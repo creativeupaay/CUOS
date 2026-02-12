@@ -1,0 +1,82 @@
+# FRONTEND DEVELOPMENT RULES
+
+## UI/UX Patterns
+
+### Loading States
+- Always show loading indicators for async operations
+- Use appropriate loaders: spinner or progress bar
+- Show button loading states during mutations
+
+### Error Handling
+- Display user-friendly error messages
+- Show errors inline for form validation
+- Use toast for global errors
+- Provide actionable error messages when possible
+- Log errors to console for debugging
+
+### Empty States
+- Show meaningful empty states for lists and data views
+- Provide clear next actions (e.g., "Create your first item")
+
+## Styling & Theming
+
+### Theme Consistency
+- Use theme variables from your theme configuration
+- Avoid hardcoded colors - use semantic tokens instead
+
+
+### Responsive Design
+- Build mobile-first, then enhance for larger screens
+- Test layouts on multiple screen sizes
+- Use responsive utilities from your UI framework
+- Ensure touch targets are appropriately sized on mobile
+
+## Forms & Validation
+- Validate user input on the client side for immediate feedback
+- Show validation errors inline near the relevant field
+- Disable submit button while form is submitting
+- Clear errors when user corrects input
+- Use proper input types (email, number, etc.)
+
+## Data Fetching
+- Use RTK Query for API calls and caching
+- Handle loading, error, and success states
+- Implement proper error retry logic
+- Cache data appropriately to reduce unnecessary requests
+- Show stale data while refetching when appropriate
+
+## Performance
+
+### Optimization
+- Lazy load routes and heavy components
+- Debounce search inputs and frequent API calls
+- Memoize expensive computations with useMemo
+- Use React.memo for components that render frequently with same props
+- Only optimize when you identify an actual performance issue
+
+### Bundle Size
+- Code-split routes using dynamic imports
+- Avoid importing entire libraries when you only need parts
+- Keep dependencies lean - audit before adding new packages
+
+
+## TypeScript
+- Define clear types for props and state
+- Use interfaces for object shapes
+- Avoid `any` type - use `unknown` if type is truly unknown
+- Define API types in `apiTypes.ts`
+- Use proper type guards for runtime checks
+
+## Code Organization
+- Keep components focused and single-purpose
+- Extract complex logic into custom hooks
+- Keep files under 300 lines when practical (can be avoided or tweaked in exceptional cases)
+- Group related functionality together
+
+## Best Practices
+- Remove unused imports and dead code
+- Follow consistent code formatting
+- Keep dependency arrays in hooks accurate
+- Clean up side effects in useEffect
+- Avoid nested ternaries - use early returns instead
+- Write self-documenting code with clear names

@@ -1,0 +1,91 @@
+# FRONTEND ARCHITECTURE RULES
+
+## Project Structure
+```
+src/
+├── components/        # Global reusable components
+├── features/          # Feature-based modules
+├── pages/            # Route-level page components
+├── services/         # Global services (API base, auth, sockets)
+├── assets/           # Static assets
+```
+
+## Feature Module Structure
+Each feature in `src/features/<feature-name>/` follows this structure:
+
+```
+<feature-name>/
+├── components/           # Feature-specific UI components
+├── hooks/               # Feature-specific hooks (optional)
+├── types/
+│   ├── apiTypes.ts     # API request/response types
+│   └── types.ts        # Internal entity types
+├── <feature>Api.ts     # RTK Query API definitions
+├── <feature>Slice.ts   # Redux slice (optional)
+└── index.ts            # Public export layer
+```
+
+**Note:** Only create files/folders that are needed for the specific feature.
+
+## Component Classification
+
+### UI Components
+- Location: `src/components/ui/` or `<feature>/components/ui/`
+- Purpose: Small, reusable building blocks (Button, Input, Card)
+- Characteristics: Pure UI, no business logic, styling only
+- Example: `Button.tsx`, `Input.tsx`, `Card.tsx`
+
+### Composite Components
+- Location: `src/components/composite/` or `<feature>/components/composite/`
+- Purpose: Combine multiple UI components into logical units
+- Characteristics: No API calls, reusable across features
+- Example: `SearchBar.tsx`, `UserCard.tsx`, `FormField.tsx`
+
+### Layout Components
+- Location: `src/components/layout/`
+- Purpose: Define page structure and layout patterns
+- Characteristics: No data fetching, structural only
+- Example: `MainLayout.tsx`, `DashboardLayout.tsx`, `AuthLayout.tsx`
+
+### Feature Components
+- Location: `src/features/<feature>/components/`
+- Purpose: Implement feature-specific business logic
+- Characteristics: May use hooks, API calls, and state management
+- Example: `LoginForm.tsx`, `ProductList.tsx`, `CheckoutFlow.tsx`
+
+## Pages Structure
+- Pages should match the navigation/routing structure of the app
+- Keep pages thin - they should only wire features and layouts together
+- Avoid heavy logic in page components
+- Example: `src/pages/dashboard/overview/` → `/dashboard/overview` route
+
+## Export Layer Pattern
+Every feature must expose its public API through `index.ts`:
+
+```typescript
+// ✅ Good - Import from feature's public API
+import { LoginForm, useAuth } from '@/features/auth';
+
+// ❌ Bad - Direct import from internal structure
+import LoginForm from '@/features/auth/components/LoginForm';
+```
+
+This encapsulation allows internal refactoring without breaking imports.
+
+## File Naming Conventions
+- Component files: `PascalCase.tsx` → `LoginForm.tsx`
+- Component folders: `lowercase` → `login/`, `dashboard/`
+- Hooks: `camelCase` with "use" prefix → `useAuth.ts`, `useLogin.ts`
+- API files: `<feature>Api.ts` → `authApi.ts`, `productApi.ts`
+- Redux slices: `<feature>Slice.ts` → `authSlice.ts`, `cartSlice.ts`
+- Type files: `apiTypes.ts` for API types, `types.ts` for other types
+
+## State Management
+- Use Redux for global state management whereever required.
+- Use RTK Query for server state and data fetching
+
+## Component Reusability
+- Before creating a new component, check if a similar one exists
+- Reuse UI and composite components when applicable
+- Extend existing components via props rather than duplicating
+- Keep components flexible but not overly generic
