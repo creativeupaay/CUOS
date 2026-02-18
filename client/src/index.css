@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/* ============================================
+   CUOS Design System — CSS Custom Properties
+   Based on development-rules.md
+   ============================================ */
+
+@theme {
+  /* Neutral Palette */
+  --color-bg-app: #F9FAFB;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-subtle: #F3F4F6;
+  --color-border-default: #E5E7EB;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+
+  /* Brand / Action Colors */
+  --color-primary: #22C55E;
+  --color-primary-dark: #16A34A;
+  --color-primary-soft: #DCFCE7;
+
+  /* Status Colors */
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
+  --color-danger: #DC2626;
+  --color-info: #2563EB;
+
+  /* Status Soft Backgrounds */
+  --color-success-soft: #DCFCE7;
+  --color-warning-soft: #FEF3C7;
+  --color-danger-soft: #FEE2E2;
+  --color-info-soft: #DBEAFE;
+
+  /* Sidebar */
+  --sidebar-width: 260px;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    "SF Pro Text",
+    "SF Pro Display",
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-app);
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

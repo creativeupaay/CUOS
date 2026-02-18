@@ -25,6 +25,15 @@ declare global {
       /** Override: Accept only ApiResponse objects */
       json(body: ApiResponse): this;
     }
+
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        role: string;
+        [key: string]: any;
+      };
+    }
   }
 }
 
@@ -34,4 +43,4 @@ declare module 'express-serve-static-core' {
   }
 }
 
-export {};
+export { };

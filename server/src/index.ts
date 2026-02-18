@@ -10,8 +10,6 @@ import v1Routes from "./routes/v1/index";
 import errorHandlerMiddleware from "./middlewares/errorHandler";
 import notFoundMiddleware from "./middlewares/notFound";
 import cookieParser from "cookie-parser";
-import "./models";
-import "./config/auth.config"; // Import to trigger validation
 
 dotenv.config();
 
@@ -30,18 +28,16 @@ app.use(
   })
 );
 
+// CORS configuration
 const corsOptions = {
-  origin: env.FRONTEND_URL,
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "X-VERIFY", "x-verify"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
-
 app.use(cors(corsOptions));
 
 app.use(cookieParser());
-
-
 // Apply express.json() to all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

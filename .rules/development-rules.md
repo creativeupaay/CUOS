@@ -2,7 +2,7 @@
 DO
 Calm, CFO-grade UI
 Tables first, charts second
-One single Primary color, rest status-only colors
+One single Primary  , rest status-only colors
 Tooltips for complexity
 
 NEVER
@@ -266,3 +266,27 @@ If unsure:
 3. **Styling**
     - Use theme overrides and tokens.
     - No visual logic scattered across components.
+
+
+Technical Specifications : 
+ 
+: frontend : react , typescript, tailwind css, lucid-react (icons), RTK Query (apis), Redux (state management : use only if required , since we are using rtk query)
+: backend : nodeJs, typescript, mongodb
+ 
+ 
+All these verticals will have common backend and frontend 
+ 
+All the features will be separated by modular folder based seperation
+ 
+In backend we will have separate modules in src and their models and controllers separated there only
+In frontend there will be a features folder for feature specific components, its apis, etc. and common components folder for common
+We have to implement RBAC (proper feature based role based access control) and individual entity assignments and level of assignment (project, client , etc)
+** When storing sensitive information in cloudinary we will not use public urls, they will be encrypted and can be used by dashboard only
+ 
+
+External :
+Mongodb database 
+Github
+Coudinary
+
+
