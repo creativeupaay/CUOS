@@ -26,12 +26,19 @@ export const login = asyncHandler(
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
+        // Set access token in HTTP-only cookie
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000, // 15 minutes
+        });
+
         res.status(200).json({
             success: true,
             message: 'Login successful',
             data: {
                 user,
-                accessToken,
             },
         });
     }
@@ -51,18 +58,26 @@ export const refreshToken = asyncHandler(
 
         const { accessToken } = await authService.refreshAccessToken(refreshToken);
 
+        // Set access token in HTTP-only cookie
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000, // 15 minutes
+        });
+
         res.status(200).json({
             success: true,
             message: 'Token refreshed successfully',
-            data: { accessToken },
         });
     }
 );
 
 export const logout = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        // Clear refresh token cookie
+        // Clear cookies
         res.clearCookie('refreshToken');
+        res.clearCookie('accessToken');
 
         res.status(200).json({
             success: true,
@@ -88,6 +103,18 @@ export const getMe = asyncHandler(
             success: true,
             message: 'User retrieved successfully',
             data: user,
+        });
+    }
+);
+
+export const getUsers = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const users = await authService.getAllUsers();
+
+        res.status(200).json({
+            success: true,
+            message: 'Users retrieved successfully',
+            data: { users },
         });
     }
 );

@@ -132,7 +132,11 @@ async function seedRolesAndPermissions() {
 
             console.log(`Created super admin user: ${superAdminEmail}`);
         } else {
-            console.log('Super admin user already exists');
+            console.log('Super admin user already exists. Updating role...');
+            const superAdminRole = roles.find((r) => r.name === 'super-admin');
+            existingSuperAdmin.role = superAdminRole!._id as any;
+            await existingSuperAdmin.save();
+            console.log('Updated super admin role.');
         }
 
         console.log('\n✅ Seeding completed successfully!');

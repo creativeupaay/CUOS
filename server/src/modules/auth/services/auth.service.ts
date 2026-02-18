@@ -101,7 +101,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
 
     // Generate tokens
     const tokenPayload: TokenPayload = {
-        userId: user._id.toString(),
+        userId: (user._id as any).toString(),
         email: user.email,
         role: roleName,
     };
@@ -111,7 +111,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
 
     // Remove password from response
     const userObj = user.toObject();
-    delete userObj.password;
+    delete (userObj as any).password;
 
     return {
         user: userObj as IUser,
@@ -163,4 +163,14 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
     }
 
     return user;
+};
+
+/**
+ * Get all users
+ */
+export const getAllUsers = async (): Promise<IUser[]> => {
+    const users = await User.find()
+        .select('name email role department isActive')
+        .populate('role', 'name');
+    return users;
 };

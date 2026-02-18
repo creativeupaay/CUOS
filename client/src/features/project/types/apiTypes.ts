@@ -5,7 +5,6 @@ import type {
     TimeLog,
     Meeting,
     Credential,
-    ProjectAssignee,
     InvoiceDetails,
     MeetingParticipant,
     MeetingActionItem,

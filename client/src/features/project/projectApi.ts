@@ -36,7 +36,7 @@ export const projectApi = api.injectEndpoints({
 
         getProjectById: builder.query<ApiResponse<Project>, string>({
             query: (id) => `/projects/${id}`,
-            providesTags: (result, error, id) => [{ type: 'Projects', id }],
+            providesTags: (_result, _error, id) => [{ type: 'Projects', id }],
         }),
 
         createProject: builder.mutation<ApiResponse<Project>, CreateProjectRequest>({
@@ -54,7 +54,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (result, error, { id }) => [{ type: 'Projects', id }, 'Projects'],
+            invalidatesTags: (_result, _error, { id }) => [{ type: 'Projects', id }, 'Projects'],
         }),
 
         deleteProject: builder.mutation<ApiResponse<Project>, string>({
@@ -71,7 +71,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; userId: string }>({
@@ -79,7 +79,7 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/assignees/${userId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         uploadDocument: builder.mutation<ApiResponse<Project>, { projectId: string; file: File; name: string; type: string }>({
@@ -95,7 +95,7 @@ export const projectApi = api.injectEndpoints({
                     body: formData,
                 };
             },
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         getDocumentUrl: builder.query<ApiResponse<{ url: string }>, { projectId: string; docId: string }>({
@@ -107,7 +107,7 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/documents/${docId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         // ============================================
@@ -118,12 +118,12 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/tasks`,
                 params,
             }),
-            providesTags: (result, error, { projectId }) => [{ type: 'Tasks', id: projectId }],
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Tasks', id: projectId }],
         }),
 
         getTaskById: builder.query<ApiResponse<Task>, { projectId: string; taskId: string }>({
             query: ({ projectId, taskId }) => `/projects/${projectId}/tasks/${taskId}`,
-            providesTags: (result, error, { taskId }) => [{ type: 'Tasks', id: taskId }],
+            providesTags: (_result, _error, { taskId }) => [{ type: 'Tasks', id: taskId }],
         }),
 
         createTask: builder.mutation<ApiResponse<Task>, { projectId: string; data: CreateTaskRequest }>({
@@ -132,7 +132,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Tasks', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Tasks', id: projectId }],
         }),
 
         updateTask: builder.mutation<ApiResponse<Task>, { projectId: string; taskId: string; data: UpdateTaskRequest }>({
@@ -141,7 +141,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (result, error, { projectId, taskId }) => [
+            invalidatesTags: (_result, _error, { projectId, taskId }) => [
                 { type: 'Tasks', id: projectId },
                 { type: 'Tasks', id: taskId },
             ],
@@ -152,12 +152,12 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/tasks/${taskId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (result, error, { projectId }) => [{ type: 'Tasks', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Tasks', id: projectId }],
         }),
 
         getSubtasks: builder.query<ApiResponse<Task[]>, { projectId: string; taskId: string }>({
             query: ({ projectId, taskId }) => `/projects/${projectId}/tasks/${taskId}/subtasks`,
-            providesTags: (result, error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
+            providesTags: (_result, _error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
         }),
 
         createSubtask: builder.mutation<ApiResponse<Task>, { projectId: string; taskId: string; data: CreateTaskRequest }>({
@@ -166,7 +166,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (result, error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
+            invalidatesTags: (_result, _error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
         }),
 
         // ============================================
@@ -241,7 +241,7 @@ export const projectApi = api.injectEndpoints({
 
         getMeetingById: builder.query<ApiResponse<Meeting>, { projectId: string; id: string }>({
             query: ({ projectId, id }) => `/projects/${projectId}/meetings/${id}`,
-            providesTags: (result, error, { id }) => [{ type: 'Meetings', id }],
+            providesTags: (_result, _error, { id }) => [{ type: 'Meetings', id }],
         }),
 
         updateMeeting: builder.mutation<ApiResponse<Meeting>, { projectId: string; id: string; data: UpdateMeetingRequest }>({
@@ -250,7 +250,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (result, error, { id }) => [{ type: 'Meetings', id }, 'Meetings'],
+            invalidatesTags: (_result, _error, { id }) => [{ type: 'Meetings', id }, 'Meetings'],
         }),
 
         deleteMeeting: builder.mutation<ApiResponse, { projectId: string; id: string }>({
@@ -283,7 +283,7 @@ export const projectApi = api.injectEndpoints({
 
         getCredentialById: builder.query<ApiResponse<Credential>, { projectId: string; id: string }>({
             query: ({ projectId, id }) => `/projects/${projectId}/credentials/${id}`,
-            providesTags: (result, error, { id }) => [{ type: 'Credentials', id }],
+            providesTags: (_result, _error, { id }) => [{ type: 'Credentials', id }],
         }),
 
         updateCredential: builder.mutation<ApiResponse<Credential>, { projectId: string; id: string; data: UpdateCredentialRequest }>({
@@ -292,7 +292,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (result, error, { id }) => [{ type: 'Credentials', id }, 'Credentials'],
+            invalidatesTags: (_result, _error, { id }) => [{ type: 'Credentials', id }, 'Credentials'],
         }),
 
         deleteCredential: builder.mutation<ApiResponse, { projectId: string; id: string }>({

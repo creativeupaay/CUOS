@@ -19,11 +19,40 @@ import * as taskValidators from '../validators/task.validator';
 import * as timeLogValidators from '../validators/timeLog.validator';
 import * as meetingValidators from '../validators/meeting.validator';
 import * as credentialValidators from '../validators/credential.validator';
+import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 
 const router = Router();
 
+// All routes require authentication
+router.use(authenticate);
+
 // Configure multer for file uploads (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
+
+// ============================================
+// GLOBAL TIME LOG ROUTES (must be before /:id to avoid param conflicts)
+// ============================================
+
+// Get my time logs
+router.get(
+    '/timelogs/my',
+    validateRequest(timeLogValidators.getMyTimeLogsSchema),
+    timeLogController.getMyTimeLogs
+);
+
+// Update time log
+router.patch(
+    '/timelogs/:id',
+    validateRequest(timeLogValidators.updateTimeLogSchema),
+    timeLogController.updateTimeLog
+);
+
+// Delete time log
+router.delete(
+    '/timelogs/:id',
+    validateRequest(timeLogValidators.deleteTimeLogSchema),
+    timeLogController.deleteTimeLog
+);
 
 // ============================================
 // PROJECT ROUTES
@@ -104,6 +133,14 @@ router.delete(
     projectController.deleteDocument
 );
 
+// Get project cost summary
+router.get(
+    '/:id/cost-summary',
+    validateRequest(projectValidators.getProjectByIdSchema),
+    checkProjectManager,
+    require('../controllers/projectCost.controller').getProjectCost
+);
+
 // ============================================
 // TASK ROUTES
 // ============================================
@@ -165,7 +202,7 @@ router.get(
 );
 
 // ============================================
-// TIME LOG ROUTES
+// TIME LOG ROUTES (project-scoped)
 // ============================================
 
 // Create time log
@@ -278,31 +315,6 @@ router.delete(
     validateRequest(credentialValidators.deleteCredentialSchema),
     checkProjectManager,
     credentialController.deleteCredential
-);
-
-// ============================================
-// GLOBAL TIME LOG ROUTES (not project-specific)
-// ============================================
-
-// Get my time logs
-router.get(
-    '/timelogs/my',
-    validateRequest(timeLogValidators.getMyTimeLogsSchema),
-    timeLogController.getMyTimeLogs
-);
-
-// Update time log
-router.patch(
-    '/timelogs/:id',
-    validateRequest(timeLogValidators.updateTimeLogSchema),
-    timeLogController.updateTimeLog
-);
-
-// Delete time log
-router.delete(
-    '/timelogs/:id',
-    validateRequest(timeLogValidators.deleteTimeLogSchema),
-    timeLogController.deleteTimeLog
 );
 
 export default router;

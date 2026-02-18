@@ -6,6 +6,7 @@ import type {
     RegisterResponse,
     RefreshTokenResponse,
     GetMeResponse,
+    GetUsersResponse,
 } from './types/apiTypes';
 
 export const authApi = api.injectEndpoints({
@@ -41,6 +42,9 @@ export const authApi = api.injectEndpoints({
             query: () => '/auth/me',
             providesTags: ['User'],
         }),
+        getUsers: builder.query<GetUsersResponse, void>({
+            query: () => '/auth/users',
+        }),
     }),
 });
 
@@ -51,4 +55,5 @@ export const {
     useLogoutMutation,
     useGetMeQuery,
     useLazyGetMeQuery,
+    useGetUsersQuery,
 } = authApi;

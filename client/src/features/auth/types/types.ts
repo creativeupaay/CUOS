@@ -31,8 +31,8 @@ export interface Permission {
 
 export interface AuthState {
     user: User | null;
-    token: string | null;
     isAuthenticated: boolean;
+    isInitialized: boolean;
     loading: boolean;
     error: string | null;
 }

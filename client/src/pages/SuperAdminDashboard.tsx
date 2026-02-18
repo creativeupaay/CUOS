@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { useAppSelector } from '@/app/hooks';
+import { useAppSelector, useAppDispatch } from '@/app/hooks';
+import { logout } from '@/features/auth/slices/authSlice';
 import {
     FolderKanban,
     DollarSign,
@@ -9,7 +10,7 @@ import {
     ArrowRight,
     Clock,
     CheckCircle2,
-    AlertTriangle,
+    LogOut,
 } from 'lucide-react';
 
 interface DepartmentCardProps {
@@ -26,7 +27,7 @@ function DepartmentCard({ title, description, icon, path, isActive }: Department
     return (
         <div
             onClick={() => isActive && navigate(path)}
-            className="relative rounded-lg border p-5 transition-all group"
+            className="relative rounded-lg border p-6 transition-all group"
             style={{
                 backgroundColor: 'var(--color-bg-surface)',
                 borderColor: isActive ? 'var(--color-border-default)' : 'var(--color-border-default)',
@@ -46,7 +47,7 @@ function DepartmentCard({ title, description, icon, path, isActive }: Department
         >
             {/* Icon */}
             <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center mb-3"
+                className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
                 style={{
                     backgroundColor: isActive ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)',
                     color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-muted)',
@@ -57,40 +58,40 @@ function DepartmentCard({ title, description, icon, path, isActive }: Department
 
             {/* Content */}
             <h3
-                className="text-sm font-semibold mb-1"
+                className="text-base font-semibold mb-2"
                 style={{ color: 'var(--color-text-primary)' }}
             >
                 {title}
             </h3>
             <p
-                className="text-xs leading-relaxed"
+                className="text-sm leading-relaxed"
                 style={{ color: 'var(--color-text-secondary)' }}
             >
                 {description}
             </p>
 
             {/* Status */}
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-5 right-5">
                 {isActive ? (
                     <span
-                        className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                        className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
                         style={{
                             backgroundColor: 'var(--color-success-soft)',
                             color: 'var(--color-success)',
                         }}
                     >
-                        <CheckCircle2 size={10} />
+                        <CheckCircle2 size={12} />
                         Active
                     </span>
                 ) : (
                     <span
-                        className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                        className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
                         style={{
                             backgroundColor: 'var(--color-warning-soft)',
                             color: '#92400E',
                         }}
                     >
-                        <Clock size={10} />
+                        <Clock size={12} />
                         Coming Soon
                     </span>
                 )}
@@ -99,10 +100,10 @@ function DepartmentCard({ title, description, icon, path, isActive }: Department
             {/* Arrow indicator for active cards */}
             {isActive && (
                 <div
-                    className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ color: 'var(--color-primary)' }}
                 >
-                    <ArrowRight size={16} />
+                    <ArrowRight size={18} />
                 </div>
             )}
         </div>
@@ -110,185 +111,159 @@ function DepartmentCard({ title, description, icon, path, isActive }: Department
 }
 
 export default function SuperAdminDashboard() {
+    const dispatch = useAppDispatch();
+    const navigate = useNavigate();
     const user = useAppSelector((state) => state.auth.user);
+
+    const handleLogout = () => {
+        dispatch(logout());
+        navigate('/login');
+    };
 
     const departments = [
         {
             title: 'Project Management',
             description: 'Manage projects, tasks, time logs and team collaboration',
-            icon: <FolderKanban size={20} />,
+            icon: <FolderKanban size={24} />,
             path: '/projects',
             isActive: true,
         },
         {
             title: 'Finance',
             description: 'Track expenses, invoices, and financial reports',
-            icon: <DollarSign size={20} />,
+            icon: <DollarSign size={24} />,
             path: '/finance',
-            isActive: false,
+            isActive: true,
         },
         {
             title: 'CRM',
             description: 'Customer relationship management and sales tracking',
-            icon: <Users size={20} />,
+            icon: <Users size={24} />,
             path: '/crm',
-            isActive: false,
+            isActive: true,
         },
         {
             title: 'HRMS',
             description: 'Human resource management and employee records',
-            icon: <Building2 size={20} />,
+            icon: <Building2 size={24} />,
             path: '/hrms',
-            isActive: false,
+            isActive: true,
         },
         {
             title: 'Overall Admin',
             description: 'System administration, roles and permissions',
-            icon: <Shield size={20} />,
+            icon: <Shield size={24} />,
             path: '/admin',
-            isActive: false,
+            isActive: true,
         },
     ];
 
     return (
-        <div className="px-8 py-6" style={{ maxWidth: '1280px' }}>
-            {/* Welcome Section */}
-            <div className="mb-8">
-                <h1
-                    className="text-xl font-semibold mb-1"
-                    style={{ color: 'var(--color-text-primary)' }}
-                >
-                    Welcome back, {user?.name || 'User'}
-                </h1>
-                <p
-                    className="text-sm"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                >
-                    Select a department to get started
-                </p>
-            </div>
-
-            {/* Quick Stats Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div
-                    className="rounded-lg border px-5 py-4"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
+        <div
+            className="min-h-screen flex flex-col"
+            style={{ backgroundColor: 'var(--color-bg-app)' }}
+        >
+            {/* Header with user info and logout */}
+            <header
+                className="border-b"
+                style={{
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border-default)',
+                }}
+            >
+                <div className="px-8 py-4 flex justify-between items-center" style={{ maxWidth: '1280px', margin: '0 auto' }}>
+                    {/* Brand */}
                     <div className="flex items-center gap-3">
                         <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center"
-                            style={{
-                                backgroundColor: 'var(--color-primary-soft)',
-                                color: 'var(--color-primary-dark)',
-                            }}
+                            className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-base"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
                         >
-                            <CheckCircle2 size={18} />
+                            CU
                         </div>
                         <div>
-                            <div
-                                className="text-xs font-medium"
-                                style={{ color: 'var(--color-text-secondary)' }}
-                            >
-                                Active Modules
+                            <div className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                CUOS
                             </div>
-                            <div
-                                className="text-lg font-semibold"
-                                style={{ color: 'var(--color-text-primary)' }}
-                            >
-                                2
+                            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                Creative Upaay
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div
-                    className="rounded-lg border px-5 py-4"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <div className="flex items-center gap-3">
-                        <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center"
+                    {/* User section */}
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
+                            <div>
+                                <div
+                                    className="text-sm font-medium"
+                                    style={{ color: 'var(--color-text-primary)' }}
+                                >
+                                    {user?.name || 'User'}
+                                </div>
+                                <div
+                                    className="text-xs"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                >
+                                    {user?.email || ''}
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-2 px-4 text-sm font-medium rounded-lg border transition-colors"
                             style={{
-                                backgroundColor: 'var(--color-warning-soft)',
-                                color: '#92400E',
+                                height: '36px',
+                                color: 'var(--color-text-primary)',
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)';
                             }}
                         >
-                            <AlertTriangle size={18} />
-                        </div>
-                        <div>
-                            <div
-                                className="text-xs font-medium"
-                                style={{ color: 'var(--color-text-secondary)' }}
-                            >
-                                Coming Soon
-                            </div>
-                            <div
-                                className="text-lg font-semibold"
-                                style={{ color: 'var(--color-text-primary)' }}
-                            >
-                                3
-                            </div>
-                        </div>
+                            <LogOut size={16} />
+                            Logout
+                        </button>
                     </div>
                 </div>
+            </header>
 
-                <div
-                    className="rounded-lg border px-5 py-4"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <div className="flex items-center gap-3">
-                        <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center"
-                            style={{
-                                backgroundColor: 'var(--color-info-soft)',
-                                color: 'var(--color-info)',
-                            }}
+            {/* Main content */}
+            <main className="flex-1 px-8 py-8">
+                <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+                    {/* Welcome Section */}
+                    <div className="mb-8">
+                        <h1
+                            className="text-2xl font-semibold mb-2"
+                            style={{ color: 'var(--color-text-primary)' }}
                         >
-                            <Users size={18} />
-                        </div>
-                        <div>
-                            <div
-                                className="text-xs font-medium"
-                                style={{ color: 'var(--color-text-secondary)' }}
-                            >
-                                Phase
-                            </div>
-                            <div
-                                className="text-lg font-semibold"
-                                style={{ color: 'var(--color-text-primary)' }}
-                            >
-                                1
-                            </div>
-                        </div>
+                            Welcome back, {user?.name || 'User'}
+                        </h1>
+                        <p
+                            className="text-sm"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                        >
+                            Select a department to get started
+                        </p>
+                    </div>
+
+                    {/* Department Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {departments.map((dept) => (
+                            <DepartmentCard key={dept.title} {...dept} />
+                        ))}
                     </div>
                 </div>
-            </div>
-
-            {/* Section Header */}
-            <div className="mb-4">
-                <h2
-                    className="text-sm font-semibold uppercase tracking-wider"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                >
-                    Departments
-                </h2>
-            </div>
-
-            {/* Department Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {departments.map((dept) => (
-                    <DepartmentCard key={dept.title} {...dept} />
-                ))}
-            </div>
+            </main>
         </div>
     );
 }

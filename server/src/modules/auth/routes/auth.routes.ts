@@ -31,6 +31,7 @@ router.post(
 
 router.post('/logout', authenticate, authController.logout);
 
+router.get('/users', authenticate, authController.getUsers);
 router.get('/me', authenticate, authController.getMe);
 
 export default router;

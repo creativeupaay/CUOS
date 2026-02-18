@@ -10,7 +10,6 @@ export interface LoginResponse {
     message: string;
     data: {
         user: User;
-        accessToken: string;
     };
 }
 
@@ -44,4 +43,11 @@ export interface GetMeResponse {
     success: boolean;
     message: string;
     data: User;
+}
+
+export interface GetUsersResponse {
+    success: boolean;
+    data: {
+        users: User[];
+    };
 }

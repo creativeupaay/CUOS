@@ -26,11 +26,18 @@ const baseQueryWithReauth = async (
 
   if (result.error?.status === 401) {
     // Try calling refresh token endpoint (common)
-    const refreshResult = await baseQuery('/auth/refresh', api, extraOptions);
+    const refreshResult = await baseQuery(
+      { url: '/auth/refresh', method: 'POST' },
+      api,
+      extraOptions
+    );
 
     if (refreshResult.data) {
       // Retry the original request again
       result = await baseQuery(args, api, extraOptions);
+    } else {
+      // Refresh failed — clear auth state
+      api.dispatch({ type: 'auth/logout' });
     }
   }
 
@@ -41,7 +48,7 @@ const baseQueryWithReauth = async (
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials'],
+  tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Salary', 'Leaves', 'Payroll', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Expenses', 'Invoices', 'Milestones', 'FinanceDashboard', 'CurrencyRates'],
   endpoints: () => ({}),
 });
 

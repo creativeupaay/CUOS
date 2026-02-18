@@ -11,6 +11,9 @@ import errorHandlerMiddleware from "./middlewares/errorHandler";
 import notFoundMiddleware from "./middlewares/notFound";
 import cookieParser from "cookie-parser";
 
+// Register models
+import "./modules/auth/models/Permission.model";
+
 dotenv.config();
 
 connectDB();

@@ -2,7 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { Request, Response, NextFunction } from 'express';
 import AppError from '../utils/appError';
 import { env } from '../config/env.config';
-import { ApiResponse } from '../../types';
+import { ApiResponse } from '../types/express.d';
 
 const errorHandlerMiddleware = (
     err: any,
@@ -69,15 +69,15 @@ const errorHandlerMiddleware = (
 
     // Add error details if available
     const errorDetails: any = {};
-    
+
     if (error.code) {
         errorDetails.code = error.code;
     }
-    
+
     if (error.details) {
         errorDetails.details = error.details;
     }
-    
+
     // Include stack trace in development mode
     if (process.env.NODE_ENV === 'development') {
         errorDetails.stack = error.stack;
