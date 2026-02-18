@@ -15,7 +15,7 @@ export const createLeadSchema = z.object({
             .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
             .default('other'),
         stage: z
-            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'won', 'lost'])
+            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .default('new'),
         priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
         estimatedValue: z.number().min(0).optional(),
@@ -40,7 +40,7 @@ export const updateLeadSchema = z.object({
             .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
             .optional(),
         stage: z
-            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'won', 'lost'])
+            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
         estimatedValue: z.number().min(0).optional(),
@@ -66,7 +66,7 @@ export const getLeadSchema = z.object({
 export const listLeadsSchema = z.object({
     query: z.object({
         stage: z
-            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'won', 'lost'])
+            .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .optional(),
         source: z
             .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
@@ -95,9 +95,19 @@ export const addActivitySchema = z.object({
     }),
 });
 
+export const addMeetingSchema = z.object({
+    body: z.object({
+        type: z.enum(['internal', 'external']),
+        title: z.string().min(1, 'Title is required').trim(),
+        notes: z.string().default(''),
+        date: z.string().optional(),
+    }),
+});
+
 // Inferred types
 export type CreateLeadInput = z.infer<typeof createLeadSchema>['body'];
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>['body'];
 export type GetLeadInput = z.infer<typeof getLeadSchema>['params'];
 export type ListLeadsInput = z.infer<typeof listLeadsSchema>['query'];
 export type AddActivityInput = z.infer<typeof addActivitySchema>['body'];
+export type AddMeetingInput = z.infer<typeof addMeetingSchema>['body'];

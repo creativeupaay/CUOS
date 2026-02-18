@@ -97,12 +97,6 @@ function App() {
           }
         >
           {/* Project Management Module */}
-          {/* Clients */}
-          <Route path="/projects/clients" element={<ClientsPage />} />
-          <Route path="/projects/clients/new" element={<ClientFormPage />} />
-          <Route path="/projects/clients/:id" element={<ClientDetailPage />} />
-          <Route path="/projects/clients/:id/edit" element={<ClientFormPage />} />
-
           {/* Projects */}
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/new" element={<ProjectFormPage />} />
@@ -117,13 +111,18 @@ function App() {
           </Route>
 
           {/* CRM Module */}
-          <Route path="/crm" element={<Navigate to="/crm/leads" replace />} />
+          <Route path="/crm" element={<Navigate to="/crm/pipeline" replace />} />
+          <Route path="/crm/pipeline" element={<CrmPipelinePage />} />
           <Route path="/crm/leads" element={<CrmLeadsPage />} />
           <Route path="/crm/leads/new" element={<CrmLeadFormPage />} />
           <Route path="/crm/leads/:id" element={<CrmLeadDetailPage />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadFormPage />} />
-          <Route path="/crm/pipeline" element={<CrmPipelinePage />} />
           <Route path="/crm/proposals" element={<CrmProposalsPage />} />
+          {/* CRM Clients (moved from Project Management) */}
+          <Route path="/crm/clients" element={<ClientsPage />} />
+          <Route path="/crm/clients/new" element={<ClientFormPage />} />
+          <Route path="/crm/clients/:id" element={<ClientDetailPage />} />
+          <Route path="/crm/clients/:id/edit" element={<ClientFormPage />} />
 
           {/* Finance Module */}
           <Route path="/finance" element={<FinanceDashboardPage />} />

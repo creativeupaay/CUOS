@@ -177,9 +177,9 @@ export class ProposalService {
         if (newStatus === 'accepted') {
             proposal.acceptedAt = new Date();
 
-            // Update lead stage to negotiation if not already won
+            // Update lead stage to negotiation if not already closed
             const lead = await Lead.findById(proposal.leadId);
-            if (lead && !['won', 'lost'].includes(lead.stage)) {
+            if (lead && !['closed', 'lead-lost'].includes(lead.stage)) {
                 lead.stage = 'negotiation';
                 await lead.save();
             }

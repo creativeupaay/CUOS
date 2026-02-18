@@ -11,6 +11,7 @@ import {
     getLeadSchema,
     listLeadsSchema,
     addActivitySchema,
+    addMeetingSchema,
 } from '../validators/lead.validator';
 import {
     createProposalSchema,
@@ -19,6 +20,10 @@ import {
     listProposalsSchema,
     updateStatusSchema,
 } from '../validators/proposal.validator';
+
+// Import client controller for CRM client routes
+import * as clientController from '../../client/controllers/client.controller';
+import { listClientsSchema, getClientSchema } from '../../client/validators/client.validator';
 
 const router = Router();
 
@@ -89,11 +94,20 @@ router.post(
 );
 
 router.post(
-    '/leads/:id/convert',
+    '/leads/:id/meetings',
+    authorize(crmRoles),
+    validateRequest(getLeadSchema),
+    validateRequest(addMeetingSchema),
+    checkLeadAccess,
+    leadController.addMeeting
+);
+
+router.post(
+    '/leads/:id/close',
     authorize(crmRoles),
     validateRequest(getLeadSchema),
     checkLeadAccess,
-    leadController.convertToClient
+    leadController.closeLead
 );
 
 // ============================================
@@ -144,6 +158,30 @@ router.patch(
     validateRequest(updateStatusSchema),
     checkProposalAccess,
     proposalController.updateStatus
+);
+
+// ============================================
+// CRM CLIENT ROUTES (proxy to client module)
+// ============================================
+router.get(
+    '/clients',
+    authorize(crmRoles),
+    validateRequest(listClientsSchema),
+    clientController.getClients
+);
+
+router.get(
+    '/clients/:id',
+    authorize(crmRoles),
+    validateRequest(getClientSchema),
+    clientController.getClient
+);
+
+router.get(
+    '/clients/:id/projects',
+    authorize(crmRoles),
+    validateRequest(getClientSchema),
+    clientController.getClientProjects
 );
 
 export default router;

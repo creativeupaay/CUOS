@@ -25,6 +25,32 @@ const LeadActivitySchema = new Schema<ILeadActivity>(
 );
 
 // ============================================
+// MEETING SUB-SCHEMA
+// ============================================
+export interface ILeadMeeting {
+    type: 'internal' | 'external';
+    title: string;
+    notes: string;
+    date: Date;
+    createdBy: Types.ObjectId;
+}
+
+const LeadMeetingSchema = new Schema<ILeadMeeting>(
+    {
+        type: {
+            type: String,
+            enum: ['internal', 'external'],
+            required: true,
+        },
+        title: { type: String, required: true, trim: true },
+        notes: { type: String, trim: true, default: '' },
+        date: { type: Date, default: Date.now },
+        createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    },
+    { _id: true, timestamps: false }
+);
+
+// ============================================
 // LEAD SCHEMA
 // ============================================
 export interface ILead extends Document {
@@ -35,7 +61,7 @@ export interface ILead extends Document {
     company?: string;
 
     source: 'website' | 'referral' | 'cold-call' | 'social-media' | 'event' | 'other';
-    stage: 'new' | 'contacted' | 'qualified' | 'proposal-sent' | 'negotiation' | 'won' | 'lost';
+    stage: 'new' | 'contacted' | 'qualified' | 'proposal-sent' | 'negotiation' | 'closed' | 'pending' | 'lead-lost' | 'follow-up';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
     estimatedValue?: number;
@@ -47,10 +73,13 @@ export interface ILead extends Document {
     assignedTo?: Types.ObjectId;
     convertedClientId?: Types.ObjectId;
 
+    isLocked: boolean;
+    closedAt?: Date;
     lostReason?: string;
     expectedCloseDate?: Date;
 
     activities: ILeadActivity[];
+    meetings: ILeadMeeting[];
 
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -76,7 +105,7 @@ const LeadSchema = new Schema<ILead>(
         },
         stage: {
             type: String,
-            enum: ['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'won', 'lost'],
+            enum: ['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'],
             default: 'new',
         },
         priority: {
@@ -94,10 +123,13 @@ const LeadSchema = new Schema<ILead>(
         assignedTo: { type: Schema.Types.ObjectId, ref: 'User' },
         convertedClientId: { type: Schema.Types.ObjectId, ref: 'Client' },
 
+        isLocked: { type: Boolean, default: false },
+        closedAt: { type: Date },
         lostReason: { type: String, trim: true },
         expectedCloseDate: { type: Date },
 
         activities: [LeadActivitySchema],
+        meetings: [LeadMeetingSchema],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },

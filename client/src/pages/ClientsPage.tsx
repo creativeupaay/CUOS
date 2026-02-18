@@ -43,7 +43,7 @@ export default function ClientsPage() {
                     <p className="text-neutral-600 mt-1">Manage your client relationships</p>
                 </div>
                 <Link
-                    to="/projects/clients/new"
+                    to="/crm/clients/new"
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
                     <Plus size={20} />
@@ -89,7 +89,7 @@ export default function ClientsPage() {
                     <h3 className="text-xl font-semibold text-neutral-900 mb-2">No clients found</h3>
                     <p className="text-neutral-600 mb-6">Get started by adding your first client</p>
                     <Link
-                        to="/projects/clients/new"
+                        to="/crm/clients/new"
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                     >
                         <Plus size={20} />
@@ -115,10 +115,10 @@ export default function ClientsPage() {
                                 </div>
                                 <span
                                     className={`px-2 py-1 text-xs font-medium rounded ${client.status === 'active'
-                                            ? 'bg-green-100 text-green-800'
-                                            : client.status === 'inactive'
-                                                ? 'bg-yellow-100 text-yellow-800'
-                                                : 'bg-neutral-100 text-neutral-800'
+                                        ? 'bg-green-100 text-green-800'
+                                        : client.status === 'inactive'
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-neutral-100 text-neutral-800'
                                         }`}
                                 >
                                     {client.status}
@@ -152,14 +152,14 @@ export default function ClientsPage() {
                             {/* Actions */}
                             <div className="flex gap-2 pt-4 border-t border-neutral-200">
                                 <Link
-                                    to={`/projects/clients/${client._id}`}
+                                    to={`/crm/clients/${client._id}`}
                                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 transition-colors"
                                 >
                                     <Eye size={16} />
                                     View
                                 </Link>
                                 <Link
-                                    to={`/projects/clients/${client._id}/edit`}
+                                    to={`/crm/clients/${client._id}/edit`}
                                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-primary-light text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
                                 >
                                     <Edit size={16} />

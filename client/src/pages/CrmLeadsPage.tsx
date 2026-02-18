@@ -12,6 +12,7 @@ import {
     AlertCircle,
     LayoutDashboard,
     List,
+    Lock,
 } from 'lucide-react';
 import { useGetLeadsQuery, useGetPipelineSummaryQuery } from '@/features/crm';
 
@@ -21,8 +22,10 @@ const stageColors: Record<string, { bg: string; text: string }> = {
     qualified: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
     'proposal-sent': { bg: '#E0E7FF', text: '#4338CA' },
     negotiation: { bg: '#F3E8FF', text: '#7E22CE' },
-    won: { bg: 'var(--color-success)', text: '#FFFFFF' },
-    lost: { bg: 'var(--color-danger-soft)', text: 'var(--color-danger)' },
+    closed: { bg: 'var(--color-success)', text: '#FFFFFF' },
+    pending: { bg: '#FEF3C7', text: '#92400E' },
+    'lead-lost': { bg: 'var(--color-danger-soft)', text: 'var(--color-danger)' },
+    'follow-up': { bg: '#DBEAFE', text: '#1D4ED8' },
 };
 
 const priorityColors: Record<string, string> = {
@@ -133,7 +136,7 @@ export default function CrmLeadsPage() {
                         { label: 'Total Leads', value: summary.totalLeads, subtext: 'All stages' },
                         { label: 'Pipeline Value', value: formatCurrency(summary.totalValue, 'INR'), subtext: 'Total estimated value' },
                         { label: 'New Leads', value: summary.stages.find(s => s.stage === 'new')?.count || 0, subtext: 'Needs attention' },
-                        { label: 'Won Deals', value: summary.stages.find(s => s.stage === 'won')?.count || 0, subtext: 'Successfully closed' }
+                        { label: 'Closed Deals', value: summary.stages.find(s => s.stage === 'closed')?.count || 0, subtext: 'Successfully closed' }
                     ].map((card, idx) => (
                         <div key={idx} className="p-4 rounded-xl border bg-white shadow-sm" style={{ borderColor: 'var(--color-border-default)' }}>
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>{card.label}</p>
@@ -174,8 +177,10 @@ export default function CrmLeadsPage() {
                     <option value="qualified">Qualified</option>
                     <option value="proposal-sent">Proposal Sent</option>
                     <option value="negotiation">Negotiation</option>
-                    <option value="won">Won</option>
-                    <option value="lost">Lost</option>
+                    <option value="closed">Closed</option>
+                    <option value="pending">Pending</option>
+                    <option value="lead-lost">Lead Lost</option>
+                    <option value="follow-up">Follow Up</option>
                 </select>
                 <select
                     value={filters.priority}
@@ -254,8 +259,13 @@ export default function CrmLeadsPage() {
                                             color: stageColors[lead.stage]?.text || '#6b7280'
                                         }}
                                     >
-                                        {lead.stage.replace('-', ' ')}
+                                        {lead.stage.replace(/-/g, ' ')}
                                     </span>
+                                    {lead.isLocked && (
+                                        <span title="Lead is locked">
+                                            <Lock size={12} className="ml-1.5 text-gray-400 inline" />
+                                        </span>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-1.5">

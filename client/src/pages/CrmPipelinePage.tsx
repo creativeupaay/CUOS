@@ -18,8 +18,10 @@ const stages = [
     { id: 'qualified', label: 'Qualified', color: 'var(--color-success)' },
     { id: 'proposal-sent', label: 'Proposal', color: '#4338CA' },
     { id: 'negotiation', label: 'Negotiation', color: '#7E22CE' },
-    { id: 'won', label: 'Won', color: 'var(--color-success-dark)' },
-    { id: 'lost', label: 'Lost', color: 'var(--color-danger)' },
+    { id: 'closed', label: 'Closed', color: 'var(--color-success-dark, #059669)' },
+    { id: 'pending', label: 'Pending', color: '#92400E' },
+    { id: 'lead-lost', label: 'Lost', color: 'var(--color-danger)' },
+    { id: 'follow-up', label: 'Follow Up', color: '#1D4ED8' },
 ];
 
 export default function CrmPipelinePage() {

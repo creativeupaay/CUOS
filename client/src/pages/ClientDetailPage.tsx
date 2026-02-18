@@ -38,7 +38,7 @@ export default function ClientDetailPage() {
             {/* Header */}
             <div className="flex items-center gap-4 mb-8">
                 <button
-                    onClick={() => navigate('/projects/clients')}
+                    onClick={() => navigate('/crm/clients')}
                     className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
                 >
                     <ArrowLeft size={24} />
@@ -60,7 +60,7 @@ export default function ClientDetailPage() {
                     {client.status}
                 </span>
                 <Link
-                    to={`/projects/clients/${id}/edit`}
+                    to={`/crm/clients/${id}/edit`}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
                     <Edit size={20} />

@@ -15,11 +15,12 @@ import {
     MoreVertical,
     Send,
     UserCircle,
+    Lock,
 } from 'lucide-react';
 import {
     useGetLeadByIdQuery,
     useAddLeadActivityMutation,
-    useConvertLeadToClientMutation,
+    useCloseLeadDealMutation,
     useGetProposalsQuery,
 } from '@/features/crm';
 
@@ -29,8 +30,10 @@ const stageColors: Record<string, { bg: string; text: string }> = {
     qualified: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
     'proposal-sent': { bg: '#E0E7FF', text: '#4338CA' },
     negotiation: { bg: '#F3E8FF', text: '#7E22CE' },
-    won: { bg: 'var(--color-success)', text: '#FFFFFF' },
-    lost: { bg: 'var(--color-danger-soft)', text: 'var(--color-danger)' },
+    closed: { bg: 'var(--color-success)', text: '#FFFFFF' },
+    pending: { bg: '#FEF3C7', text: '#92400E' },
+    'lead-lost': { bg: 'var(--color-danger-soft)', text: 'var(--color-danger)' },
+    'follow-up': { bg: '#DBEAFE', text: '#1D4ED8' },
 };
 
 export default function CrmLeadDetailPage() {
@@ -43,7 +46,7 @@ export default function CrmLeadDetailPage() {
     const { data: proposalsData } = useGetProposalsQuery({ leadId: id }, { skip: !id });
 
     const [addActivity, { isLoading: isAddingActivity }] = useAddLeadActivityMutation();
-    const [convertLead, { isLoading: isConvertingLead }] = useConvertLeadToClientMutation();
+    const [closeDeal, { isLoading: isClosingDeal }] = useCloseLeadDealMutation();
 
     const lead = leadData?.data.lead;
     const proposals = proposalsData?.data.proposals || [];
@@ -67,15 +70,15 @@ export default function CrmLeadDetailPage() {
         }
     };
 
-    const handleConvert = async () => {
-        if (!window.confirm('Are you sure you want to convert this lead to a client?')) return;
+    const handleCloseDeal = async () => {
+        if (!window.confirm('Are you sure you want to close this deal? A client record will be created automatically.')) return;
 
         try {
-            const result = await convertLead(id!).unwrap();
-            navigate(`/projects/clients/${result.data.client._id}`);
+            const result = await closeDeal(id!).unwrap();
+            navigate(`/crm/clients/${result.data.client._id}`);
         } catch (error) {
-            console.error('Failed to convert lead:', error);
-            alert('Failed to convert lead. Ensure lead is in "Won" stage.');
+            console.error('Failed to close deal:', error);
+            alert('Failed to close deal. Please try again.');
         }
     };
 
@@ -158,15 +161,21 @@ export default function CrmLeadDetailPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {lead.stage === 'won' && !lead.convertedClientId && (
+                    {!lead.isLocked && !lead.convertedClientId && (
                         <button
-                            onClick={handleConvert}
-                            disabled={isConvertingLead}
+                            onClick={handleCloseDeal}
+                            disabled={isClosingDeal}
                             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                         >
-                            {isConvertingLead ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-                            Convert to Client
+                            {isClosingDeal ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                            Close Deal
                         </button>
+                    )}
+                    {lead.isLocked && (
+                        <span className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg">
+                            <Lock size={16} />
+                            Lead Closed
+                        </span>
                     )}
                     <button
                         onClick={() => navigate(`/crm/leads/${id}/edit`)}

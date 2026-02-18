@@ -21,6 +21,46 @@ const ProposalLineItemSchema = new Schema<IProposalLineItem>(
 );
 
 // ============================================
+// DOCUMENT SUB-SCHEMA
+// ============================================
+export interface IProposalDocument {
+    name: string;
+    cloudinaryId: string;
+    uploadedAt: Date;
+    uploadedBy: Types.ObjectId;
+}
+
+const ProposalDocumentSchema = new Schema<IProposalDocument>(
+    {
+        name: { type: String, required: true, trim: true },
+        cloudinaryId: { type: String, required: true },
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    },
+    { _id: true }
+);
+
+// ============================================
+// AUDIT LOG SUB-SCHEMA
+// ============================================
+export interface IProposalAuditEntry {
+    action: string;
+    performedBy: Types.ObjectId;
+    performedAt: Date;
+    details?: string;
+}
+
+const ProposalAuditEntrySchema = new Schema<IProposalAuditEntry>(
+    {
+        action: { type: String, required: true },
+        performedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        performedAt: { type: Date, default: Date.now },
+        details: { type: String },
+    },
+    { _id: true }
+);
+
+// ============================================
 // PROPOSAL SCHEMA
 // ============================================
 export interface IProposal extends Document {
@@ -31,6 +71,10 @@ export interface IProposal extends Document {
 
     status: 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired';
 
+    version: number;
+    parentProposalId?: Types.ObjectId;
+    scope?: string;
+
     validUntil?: Date;
 
     items: IProposalLineItem[];
@@ -38,6 +82,9 @@ export interface IProposal extends Document {
     tax: number;
     total: number;
     currency: string;
+
+    documents: IProposalDocument[];
+    auditLog: IProposalAuditEntry[];
 
     notes?: string;
 
@@ -61,6 +108,10 @@ const ProposalSchema = new Schema<IProposal>(
             default: 'draft',
         },
 
+        version: { type: Number, default: 1 },
+        parentProposalId: { type: Schema.Types.ObjectId, ref: 'Proposal' },
+        scope: { type: String, trim: true },
+
         validUntil: { type: Date },
 
         items: [ProposalLineItemSchema],
@@ -68,6 +119,9 @@ const ProposalSchema = new Schema<IProposal>(
         tax: { type: Number, default: 0, min: 0 },
         total: { type: Number, default: 0, min: 0 },
         currency: { type: String, default: 'INR' },
+
+        documents: [ProposalDocumentSchema],
+        auditLog: [ProposalAuditEntrySchema],
 
         notes: { type: String, trim: true },
 

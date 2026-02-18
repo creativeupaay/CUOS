@@ -46,12 +46,6 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
                     icon: <FolderKanban size={20} />,
                     matchPrefix: '/projects',
                 },
-                {
-                    label: 'Clients',
-                    path: '/projects/clients',
-                    icon: <Users2 size={20} />,
-                    matchPrefix: '/projects/clients',
-                },
             ],
         };
     }
@@ -93,12 +87,6 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
             title: 'CRM',
             items: [
                 {
-                    label: 'Leads',
-                    path: '/crm/leads',
-                    icon: <ListTodo size={20} />,
-                    matchPrefix: '/crm/leads',
-                },
-                {
                     label: 'Pipeline',
                     path: '/crm/pipeline',
                     icon: <BarChart3 size={20} />,
@@ -109,6 +97,12 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
                     path: '/crm/proposals',
                     icon: <FileText size={20} />,
                     matchPrefix: '/crm/proposals',
+                },
+                {
+                    label: 'Clients',
+                    path: '/crm/clients',
+                    icon: <Users2 size={20} />,
+                    matchPrefix: '/crm/clients',
                 },
             ],
         };

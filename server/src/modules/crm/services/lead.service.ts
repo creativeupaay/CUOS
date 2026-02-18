@@ -1,5 +1,6 @@
 import { Lead, ILead } from '../models/Lead.model';
 import { Client } from '../../client/models/Client.model';
+import { Proposal } from '../models/Proposal.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import type {
@@ -7,6 +8,7 @@ import type {
     UpdateLeadInput,
     ListLeadsInput,
     AddActivityInput,
+    AddMeetingInput,
 } from '../validators/lead.validator';
 
 export class LeadService {
@@ -76,7 +78,8 @@ export class LeadService {
             .populate('assignedTo', 'name email')
             .populate('createdBy', 'name email')
             .populate('convertedClientId', 'name email')
-            .populate('activities.createdBy', 'name email');
+            .populate('activities.createdBy', 'name email')
+            .populate('meetings.createdBy', 'name email');
 
         if (!lead) {
             throw new AppError('Lead not found', 404);
@@ -94,7 +97,12 @@ export class LeadService {
             throw new AppError('Lead not found', 404);
         }
 
-        // Prevent editing converted leads
+        // Prevent editing locked (closed) leads
+        if (lead.isLocked) {
+            throw new AppError('Cannot edit a closed/locked lead', 400);
+        }
+
+        // Prevent editing converted leads (backward compat)
         if (lead.convertedClientId) {
             throw new AppError('Cannot edit a converted lead', 400);
         }
@@ -120,8 +128,8 @@ export class LeadService {
             throw new AppError('Lead not found', 404);
         }
 
-        if (lead.convertedClientId) {
-            throw new AppError('Cannot delete a converted lead', 400);
+        if (lead.isLocked || lead.convertedClientId) {
+            throw new AppError('Cannot delete a closed or converted lead', 400);
         }
 
         await Lead.findByIdAndDelete(id);
@@ -153,9 +161,34 @@ export class LeadService {
     }
 
     /**
-     * Convert lead to client
+     * Add meeting to lead
      */
-    async convertToClient(leadId: string, userId: Types.ObjectId): Promise<{
+    async addMeeting(
+        leadId: string,
+        data: AddMeetingInput,
+        createdBy: Types.ObjectId
+    ): Promise<ILead> {
+        const lead = await Lead.findById(leadId);
+
+        if (!lead) {
+            throw new AppError('Lead not found', 404);
+        }
+
+        lead.meetings.push({
+            ...data,
+            date: data.date ? new Date(data.date) : new Date(),
+            createdBy,
+        });
+
+        await lead.save();
+
+        return this.getLeadById(leadId);
+    }
+
+    /**
+     * Close lead — auto-creates client, locks lead, links proposals
+     */
+    async closeLead(leadId: string, userId: Types.ObjectId): Promise<{
         lead: ILead;
         client: any;
     }> {
@@ -165,17 +198,22 @@ export class LeadService {
             throw new AppError('Lead not found', 404);
         }
 
-        if (lead.convertedClientId) {
-            throw new AppError('Lead is already converted', 400);
+        if (lead.isLocked) {
+            throw new AppError('Lead is already closed', 400);
         }
 
-        if (lead.stage !== 'won') {
-            throw new AppError('Lead must be in "won" stage to convert', 400);
+        if (lead.convertedClientId) {
+            throw new AppError('Lead is already converted to a client', 400);
         }
+
+        // Find all proposals linked to this lead
+        const proposals = await Proposal.find({ leadId: lead._id });
+        const proposalIds = proposals.map((p) => p._id as Types.ObjectId);
 
         // Create client from lead data
         const client = await Client.create({
             name: lead.company || lead.name,
+            companyName: lead.company,
             email: lead.email,
             phone: lead.phone,
             contacts: [
@@ -190,11 +228,24 @@ export class LeadService {
             billingDetails: {
                 currency: lead.currency,
             },
+            leadId: lead._id,
+            proposalIds,
             notes: `Converted from lead. Estimated value: ${lead.currency} ${lead.estimatedValue || 0}`,
             createdBy: userId,
         });
 
-        // Update lead with converted client reference
+        // Update all proposals to reference the new client
+        if (proposalIds.length > 0) {
+            await Proposal.updateMany(
+                { _id: { $in: proposalIds } },
+                { $set: { clientId: client._id } }
+            );
+        }
+
+        // Lock the lead and set stage to closed
+        lead.stage = 'closed';
+        lead.isLocked = true;
+        lead.closedAt = new Date();
         lead.convertedClientId = client._id as Types.ObjectId;
         await lead.save();
 
@@ -234,8 +285,10 @@ export class LeadService {
             'qualified',
             'proposal-sent',
             'negotiation',
-            'won',
-            'lost',
+            'closed',
+            'pending',
+            'lead-lost',
+            'follow-up',
         ];
         const stageMap = new Map(pipeline.map((s: any) => [s._id, s]));
         const stages = allStages.map((stage) => ({

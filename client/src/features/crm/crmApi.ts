@@ -7,6 +7,7 @@ import type {
     ListLeadsParams,
     ListLeadsResponse,
     AddActivityRequest,
+    AddMeetingRequest,
     CreateProposalRequest,
     UpdateProposalRequest,
     ListProposalsParams,
@@ -79,15 +80,29 @@ export const crmApi = api.injectEndpoints({
             ],
         }),
 
-        convertLeadToClient: builder.mutation<
+        addLeadMeeting: builder.mutation<
+            ApiResponse<{ lead: Lead }>,
+            { leadId: string; data: AddMeetingRequest }
+        >({
+            query: ({ leadId, data }) => ({
+                url: `/crm/leads/${leadId}/meetings`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { leadId }) => [
+                { type: 'Leads', id: leadId },
+            ],
+        }),
+
+        closeLeadDeal: builder.mutation<
             ApiResponse<{ lead: Lead; client: any }>,
             string
         >({
             query: (id) => ({
-                url: `/crm/leads/${id}/convert`,
+                url: `/crm/leads/${id}/close`,
                 method: 'POST',
             }),
-            invalidatesTags: ['Leads', 'Pipeline'],
+            invalidatesTags: ['Leads', 'Pipeline', 'Clients'],
         }),
 
         getPipelineSummary: builder.query<
@@ -186,7 +201,8 @@ export const {
     useUpdateLeadMutation,
     useDeleteLeadMutation,
     useAddLeadActivityMutation,
-    useConvertLeadToClientMutation,
+    useAddLeadMeetingMutation,
+    useCloseLeadDealMutation,
     useGetPipelineSummaryQuery,
 
     // Proposals

@@ -73,7 +73,7 @@ export default function ClientFormPage() {
             } else {
                 await createClient(formData).unwrap();
             }
-            navigate('/projects/clients');
+            navigate('/crm/clients');
         } catch (err) {
             console.error('Failed to save client:', err);
             alert('Failed to save client. Please try again.');
@@ -117,7 +117,7 @@ export default function ClientFormPage() {
                 {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                     <button
-                        onClick={() => navigate('/projects/clients')}
+                        onClick={() => navigate('/crm/clients')}
                         className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
                     >
                         <ArrowLeft size={24} />
@@ -436,7 +436,7 @@ export default function ClientFormPage() {
                     <div className="flex gap-4">
                         <button
                             type="button"
-                            onClick={() => navigate('/projects/clients')}
+                            onClick={() => navigate('/crm/clients')}
                             className="px-6 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
                         >
                             Cancel

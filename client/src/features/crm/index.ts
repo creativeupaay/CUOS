@@ -1,20 +1,31 @@
+// ============================================
+// CRM Feature — Public API
+// ============================================
+
 // Types
 export type {
     Lead,
     LeadActivity,
+    LeadMeeting,
     Proposal,
     ProposalLineItem,
-    PipelineSummary,
+    ProposalDocument,
+    ProposalAuditEntry,
     PipelineStageSummary,
+    PipelineSummary,
+    User,
+    Client,
 } from './types/types';
 
 // API Types
 export type {
+    ApiResponse,
     CreateLeadRequest,
     UpdateLeadRequest,
     ListLeadsParams,
     ListLeadsResponse,
     AddActivityRequest,
+    AddMeetingRequest,
     CreateProposalRequest,
     UpdateProposalRequest,
     ListProposalsParams,
@@ -22,16 +33,20 @@ export type {
     UpdateProposalStatusRequest,
 } from './types/apiTypes';
 
-// API Hooks
+// API & Hooks
 export {
+    crmApi,
+    // Lead hooks
     useCreateLeadMutation,
     useGetLeadsQuery,
     useGetLeadByIdQuery,
     useUpdateLeadMutation,
     useDeleteLeadMutation,
     useAddLeadActivityMutation,
-    useConvertLeadToClientMutation,
+    useAddLeadMeetingMutation,
+    useCloseLeadDealMutation,
     useGetPipelineSummaryQuery,
+    // Proposal hooks
     useCreateProposalMutation,
     useGetProposalsQuery,
     useGetProposalByIdQuery,

@@ -34,6 +34,10 @@ export interface IClient extends Document {
     billingDetails?: IClientBillingDetails;
     contacts: IClientContact[];
 
+    leadId?: Types.ObjectId;
+    proposalIds: Types.ObjectId[];
+    projectDetails?: string;
+
     status: 'active' | 'inactive' | 'archived';
     notes?: string;
 
@@ -84,6 +88,10 @@ const ClientSchema = new Schema<IClient>(
         address: ClientAddressSchema,
         billingDetails: ClientBillingDetailsSchema,
         contacts: [ClientContactSchema],
+
+        leadId: { type: Schema.Types.ObjectId, ref: 'Lead' },
+        proposalIds: [{ type: Schema.Types.ObjectId, ref: 'Proposal' }],
+        projectDetails: { type: String, trim: true },
 
         status: {
             type: String,

@@ -67,6 +67,13 @@ export interface AddActivityRequest {
     date?: string;
 }
 
+export interface AddMeetingRequest {
+    type: 'internal' | 'external';
+    title: string;
+    notes?: string;
+    date?: string;
+}
+
 // ============================================
 // PROPOSAL API TYPES
 // ============================================
@@ -75,6 +82,7 @@ export interface CreateProposalRequest {
     leadId: string;
     clientId?: string;
     validUntil?: string;
+    scope?: string;
     items: {
         description: string;
         quantity: number;
@@ -89,6 +97,7 @@ export interface CreateProposalRequest {
 export interface UpdateProposalRequest {
     title?: string;
     validUntil?: string | null;
+    scope?: string;
     items?: {
         description: string;
         quantity: number;

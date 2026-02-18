@@ -19,7 +19,7 @@ const leadSchema = z.object({
     phone: z.string().optional(),
     company: z.string().optional(),
     source: z.enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other']),
-    stage: z.enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'won', 'lost']),
+    stage: z.enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up']),
     priority: z.enum(['low', 'medium', 'high', 'critical']),
     estimatedValue: z.number().min(0).optional(),
     currency: z.string().default('INR'),
@@ -208,8 +208,10 @@ export default function CrmLeadFormPage() {
                                 <option value="qualified">Qualified</option>
                                 <option value="proposal-sent">Proposal Sent</option>
                                 <option value="negotiation">Negotiation</option>
-                                <option value="won">Won</option>
-                                <option value="lost">Lost</option>
+                                <option value="closed">Closed</option>
+                                <option value="pending">Pending</option>
+                                <option value="lead-lost">Lead Lost</option>
+                                <option value="follow-up">Follow Up</option>
                             </select>
                         </div>
 
