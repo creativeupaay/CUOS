@@ -1,4 +1,12 @@
 // Entity types (internal representation)
+export interface ProjectPhase {
+    _id?: string;
+    name: string;
+    status: 'pending' | 'in-progress' | 'completed';
+    startDate?: string;
+    endDate?: string;
+}
+
 export interface Project {
     _id: string;
     name: string;
@@ -22,6 +30,8 @@ export interface Project {
     documents: ProjectDocument[];
 
     assignees: ProjectAssignee[];
+
+    phases?: ProjectPhase[];
 
     createdBy: string | User;
     createdAt: string;
@@ -58,7 +68,7 @@ export interface Task {
     _id: string;
     title: string;
     description?: string;
-    status: 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked';
+    status: 'todo' | 'in-progress' | 'completed';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
     projectId: string | Project;

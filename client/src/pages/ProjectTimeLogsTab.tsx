@@ -1,369 +1,194 @@
 import { useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/app/store';
 import {
     useGetProjectTimeLogsQuery,
     useGetTasksQuery,
-    useCreateTimeLogMutation,
 } from '@/features/project';
-import { useState } from 'react';
-import { Plus, Loader2, Clock, X } from 'lucide-react';
+import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m > 0 ? m + 'm' : ''}`.trim() : `${m}m`;
+};
+
+const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+const MANAGER_ROLES = ['super-admin', 'admin', 'manager', 'super_admin'];
 
 export default function ProjectTimeLogsTab() {
     const { id: projectId } = useParams<{ id: string }>();
-    const [showForm, setShowForm] = useState(false);
+    const currentUser = useSelector((s: RootState) => s.auth.user);
 
-    const { data, isLoading } = useGetProjectTimeLogsQuery({ projectId: projectId! });
-    const timeLogs = data?.data || [];
+    // Resolve role name (role can be a Role object or a string)
+    const roleName = currentUser?.role
+        ? typeof currentUser.role === 'object'
+            ? (currentUser.role as any).name?.toLowerCase()
+            : String(currentUser.role).toLowerCase()
+        : '';
 
-    const { data: tasksData } = useGetTasksQuery({ projectId: projectId! });
+    const canViewLogs = MANAGER_ROLES.includes(roleName);
+
+    const { data: logsData, isLoading } = useGetProjectTimeLogsQuery(
+        { projectId: projectId! },
+        { skip: !canViewLogs }
+    );
+    const timeLogs = logsData?.data || [];
+
+    const { data: tasksData } = useGetTasksQuery(
+        { projectId: projectId! },
+        { skip: !canViewLogs }
+    );
     const tasks = tasksData?.data || [];
 
-    const [createTimeLog, { isLoading: isCreating }] = useCreateTimeLogMutation();
-
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-
-        const taskId = formData.get('taskId') as string;
-        if (!taskId) return;
-
-        const timeLogData = {
-            date: formData.get('date') as string,
-            duration: parseInt(formData.get('duration') as string),
-            description: formData.get('description') as string,
-            billable: formData.get('billable') === 'true',
-        };
-
-        try {
-            await createTimeLog({
-                projectId: projectId!,
-                taskId,
-                data: timeLogData,
-            }).unwrap();
-            setShowForm(false);
-        } catch (error) {
-            console.error('Failed to create time log:', error);
-        }
-    };
-
-    if (isLoading) {
+    // ── Access Restricted screen ──────────────────────────────────────────────
+    if (!canViewLogs) {
         return (
-            <div className="flex items-center justify-center py-16">
-                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    <Loader2 size={16} className="animate-spin" />
-                    Loading time logs...
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                    style={{ backgroundColor: 'var(--color-danger-soft, rgba(239,68,68,0.1))' }}>
+                    <ShieldOff size={28} style={{ color: 'var(--color-danger)' }} />
+                </div>
+                <div className="text-center">
+                    <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>
+                        Access Restricted
+                    </h3>
+                    <p className="text-sm max-w-sm" style={{ color: 'var(--color-text-muted)' }}>
+                        Time logs are visible to project managers and admins only.
+                        Your work hours are tracked automatically from your task activity.
+                    </p>
                 </div>
             </div>
         );
     }
 
-    const totalMinutes = timeLogs.reduce((sum, log) => sum + log.duration, 0);
-    const billableMinutes = timeLogs.filter(log => log.billable).reduce((sum, log) => sum + log.duration, 0);
+    // ── Summary calculations ──────────────────────────────────────────────────
+    const actualMins = timeLogs.reduce((sum, log) => sum + log.duration, 0);
+    const expectedMins = tasks.reduce((sum, t) => sum + ((t.estimatedHours ?? 0) * 60), 0);
+    const varianceMins = actualMins - expectedMins;
+    const overEstimate = varianceMins > 0;
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h2
-                    className="text-base font-semibold"
-                    style={{ color: 'var(--color-text-primary)' }}
-                >
-                    Time Logs
-                </h2>
-                <button
-                    onClick={() => setShowForm(true)}
-                    className="flex items-center gap-1.5 px-3.5 text-sm font-medium text-white rounded-lg transition-colors"
-                    style={{
-                        height: '36px',
-                        backgroundColor: 'var(--color-primary)',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'var(--color-primary)'; }}
-                >
-                    <Plus size={15} />
-                    Log Time
-                </button>
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        Time Logs
+                    </h2>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
+                        {timeLogs.length} entries
+                    </span>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    Auto-logged from employee task activity
+                </p>
             </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-3 gap-4">
-                <div
-                    className="p-4 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <p className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>Total Hours</p>
-                    <p className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                        {(totalMinutes / 60).toFixed(1)}h
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                    <p className="text-xs mb-1 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Actual Hours</p>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--color-primary)' }}>
+                        {(actualMins / 60).toFixed(1)}h
                     </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Total time logged across all tasks</p>
                 </div>
-                <div
-                    className="p-4 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <p className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>Billable Hours</p>
-                    <p className="text-xl font-bold" style={{ color: 'var(--color-success)' }}>
-                        {(billableMinutes / 60).toFixed(1)}h
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                    <p className="text-xs mb-1 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Expected Hours</p>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--color-success)' }}>
+                        {(expectedMins / 60).toFixed(1)}h
                     </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Sum of estimated task hours</p>
                 </div>
-                <div
-                    className="p-4 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <p className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>Total Entries</p>
-                    <p className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                        {timeLogs.length}
-                    </p>
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                    <p className="text-xs mb-1 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Variance</p>
+                    {expectedMins > 0 ? (
+                        <>
+                            <div className="flex items-center gap-1.5">
+                                {overEstimate
+                                    ? <TrendingUp size={18} style={{ color: 'var(--color-danger)' }} />
+                                    : <TrendingDown size={18} style={{ color: 'var(--color-success)' }} />}
+                                <p className="text-2xl font-bold tabular-nums"
+                                    style={{ color: overEstimate ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                    {overEstimate ? '+' : ''}{(varianceMins / 60).toFixed(1)}h
+                                </p>
+                            </div>
+                            <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                {overEstimate ? 'Over estimate' : 'Within estimate'}
+                            </p>
+                        </>
+                    ) : (
+                        <p className="text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>No estimates set on tasks</p>
+                    )}
                 </div>
             </div>
 
-            {/* Create Form */}
-            {showForm && (
-                <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <div className="flex justify-between items-center mb-4">
-                        <h3
-                            className="text-sm font-semibold"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
-                            Log Time
-                        </h3>
-                        <button
-                            onClick={() => setShowForm(false)}
-                            className="p-1 rounded transition-colors"
-                            style={{ color: 'var(--color-text-muted)' }}
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Task *
-                                </label>
-                                <select
-                                    name="taskId"
-                                    required
-                                    className="w-full px-3 rounded-lg border text-sm outline-none"
-                                    style={{
-                                        height: '36px',
-                                        borderColor: 'var(--color-border-default)',
-                                        backgroundColor: 'var(--color-bg-surface)',
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                >
-                                    <option value="">Select a task</option>
-                                    {tasks.map(task => (
-                                        <option key={task._id} value={task._id}>
-                                            {task.title}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Date *
-                                </label>
-                                <input
-                                    type="date"
-                                    name="date"
-                                    required
-                                    defaultValue={new Date().toISOString().split('T')[0]}
-                                    className="w-full px-3 rounded-lg border text-sm outline-none"
-                                    style={{
-                                        height: '36px',
-                                        borderColor: 'var(--color-border-default)',
-                                        backgroundColor: 'var(--color-bg-surface)',
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Duration (minutes) *
-                                </label>
-                                <input
-                                    type="number"
-                                    name="duration"
-                                    required
-                                    min={1}
-                                    placeholder="60"
-                                    className="w-full px-3 rounded-lg border text-sm outline-none"
-                                    style={{
-                                        height: '36px',
-                                        borderColor: 'var(--color-border-default)',
-                                        backgroundColor: 'var(--color-bg-surface)',
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Billable
-                                </label>
-                                <select
-                                    name="billable"
-                                    defaultValue="true"
-                                    className="w-full px-3 rounded-lg border text-sm outline-none"
-                                    style={{
-                                        height: '36px',
-                                        borderColor: 'var(--color-border-default)',
-                                        backgroundColor: 'var(--color-bg-surface)',
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                >
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                Description
-                            </label>
-                            <textarea
-                                name="description"
-                                rows={2}
-                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                                placeholder="What did you work on?"
-                            />
-                        </div>
-
-                        <div className="flex gap-2 pt-1">
-                            <button
-                                type="submit"
-                                disabled={isCreating}
-                                className="flex items-center gap-1.5 px-4 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-                                style={{
-                                    height: '36px',
-                                    backgroundColor: 'var(--color-primary)',
-                                }}
-                            >
-                                {isCreating && <Loader2 size={14} className="animate-spin" />}
-                                Log Time
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowForm(false)}
-                                className="px-4 text-sm font-medium rounded-lg border transition-colors"
-                                style={{
-                                    height: '36px',
-                                    borderColor: 'var(--color-border-default)',
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                }}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
+            {/* Log Table */}
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+                {/* Column headers */}
+                <div className="grid grid-cols-[120px_1fr_1fr_80px_1fr] gap-3 px-4 py-2.5 border-b text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}>
+                    <span>Date</span>
+                    <span>Member</span>
+                    <span>Task</span>
+                    <span>Duration</span>
+                    <span>Description</span>
                 </div>
-            )}
 
-            {/* Time Log Table */}
-            <div
-                className="rounded-lg border overflow-hidden"
-                style={{
-                    backgroundColor: 'var(--color-bg-surface)',
-                    borderColor: 'var(--color-border-default)',
-                }}
-            >
-                <table className="w-full">
-                    <thead>
-                        <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>Date</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>User</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>Task</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>Duration</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>Billable</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'var(--color-text-secondary)', borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {timeLogs.map((log) => {
-                            const user = typeof log.userId === 'object' ? log.userId : null;
-                            const task = typeof log.taskId === 'object' ? log.taskId : null;
-                            return (
-                                <tr
-                                    key={log._id}
-                                    style={{ borderBottomWidth: '1px', borderColor: 'var(--color-border-default)' }}
-                                >
-                                    <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                        {new Date(log.date).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                        {user?.name || 'Unknown'}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                        {task?.title || 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                        {(log.duration / 60).toFixed(1)}h
-                                    </td>
-                                    <td className="px-4 py-2.5 text-sm">
-                                        {log.billable ? (
-                                            <span
-                                                className="px-2 py-0.5 rounded-full text-[11px] font-medium"
-                                                style={{ backgroundColor: 'var(--color-success-soft)', color: 'var(--color-success)' }}
-                                            >
-                                                Yes
-                                            </span>
-                                        ) : (
-                                            <span
-                                                className="px-2 py-0.5 rounded-full text-[11px] font-medium"
-                                                style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}
-                                            >
-                                                No
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                        {log.description || '—'}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-
-                {timeLogs.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12">
-                        <div
-                            className="w-10 h-10 rounded-lg flex items-center justify-center mb-2"
-                            style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}
-                        >
-                            <Clock size={20} />
+                {isLoading ? (
+                    <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
+                ) : timeLogs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 gap-2">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+                            style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
+                            <Clock size={22} />
                         </div>
-                        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                            No time logs yet
-                        </p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                            Start tracking your time
+                        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>No time logged yet</p>
+                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            Time is tracked automatically when employees start and pause/complete tasks
                         </p>
                     </div>
+                ) : (
+                    timeLogs.map(log => {
+                        const user = typeof log.userId === 'object' ? (log.userId as any) : null;
+                        const task = typeof log.taskId === 'object' ? (log.taskId as any) : null;
+                        return (
+                            <div key={log._id}
+                                className="grid grid-cols-[120px_1fr_1fr_80px_1fr] gap-3 px-4 py-3 items-center border-b"
+                                style={{ backgroundColor: 'var(--color-bg-body)', borderColor: 'var(--color-border-default)' }}>
+                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                    {fmtDate(log.date)}
+                                </span>
+                                <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                    {user?.name || '—'}
+                                </span>
+                                <span className="text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                    {task?.title || '—'}
+                                </span>
+                                <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--color-primary)' }}>
+                                    {fmt(log.duration)}
+                                </span>
+                                <span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                                    {log.description || '—'}
+                                </span>
+                            </div>
+                        );
+                    })
                 )}
             </div>
+
+            {timeLogs.length > 0 && (
+                <div className="flex items-center gap-2 text-xs px-1" style={{ color: 'var(--color-text-muted)' }}>
+                    <CheckCircle2 size={12} />
+                    Time logs are auto-generated from employee task activity and will link to finance reporting.
+                </div>
+            )}
         </div>
     );
 }

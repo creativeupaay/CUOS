@@ -13,10 +13,10 @@ export interface ApiResponse<T = any> {
 // ============================================
 export interface CreateLeadRequest {
     name: string;
-    email: string;
+    email?: string;
     phone?: string;
-    company?: string;
-    source?: Lead['source'];
+    company: string;
+    source?: string;
     stage?: Lead['stage'];
     priority?: Lead['priority'];
     estimatedValue?: number;
@@ -32,7 +32,7 @@ export interface UpdateLeadRequest {
     email?: string;
     phone?: string;
     company?: string;
-    source?: Lead['source'];
+    source?: string;
     stage?: Lead['stage'];
     priority?: Lead['priority'];
     estimatedValue?: number;
@@ -46,7 +46,7 @@ export interface UpdateLeadRequest {
 
 export interface ListLeadsParams {
     stage?: Lead['stage'];
-    source?: Lead['source'];
+    source?: string;
     priority?: Lead['priority'];
     assignedTo?: string;
     search?: string;

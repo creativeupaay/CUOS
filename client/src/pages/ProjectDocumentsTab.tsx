@@ -5,7 +5,7 @@ import {
     useDeleteDocumentMutation,
 } from '@/features/project';
 import type { Project } from '@/features/project';
-import { FileText, Download, Trash2, Upload, Loader2 } from 'lucide-react';
+import { FileText, Download, Trash2, Upload, Loader2, Eye } from 'lucide-react';
 import { useState } from 'react';
 
 export default function ProjectDocumentsTab() {
@@ -35,6 +35,26 @@ export default function ProjectDocumentsTab() {
     };
 
     const handleDownload = async (docId: string) => {
+        try {
+            const result = await getDocumentUrl({
+                projectId: project._id,
+                docId,
+            }).unwrap();
+
+            if (result.data?.url) {
+                const a = document.createElement('a');
+                a.href = result.data.url;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        } catch (error) {
+            console.error('Failed to get document URL:', error);
+        }
+    };
+
+    const handleView = async (docId: string) => {
         try {
             const result = await getDocumentUrl({
                 projectId: project._id,
@@ -175,20 +195,28 @@ export default function ProjectDocumentsTab() {
                                     <td className="px-4 py-2.5">
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={() => handleDownload(doc._id)}
-                                                className="p-1 transition-colors"
+                                                onClick={() => handleView(doc._id)}
+                                                className="p-1 transition-colors group relative"
                                                 style={{ color: 'var(--color-primary)' }}
+                                                title="View"
+                                            >
+                                                <Eye size={14} className="opacity-80 group-hover:opacity-100" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownload(doc._id)}
+                                                className="p-1 transition-colors group relative"
+                                                style={{ color: 'var(--color-text-secondary)' }}
                                                 title="Download"
                                             >
-                                                <Download size={14} />
+                                                <Download size={14} className="opacity-80 group-hover:opacity-100" />
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(doc._id)}
-                                                className="p-1 transition-colors"
+                                                className="p-1 transition-colors group relative"
                                                 style={{ color: 'var(--color-danger)' }}
                                                 title="Delete"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={14} className="opacity-80 group-hover:opacity-100" />
                                             </button>
                                         </div>
                                     </td>

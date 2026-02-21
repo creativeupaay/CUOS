@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAppSelector } from '@/app/hooks';
 import {
     useGetLeavesQuery, useGetMyLeavesQuery, useGetLeaveBalanceQuery,
     useCreateLeaveMutation, useUpdateLeaveStatusMutation,
@@ -8,10 +9,20 @@ import { Plus, Calendar, X, Check, XCircle, Clock } from 'lucide-react';
 const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity'];
 
 export default function HrmsLeavesPage() {
-    const [showForm, setShowForm] = useState(false);
-    const [view, setView] = useState<'all' | 'mine'>('all');
+    const rawRole = useAppSelector((state) => state.auth.user?.role);
+    const userRole = typeof rawRole === 'object' ? (rawRole as any)?.name : rawRole;
+    const isHrOrAdmin = ['super-admin', 'admin', 'hr'].includes(userRole || 'employee');
 
-    const { data: allLeaves, isLoading: loadingAll } = useGetLeavesQuery({}, { skip: view !== 'all' });
+    const [showForm, setShowForm] = useState(false);
+    const [view, setView] = useState<'all' | 'mine'>(isHrOrAdmin ? 'all' : 'mine');
+
+    useEffect(() => {
+        if (!isHrOrAdmin && view === 'all') {
+            setView('mine');
+        }
+    }, [isHrOrAdmin, view]);
+
+    const { data: allLeaves, isLoading: loadingAll } = useGetLeavesQuery({}, { skip: view !== 'all' || !isHrOrAdmin });
     const { data: myLeaves, isLoading: loadingMine } = useGetMyLeavesQuery({}, { skip: view !== 'mine' });
     const { data: balanceData } = useGetLeaveBalanceQuery();
 
@@ -61,18 +72,20 @@ export default function HrmsLeavesPage() {
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>Manage leave requests and track balances</p>
                 </div>
                 <div className="flex gap-3">
-                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
-                        {(['all', 'mine'] as const).map((v) => (
-                            <button key={v} onClick={() => setView(v)}
-                                className="px-4 py-2 text-sm font-medium capitalize cursor-pointer"
-                                style={{
-                                    backgroundColor: view === v ? 'var(--color-primary)' : 'var(--color-bg-surface)',
-                                    color: view === v ? 'white' : 'var(--color-text-primary)',
-                                }}>
-                                {v === 'mine' ? 'My Leaves' : 'All Leaves'}
-                            </button>
-                        ))}
-                    </div>
+                    {isHrOrAdmin && (
+                        <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+                            {(['all', 'mine'] as const).map((v) => (
+                                <button key={v} onClick={() => setView(v)}
+                                    className="px-4 py-2 text-sm font-medium capitalize cursor-pointer"
+                                    style={{
+                                        backgroundColor: view === v ? 'var(--color-primary)' : 'var(--color-bg-surface)',
+                                        color: view === v ? 'white' : 'var(--color-text-primary)',
+                                    }}>
+                                    {v === 'mine' ? 'My Leaves' : 'All Leaves'}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <button onClick={() => setShowForm(true)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer"
                         style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -192,13 +205,13 @@ export default function HrmsLeavesPage() {
                                                 {getStatusIcon(leave.status)} {leave.status}
                                             </span>
                                         </td>
-                                        {view === 'all' && leave.status === 'pending' && (
+                                        {isHrOrAdmin && view === 'all' && leave.status === 'pending' && (
                                             <td className="px-4 py-3">
                                                 <div className="flex gap-1">
                                                     <button onClick={() => updateStatus({ id: leave._id, data: { status: 'approved' } })}
-                                                        className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer" style={{ backgroundColor: 'var(--color-success)' }}>Approve</button>
+                                                        className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer hover:opacity-90 transition-opacity" style={{ backgroundColor: 'var(--color-success)' }}>Approve</button>
                                                     <button onClick={() => updateStatus({ id: leave._id, data: { status: 'rejected' } })}
-                                                        className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer" style={{ backgroundColor: '#EF4444' }}>Reject</button>
+                                                        className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer hover:opacity-90 transition-opacity" style={{ backgroundColor: '#EF4444' }}>Reject</button>
                                                 </div>
                                             </td>
                                         )}

@@ -23,12 +23,23 @@ export interface IClientBillingDetails {
     currency: string;
 }
 
+export interface IClientPhone {
+    number: string;
+    label: string;
+}
+
+export interface IClientCustomDetail {
+    key: string;
+    value: string;
+}
+
 export interface IClient extends Document {
     _id: Types.ObjectId;
     name: string;
     companyName?: string;
-    email: string;
+    email?: string;
     phone?: string;
+    otherPhones?: IClientPhone[];
 
     address?: IClientAddress;
     billingDetails?: IClientBillingDetails;
@@ -39,6 +50,10 @@ export interface IClient extends Document {
     projectDetails?: string;
 
     status: 'active' | 'inactive' | 'archived';
+    registrationType: 'Registered' | 'Unregistered' | 'Overseas';
+    gstNumber?: string;
+    vatNumber?: string;
+    customDetails?: IClientCustomDetail[];
     notes?: string;
 
     createdBy: Types.ObjectId;
@@ -82,8 +97,14 @@ const ClientSchema = new Schema<IClient>(
     {
         name: { type: String, required: true, trim: true },
         companyName: { type: String, trim: true },
-        email: { type: String, required: true, trim: true, lowercase: true },
+        email: { type: String, trim: true, lowercase: true },
         phone: { type: String, trim: true },
+        otherPhones: [
+            {
+                number: { type: String, required: true, trim: true },
+                label: { type: String, required: true, trim: true },
+            },
+        ],
 
         address: ClientAddressSchema,
         billingDetails: ClientBillingDetailsSchema,
@@ -98,6 +119,19 @@ const ClientSchema = new Schema<IClient>(
             enum: ['active', 'inactive', 'archived'],
             default: 'active',
         },
+        registrationType: {
+            type: String,
+            enum: ['Registered', 'Unregistered', 'Overseas'],
+            default: 'Unregistered',
+        },
+        gstNumber: { type: String, trim: true },
+        vatNumber: { type: String, trim: true },
+        customDetails: [
+            {
+                key: { type: String, required: true, trim: true },
+                value: { type: String, required: true, trim: true },
+            },
+        ],
         notes: { type: String, trim: true },
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

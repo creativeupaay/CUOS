@@ -9,6 +9,7 @@ import type {
     MeetingParticipant,
     MeetingActionItem,
     CredentialData,
+    ProjectPhase,
 } from './types';
 
 // ============================================
@@ -33,6 +34,7 @@ export interface CreateProjectRequest {
         userId: string;
         role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
     }>;
+    phases?: Array<Omit<ProjectPhase, '_id'>>;
 }
 
 export interface UpdateProjectRequest {
@@ -48,6 +50,7 @@ export interface UpdateProjectRequest {
     billingType?: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
     invoiceDetails?: InvoiceDetails;
+    phases?: ProjectPhase[];
 }
 
 export interface AddAssigneeRequest {
@@ -81,7 +84,7 @@ export interface CreateTaskRequest {
 export interface UpdateTaskRequest {
     title?: string;
     description?: string;
-    status?: 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked';
+    status?: 'todo' | 'in-progress' | 'completed';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     startDate?: string;
     endDate?: string;

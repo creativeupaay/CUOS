@@ -3,7 +3,7 @@ import { Incentive } from '../models/Incentive.model';
 import { Leave } from '../models/Leave.model';
 import { Employee } from '../models/Employee.model';
 import { SalaryStructure } from '../models/SalaryStructure.model';
-import { TimeLog } from '../../project/models/TimeLog.model';
+import { Attendance } from '../models/Attendance.model';
 import { Task } from '../../project/models/Task.model';
 import AppError from '../../../utils/appError';
 
@@ -38,25 +38,26 @@ class PayrollService {
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0, 23, 59, 59);
 
-        // ── Working hours from TimeLog ──────────────────────────────
-        const timeLogs = await TimeLog.aggregate([
+        // ── Working hours from Attendance ──────────────────────────────
+        const attendanceLogs = await Attendance.aggregate([
             {
                 $match: {
-                    userId: employee.userId,
+                    employeeId: employee._id,
                     date: { $gte: startDate, $lte: endDate },
+                    status: { $in: ['present', 'half-day'] },
                 },
             },
             {
                 $group: {
                     _id: null,
-                    totalMinutes: { $sum: '$duration' },
+                    totalHours: { $sum: '$totalHours' },
                     distinctDays: { $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$date' } } },
                 },
             },
         ]);
 
-        const totalHoursWorked = timeLogs.length > 0 ? timeLogs[0].totalMinutes / 60 : 0;
-        const presentDays = timeLogs.length > 0 ? timeLogs[0].distinctDays.length : 0;
+        const totalHoursWorked = attendanceLogs.length > 0 ? attendanceLogs[0].totalHours : 0;
+        const presentDays = attendanceLogs.length > 0 ? attendanceLogs[0].distinctDays.length : 0;
 
         // Calculate working days (business days in month)
         const workingDays = this.getWorkingDaysInMonth(year, month, employee.workSchedule.workingDaysPerWeek);
@@ -98,13 +99,24 @@ class PayrollService {
         ]);
 
         const unpaidLeaveDays = unpaidLeaves.length > 0 ? unpaidLeaves[0].totalDays : 0;
-        const leaveDeduction = workingDays > 0 ? (salary.basic / workingDays) * unpaidLeaveDays : 0;
+        const leaveDeduction = (employee.employmentType !== 'contract' && workingDays > 0)
+            ? (salary.basic / workingDays) * unpaidLeaveDays
+            : 0;
 
         // ── Calculate salary ────────────────────────────────────────
-        const grossSalary = salary.basic + salary.hra + salary.da + salary.specialAllowance;
+        let grossSalary = 0;
+        let basicComponent = 0;
+
+        if (employee.employmentType === 'contract' && salary.hourlyRate > 0) {
+            grossSalary = totalHoursWorked * salary.hourlyRate;
+            basicComponent = grossSalary;
+        } else {
+            grossSalary = salary.basic + salary.hra + salary.da + salary.specialAllowance;
+            basicComponent = salary.basic;
+        }
 
         // Statutory deductions
-        const pfDeduction = salary.basic * 0.12;
+        const pfDeduction = basicComponent * 0.12;
         const esiDeduction = grossSalary < 21000 ? grossSalary * 0.0075 : 0;
         const taxDeduction = salary.deductions.tax || 0;
 

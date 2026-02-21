@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export interface IProjectPhase {
+    name: string;
+    status: 'pending' | 'in-progress' | 'completed';
+    startDate?: Date;
+    endDate?: Date;
+}
+
 export interface IProjectDocument {
     _id: Types.ObjectId;
     name: string;
@@ -48,6 +55,8 @@ export interface IProject extends Document {
     documents: IProjectDocument[];
 
     assignees: IProjectAssignee[];
+
+    phases: IProjectPhase[];
 
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -99,6 +108,20 @@ const InvoiceDetailsSchema = new Schema<IInvoiceDetails>(
     { _id: false }
 );
 
+const ProjectPhaseSchema = new Schema<IProjectPhase>(
+    {
+        name: { type: String, required: true },
+        status: {
+            type: String,
+            enum: ['pending', 'in-progress', 'completed'],
+            default: 'pending',
+        },
+        startDate: Date,
+        endDate: Date,
+    },
+    { _id: true }
+);
+
 const ProjectSchema = new Schema<IProject>(
     {
         name: { type: String, required: true, trim: true },
@@ -134,6 +157,8 @@ const ProjectSchema = new Schema<IProject>(
         documents: [ProjectDocumentSchema],
 
         assignees: [ProjectAssigneeSchema],
+
+        phases: [ProjectPhaseSchema],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         isArchived: { type: Boolean, default: false },

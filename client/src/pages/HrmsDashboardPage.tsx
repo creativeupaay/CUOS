@@ -42,6 +42,7 @@ export default function HrmsDashboardPage() {
 
     const quickLinks = [
         { label: 'Manage Employees', desc: 'View, add, and edit employee profiles', path: '/hrms/employees', icon: Users, color: '#3B82F6' },
+        { label: 'Attendance', desc: 'Track daily working hours and check-ins', path: '/hrms/attendance', icon: Clock, color: '#F59E0B' },
         { label: 'Leave Management', desc: 'Review and approve leave requests', path: '/hrms/leaves', icon: CalendarDays, color: '#10B981' },
         { label: 'Payroll', desc: 'Generate and manage salary payouts', path: '/hrms/payroll', icon: Award, color: '#8B5CF6' },
     ];

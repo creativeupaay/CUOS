@@ -2,8 +2,13 @@ export interface Client {
     _id: string;
     name: string;
     companyName?: string;
-    email: string;
+    email?: string;
     phone?: string;
+    otherPhones?: ClientPhone[];
+    registrationType?: 'Registered' | 'Unregistered' | 'Overseas';
+    gstNumber?: string;
+    vatNumber?: string;
+    customDetails?: ClientCustomDetail[];
     address?: ClientAddress;
     billingDetails?: ClientBillingDetails;
     contacts: ClientContact[];
@@ -36,4 +41,14 @@ export interface ClientBillingDetails {
     taxId?: string;
     paymentTerms?: string;
     currency: string;
+}
+
+export interface ClientPhone {
+    number: string;
+    label: string;
+}
+
+export interface ClientCustomDetail {
+    key: string;
+    value: string;
 }

@@ -4,11 +4,11 @@
 export interface Lead {
     _id: string;
     name: string;
-    email: string;
+    email?: string;
     phone?: string;
-    company?: string;
+    company: string;
 
-    source: 'website' | 'referral' | 'cold-call' | 'social-media' | 'event' | 'other';
+    source: string;
     stage: 'new' | 'contacted' | 'qualified' | 'proposal-sent' | 'negotiation' | 'closed' | 'pending' | 'lead-lost' | 'follow-up';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
@@ -52,6 +52,192 @@ export interface LeadMeeting {
 }
 
 // ============================================
+// PROPOSAL SUB-INTERFACES
+// ============================================
+
+export interface ProposalOverview {
+    project: string;
+    purpose: string;
+    outcome: string;
+}
+
+export interface ProposalPainPoint {
+    title: string;
+    description: string;
+}
+
+export interface ProposalBusinessChallenge {
+    challenge: string;
+    painPoints: ProposalPainPoint[];
+}
+
+export interface ProposalTargetAudience {
+    primary: string;
+    secondary?: string;
+}
+
+export interface ProposalGoals {
+    business: string;
+    operational: string;
+    technical: string;
+}
+
+export interface ProposalScopePhase {
+    title: string;
+    summary: string;
+    points: string[];
+}
+
+export interface ProposalScope {
+    intro: string;
+    phases: ProposalScopePhase[];
+}
+
+export interface ProposalFeatureItem {
+    name: string;
+    description: string;
+}
+
+export interface ProposalFeaturePhase {
+    title: string;
+    description: string;
+    features: ProposalFeatureItem[];
+}
+
+export interface ProposalFeatures {
+    intro: string;
+    phases: ProposalFeaturePhase[];
+}
+
+export interface ProposalUserStep {
+    title: string;
+    description: string;
+}
+
+export interface ProposalUserFlow {
+    intro: string;
+    steps: ProposalUserStep[];
+}
+
+export interface ProposalTechStack {
+    intro: string;
+    frontend: string;
+    uiStyling: string;
+    stateManagement?: string;
+    backend: string;
+    database: string;
+    fileStorage?: string;
+    searchEngine?: string;
+    aiIntegration?: string;
+    automation?: string;
+    notifications?: string;
+    hosting: string;
+    security: string;
+    integrations: string[];
+}
+
+export interface ProposalNFR {
+    intro: string;
+    performance: string;
+    accuracy?: string;
+    reliability: string;
+    security: string;
+}
+
+export interface ProposalDesign {
+    intro: string;
+    description: string;
+}
+
+export interface ProposalDeliverablePhase {
+    name: string;
+    items: string[];
+}
+
+export interface ProposalDeliverables {
+    intro: string;
+    phases: ProposalDeliverablePhase[];
+}
+
+export interface ProposalMetrics {
+    intro: string;
+    business: string[];
+    user: string[];
+    technical: string[];
+}
+
+export interface ProposalDependencies {
+    intro: string;
+    assumptions: string[];
+    constraints: string[];
+    clientRequirements: string[];
+}
+
+export interface ProposalActivity {
+    title: string;
+    duration: string;
+    objective: string;
+    activities: string[];
+}
+
+export interface ProposalTimeline {
+    intro: string;
+    phases: ProposalActivity[];
+    releasePlan?: string;
+}
+
+export interface ProposalResource {
+    role: string;
+    count: number;
+    duration: string;
+}
+
+export interface ProposalTeam {
+    intro: string;
+    resources: ProposalResource[];
+}
+
+export interface ProposalPaymentMilestone {
+    milestone: string;
+    percentage: number;
+    amount: number;
+}
+
+export interface ProposalBudgetV2 {
+    intro: string;
+    includeExclude: string[];
+    thirdPartyCosts: string[];
+    paymentSchedule: ProposalPaymentMilestone[];
+    currency: string;
+    total: number;
+}
+
+export interface ProposalFutureItem {
+    feature: string;
+    description: string;
+}
+
+export interface ProposalFutureScope {
+    intro: string;
+    items: ProposalFutureItem[];
+}
+
+export interface ProposalRisk {
+    risk: string;
+    mitigation: string;
+}
+
+export interface ProposalRisks {
+    intro: string;
+    items: ProposalRisk[];
+}
+
+export interface ProposalTerms {
+    intro: string;
+    clauses: string[];
+}
+
+// ============================================
 // PROPOSAL TYPES
 // ============================================
 export interface Proposal {
@@ -64,9 +250,32 @@ export interface Proposal {
 
     version: number;
     parentProposalId?: string;
-    scope?: string;
+    scope?: string; // Legacy
 
     validUntil?: string;
+
+    // New Structured Sections
+    overview?: ProposalOverview;
+    businessChallenge?: ProposalBusinessChallenge;
+    targetAudience?: ProposalTargetAudience;
+    goals?: ProposalGoals;
+    scopeOfWork?: ProposalScope;
+    features?: ProposalFeatures;
+    userFlow?: ProposalUserFlow;
+    techStack?: ProposalTechStack;
+    nfr?: ProposalNFR;
+    designRequirements?: ProposalDesign;
+    deliverables?: ProposalDeliverables;
+    successMetrics?: ProposalMetrics;
+    dependencies?: ProposalDependencies;
+    timeline?: ProposalTimeline;
+    team?: ProposalTeam;
+    budgetV2?: ProposalBudgetV2;
+    futureScope?: ProposalFutureScope;
+    risks?: ProposalRisks;
+    terms?: ProposalTerms;
+    conclusion?: string;
+    nextSteps?: string[];
 
     items: ProposalLineItem[];
     subtotal: number;

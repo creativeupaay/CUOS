@@ -31,6 +31,13 @@ export const createProjectSchema = z.object({
             userId: z.string(),
             role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer']),
         })).optional(),
+
+        phases: z.array(z.object({
+            name: z.string().min(1, 'Phase name is required'),
+            status: z.enum(['pending', 'in-progress', 'completed']).optional().default('pending'),
+            startDate: z.string().or(z.date()).optional(),
+            endDate: z.string().or(z.date()).optional(),
+        })).optional(),
     }),
 });
 
@@ -60,6 +67,13 @@ export const updateProjectSchema = z.object({
             paymentStatus: z.enum(['pending', 'partial', 'paid']).optional(),
             paymentTerms: z.string().optional(),
         }).optional(),
+
+        phases: z.array(z.object({
+            name: z.string().min(1, 'Phase name is required'),
+            status: z.enum(['pending', 'in-progress', 'completed']).optional(),
+            startDate: z.string().or(z.date()).optional(),
+            endDate: z.string().or(z.date()).optional(),
+        })).optional(),
     }),
 });
 

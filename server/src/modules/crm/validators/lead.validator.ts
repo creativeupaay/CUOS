@@ -8,12 +8,10 @@ const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 export const createLeadSchema = z.object({
     body: z.object({
         name: z.string().min(1, 'Name is required').trim(),
-        email: z.string().email('Invalid email').trim(),
+        email: z.string().email('Invalid email').trim().optional().or(z.literal('')),
         phone: z.string().optional(),
-        company: z.string().optional(),
-        source: z
-            .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
-            .default('other'),
+        company: z.string().min(1, 'Company name is required').trim(),
+        source: z.string().trim().default('other'),
         stage: z
             .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .default('new'),
@@ -33,12 +31,10 @@ export const createLeadSchema = z.object({
 export const updateLeadSchema = z.object({
     body: z.object({
         name: z.string().min(1).trim().optional(),
-        email: z.string().email().trim().optional(),
+        email: z.string().email().trim().optional().or(z.literal('')),
         phone: z.string().optional(),
         company: z.string().optional(),
-        source: z
-            .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
-            .optional(),
+        source: z.string().trim().optional(),
         stage: z
             .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .optional(),
@@ -68,9 +64,7 @@ export const listLeadsSchema = z.object({
         stage: z
             .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
             .optional(),
-        source: z
-            .enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other'])
-            .optional(),
+        source: z.string().optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
         assignedTo: z.string().regex(objectIdRegex).optional(),
         search: z.string().optional(),

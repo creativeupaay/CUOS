@@ -21,8 +21,10 @@ import {
     useGetLeadByIdQuery,
     useAddLeadActivityMutation,
     useCloseLeadDealMutation,
+    useUpdateLeadMutation,
     useGetProposalsQuery,
 } from '@/features/crm';
+import type { Lead } from '@/features/crm';
 
 const stageColors: Record<string, { bg: string; text: string }> = {
     new: { bg: 'var(--color-info-soft)', text: 'var(--color-info)' },
@@ -47,6 +49,7 @@ export default function CrmLeadDetailPage() {
 
     const [addActivity, { isLoading: isAddingActivity }] = useAddLeadActivityMutation();
     const [closeDeal, { isLoading: isClosingDeal }] = useCloseLeadDealMutation();
+    const [updateLead, { isLoading: isUpdating }] = useUpdateLeadMutation();
 
     const lead = leadData?.data.lead;
     const proposals = proposalsData?.data.proposals || [];
@@ -79,6 +82,15 @@ export default function CrmLeadDetailPage() {
         } catch (error) {
             console.error('Failed to close deal:', error);
             alert('Failed to close deal. Please try again.');
+        }
+    };
+
+    const handleStageChange = async (newStage: string) => {
+        if (!lead || lead.isLocked) return;
+        try {
+            await updateLead({ id: id!, data: { stage: newStage as Lead['stage'] } }).unwrap();
+        } catch (error) {
+            console.error('Failed to update stage:', error);
         }
     };
 
@@ -130,15 +142,38 @@ export default function CrmLeadDetailPage() {
                     <div>
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold text-gray-900">{lead.name}</h1>
-                            <span
-                                className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
-                                style={{
-                                    backgroundColor: stageColors[lead.stage]?.bg,
-                                    color: stageColors[lead.stage]?.text,
-                                }}
-                            >
-                                {lead.stage}
-                            </span>
+                            {lead.isLocked ? (
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
+                                    <Lock size={12} />
+                                    {lead.stage} (Locked)
+                                </span>
+                            ) : (
+                                <div className="relative group">
+                                    <select
+                                        value={lead.stage}
+                                        onChange={(e) => handleStageChange(e.target.value)}
+                                        disabled={isUpdating}
+                                        className="appearance-none cursor-pointer pl-3 pr-8 py-1 rounded-full text-xs font-semibold uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary/20"
+                                        style={{
+                                            backgroundColor: stageColors[lead.stage]?.bg,
+                                            color: stageColors[lead.stage]?.text,
+                                        }}
+                                    >
+                                        <option value="new">New</option>
+                                        <option value="contacted">Contacted</option>
+                                        <option value="qualified">Qualified</option>
+                                        <option value="proposal-sent">Proposal Sent</option>
+                                        <option value="negotiation">Negotiation</option>
+                                        <option value="closed">Closed</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="lead-lost">Lead Lost</option>
+                                        <option value="follow-up">Follow Up</option>
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <MoreVertical size={12} style={{ color: stageColors[lead.stage]?.text }} />
+                                    </div>
+                                </div>
+                            )}
                             {lead.convertedClientId && (
                                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
                                     Converted

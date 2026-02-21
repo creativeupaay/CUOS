@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useGetEmployeeQuery, useGetSalaryByEmployeeQuery } from '@/features/hrms/hrmsApi';
-import { ArrowLeft, Edit, User, Briefcase, DollarSign, Shield, CheckCircle2 } from 'lucide-react';
+import { useGetEmployeeQuery, useGetSalaryByEmployeeQuery, useCreateSalaryMutation, useUpdateSalaryMutation } from '@/features/hrms/hrmsApi';
+import { ArrowLeft, Edit, User, Briefcase, DollarSign, Shield, CheckCircle2, Plus, X, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function HrmsEmployeeDetailPage() {
     const { id } = useParams();
@@ -10,6 +11,44 @@ export default function HrmsEmployeeDetailPage() {
 
     const employee = data?.data?.employee;
     const salary = salaryData?.data?.salary;
+
+    const [createSalary, { isLoading: isCreatingSalary }] = useCreateSalaryMutation();
+    const [updateSalary, { isLoading: isUpdatingSalary }] = useUpdateSalaryMutation();
+
+    const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
+    const [salaryForm, setSalaryForm] = useState({
+        basic: 0,
+        hra: 0,
+        da: 0,
+        specialAllowance: 0,
+        effectiveFrom: new Date().toISOString().split('T')[0],
+    });
+
+    useEffect(() => {
+        if (salary && isSalaryModalOpen) {
+            setSalaryForm({
+                basic: salary.basic || 0,
+                hra: salary.hra || 0,
+                da: salary.da || 0,
+                specialAllowance: salary.specialAllowance || 0,
+                effectiveFrom: salary.effectiveFrom ? salary.effectiveFrom.split('T')[0] : new Date().toISOString().split('T')[0],
+            });
+        }
+    }, [salary, isSalaryModalOpen]);
+
+    const handleSaveSalary = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            if (salary) {
+                await updateSalary({ id: salary._id, data: salaryForm }).unwrap();
+            } else {
+                await createSalary({ employeeId: id!, ...salaryForm, currency: 'INR' }).unwrap();
+            }
+            setIsSalaryModalOpen(false);
+        } catch (err: any) {
+            alert(err?.data?.message || err?.message || 'Failed to save salary');
+        }
+    };
 
     if (isLoading) {
         return <div className="p-12 text-center" style={{ color: 'var(--color-text-muted)' }}>Loading...</div>;
@@ -77,9 +116,16 @@ export default function HrmsEmployeeDetailPage() {
 
                     {/* Salary Card */}
                     <div className="rounded-lg border p-6" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                        <div className="flex items-center gap-2 mb-4">
-                            <DollarSign size={18} style={{ color: 'var(--color-primary)' }} />
-                            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structure</h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <DollarSign size={18} style={{ color: 'var(--color-primary)' }} />
+                                <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structure</h2>
+                            </div>
+                            <button onClick={() => setIsSalaryModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                                {salary ? <><Edit size={14} /> Edit Salary</> : <><Plus size={14} /> Add Salary</>}
+                            </button>
                         </div>
                         {salary ? (
                             <div className="grid grid-cols-2 gap-y-4 gap-x-8">
@@ -158,6 +204,77 @@ export default function HrmsEmployeeDetailPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Salary Modal */}
+            {isSalaryModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="w-full max-w-md rounded-xl border p-6 shadow-xl" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                {salary ? 'Edit Salary Structure' : 'Add Salary Structure'}
+                            </h2>
+                            <button onClick={() => setIsSalaryModalOpen(false)} className="p-1 rounded-md hover:bg-gray-100 cursor-pointer">
+                                <X size={20} style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveSalary} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Basic (₹) *</label>
+                                    <input type="number" required min="0" value={salaryForm.basic}
+                                        onChange={(e) => setSalaryForm({ ...salaryForm, basic: Number(e.target.value) })}
+                                        className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>HRA (₹) *</label>
+                                    <input type="number" required min="0" value={salaryForm.hra}
+                                        onChange={(e) => setSalaryForm({ ...salaryForm, hra: Number(e.target.value) })}
+                                        className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>DA (₹)</label>
+                                    <input type="number" min="0" value={salaryForm.da}
+                                        onChange={(e) => setSalaryForm({ ...salaryForm, da: Number(e.target.value) })}
+                                        className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Special Allowance (₹)</label>
+                                    <input type="number" min="0" value={salaryForm.specialAllowance}
+                                        onChange={(e) => setSalaryForm({ ...salaryForm, specialAllowance: Number(e.target.value) })}
+                                        className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Effective From *</label>
+                                <input type="date" required value={salaryForm.effectiveFrom}
+                                    onChange={(e) => setSalaryForm({ ...salaryForm, effectiveFrom: e.target.value })}
+                                    className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }} />
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button type="submit" disabled={isCreatingSalary || isUpdatingSalary}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    {(isCreatingSalary || isUpdatingSalary) ? <Loader2 size={16} className="animate-spin" /> : <DollarSign size={16} />}
+                                    Save Salary
+                                </button>
+                                <button type="button" onClick={() => setIsSalaryModalOpen(false)}
+                                    className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

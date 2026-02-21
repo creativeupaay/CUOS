@@ -5,6 +5,7 @@ export interface ISalaryRevision {
     hra: number;
     da: number;
     specialAllowance: number;
+    hourlyRate: number;
     effectiveFrom: Date;
     revisedBy: Types.ObjectId;
 }
@@ -23,6 +24,7 @@ export interface ISalaryStructure extends Document {
     hra: number;
     da: number;
     specialAllowance: number;
+    hourlyRate: number;
     deductions: ISalaryDeductions;
     currency: string;
     effectiveFrom: Date;
@@ -33,10 +35,11 @@ export interface ISalaryStructure extends Document {
 
 const SalaryRevisionSchema = new Schema<ISalaryRevision>(
     {
-        basic: { type: Number, required: true, min: 0 },
-        hra: { type: Number, required: true, min: 0 },
+        basic: { type: Number, required: true, min: 0, default: 0 },
+        hra: { type: Number, required: true, min: 0, default: 0 },
         da: { type: Number, default: 0, min: 0 },
         specialAllowance: { type: Number, default: 0, min: 0 },
+        hourlyRate: { type: Number, default: 0, min: 0 },
         effectiveFrom: { type: Date, required: true },
         revisedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
@@ -61,10 +64,11 @@ const SalaryStructureSchema = new Schema<ISalaryStructure>(
             required: true,
             unique: true,
         },
-        basic: { type: Number, required: true, min: 0 },
-        hra: { type: Number, required: true, min: 0 },
+        basic: { type: Number, required: true, min: 0, default: 0 },
+        hra: { type: Number, required: true, min: 0, default: 0 },
         da: { type: Number, default: 0, min: 0 },
         specialAllowance: { type: Number, default: 0, min: 0 },
+        hourlyRate: { type: Number, default: 0, min: 0 },
         deductions: {
             type: SalaryDeductionsSchema,
             default: () => ({ pf: 0, esi: 0, tax: 0, other: 0 }),

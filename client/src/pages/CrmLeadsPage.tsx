@@ -42,7 +42,6 @@ export default function CrmLeadsPage() {
         search: '',
         stage: '',
         priority: '',
-        source: '',
     });
 
     // Determine query params (debounced search handled by user typing pause effectively in simple implementations, or just pass directly)
@@ -50,7 +49,6 @@ export default function CrmLeadsPage() {
     if (filters.search) queryParams.search = filters.search;
     if (filters.stage) queryParams.stage = filters.stage;
     if (filters.priority) queryParams.priority = filters.priority;
-    if (filters.source) queryParams.source = filters.source;
 
     const { data, isLoading, error } = useGetLeadsQuery(queryParams);
     const { data: pipelineData } = useGetPipelineSummaryQuery();

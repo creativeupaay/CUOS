@@ -1,4 +1,5 @@
 import { Client, IClient } from '../models/Client.model';
+import { IProject } from '../../project/models/Project.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import type { CreateClientInput, UpdateClientInput, ListClientsInput } from '../validators/client.validator';
@@ -103,14 +104,15 @@ export class ClientService {
     /**
      * Get client's projects
      */
-    async getClientProjects(clientId: string): Promise<any[]> {
+    async getClientProjects(clientId: string): Promise<IProject[]> {
         const { Project } = await import('../../project/models/Project.model');
 
+        // Use lean() for performance as we don't need Mongoose document methods here
         const projects = await Project.find({ clientId, isArchived: false })
             .sort({ createdAt: -1 })
-            .populate('createdBy', 'name email')
-            .select('-documents'); // Exclude documents for list view
+            .select('-documents') // Exclude documents for list view
+            .lean();
 
-        return projects;
+        return projects as any; // Cast to any to avoid complex type issues with lean() + dynamic import, but efficiently fetched
     }
 }

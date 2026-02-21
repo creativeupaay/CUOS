@@ -101,3 +101,14 @@ export interface GeneratePayrollRequest {
 export interface UpdatePayrollStatusRequest {
     status: 'approved' | 'paid';
 }
+
+// ── Attendance API Types ──────────────────────────────────────────────
+export interface CheckInRequest {
+    projectId?: string;
+    taskId?: string;
+    notes?: string;
+}
+
+export interface CheckOutRequest {
+    notes?: string;
+}

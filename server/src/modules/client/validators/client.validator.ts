@@ -8,6 +8,16 @@ const clientContactSchema = z.object({
     isPrimary: z.boolean().default(false),
 });
 
+const clientPhoneSchema = z.object({
+    number: z.string().min(1, 'Phone number is required').trim(),
+    label: z.string().min(1, 'Label is required').trim(),
+});
+
+const clientCustomDetailSchema = z.object({
+    key: z.string().min(1, 'Key is required').trim(),
+    value: z.string().min(1, 'Value is required').trim(),
+});
+
 const clientAddressSchema = z.object({
     street: z.string().optional(),
     city: z.string().optional(),
@@ -27,8 +37,13 @@ export const createClientSchema = z.object({
     body: z.object({
         name: z.string().min(1, 'Client name is required').trim(),
         companyName: z.string().optional(),
-        email: z.string().email('Invalid email').trim(),
+        email: z.string().email('Invalid email').trim().optional().or(z.literal('')),
         phone: z.string().optional(),
+        otherPhones: z.array(clientPhoneSchema).optional(),
+        registrationType: z.enum(['Registered', 'Unregistered', 'Overseas']).default('Unregistered'),
+        gstNumber: z.string().optional(),
+        vatNumber: z.string().optional(),
+        customDetails: z.array(clientCustomDetailSchema).optional(),
         address: clientAddressSchema.optional(),
         billingDetails: clientBillingDetailsSchema.optional(),
         contacts: z.array(clientContactSchema).default([]),
@@ -41,8 +56,13 @@ export const updateClientSchema = z.object({
     body: z.object({
         name: z.string().min(1).trim().optional(),
         companyName: z.string().optional(),
-        email: z.string().email().trim().optional(),
+        email: z.string().email().trim().optional().or(z.literal('')),
         phone: z.string().optional(),
+        otherPhones: z.array(clientPhoneSchema).optional(),
+        registrationType: z.enum(['Registered', 'Unregistered', 'Overseas']).optional(),
+        gstNumber: z.string().optional(),
+        vatNumber: z.string().optional(),
+        customDetails: z.array(clientCustomDetailSchema).optional(),
         address: clientAddressSchema.optional(),
         billingDetails: clientBillingDetailsSchema.optional(),
         contacts: z.array(clientContactSchema).optional(),

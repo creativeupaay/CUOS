@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateClientMutation, useUpdateClientMutation, useGetClientQuery } from '@/features/client/clientApi';
-import type { ClientContact } from '@/features/client/types/types';
-import { ArrowLeft, Plus, X } from 'lucide-react';
+import type { ClientContact, ClientPhone, ClientCustomDetail } from '@/features/client/types/types';
+import { ArrowLeft, Plus, X, Trash2 } from 'lucide-react';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -18,6 +18,11 @@ export default function ClientFormPage() {
         companyName: '',
         email: '',
         phone: '',
+        otherPhones: [] as ClientPhone[],
+        registrationType: 'Unregistered' as 'Registered' | 'Unregistered' | 'Overseas',
+        gstNumber: '',
+        vatNumber: '',
+        customDetails: [] as ClientCustomDetail[],
         status: 'active' as 'active' | 'inactive' | 'archived',
         notes: '',
         address: {
@@ -36,14 +41,21 @@ export default function ClientFormPage() {
         contacts: [] as ClientContact[],
     });
 
+    const [hasGst, setHasGst] = useState(false);
+
     useEffect(() => {
         if (clientData?.data.client) {
             const client = clientData.data.client;
             setFormData({
                 name: client.name,
                 companyName: client.companyName || '',
-                email: client.email,
+                email: client.email || '',
                 phone: client.phone || '',
+                otherPhones: client.otherPhones || [],
+                registrationType: client.registrationType || 'Unregistered',
+                gstNumber: client.gstNumber || '',
+                vatNumber: client.vatNumber || '',
+                customDetails: client.customDetails || [],
                 status: client.status,
                 notes: client.notes || '',
                 address: {
@@ -61,6 +73,7 @@ export default function ClientFormPage() {
                 },
                 contacts: client.contacts || [],
             });
+            setHasGst(!!client.gstNumber);
         }
     }, [clientData]);
 
@@ -74,9 +87,10 @@ export default function ClientFormPage() {
                 await createClient(formData).unwrap();
             }
             navigate('/crm/clients');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to save client:', err);
-            alert('Failed to save client. Please try again.');
+            const errorMessage = err.data?.message || err.message || 'Failed to save client. Please try again.';
+            alert(errorMessage);
         }
     };
 
@@ -111,6 +125,46 @@ export default function ClientFormPage() {
         setFormData({ ...formData, contacts: newContacts });
     };
 
+    const addPhone = () => {
+        setFormData({
+            ...formData,
+            otherPhones: [...formData.otherPhones, { number: '', label: '' }],
+        });
+    };
+
+    const removePhone = (index: number) => {
+        setFormData({
+            ...formData,
+            otherPhones: formData.otherPhones.filter((_, i) => i !== index),
+        });
+    };
+
+    const updatePhone = (index: number, field: keyof ClientPhone, value: string) => {
+        const newPhones = [...formData.otherPhones];
+        newPhones[index] = { ...newPhones[index], [field]: value };
+        setFormData({ ...formData, otherPhones: newPhones });
+    };
+
+    const addCustomDetail = () => {
+        setFormData({
+            ...formData,
+            customDetails: [...formData.customDetails, { key: '', value: '' }],
+        });
+    };
+
+    const removeCustomDetail = (index: number) => {
+        setFormData({
+            ...formData,
+            customDetails: formData.customDetails.filter((_, i) => i !== index),
+        });
+    };
+
+    const updateCustomDetail = (index: number, field: keyof ClientCustomDetail, value: string) => {
+        const newDetails = [...formData.customDetails];
+        newDetails[index] = { ...newDetails[index], [field]: value };
+        setFormData({ ...formData, customDetails: newDetails });
+    };
+
     return (
         <div className="p-8">
             <div className="max-w-4xl mx-auto">
@@ -131,6 +185,27 @@ export default function ClientFormPage() {
                     {/* Basic Information */}
                     <div className="bg-white rounded-lg border border-neutral-200 p-6">
                         <h2 className="text-lg font-semibold text-neutral-900 mb-4">Basic Information</h2>
+
+                        {/* Registration Type Chips */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">Registration Type</label>
+                            <div className="flex gap-3">
+                                {(['Registered', 'Unregistered', 'Overseas'] as const).map((type) => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, registrationType: type })}
+                                        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${formData.registrationType === type
+                                            ? 'bg-primary text-white shadow-sm'
+                                            : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                                            }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-1">
@@ -161,7 +236,6 @@ export default function ClientFormPage() {
                                 </label>
                                 <input
                                     type="email"
-                                    required
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -188,6 +262,130 @@ export default function ClientFormPage() {
                                     <option value="archived">Archived</option>
                                 </select>
                             </div>
+                        </div>
+
+                        {/* Additional Phones */}
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">Additional Phone Numbers</label>
+                            {formData.otherPhones.map((phone, index) => (
+                                <div key={index} className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Label (e.g. Work, Home)"
+                                        value={phone.label}
+                                        onChange={(e) => updatePhone(index, 'label', e.target.value)}
+                                        className="w-1/3 px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    />
+                                    <input
+                                        type="tel"
+                                        placeholder="Number"
+                                        value={phone.number}
+                                        onChange={(e) => updatePhone(index, 'number', e.target.value)}
+                                        className="w-2/3 px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => removePhone(index)}
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={addPhone}
+                                className="text-sm text-primary hover:text-primary-dark font-medium flex items-center gap-1"
+                            >
+                                <Plus size={16} /> Add Another Number
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Specific Registration Details */}
+                    {(formData.registrationType === 'Registered' || formData.registrationType === 'Unregistered' || formData.registrationType === 'Overseas') && (
+                        <div className="bg-white rounded-lg border border-neutral-200 p-6">
+                            <h2 className="text-lg font-semibold text-neutral-900 mb-4">Registration Details ({formData.registrationType})</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {(formData.registrationType === 'Registered' || formData.registrationType === 'Unregistered') && (
+                                    <div className="md:col-span-2">
+                                        <label className="flex items-center gap-2 mb-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={hasGst}
+                                                onChange={(e) => {
+                                                    setHasGst(e.target.checked);
+                                                    if (!e.target.checked) setFormData({ ...formData, gstNumber: '' });
+                                                }}
+                                                className="rounded border-neutral-300 text-primary focus:ring-primary"
+                                            />
+                                            <span className="text-sm font-medium text-neutral-700">Have GST?</span>
+                                        </label>
+                                        {hasGst && (
+                                            <div className="animate-in fade-in slide-in-from-top-2">
+                                                <label className="block text-sm font-medium text-neutral-700 mb-1">GST Number</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.gstNumber}
+                                                    onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {formData.registrationType === 'Overseas' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-700 mb-1">VAT Number</label>
+                                        <input
+                                            type="text"
+                                            value={formData.vatNumber}
+                                            onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value })}
+                                            className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Custom Details */}
+                    <div className="bg-white rounded-lg border border-neutral-200 p-6">
+                        <h2 className="text-lg font-semibold text-neutral-900 mb-4">Other Details</h2>
+                        <div className="space-y-3">
+                            {formData.customDetails.map((detail, index) => (
+                                <div key={index} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Key (e.g. Website)"
+                                        value={detail.key}
+                                        onChange={(e) => updateCustomDetail(index, 'key', e.target.value)}
+                                        className="w-1/3 px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Value"
+                                        value={detail.value}
+                                        onChange={(e) => updateCustomDetail(index, 'value', e.target.value)}
+                                        className="w-2/3 px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeCustomDetail(index)}
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={addCustomDetail}
+                                className="text-sm text-primary hover:text-primary-dark font-medium flex items-center gap-1"
+                            >
+                                <Plus size={16} /> Add Detail
+                            </button>
                         </div>
                     </div>
 
@@ -382,7 +580,7 @@ export default function ClientFormPage() {
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-neutral-700 mb-1">
-                                                    Role
+                                                    Designation/Role
                                                 </label>
                                                 <input
                                                     type="text"

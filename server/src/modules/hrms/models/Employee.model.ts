@@ -31,6 +31,10 @@ export interface IBankDetails {
     accountNumber?: string;
     ifscCode?: string;
     panNumber?: string;
+    taxInfo?: {
+        gstNumber?: string;
+        tdsRate?: number;
+    };
 }
 
 export interface IOnboardingChecklist {
@@ -106,6 +110,10 @@ const BankDetailsSchema = new Schema<IBankDetails>(
         accountNumber: { type: String, trim: true },
         ifscCode: { type: String, trim: true },
         panNumber: { type: String, trim: true },
+        taxInfo: {
+            gstNumber: { type: String, trim: true },
+            tdsRate: { type: Number, min: 0, max: 100 },
+        },
     },
     { _id: false }
 );

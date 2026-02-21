@@ -15,13 +15,13 @@ import { useGetUsersQuery } from '@/features/auth/authApi';
 // Schema matching the backend validator
 const leadSchema = z.object({
     name: z.string().min(1, 'Name is required'),
-    email: z.string().email('Invalid email'),
+    email: z.string().email('Invalid email').optional().or(z.literal('')),
     phone: z.string().optional(),
-    company: z.string().optional(),
-    source: z.enum(['website', 'referral', 'cold-call', 'social-media', 'event', 'other']),
+    company: z.string().min(1, 'Company name is required'),
+    source: z.string().optional(),
     stage: z.enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up']),
     priority: z.enum(['low', 'medium', 'high', 'critical']),
-    estimatedValue: z.number().min(0).optional(),
+    estimatedValue: z.any().optional(),
     currency: z.string().default('INR'),
     expectedCloseDate: z.string().optional(),
     tags: z.string().optional(), // We'll parse this to array
@@ -45,7 +45,7 @@ export default function CrmLeadFormPage() {
     } = useForm<LeadFormData>({
         resolver: zodResolver(leadSchema) as any,
         defaultValues: {
-            source: 'other',
+            source: '',
             stage: 'new',
             priority: 'medium',
             currency: 'INR',
@@ -81,11 +81,23 @@ export default function CrmLeadFormPage() {
                 ? data.tags.split(',').map((t) => t.trim()).filter(Boolean)
                 : [];
 
-            const payload = {
-                ...data,
+            const payload: any = {
+                name: data.name,
+                company: data.company,
                 tags: tagsArray,
-                estimatedValue: data.estimatedValue ? Number(data.estimatedValue) : undefined,
+                stage: data.stage,
+                priority: data.priority,
+                currency: data.currency || 'INR',
             };
+
+            // Only include optional fields if they have values
+            if (data.email) payload.email = data.email;
+            if (data.phone) payload.phone = data.phone;
+            if (data.source) payload.source = data.source;
+            if (data.estimatedValue) payload.estimatedValue = Number(data.estimatedValue);
+            if (data.expectedCloseDate) payload.expectedCloseDate = data.expectedCloseDate;
+            if (data.assignedTo) payload.assignedTo = data.assignedTo;
+            if (data.notes) payload.notes = data.notes;
 
             if (isEditMode) {
                 await updateLead({ id: id!, data: payload }).unwrap();
@@ -156,18 +168,19 @@ export default function CrmLeadFormPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Company
+                                Company <span className="text-red-500">*</span>
                             </label>
                             <input
                                 {...register('company')}
                                 className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 placeholder="Acme Inc."
                             />
+                            {errors.company && <p className="text-xs text-red-500 mt-1">{errors.company.message}</p>}
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Email <span className="text-red-500">*</span>
+                                Email
                             </label>
                             <input
                                 {...register('email')}
@@ -238,7 +251,7 @@ export default function CrmLeadFormPage() {
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
                                 <input
                                     type="number"
-                                    {...register('estimatedValue', { valueAsNumber: true })}
+                                    {...register('estimatedValue')}
                                     className="w-full pl-8 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     placeholder="0.00"
                                 />
@@ -249,17 +262,11 @@ export default function CrmLeadFormPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Source
                             </label>
-                            <select
+                            <input
                                 {...register('source')}
-                                className="w-full px-4 py-2 rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="website">Website</option>
-                                <option value="referral">Referral</option>
-                                <option value="cold-call">Cold Call</option>
-                                <option value="social-media">Social Media</option>
-                                <option value="event">Event</option>
-                                <option value="other">Other</option>
-                            </select>
+                                className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                placeholder="e.g. Website, Referral, LinkedIn, Cold Call..."
+                            />
                         </div>
 
                         <div>

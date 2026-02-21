@@ -6,8 +6,9 @@ import {
 } from '@/features/project';
 import { useGetClientsQuery } from '@/features/client/clientApi';
 import { useState, useEffect } from 'react';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import type { ProjectPhase } from '@/features/project/types/types';
 
 export default function ProjectFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -38,6 +39,7 @@ export default function ProjectFormPage() {
         currency: 'INR',
         billingType: 'fixed' as string,
         hourlyRate: '',
+        phases: [] as Omit<ProjectPhase, '_id'>[],
     });
 
     const [error, setError] = useState('');
@@ -57,12 +59,40 @@ export default function ProjectFormPage() {
                 currency: project.currency || 'INR',
                 billingType: project.billingType || 'fixed',
                 hourlyRate: project.hourlyRate?.toString() || '',
+                phases: project.phases ? project.phases.map((p: any) => ({
+                    name: p.name,
+                    status: p.status,
+                    startDate: p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : undefined,
+                    endDate: p.endDate ? new Date(p.endDate).toISOString().split('T')[0] : undefined,
+                })) : [],
             });
         }
     }, [project, isEditing]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value });
+    };
+
+    const handleAddPhase = () => {
+        setForm({
+            ...form,
+            phases: [
+                ...form.phases,
+                { name: '', status: 'pending', startDate: '', endDate: '' }
+            ]
+        });
+    };
+
+    const handleRemovePhase = (index: number) => {
+        const updatedPhases = [...form.phases];
+        updatedPhases.splice(index, 1);
+        setForm({ ...form, phases: updatedPhases });
+    };
+
+    const handlePhaseChange = (index: number, field: keyof ProjectPhase, value: string) => {
+        const updatedPhases = [...form.phases];
+        updatedPhases[index] = { ...updatedPhases[index], [field]: value } as any;
+        setForm({ ...form, phases: updatedPhases });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -72,6 +102,13 @@ export default function ProjectFormPage() {
         if (!form.name.trim()) { setError('Project name is required'); return; }
         if (!form.clientId) { setError('Client is required'); return; }
         if (!form.startDate) { setError('Start date is required'); return; }
+
+        for (const phase of form.phases) {
+            if (!phase.name.trim()) {
+                setError('All phase names must be filled out');
+                return;
+            }
+        }
 
         const payload: any = {
             name: form.name.trim(),
@@ -86,6 +123,7 @@ export default function ProjectFormPage() {
             currency: form.currency,
             billingType: form.billingType,
             hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
+            phases: form.phases.length > 0 ? form.phases : undefined,
         };
 
         try {
@@ -371,6 +409,114 @@ export default function ProjectFormPage() {
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* Project Phases */}
+                <div
+                    className="p-5 rounded-lg border"
+                    style={{
+                        backgroundColor: 'var(--color-bg-surface)',
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            Project Phases
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={handleAddPhase}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                color: 'var(--color-text-secondary)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                            }}
+                        >
+                            <Plus size={14} /> Add Phase
+                        </button>
+                    </div>
+
+                    {form.phases.length > 0 ? (
+                        <div className="space-y-4">
+                            {form.phases.map((phase, index) => (
+                                <div
+                                    key={index}
+                                    className="p-4 rounded-lg border relative grid grid-cols-2 lg:grid-cols-4 gap-4"
+                                    style={{
+                                        backgroundColor: 'var(--color-bg-subtle)',
+                                        borderColor: 'var(--color-border-default)'
+                                    }}
+                                >
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Phase Name *</label>
+                                        <input
+                                            value={phase.name}
+                                            onChange={(e) => handlePhaseChange(index, 'name', e.target.value)}
+                                            required
+                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                            style={{ ...inputStyle, backgroundColor: 'white' }}
+                                            placeholder="e.g. Design"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Status</label>
+                                        <select
+                                            value={phase.status}
+                                            onChange={(e) => handlePhaseChange(index, 'status', e.target.value)}
+                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                            style={{ ...inputStyle, backgroundColor: 'white' }}
+                                        >
+                                            <option value="pending">Pending</option>
+                                            <option value="in-progress">In Progress</option>
+                                            <option value="completed">Completed</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Start Date</label>
+                                        <input
+                                            type="date"
+                                            value={phase.startDate || ''}
+                                            onChange={(e) => handlePhaseChange(index, 'startDate', e.target.value)}
+                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                            style={{ ...inputStyle, backgroundColor: 'white' }}
+                                        />
+                                    </div>
+                                    <div className="relative">
+                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>End Date</label>
+                                        <input
+                                            type="date"
+                                            value={phase.endDate || ''}
+                                            onChange={(e) => handlePhaseChange(index, 'endDate', e.target.value)}
+                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                            style={{ ...inputStyle, backgroundColor: 'white' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemovePhase(index)}
+                                            className="absolute top-0 -right-2 p-1.5 text-red-500 hover:text-red-700 bg-white hover:bg-red-50 rounded-full border shadow-sm transition-colors cursor-pointer z-10"
+                                            style={{ transform: 'translate(50%, -50%)', borderColor: 'var(--color-border-default)' }}
+                                            title="Remove Phase"
+                                        >
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div
+                            className="text-center py-6 px-4 rounded-lg border border-dashed"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-subtle)'
+                            }}
+                        >
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                No phases created yet.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Actions */}

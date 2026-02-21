@@ -1,7 +1,7 @@
 import { api } from '@/services/api';
 import type {
     Employee, SalaryStructure, Leave, Payroll, LeaveBalance,
-    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary,
+    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance
 } from './types/types';
 import type {
     ApiResponse, PaginatedResponse,
@@ -9,6 +9,7 @@ import type {
     CreateSalaryRequest, UpdateSalaryRequest,
     CreateLeaveRequest, UpdateLeaveStatusRequest,
     GeneratePayrollRequest, UpdatePayrollStatusRequest,
+    CheckInRequest, CheckOutRequest,
 } from './types/apiTypes';
 
 export const hrmsApi = api.injectEndpoints({
@@ -230,6 +231,41 @@ export const hrmsApi = api.injectEndpoints({
                 params,
             }),
         }),
+
+        // ══════════════════════════════════════════════════════════
+        // ATTENDANCE ENDPOINTS
+        // ══════════════════════════════════════════════════════════
+        checkIn: builder.mutation<ApiResponse<{ attendance: Attendance }>, CheckInRequest>({
+            query: (data) => ({
+                url: '/hrms/attendance/check-in',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Employees'], // Refresh dashboard stats/today's attendance
+        }),
+
+        checkOut: builder.mutation<ApiResponse<{ attendance: Attendance }>, CheckOutRequest>({
+            query: (data) => ({
+                url: '/hrms/attendance/check-out',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Employees'],
+        }),
+
+        getMyAttendance: builder.query<ApiResponse<{ data: Attendance[], results: number }>, { startDate?: string; endDate?: string }>({
+            query: (params) => ({
+                url: '/hrms/attendance/me',
+                params,
+            }),
+        }),
+
+        getEmployeeAttendance: builder.query<ApiResponse<{ data: Attendance[], results: number }>, { id: string, startDate?: string; endDate?: string }>({
+            query: ({ id, ...params }) => ({
+                url: `/hrms/attendance/employee/${id}`,
+                params,
+            }),
+        }),
     }),
     overrideExisting: false,
 });
@@ -259,9 +295,13 @@ export const {
     useGetPayrollsQuery,
     useGetPayrollByIdQuery,
     useUpdatePayrollStatusMutation,
-    // Analytics
     useGetDashboardStatsQuery,
     useGetWorkingHoursQuery,
     useGetTeamAnalyticsQuery,
     useGetIncentiveSummaryQuery,
+    // Attendance
+    useCheckInMutation,
+    useCheckOutMutation,
+    useGetMyAttendanceQuery,
+    useGetEmployeeAttendanceQuery,
 } = hrmsApi;

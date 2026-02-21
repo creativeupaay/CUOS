@@ -1,10 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Plus,
     Search,
     FileText,
     Download,
-    Eye,
     Send,
     Loader2,
     AlertCircle,
@@ -24,6 +24,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 };
 
 export default function CrmProposalsPage() {
+    const navigate = useNavigate();
     const [statusFilter, setStatusFilter] = useState('');
     const [search, setSearch] = useState('');
 
@@ -81,6 +82,7 @@ export default function CrmProposalsPage() {
                     </p>
                 </div>
                 <button
+                    onClick={() => navigate('/crm/proposals/new')}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
                     <Plus size={18} />
@@ -206,8 +208,12 @@ export default function CrmProposalsPage() {
                                                 </button>
                                             </>
                                         )}
-                                        <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="View Details">
-                                            <Eye size={16} />
+                                        <button
+                                            onClick={() => navigate(`/crm/proposals/${proposal._id}/edit`)}
+                                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                                            title="Edit Proposal"
+                                        >
+                                            <FileText size={16} />
                                         </button>
                                         <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Download PDF">
                                             <Download size={16} />

@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { logout } from '@/features/auth/slices/authSlice';
+import { useGetProjectsQuery } from '@/features/project/projectApi';
 import {
     ArrowLeft,
     FolderKanban,
@@ -10,6 +12,7 @@ import {
     FileText,
     LogOut,
     ChevronRight,
+    ChevronDown,
     Shield,
     ScrollText,
     Settings,
@@ -17,6 +20,7 @@ import {
     Receipt,
     CreditCard,
     TrendingUp,
+    Clock,
 } from 'lucide-react';
 
 interface NavItem {
@@ -25,6 +29,8 @@ interface NavItem {
     icon: React.ReactNode;
     /** Match routes that start with this prefix to highlight active state */
     matchPrefix?: string;
+    /** Optional sub-items for nested navigation */
+    subItems?: { label: string; path: string }[];
 }
 
 interface ModuleConfig {
@@ -35,8 +41,13 @@ interface ModuleConfig {
 /**
  * Returns module-specific navigation items based on the current route.
  */
-function getModuleConfig(pathname: string): ModuleConfig | null {
+function getModuleConfig(pathname: string, projects?: { _id: string; name: string }[]): ModuleConfig | null {
     if (pathname.startsWith('/projects')) {
+        const projectSubItems = projects?.map(p => ({
+            label: p.name,
+            path: `/projects/${p._id}`
+        })) || [];
+
         return {
             title: 'Project Management',
             items: [
@@ -45,6 +56,7 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
                     path: '/projects',
                     icon: <FolderKanban size={20} />,
                     matchPrefix: '/projects',
+                    subItems: projectSubItems,
                 },
             ],
         };
@@ -125,6 +137,12 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
                     matchPrefix: '/hrms/employees',
                 },
                 {
+                    label: 'Attendance',
+                    path: '/hrms/attendance',
+                    icon: <Clock size={20} />,
+                    matchPrefix: '/hrms/attendance',
+                },
+                {
                     label: 'Leaves',
                     path: '/hrms/leaves',
                     icon: <ListTodo size={20} />,
@@ -189,6 +207,11 @@ function getModuleConfig(pathname: string): ModuleConfig | null {
 function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
     if (!item.matchPrefix) return false;
 
+    // Check if any subItem is active specifically to avoid parent taking precedence
+    if (item.subItems?.some(sub => pathname === sub.path)) {
+        return true;
+    }
+
     // Sort items by matchPrefix length descending (most specific first)
     const sorted = [...allItems]
         .filter((i) => i.matchPrefix)
@@ -196,8 +219,128 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 
     // Find the first (most specific) match
     const bestMatch = sorted.find((i) => pathname.startsWith(i.matchPrefix!));
+
+    // For exact paths or general prefix matches where a subItem isn't explicitly active
     return bestMatch?.path === item.path;
 }
+
+// Separate component for rendering a nav item to manage its own expand/collapse state
+const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) => {
+    // Default open if active or if we are in one of its subItems
+    const hasSubItems = item.subItems && item.subItems.length > 0;
+    const isSubItemActive = hasSubItems && item.subItems!.some(sub => pathname === sub.path);
+    const [isExpanded, setIsExpanded] = useState(active || isSubItemActive);
+
+    // Sync expansion state when route changes
+    useEffect(() => {
+        if (active || isSubItemActive) {
+            setIsExpanded(true);
+        }
+    }, [pathname, active, isSubItemActive]);
+
+    const toggleExpand = (e: React.MouseEvent) => {
+        if (hasSubItems) {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+        }
+    };
+
+    return (
+        <div className="space-y-1">
+            <NavLink
+                to={item.path}
+                end={item.path === '/projects'}
+                className="flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors h-10 select-none"
+                style={
+                    active && !isSubItemActive
+                        ? {
+                            backgroundColor: 'var(--color-primary-soft)',
+                            color: 'var(--color-primary-dark)',
+                        }
+                        : {
+                            color: 'var(--color-text-secondary)',
+                        }
+                }
+                onMouseEnter={(e) => {
+                    if (!(active && !isSubItemActive)) {
+                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    if (!(active && !isSubItemActive)) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                }}
+            >
+                <span style={active && !isSubItemActive ? { color: 'var(--color-primary-dark)' } : {}}>
+                    {item.icon}
+                </span>
+                <span className="flex-1 truncate">{item.label}</span>
+                {hasSubItems && (
+                    <button
+                        onClick={toggleExpand}
+                        className="p-1 rounded hover:bg-black/5"
+                        style={active && !isSubItemActive ? { color: 'var(--color-primary-dark)' } : {}}
+                    >
+                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                )}
+                {!hasSubItems && active && (
+                    <ChevronRight
+                        size={16}
+                        className="ml-auto"
+                        style={{ color: 'var(--color-primary-dark)' }}
+                    />
+                )}
+            </NavLink>
+
+            {hasSubItems && isExpanded && (
+                <div className="pl-10 space-y-1 mt-1">
+                    {item.subItems!.map((sub) => {
+                        const isSubActive = pathname === sub.path;
+                        return (
+                            <NavLink
+                                key={sub.path}
+                                to={sub.path}
+                                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors truncate"
+                                style={
+                                    isSubActive
+                                        ? {
+                                            color: 'var(--color-primary-dark)',
+                                            fontWeight: 500,
+                                            backgroundColor: 'var(--color-primary-soft)',
+                                        }
+                                        : {
+                                            color: 'var(--color-text-secondary)',
+                                        }
+                                }
+                                onMouseEnter={(e) => {
+                                    if (!isSubActive) {
+                                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!isSubActive) {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                    }
+                                }}
+                            >
+                                <div
+                                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                                    style={{
+                                        backgroundColor: isSubActive ? 'var(--color-primary-dark)' : 'var(--border-default)',
+                                        opacity: isSubActive ? 1 : 0.5
+                                    }}
+                                />
+                                <span className="truncate">{sub.label}</span>
+                            </NavLink>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function Sidebar() {
     const dispatch = useAppDispatch();
@@ -205,7 +348,15 @@ export default function Sidebar() {
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
 
-    const moduleConfig = getModuleConfig(location.pathname);
+    // Only fetch projects if we are in the PM module
+    const isPMRoute = location.pathname.startsWith('/projects');
+    const { data: projectsResponse } = useGetProjectsQuery(
+        {},
+        { skip: !isPMRoute }
+    );
+    const projects = projectsResponse?.data || [];
+
+    const moduleConfig = getModuleConfig(location.pathname, projects);
 
     const handleLogout = () => {
         dispatch(logout());
@@ -226,7 +377,7 @@ export default function Sidebar() {
         >
             {/* Brand + Module Title */}
             <div
-                className="px-5 border-b"
+                className="px-5 border-b shrink-0"
                 style={{
                     borderColor: 'var(--color-border-default)',
                 }}
@@ -266,7 +417,7 @@ export default function Sidebar() {
                         Back to Dashboard
                     </button>
                     <h2
-                        className="text-sm font-semibold"
+                        className="text-sm font-semibold truncate"
                         style={{ color: 'var(--color-text-primary)' }}
                     >
                         {moduleConfig.title}
@@ -275,50 +426,18 @@ export default function Sidebar() {
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 py-4 px-3 overflow-y-auto">
+            <nav className="flex-1 py-4 px-3 overflow-y-auto overflow-x-hidden">
                 <div className="space-y-1">
                     {moduleConfig.items.map((item) => {
                         const active = isItemActive(item, location.pathname, moduleConfig.items);
 
                         return (
-                            <NavLink
+                            <NavItemComponent
                                 key={item.path}
-                                to={item.path}
-                                end={item.path === '/projects'}
-                                className="flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors h-10"
-                                style={
-                                    active
-                                        ? {
-                                            backgroundColor: 'var(--color-primary-soft)',
-                                            color: 'var(--color-primary-dark)',
-                                        }
-                                        : {
-                                            color: 'var(--color-text-secondary)',
-                                        }
-                                }
-                                onMouseEnter={(e) => {
-                                    if (!active) {
-                                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
-                                    }
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (!active) {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }
-                                }}
-                            >
-                                <span style={active ? { color: 'var(--color-primary-dark)' } : {}}>
-                                    {item.icon}
-                                </span>
-                                <span>{item.label}</span>
-                                {active && (
-                                    <ChevronRight
-                                        size={16}
-                                        className="ml-auto"
-                                        style={{ color: 'var(--color-primary-dark)' }}
-                                    />
-                                )}
-                            </NavLink>
+                                item={item}
+                                active={active}
+                                pathname={location.pathname}
+                            />
                         );
                     })}
                 </div>
@@ -326,7 +445,7 @@ export default function Sidebar() {
 
             {/* User */}
             <div
-                className="px-4 py-3 border-t"
+                className="px-4 py-3 border-t shrink-0"
                 style={{ borderColor: 'var(--color-border-default)' }}
             >
                 <div className="flex items-center gap-3">

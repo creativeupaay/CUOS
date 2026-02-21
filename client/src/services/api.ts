@@ -24,7 +24,9 @@ const baseQueryWithReauth = async (
 ) => {
   let result = await baseQuery(args, api, extraOptions);
 
-  if (result.error?.status === 401) {
+  const isLoginRequest = typeof args === 'string' ? args.includes('/auth/login') : args.url?.includes('/auth/login');
+
+  if (result.error?.status === 401 && !isLoginRequest) {
     // Try calling refresh token endpoint (common)
     const refreshResult = await baseQuery(
       { url: '/auth/refresh', method: 'POST' },

@@ -8,12 +8,14 @@ import { createEmployeeSchema, updateEmployeeSchema } from '../validators/employ
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
+import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
 
 // Controllers
 import * as employeeController from '../controllers/employee.controller';
 import * as salaryController from '../controllers/salary.controller';
 import * as leaveController from '../controllers/leave.controller';
 import * as payrollController from '../controllers/payroll.controller';
+import * as attendanceController from '../controllers/attendance.controller';
 
 const router = Router();
 
@@ -47,6 +49,22 @@ router.patch(
     hrAdminOnly,
     employeeController.updateOnboardingChecklist
 );
+
+// ══════════════════════════════════════════════════════════════════════
+// ATTENDANCE ROUTES
+// ══════════════════════════════════════════════════════════════════════
+router.post(
+    '/attendance/check-in',
+    validateRequest(checkInSchema),
+    attendanceController.checkIn
+);
+router.post(
+    '/attendance/check-out',
+    validateRequest(checkOutSchema),
+    attendanceController.checkOut
+);
+router.get('/attendance/me', attendanceController.getMyAttendance);
+router.get('/attendance/employee/:id', checkHrmsAccess(true), attendanceController.getEmployeeAttendance);
 
 // ══════════════════════════════════════════════════════════════════════
 // SALARY ROUTES

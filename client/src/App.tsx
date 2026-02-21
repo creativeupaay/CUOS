@@ -32,6 +32,7 @@ import CrmLeadFormPage from './pages/CrmLeadFormPage';
 import CrmPipelinePage from './pages/CrmPipelinePage';
 import CrmLeadDetailPage from './pages/CrmLeadDetailPage';
 import CrmProposalsPage from './pages/CrmProposalsPage';
+import CrmProposalFormPage from './pages/CrmProposalFormPage';
 
 // Finance pages
 import FinanceDashboardPage from './pages/FinanceDashboardPage';
@@ -45,6 +46,7 @@ import HrmsDashboardPage from './pages/HrmsDashboardPage';
 import HrmsEmployeesPage from './pages/HrmsEmployeesPage';
 import HrmsEmployeeFormPage from './pages/HrmsEmployeeFormPage';
 import HrmsEmployeeDetailPage from './pages/HrmsEmployeeDetailPage';
+import HrmsAttendancePage from './pages/HrmsAttendancePage';
 import HrmsLeavesPage from './pages/HrmsLeavesPage';
 import HrmsPayrollPage from './pages/HrmsPayrollPage';
 
@@ -118,6 +120,8 @@ function App() {
           <Route path="/crm/leads/:id" element={<CrmLeadDetailPage />} />
           <Route path="/crm/leads/:id/edit" element={<CrmLeadFormPage />} />
           <Route path="/crm/proposals" element={<CrmProposalsPage />} />
+          <Route path="/crm/proposals/new" element={<CrmProposalFormPage />} />
+          <Route path="/crm/proposals/:id/edit" element={<CrmProposalFormPage />} />
           {/* CRM Clients (moved from Project Management) */}
           <Route path="/crm/clients" element={<ClientsPage />} />
           <Route path="/crm/clients/new" element={<ClientFormPage />} />
@@ -136,6 +140,7 @@ function App() {
           <Route path="/hrms/employees/new" element={<HrmsEmployeeFormPage />} />
           <Route path="/hrms/employees/:id" element={<HrmsEmployeeDetailPage />} />
           <Route path="/hrms/employees/:id/edit" element={<HrmsEmployeeFormPage />} />
+          <Route path="/hrms/attendance" element={<HrmsAttendancePage />} />
           <Route path="/hrms/leaves" element={<HrmsLeavesPage />} />
           <Route path="/hrms/payroll" element={<HrmsPayrollPage />} />
           {/* Admin Module */}

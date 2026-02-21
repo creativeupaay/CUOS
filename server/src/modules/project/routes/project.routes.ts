@@ -269,7 +269,7 @@ router.patch(
 router.delete(
     '/:projectId/meetings/:id',
     validateRequest(meetingValidators.deleteMeetingSchema),
-    checkProjectManager,
+    checkMeetingAccess,
     meetingController.deleteMeeting
 );
 
@@ -313,7 +313,7 @@ router.patch(
 router.delete(
     '/:projectId/credentials/:id',
     validateRequest(credentialValidators.deleteCredentialSchema),
-    checkProjectManager,
+    checkCredentialAccess,
     credentialController.deleteCredential
 );
 

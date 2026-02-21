@@ -56,11 +56,11 @@ const LeadMeetingSchema = new Schema<ILeadMeeting>(
 export interface ILead extends Document {
     _id: Types.ObjectId;
     name: string;
-    email: string;
+    email?: string;
     phone?: string;
-    company?: string;
+    company: string;
 
-    source: 'website' | 'referral' | 'cold-call' | 'social-media' | 'event' | 'other';
+    source: string;
     stage: 'new' | 'contacted' | 'qualified' | 'proposal-sent' | 'negotiation' | 'closed' | 'pending' | 'lead-lost' | 'follow-up';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
@@ -91,16 +91,15 @@ const LeadSchema = new Schema<ILead>(
         name: { type: String, required: true, trim: true },
         email: {
             type: String,
-            required: true,
             trim: true,
             lowercase: true,
         },
         phone: { type: String, trim: true },
-        company: { type: String, trim: true },
+        company: { type: String, required: true, trim: true },
 
         source: {
             type: String,
-            enum: ['website', 'referral', 'cold-call', 'social-media', 'event', 'other'],
+            trim: true,
             default: 'other',
         },
         stage: {

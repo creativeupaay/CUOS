@@ -70,6 +70,7 @@ class SalaryService {
             basic: salary.basic,
             hra: salary.hra,
             da: salary.da,
+            hourlyRate: salary.hourlyRate,
             specialAllowance: salary.specialAllowance,
             effectiveFrom: salary.effectiveFrom,
             revisedBy: revisedBy as any,

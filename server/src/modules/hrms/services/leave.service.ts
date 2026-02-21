@@ -1,4 +1,5 @@
 import { Leave, ILeave } from '../models/Leave.model';
+import { LeaveBalance } from '../models/LeaveBalance.model';
 import { CreateLeaveInput, UpdateLeaveStatusInput } from '../validators/leave.validator';
 import { Employee } from '../models/Employee.model';
 import AppError from '../../../utils/appError';
@@ -118,7 +119,44 @@ class LeaveService {
         }
 
         await leave.save();
+
+        // Auto-update LeaveBalance if approved
+        if (data.status === 'approved' && leave.type !== 'unpaid') {
+            const year = leave.startDate.getFullYear();
+            await this.ensureLeaveBalance(leave.employeeId.toString(), year);
+
+            await LeaveBalance.updateOne(
+                { employeeId: leave.employeeId, year, 'balances.type': leave.type },
+                {
+                    $inc: {
+                        'balances.$.used': leave.days,
+                        'balances.$.pending': -leave.days
+                    }
+                }
+            );
+        }
+
         return leave;
+    }
+
+    private async ensureLeaveBalance(employeeId: string, year: number) {
+        let balance = await LeaveBalance.findOne({ employeeId, year });
+        if (!balance) {
+            const defaultBalances = [
+                { type: 'casual', quota: 12, used: 0, pending: 12 },
+                { type: 'sick', quota: 12, used: 0, pending: 12 },
+                { type: 'earned', quota: 15, used: 0, pending: 15 },
+                { type: 'unpaid', quota: 365, used: 0, pending: 365 },
+                { type: 'maternity', quota: 180, used: 0, pending: 180 },
+                { type: 'paternity', quota: 15, used: 0, pending: 15 },
+            ];
+            balance = await LeaveBalance.create({
+                employeeId,
+                year,
+                balances: defaultBalances
+            });
+        }
+        return balance;
     }
 
     async getLeaveBalance(userId: string, year: number) {
@@ -127,48 +165,8 @@ class LeaveService {
             throw new AppError('Employee record not found', 404);
         }
 
-        const startOfYear = new Date(year, 0, 1);
-        const endOfYear = new Date(year, 11, 31);
-
-        const leavesTaken = await Leave.aggregate([
-            {
-                $match: {
-                    employeeId: employee._id,
-                    status: 'approved',
-                    startDate: { $gte: startOfYear, $lte: endOfYear },
-                },
-            },
-            {
-                $group: {
-                    _id: '$type',
-                    totalDays: { $sum: '$days' },
-                    count: { $sum: 1 },
-                },
-            },
-        ]);
-
-        // Default leave allocation per year
-        const allocation: Record<string, number> = {
-            casual: 12,
-            sick: 12,
-            earned: 15,
-            unpaid: 365, // unlimited
-            maternity: 180,
-            paternity: 15,
-        };
-
-        const balance = Object.entries(allocation).map(([type, total]) => {
-            const taken = leavesTaken.find((l) => l._id === type);
-            return {
-                type,
-                total,
-                used: taken?.totalDays || 0,
-                remaining: total - (taken?.totalDays || 0),
-                count: taken?.count || 0,
-            };
-        });
-
-        return balance;
+        const balance = await this.ensureLeaveBalance(employee._id.toString(), year);
+        return balance.balances;
     }
 }
 

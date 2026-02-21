@@ -1,10 +1,15 @@
-import type { Client, ClientContact, ClientAddress, ClientBillingDetails } from './types';
+import type { Client, ClientContact, ClientAddress, ClientBillingDetails, ClientPhone, ClientCustomDetail } from './types';
 
 export interface CreateClientRequest {
     name: string;
     companyName?: string;
-    email: string;
+    email?: string;
     phone?: string;
+    otherPhones?: ClientPhone[];
+    registrationType?: 'Registered' | 'Unregistered' | 'Overseas';
+    gstNumber?: string;
+    vatNumber?: string;
+    customDetails?: ClientCustomDetail[];
     address?: ClientAddress;
     billingDetails?: ClientBillingDetails;
     contacts?: ClientContact[];
@@ -17,6 +22,11 @@ export interface UpdateClientRequest {
     companyName?: string;
     email?: string;
     phone?: string;
+    otherPhones?: ClientPhone[];
+    registrationType?: 'Registered' | 'Unregistered' | 'Overseas';
+    gstNumber?: string;
+    vatNumber?: string;
+    customDetails?: ClientCustomDetail[];
     address?: ClientAddress;
     billingDetails?: ClientBillingDetails;
     contacts?: ClientContact[];

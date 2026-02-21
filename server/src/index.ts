@@ -47,6 +47,9 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/v1", v1Routes);
 
+// Serve local fallback uploads directory publicly
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
 if (env.NODE_ENV === "production") {
   const buildPath = path.join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(buildPath));

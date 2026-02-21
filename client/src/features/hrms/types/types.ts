@@ -235,3 +235,19 @@ export interface IncentiveSummary {
         taskCount: number;
     };
 }
+
+// ── Attendance Types ────────────────────────────────────────────────
+export interface Attendance {
+    _id: string;
+    employeeId: string;
+    date: string;
+    checkIn?: string;
+    checkOut?: string;
+    totalHours: number;
+    status: 'present' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
+    projectId?: string;
+    taskId?: string;
+    notes?: string;
+    createdAt: string;
+    updatedAt: string;
+}

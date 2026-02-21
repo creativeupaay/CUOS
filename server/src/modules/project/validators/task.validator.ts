@@ -7,7 +7,7 @@ export const createTaskSchema = z.object({
     body: z.object({
         title: z.string().min(1, 'Task title is required').trim(),
         description: z.string().optional(),
-        status: z.enum(['todo', 'in-progress', 'review', 'completed', 'blocked']).optional(),
+        status: z.enum(['todo', 'in-progress', 'completed']).optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
 
         parentTaskId: z.string().optional(), // For subtasks
@@ -29,7 +29,7 @@ export const updateTaskSchema = z.object({
     body: z.object({
         title: z.string().min(1).trim().optional(),
         description: z.string().optional(),
-        status: z.enum(['todo', 'in-progress', 'review', 'completed', 'blocked']).optional(),
+        status: z.enum(['todo', 'in-progress', 'completed']).optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
 
         startDate: z.string().or(z.date()).optional(),
@@ -46,7 +46,7 @@ export const getTasksSchema = z.object({
         projectId: z.string().min(1, 'Project ID is required'),
     }),
     query: z.object({
-        status: z.enum(['todo', 'in-progress', 'review', 'completed', 'blocked']).optional(),
+        status: z.enum(['todo', 'in-progress', 'completed']).optional(),
         assignee: z.string().optional(),
     }).optional(),
 });
@@ -73,7 +73,7 @@ export const createSubtaskSchema = z.object({
     body: z.object({
         title: z.string().min(1, 'Subtask title is required').trim(),
         description: z.string().optional(),
-        status: z.enum(['todo', 'in-progress', 'review', 'completed', 'blocked']).optional(),
+        status: z.enum(['todo', 'in-progress', 'completed']).optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
 
         startDate: z.string().or(z.date()).optional(),
