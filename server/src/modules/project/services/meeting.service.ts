@@ -1,6 +1,7 @@
 import { Meeting, IMeeting } from '../models/Meeting.model';
 import { Project } from '../models/Project.model';
 import AppError from '../../../utils/appError';
+import { Employee } from '../../hrms/models/Employee.model';
 
 export interface CreateMeetingData {
     title: string;
@@ -88,8 +89,10 @@ export const getMeetings = async (
     // Filter by access level (if not admin)
     if (userRole !== 'admin' && userRole !== 'super-admin') {
         const project = await Project.findById(projectId);
-        const userAssignee = project?.assignees.find(
-            (a) => a.userId.toString() === userId
+
+        const employee = await Employee.findOne({ userId });
+        const userAssignee = employee && project?.assignees.find(
+            (a) => a.employeeId.toString() === employee._id.toString()
         );
 
         meetings = meetings.filter((meeting) => {

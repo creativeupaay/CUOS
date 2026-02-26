@@ -9,14 +9,16 @@ import {
     useGetSubtasksQuery,
     useGetProjectByIdQuery,
     useCreateTimeLogMutation,
+    useCreateSubtaskMutation,
 } from '@/features/project';
 import type { Task } from '@/features/project';
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Play, Pause, Square } from 'lucide-react';
+import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Play, Pause, Square, Pencil } from 'lucide-react';
 
 const statusStyles: Record<string, { bg: string; text: string; dot: string; icon?: any }> = {
     todo: { bg: 'transparent', text: 'var(--color-text-secondary)', dot: '#9CA3AF', icon: Circle },
     'in-progress': { bg: 'transparent', text: 'var(--color-text-primary)', dot: '#3B82F6', icon: Circle },
+    paused: { bg: 'transparent', text: '#D97706', dot: '#F59E0B', icon: Pause },
     completed: { bg: 'transparent', text: 'var(--color-text-primary)', dot: '#10B981', icon: CheckCircle2 },
 };
 
@@ -29,17 +31,41 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
 
 export default function ProjectTasksTab() {
     const { id: projectId } = useParams<{ id: string }>();
+    const currentUser = useSelector((s: RootState) => s.auth.user);
+    const currentUserId = (currentUser as any)?._id || (currentUser as any)?.id;
+
+    // Determine if the current user is a super admin
+    const roleName = currentUser?.role
+        ? typeof currentUser.role === 'object'
+            ? (currentUser.role as any).name?.toLowerCase()
+            : String(currentUser.role).toLowerCase()
+        : '';
+    const isSuperAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
+
     const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
+    // Super admin always sees all tasks; team starts on 'my' tasks
+    const [taskFilter, setTaskFilter] = useState<'all' | 'my'>(isSuperAdmin ? 'all' : 'my');
     const [showForm, setShowForm] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [expandedTask, setExpandedTask] = useState<string | null>(null);
 
     const { data: projectData } = useGetProjectByIdQuery(projectId!);
     const projectMembers = projectData?.data?.assignees || [];
 
     const { data, isLoading } = useGetTasksQuery({ projectId: projectId! });
     const tasks = data?.data || [];
-    const mainTasks = tasks.filter(t => !t.parentTaskId);
+
+    // Filter tasks based on selected tab (super admin always sees all)
+    const filteredTasks = isSuperAdmin || taskFilter === 'all'
+        ? tasks
+        : tasks.filter(t => {
+            const assignees = t.assignees || [];
+            return assignees.some((a: any) => {
+                const uid = typeof a === 'object' ? (a._id || a.id) : a;
+                return uid === currentUserId;
+            });
+        });
+
+    const mainTasks = filteredTasks.filter(t => !t.parentTaskId);
 
     const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
 
@@ -115,16 +141,86 @@ export default function ProjectTasksTab() {
 
     return (
         <div className="space-y-5">
-            <div className="flex justify-between items-center">
-                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Tasks
-                    <span
-                        className="ml-2 text-[11px] font-normal px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}
-                    >
-                        {mainTasks.length}
-                    </span>
-                </h2>
+            {/* Task Filter Tabs — hidden for super admin */}
+            <div className="flex items-center justify-between">
+                <div className="flex gap-1 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    {isSuperAdmin ? (
+                        /* Super admin: no tabs, just a plain header label */
+                        <div
+                            className="px-4 py-2.5 text-sm font-medium border-b-2"
+                            style={{
+                                color: 'var(--color-primary)',
+                                borderColor: 'var(--color-primary)',
+                                backgroundColor: 'var(--color-primary-soft)',
+                                borderTopLeftRadius: 6,
+                                borderTopRightRadius: 6,
+                            }}
+                        >
+                            All Tasks
+                            <span
+                                className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
+                                style={{
+                                    backgroundColor: 'var(--color-primary)',
+                                    color: 'white',
+                                }}
+                            >
+                                {tasks.filter(t => !t.parentTaskId).length}
+                            </span>
+                        </div>
+                    ) : (
+                        /* Team member: My Tasks + All Tasks tabs */
+                        <>
+                            <button
+                                onClick={() => setTaskFilter('my')}
+                                className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
+                                style={{
+                                    color: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                    borderColor: taskFilter === 'my' ? 'var(--color-primary)' : 'transparent',
+                                    backgroundColor: taskFilter === 'my' ? 'var(--color-primary-soft)' : 'transparent',
+                                    borderTopLeftRadius: 6,
+                                    borderTopRightRadius: 6,
+                                }}
+                            >
+                                My Tasks
+                                <span
+                                    className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
+                                    style={{
+                                        backgroundColor: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
+                                        color: taskFilter === 'my' ? 'white' : 'var(--color-text-muted)',
+                                    }}
+                                >
+                                    {tasks.filter(t => !t.parentTaskId && t.assignees.some((a: any) => {
+                                        const uid = typeof a === 'object' ? (a._id || a.id) : a;
+                                        return uid === currentUserId;
+                                    })).length}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => setTaskFilter('all')}
+                                className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
+                                style={{
+                                    color: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                    borderColor: taskFilter === 'all' ? 'var(--color-primary)' : 'transparent',
+                                    backgroundColor: taskFilter === 'all' ? 'var(--color-primary-soft)' : 'transparent',
+                                    borderTopLeftRadius: 6,
+                                    borderTopRightRadius: 6,
+                                }}
+                            >
+                                All Tasks
+                                <span
+                                    className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
+                                    style={{
+                                        backgroundColor: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
+                                        color: taskFilter === 'all' ? 'white' : 'var(--color-text-muted)',
+                                    }}
+                                >
+                                    {tasks.filter(t => !t.parentTaskId).length}
+                                </span>
+                            </button>
+                        </>
+                    )}
+                </div>
+
                 <div className="flex items-center gap-3">
                     <div
                         className="flex items-center p-0.5 rounded-lg border"
@@ -165,179 +261,178 @@ export default function ProjectTasksTab() {
                 </div>
             </div>
 
-            {/* Task Form */}
+            {/* ── Task Create / Edit Modal ────────────────────────── */}
             {showForm && (
                 <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={(e) => { if (e.target === e.currentTarget) { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); } }}
                 >
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            {editingTask ? 'Edit Task' : 'New Task'}
-                        </h3>
-                        <button
-                            onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); }}
-                            className="p-1" style={{ color: 'var(--color-text-muted)' }}
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Title *</label>
-                            <input
-                                type="text"
-                                name="title"
-                                defaultValue={editingTask?.title}
-                                required
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                                placeholder="Task title"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
-                            <textarea
-                                name="description"
-                                defaultValue={editingTask?.description}
-                                rows={2}
-                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                                placeholder="What needs to be done?"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Assignees</label>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {selectedAssignees.map(userId => {
-                                    const assigneeData = projectMembers.find((m: any) =>
-                                        (typeof m.userId === 'object' ? m.userId._id : m.userId) === userId
-                                    );
-                                    const name = assigneeData && typeof assigneeData.userId === 'object'
-                                        ? (assigneeData.userId as any).name
-                                        : 'User';
-
-                                    return (
-                                        <div key={userId} className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                                            <span>{name}</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleAssignee(userId)}
-                                                className="hover:bg-blue-100 rounded p-0.5"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="relative border rounded-lg max-h-40 overflow-y-auto mt-1" style={{ borderColor: 'var(--color-border-default)' }}>
-                                {projectMembers.length === 0 ? (
-                                    <div className="p-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-                                        No team members in this project.
-                                    </div>
-                                ) : (
-                                    projectMembers.map((member: any) => {
-                                        const userId = typeof member.userId === 'object' ? member.userId._id : member.userId;
-                                        const name = typeof member.userId === 'object' ? (member.userId as any).name : 'User';
-                                        const isSelected = selectedAssignees.includes(userId);
-
-                                        return (
-                                            <div
-                                                key={userId}
-                                                onClick={() => toggleAssignee(userId)}
-                                                className={`flex items-center gap-2 p-2.5 cursor-pointer text-sm border-b last:border-0 hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}
-                                                style={{ borderColor: 'var(--color-border-default)' }}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    readOnly
-                                                    checked={isSelected}
-                                                    className="rounded border-gray-300 pointer-events-none"
-                                                />
-                                                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-medium">
-                                                    {name.charAt(0)}
-                                                </div>
-                                                <div style={{ color: 'var(--color-text-primary)' }}>
-                                                    {name}
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
-                                <select name="status" defaultValue={editingTask?.status || 'todo'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
-                                    <option value="todo">To Do</option>
-                                    <option value="in-progress">In Progress</option>
-                                    <option value="completed">Completed</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Priority</label>
-                                <select name="priority" defaultValue={editingTask?.priority || 'medium'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                    <option value="critical">Critical</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Start Date</label>
-                                <input type="date" name="startDate" defaultValue={editingTask?.startDate?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Deadline</label>
-                                <input type="date" name="deadline" defaultValue={editingTask?.deadline?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Estimated Hours</label>
-                                <input type="number" name="estimatedHours" defaultValue={editingTask?.estimatedHours} min={0} step={0.5} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} placeholder="0" />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-1">
+                    <div
+                        className="w-full max-w-xl rounded-xl shadow-2xl flex flex-col overflow-hidden"
+                        style={{ backgroundColor: 'var(--color-bg-surface)', maxHeight: '90vh' }}
+                    >
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                {editingTask ? 'Edit Task' : 'New Task'}
+                            </h3>
                             <button
-                                type="submit"
-                                disabled={isCreating}
-                                className="flex items-center gap-1.5 px-4 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-                                style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}
+                                onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); }}
+                                className="p-1.5 rounded-md hover:bg-black/5 transition-colors"
+                                style={{ color: 'var(--color-text-muted)' }}
                             >
-                                {isCreating && <Loader2 size={14} className="animate-spin" />}
-                                {editingTask ? 'Update' : 'Create'}
+                                <X size={16} />
                             </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="overflow-y-auto flex-1 p-5">
+                            <form id="task-form" onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Title *</label>
+                                    <input
+                                        type="text"
+                                        name="title"
+                                        defaultValue={editingTask?.title}
+                                        required
+                                        autoFocus
+                                        className="w-full px-3 rounded-lg border text-sm outline-none"
+                                        style={inputStyle}
+                                        placeholder="Task title"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
+                                    <textarea
+                                        name="description"
+                                        defaultValue={editingTask?.description}
+                                        rows={3}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            backgroundColor: 'var(--color-bg-surface)',
+                                            color: 'var(--color-text-primary)',
+                                        }}
+                                        placeholder="What needs to be done?"
+                                    />
+                                </div>
+
+                                {/* Assignees */}
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Assignees</label>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {selectedAssignees.map(userId => {
+                                            const assigneeData = projectMembers.find((m: any) => {
+                                                const empId = typeof m.employeeId === 'object' ? m.employeeId : null;
+                                                const uid = empId ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId) : (typeof m.userId === 'object' ? m.userId._id : m.userId);
+                                                return uid === userId;
+                                            });
+                                            const empId = assigneeData?.employeeId;
+                                            const name = (typeof empId === 'object' && typeof empId?.userId === 'object')
+                                                ? (empId.userId as any).name
+                                                : ((typeof assigneeData?.userId === 'object') ? (assigneeData.userId as any).name : 'User');
+                                            return (
+                                                <div key={userId} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>
+                                                    <span>{name}</span>
+                                                    <button type="button" onClick={() => toggleAssignee(userId)} className="rounded p-0.5 hover:bg-black/10">
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="border rounded-lg max-h-36 overflow-y-auto" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        {projectMembers.length === 0 ? (
+                                            <div className="p-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>No team members in this project.</div>
+                                        ) : (
+                                            projectMembers.map((member: any) => {
+                                                const empId = typeof member.employeeId === 'object' ? member.employeeId : null;
+                                                const userId = empId
+                                                    ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId)
+                                                    : (typeof member.userId === 'object' ? member.userId._id : member.userId);
+                                                const name = empId && typeof empId.userId === 'object'
+                                                    ? (empId.userId as any).name
+                                                    : (typeof member.userId === 'object' ? (member.userId as any).name : 'User');
+                                                const isSelected = selectedAssignees.includes(userId);
+                                                return (
+                                                    <div
+                                                        key={userId}
+                                                        onClick={() => toggleAssignee(userId)}
+                                                        className={`flex items-center gap-2 p-2.5 cursor-pointer text-sm border-b last:border-0 transition-colors ${isSelected ? '' : 'hover:bg-black/[0.03]'}`}
+                                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: isSelected ? 'var(--color-primary-soft)' : 'transparent' }}
+                                                    >
+                                                        <input type="checkbox" readOnly checked={isSelected} className="rounded border-gray-300 pointer-events-none" />
+                                                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium" style={{ backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-bg-subtle)', color: isSelected ? 'white' : 'var(--color-text-muted)' }}>
+                                                            {name.charAt(0)}
+                                                        </div>
+                                                        <span style={{ color: 'var(--color-text-primary)' }}>{name}</span>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Status / Priority / Dates */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
+                                        <select name="status" defaultValue={editingTask?.status || 'todo'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+                                            <option value="todo">To Do</option>
+                                            <option value="in-progress">In Progress</option>
+                                            <option value="paused">Paused</option>
+                                            <option value="completed">Completed</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Priority</label>
+                                        <select name="priority" defaultValue={editingTask?.priority || 'medium'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                            <option value="critical">Critical</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Start Date</label>
+                                        <input type="date" name="startDate" defaultValue={editingTask?.startDate?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Deadline</label>
+                                        <input type="date" name="deadline" defaultValue={editingTask?.deadline?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Estimated Hours</label>
+                                        <input type="number" name="estimatedHours" defaultValue={editingTask?.estimatedHours} min={0} step={0.5} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} placeholder="0" />
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-5 py-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
                             <button
                                 type="button"
                                 onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); }}
                                 className="px-4 text-sm font-medium rounded-lg border transition-colors"
-                                style={{
-                                    height: '36px',
-                                    borderColor: 'var(--color-border-default)',
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                }}
+                                style={{ height: '36px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
                             >
                                 Cancel
                             </button>
+                            <button
+                                type="submit"
+                                form="task-form"
+                                disabled={isCreating}
+                                className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+                                style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}
+                            >
+                                {isCreating && <Loader2 size={14} className="animate-spin" />}
+                                {editingTask ? 'Update Task' : 'Create Task'}
+                            </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
             )}
 
@@ -361,11 +456,10 @@ export default function ProjectTasksTab() {
                             key={task._id}
                             task={task}
                             projectId={projectId!}
-                            isExpanded={expandedTask === task._id}
-                            onToggle={() => setExpandedTask(expandedTask === task._id ? null : task._id)}
+                            filterMode={taskFilter}
                             onEdit={(t) => {
                                 setEditingTask(t);
-                                setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? a._id : a)) as string[]);
+                                setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? (a as any)._id || (a as any).id : a)) as string[]);
                                 setShowForm(true);
                             }}
                             onDelete={handleDelete}
@@ -397,7 +491,7 @@ export default function ProjectTasksTab() {
                             setShowForm(true);
                         }}
                         onNew={() => { setEditingTask(null); setShowForm(true); }}
-                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as 'todo' | 'in-progress' | 'completed' } })}
+                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as any } })}
                     />
                     <BoardColumn
                         title="In Progress"
@@ -409,7 +503,19 @@ export default function ProjectTasksTab() {
                             setShowForm(true);
                         }}
                         onNew={() => { setEditingTask(null); setShowForm(true); }}
-                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as 'todo' | 'in-progress' | 'completed' } })}
+                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as any } })}
+                    />
+                    <BoardColumn
+                        title="Paused"
+                        statusId="paused"
+                        tasks={mainTasks.filter(t => t.status === 'paused')}
+                        onEdit={(t) => {
+                            setEditingTask(t);
+                            setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? a._id : a)) as string[]);
+                            setShowForm(true);
+                        }}
+                        onNew={() => { setEditingTask(null); setShowForm(true); }}
+                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as any } })}
                     />
                     <BoardColumn
                         title="Completed"
@@ -421,7 +527,7 @@ export default function ProjectTasksTab() {
                             setShowForm(true);
                         }}
                         onNew={() => { setEditingTask(null); setShowForm(true); }}
-                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as 'todo' | 'in-progress' | 'completed' } })}
+                        onDrop={(taskId, newStatus) => updateTask({ projectId: projectId!, taskId, data: { status: newStatus as any } })}
                     />
                 </div>
             )}
@@ -432,26 +538,141 @@ export default function ProjectTasksTab() {
 function TaskCard({
     task,
     projectId,
-    isExpanded,
-    onToggle,
+    filterMode,
     onEdit,
     onDelete,
 }: {
     task: Task;
     projectId: string;
-    isExpanded: boolean;
-    onToggle: () => void;
+    filterMode: 'all' | 'my';
     onEdit: (t: Task) => void;
     onDelete: (id: string) => void;
 }) {
+    const currentUser = useSelector((s: RootState) => s.auth.user);
+    const roleName = currentUser?.role
+        ? typeof currentUser.role === 'object'
+            ? (currentUser.role as any).name?.toLowerCase()
+            : String(currentUser.role).toLowerCase()
+        : '';
+    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+
+    const { data: projectData } = useGetProjectByIdQuery(projectId);
+    const project = projectData?.data;
+    const currentUserId = (currentUser as any)?._id || (currentUser as any)?.id;
+
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const isProjectManager = isSuperAdmin || (() => {
+        if (!project || !currentUserId) return false;
+        const assignee = project.assignees.find((a: any) => {
+            const empId = typeof a.employeeId === 'object' ? a.employeeId : null;
+            const uid = empId && typeof empId.userId === 'object' ? empId.userId._id : empId?.userId;
+            return uid === currentUserId;
+        });
+        return assignee?.role === 'manager';
+    })();
+
     const sStyle = statusStyles[task.status] || statusStyles.todo;
     const pStyle = priorityStyles[task.priority] || priorityStyles.medium;
 
-    const { data: subtasksData } = useGetSubtasksQuery(
+    const { data: subtasksData, refetch: refetchSubtasks } = useGetSubtasksQuery(
         { projectId, taskId: task._id },
         { skip: !isExpanded }
     );
-    const subtasks = subtasksData?.data || [];
+    const allSubtasks = subtasksData?.data || [];
+
+    // Filter subtasks if in 'My Tasks' mode
+    const subtasks = filterMode === 'my'
+        ? allSubtasks.filter((sub: Task) => sub.assignees.some((a: any) => {
+            const uid = typeof a === 'object' ? (a._id || a.id) : a;
+            return uid === currentUserId;
+        }))
+        : allSubtasks;
+
+    // ── Subtask creation state ─────────────────────────────────────────────────
+    const [showSubtaskForm, setShowSubtaskForm] = useState(false);
+    const [subSelectedAssignees, setSubSelectedAssignees] = useState<string[]>([]);
+    const [createSubtask, { isLoading: isCreatingSubtask }] = useCreateSubtaskMutation();
+    const [updateTask, { isLoading: isUpdatingSubtask }] = useUpdateTaskMutation();
+
+    // ── Subtask editing state ──────────────────────────────────────────────────
+    const [editingSubtask, setEditingSubtask] = useState<Task | null>(null);
+    const [subEditAssignees, setSubEditAssignees] = useState<string[]>([]);
+
+    const openSubtaskEdit = (sub: Task) => {
+        setEditingSubtask(sub);
+        setSubEditAssignees(sub.assignees.map((a: any) => (a as any)._id || (a as any).id || a));
+    };
+    const closeSubtaskEdit = () => { setEditingSubtask(null); setSubEditAssignees([]); };
+
+    const toggleSubAssignee = (uid: string) => {
+        setSubSelectedAssignees(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+    };
+    const toggleSubEditAssignee = (uid: string) => {
+        setSubEditAssignees(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+    };
+
+    const handleSubtaskSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        try {
+            await createSubtask({
+                projectId,
+                taskId: task._id,
+                data: {
+                    title: fd.get('title') as string,
+                    status: (fd.get('status') as any) || 'todo',
+                    priority: (fd.get('priority') as any) || 'medium',
+                    deadline: (fd.get('deadline') as string) || undefined,
+                    assignees: subSelectedAssignees,
+                },
+            }).unwrap();
+            setShowSubtaskForm(false);
+            setSubSelectedAssignees([]);
+            refetchSubtasks();
+        } catch (err) {
+            console.error('Failed to create subtask:', err);
+        }
+    };
+
+    const handleSubtaskUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!editingSubtask) return;
+        const fd = new FormData(e.currentTarget);
+        try {
+            await updateTask({
+                projectId,
+                taskId: editingSubtask._id,
+                data: {
+                    title: fd.get('title') as string,
+                    description: (fd.get('description') as string) || '',
+                    status: (fd.get('status') as any) || editingSubtask.status,
+                    priority: (fd.get('priority') as any) || editingSubtask.priority,
+                    deadline: (fd.get('deadline') as string) || undefined,
+                    assignees: subEditAssignees,
+                },
+            }).unwrap();
+            closeSubtaskEdit();
+            refetchSubtasks();
+        } catch (err) {
+            console.error('Failed to update subtask:', err);
+        }
+    };
+
+    const subInputStyle = {
+        height: '32px',
+        borderColor: 'var(--color-border-default)',
+        backgroundColor: 'var(--color-bg-surface)',
+        color: 'var(--color-text-primary)',
+        fontSize: '12px',
+    };
+
+    const modalInputStyle = {
+        height: '36px',
+        borderColor: 'var(--color-border-default)',
+        backgroundColor: 'var(--color-bg-surface)',
+        color: 'var(--color-text-primary)',
+    };
 
     return (
         <div
@@ -462,13 +683,18 @@ function TaskCard({
             <div className="grid grid-cols-12 gap-4 px-4 py-2.5 items-center">
                 {/* Task Name */}
                 <div className="col-span-5 flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-text-muted)' }}>
+                    <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-text-muted)' }}>
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
                     <FileText size={14} style={{ color: 'var(--color-text-muted)' }} />
                     <h3 className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
                         {task.title}
                     </h3>
+                    {subtasks.length > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
+                            {subtasks.length} sub
+                        </span>
+                    )}
                 </div>
 
                 {/* Status */}
@@ -483,7 +709,12 @@ function TaskCard({
                 <div className="col-span-2 flex flex-wrap items-center gap-1.5 overflow-hidden max-h-12 py-1">
                     {task.assignees.length > 0 ? (
                         task.assignees.map((assignee, index) => {
-                            const name = typeof assignee === 'object' && 'userId' in assignee ? (typeof (assignee as any).userId === 'object' ? (assignee as any).userId.name : 'User') : 'User';
+                            // Task assignees are populated as User objects: { _id, name, email }
+                            const name = typeof assignee === 'object' && (assignee as any).name
+                                ? (assignee as any).name
+                                : (typeof assignee === 'object' && 'userId' in assignee && typeof (assignee as any).userId === 'object'
+                                    ? (assignee as any).userId.name
+                                    : 'User');
                             return (
                                 <div key={index} className="flex items-center gap-1 pr-1.5 bg-black/5 rounded-full shrink-0">
                                     <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium text-blue-700 shrink-0">
@@ -515,54 +746,328 @@ function TaskCard({
                 {/* Actions: Timer + Edit/Delete */}
                 <div className="col-span-1 flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <TaskTimerButtons task={task} projectId={projectId} />
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDelete(task._id); }}
-                        className="transition-colors hover:bg-black/5 p-1 rounded"
-                        style={{ color: 'var(--color-danger)' }}
-                    >
-                        <Trash2 size={13} />
-                    </button>
+                    {isProjectManager && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(task._id); }}
+                            className="transition-colors hover:bg-black/5 p-1 rounded"
+                            style={{ color: 'var(--color-danger)' }}
+                            title="Delete task"
+                        >
+                            <Trash2 size={13} />
+                        </button>
+                    )}
                     <button
                         onClick={(e) => { e.stopPropagation(); onEdit(task); }}
                         className="transition-colors hover:bg-black/5 p-1 rounded"
                         style={{ color: 'var(--color-text-secondary)' }}
+                        title="Edit task"
                     >
                         <MoreVertical size={13} />
                     </button>
                 </div>
             </div>
 
-            {/* Subtasks */}
+            {/* ── Expanded Subtasks Panel ────────────────────────────────────── */}
             {isExpanded && (
                 <div
-                    className="border-t px-4 py-3"
+                    className="border-t"
                     style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
+                    onClick={(e) => e.stopPropagation()}
                 >
-                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                        Subtasks ({subtasks.length})
-                    </p>
-                    {subtasks.map((sub: Task) => {
-                        const subStatus = statusStyles[sub.status] || statusStyles.todo;
-                        return (
-                            <div
-                                key={sub._id}
-                                className="flex items-center justify-between py-1.5 px-2 rounded text-xs"
-                            >
-                                <span style={{ color: 'var(--color-text-primary)' }}>{sub.title}</span>
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium capitalize" style={{ backgroundColor: subStatus.bg, color: subStatus.text }}>
-                                    {sub.status}
-                                </span>
-                            </div>
-                        );
-                    })}
-                    {subtasks.length === 0 && (
-                        <p className="text-xs py-2 text-center" style={{ color: 'var(--color-text-muted)' }}>
-                            No subtasks
+                    {/* Subtask List Header */}
+                    <div className="flex items-center justify-between px-5 py-2.5">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                            Subtasks <span className="font-normal">({subtasks.length})</span>
                         </p>
+                        {!showSubtaskForm && (
+                            <button
+                                onClick={() => setShowSubtaskForm(true)}
+                                className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors"
+                                style={{ color: 'var(--color-primary)', backgroundColor: 'var(--color-primary-soft)' }}
+                            >
+                                <Plus size={11} /> Add Subtask
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Subtask rows */}
+                    {subtasks.length > 0 && (
+                        <div className="px-4 pb-1 space-y-1">
+                            {subtasks.map((sub: Task) => {
+                                const subS = statusStyles[sub.status] || statusStyles.todo;
+                                const subP = priorityStyles[sub.priority] || priorityStyles.medium;
+                                return (
+                                    <div
+                                        key={sub._id}
+                                        onClick={() => openSubtaskEdit(sub)}
+                                        className="group/sub flex items-center gap-3 py-2 px-3 rounded-lg text-xs border cursor-pointer transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]/10"
+                                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                                    >
+                                        {/* Status dot */}
+                                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subS.dot }} />
+
+                                        {/* Title */}
+                                        <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{sub.title}</span>
+
+                                        {/* Assignees */}
+                                        {sub.assignees.length > 0 && (
+                                            <div className="flex items-center -space-x-1">
+                                                {sub.assignees.slice(0, 3).map((a: any, i: number) => (
+                                                    <div key={i} className="w-5 h-5 rounded-full border-2 flex items-center justify-center text-[9px] font-bold" style={{ borderColor: 'var(--color-bg-surface)', backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                                                        {(a.name || 'U').charAt(0)}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Priority badge */}
+                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize" style={{ backgroundColor: subP.bg, color: subP.text }}>{sub.priority}</span>
+
+                                        {/* Status label */}
+                                        <span className="text-[10px] font-semibold capitalize" style={{ color: subS.text }}>{sub.status.replace('-', ' ')}</span>
+
+                                        {/* Due date */}
+                                        {sub.deadline && (
+                                            <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                                                {new Date(sub.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            </span>
+                                        )}
+
+                                        {/* Edit pencil — visible on hover */}
+                                        <Pencil size={11} className="opacity-0 group-hover/sub:opacity-60 flex-shrink-0 transition-opacity" style={{ color: 'var(--color-primary)' }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {subtasks.length === 0 && !showSubtaskForm && (
+                        <p className="text-xs pb-3 text-center px-4" style={{ color: 'var(--color-text-muted)' }}>No subtasks yet</p>
+                    )}
+
+                    {/* ── Subtask Edit Modal ──────────────────────────────── */}
+                    {editingSubtask && (
+                        <div
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                            style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+                            onClick={(e) => { if (e.target === e.currentTarget) closeSubtaskEdit(); }}
+                        >
+                            <div
+                                className="w-full max-w-lg rounded-xl shadow-2xl flex flex-col overflow-hidden"
+                                style={{ backgroundColor: 'var(--color-bg-surface)', maxHeight: '88vh' }}
+                            >
+                                {/* Modal Header */}
+                                <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <div>
+                                        <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Subtask of · {task.title}</p>
+                                        <h3 className="text-sm font-semibold mt-0.5" style={{ color: 'var(--color-text-primary)' }}>Edit Subtask</h3>
+                                    </div>
+                                    <button onClick={closeSubtaskEdit} className="p-1.5 rounded-md hover:bg-black/5 transition-colors" style={{ color: 'var(--color-text-muted)' }}>
+                                        <X size={16} />
+                                    </button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="overflow-y-auto flex-1 p-5">
+                                    <form id="subtask-edit-form" onSubmit={handleSubtaskUpdate} className="space-y-4">
+
+                                        {/* Title */}
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Title *</label>
+                                            <input
+                                                name="title"
+                                                required
+                                                autoFocus
+                                                defaultValue={editingSubtask.title}
+                                                className="w-full px-3 rounded-lg border text-sm outline-none"
+                                                style={modalInputStyle}
+                                            />
+                                        </div>
+
+                                        {/* Description */}
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
+                                            <textarea
+                                                name="description"
+                                                defaultValue={editingSubtask.description}
+                                                rows={2}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
+                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                placeholder="Optional description"
+                                            />
+                                        </div>
+
+                                        {/* Status / Priority / Deadline */}
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
+                                                <select name="status" defaultValue={editingSubtask.status} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle}>
+                                                    <option value="todo">To Do</option>
+                                                    <option value="in-progress">In Progress</option>
+                                                    <option value="paused">Paused</option>
+                                                    <option value="completed">Completed</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Priority</label>
+                                                <select name="priority" defaultValue={editingSubtask.priority} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle}>
+                                                    <option value="low">Low</option>
+                                                    <option value="medium">Medium</option>
+                                                    <option value="high">High</option>
+                                                    <option value="critical">Critical</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Deadline</label>
+                                                <input type="date" name="deadline" defaultValue={editingSubtask.deadline?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle} />
+                                            </div>
+                                        </div>
+
+                                        {/* Assignees — only from task's members */}
+                                        {task.assignees.length > 0 && (
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Assignees <span className="font-normal" style={{ color: 'var(--color-text-muted)' }}>(task members only)</span></label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {task.assignees.map((a: any) => {
+                                                        const uid = a._id || a.id;
+                                                        const name = a.name || 'User';
+                                                        const sel = subEditAssignees.includes(uid);
+                                                        return (
+                                                            <button
+                                                                key={uid}
+                                                                type="button"
+                                                                onClick={() => toggleSubEditAssignee(uid)}
+                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+                                                                style={{
+                                                                    borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)',
+                                                                    backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)',
+                                                                    color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                                                }}
+                                                            >
+                                                                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
+                                                                    {name.charAt(0)}
+                                                                </span>
+                                                                {name}
+                                                                {sel && <span className="text-[10px]" style={{ color: 'var(--color-primary)' }}>✓</span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </form>
+                                </div>
+
+                                {/* Modal Footer */}
+                                <div className="px-5 py-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
+                                    <button type="button" onClick={closeSubtaskEdit} className="px-4 text-sm font-medium rounded-lg border transition-colors" style={{ height: '36px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}>
+                                        Cancel
+                                    </button>
+                                    <button type="submit" form="subtask-edit-form" disabled={isUpdatingSubtask} className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg disabled:opacity-50" style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}>
+                                        {isUpdatingSubtask && <Loader2 size={14} className="animate-spin" />}
+                                        Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+
+                    {showSubtaskForm && (
+                        <form
+                            onSubmit={handleSubtaskSubmit}
+                            className="mx-4 mb-3 p-3 rounded-lg border space-y-3"
+                            style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                        >
+                            <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>New Subtask</p>
+
+                            {/* Title */}
+                            <input
+                                name="title"
+                                required
+                                autoFocus
+                                placeholder="Subtask title *"
+                                className="w-full px-2.5 rounded-md border outline-none"
+                                style={subInputStyle}
+                            />
+
+                            {/* Status / Priority / Deadline row */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <select name="status" defaultValue="todo" className="px-2 rounded-md border outline-none" style={subInputStyle}>
+                                    <option value="todo">To Do</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="paused">Paused</option>
+                                    <option value="completed">Completed</option>
+                                </select>
+                                <select name="priority" defaultValue="medium" className="px-2 rounded-md border outline-none" style={subInputStyle}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                                <input type="date" name="deadline" className="px-2 rounded-md border outline-none" style={subInputStyle} />
+                            </div>
+
+                            {/* Assignees mini-picker — only from this task's assigned members */}
+                            {task.assignees.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                                        Assign to <span style={{ fontWeight: 400 }}>(task members only)</span>
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {task.assignees.map((assignee: any) => {
+                                            // Task assignees are populated as User objects: { _id, name, email }
+                                            const uid = assignee._id || assignee.id || assignee;
+                                            const mName = assignee.name || 'User';
+                                            const sel = subSelectedAssignees.includes(uid);
+                                            return (
+                                                <button
+                                                    key={uid}
+                                                    type="button"
+                                                    onClick={() => toggleSubAssignee(uid)}
+                                                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors"
+                                                    style={{
+                                                        borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)',
+                                                        backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)',
+                                                        color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                                    }}
+                                                >
+                                                    <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
+                                                        {mName.charAt(0)}
+                                                    </span>
+                                                    {mName}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Form actions */}
+                            <div className="flex gap-2 pt-0.5">
+                                <button
+                                    type="submit"
+                                    disabled={isCreatingSubtask}
+                                    className="flex items-center gap-1 px-3 text-[11px] font-semibold text-white rounded-md disabled:opacity-50"
+                                    style={{ height: '28px', backgroundColor: 'var(--color-primary)' }}
+                                >
+                                    {isCreatingSubtask && <Loader2 size={10} className="animate-spin" />}
+                                    Add
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowSubtaskForm(false); setSubSelectedAssignees([]); }}
+                                    className="px-3 text-[11px] font-medium rounded-md border"
+                                    style={{ height: '28px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
                     )}
                 </div>
             )}
         </div>
+
     );
 }
 
@@ -632,12 +1137,12 @@ function TaskTimerButtons({ task, projectId }: { task: Task; projectId: string }
 
     const handlePause = async () => {
         const sessionSecs = Math.floor((Date.now() - startedAtRef.current) / 1000);
-        const totalSecs = accumulatedRef.current + sessionSecs;
-        accumulatedRef.current = totalSecs;
-        localStorage.setItem(TIMER_KEY(task._id), JSON.stringify({ startedAt: 0, accumulated: totalSecs }));
+        // After pausing, clear accumulated — this session's time will be logged immediately
+        accumulatedRef.current = 0;
+        localStorage.setItem(TIMER_KEY(task._id), JSON.stringify({ startedAt: 0, accumulated: 0 }));
         setRunning(false);
-        // Log time if at least 1 minute
-        const mins = Math.max(1, Math.round(totalSecs / 60));
+        // Log ONLY this session's time (not cumulative)
+        const mins = Math.max(1, Math.round(sessionSecs / 60));
         try {
             await createTimeLog({
                 projectId,

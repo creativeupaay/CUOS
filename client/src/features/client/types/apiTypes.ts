@@ -66,3 +66,9 @@ export interface ClientProjectsResponse {
         projects: any[];
     };
 }
+
+export interface AddClientActivityRequest {
+    type: 'call' | 'email' | 'meeting' | 'note';
+    description: string;
+    date?: string;
+}

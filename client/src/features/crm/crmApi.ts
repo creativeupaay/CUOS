@@ -51,6 +51,22 @@ export const crmApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
+            async onQueryStarted({ id, data }, { dispatch, queryFulfilled }) {
+                // Optimistic update for the leads cache
+                const patchResult = dispatch(
+                    crmApi.util.updateQueryData('getLeads', { limit: 200, search: '' }, (draft) => {
+                        const leadDraft = draft.data.leads.find((l) => l._id === id);
+                        if (leadDraft && data.stage) {
+                            leadDraft.stage = data.stage;
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: (_result, _error, { id }) => [
                 { type: 'Leads', id },
                 'Leads',

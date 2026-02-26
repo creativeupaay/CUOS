@@ -105,6 +105,14 @@ const adminApi = api.injectEndpoints({
             }),
         }),
 
+        deleteAdminUser: builder.mutation<ApiResponse, string>({
+            query: (id) => ({
+                url: `/admin/users/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['AdminUsers'],
+        }),
+
         // ── Roles ────────────────────────────────────────────────
         getAdminRoles: builder.query<ApiResponse<AdminRole[]>, void>({
             query: () => '/admin/roles',
@@ -239,6 +247,7 @@ export const {
     useDeactivateUserMutation,
     useActivateUserMutation,
     useResetUserPasswordMutation,
+    useDeleteAdminUserMutation,
     // Roles
     useGetAdminRolesQuery,
     useGetAdminRoleQuery,

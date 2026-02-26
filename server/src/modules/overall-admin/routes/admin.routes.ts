@@ -56,6 +56,7 @@ router.patch(
     validateRequest(resetPasswordSchema),
     userController.resetPassword
 );
+router.delete('/users/:id', isSuperAdmin, userController.deleteUser);
 
 // ══════════════════════════════════════════════════════════════════════
 // ROLE MANAGEMENT (Super Admin only)

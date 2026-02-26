@@ -4,7 +4,7 @@ export interface ITask extends Document {
     _id: Types.ObjectId;
     title: string;
     description?: string;
-    status: 'todo' | 'in-progress' | 'completed';
+    status: 'todo' | 'in-progress' | 'paused' | 'completed';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
     projectId: Types.ObjectId;
@@ -29,7 +29,7 @@ const TaskSchema = new Schema<ITask>(
         description: { type: String, trim: true },
         status: {
             type: String,
-            enum: ['todo', 'in-progress', 'completed'],
+            enum: ['todo', 'in-progress', 'paused', 'completed'],
             default: 'todo',
         },
         priority: {

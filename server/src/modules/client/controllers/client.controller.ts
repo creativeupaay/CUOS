@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ClientService } from '../services/client.service';
 import asyncHandler from '../../../utils/asyncHandler';
-import type { CreateClientInput, UpdateClientInput, GetClientInput, ListClientsInput } from '../validators/client.validator';
+import type { CreateClientInput, UpdateClientInput, GetClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
 
 const clientService = new ClientService();
 
@@ -88,5 +88,21 @@ export const getClientProjects = asyncHandler(async (req: Request, res: Response
     res.status(200).json({
         status: 'success',
         data: { projects },
+    });
+});
+
+/**
+ * Add activity to client
+ */
+export const addActivity = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const data: AddClientActivityInput = req.body;
+    const createdBy = (req.user as any).id;
+
+    const client = await clientService.addActivity(id, data, createdBy);
+
+    res.status(200).json({
+        status: 'success',
+        data: { client },
     });
 });

@@ -8,6 +8,16 @@ export interface User {
     lastLogin?: string;
     createdAt: string;
     updatedAt: string;
+    modulePermissions?: {
+        projectManagement?: {
+            enabled: boolean;
+            projectPermissions?: Array<{ projectId: string; subModules?: { overview: boolean; tasks: boolean; timeLogs: boolean; meetings: boolean; credentials: boolean; documents: boolean } }>;
+        };
+        finance?: { enabled: boolean; subModules?: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean } };
+        crm?: { enabled: boolean; subModules?: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
+        hrms?: { enabled: boolean; subModules?: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean } };
+        overallAdmin?: { enabled: boolean; subModules?: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
+    };
 }
 
 export interface Role {

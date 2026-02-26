@@ -230,6 +230,12 @@ export class LeadService {
             },
             leadId: lead._id,
             proposalIds,
+            activities: lead.activities.map((act) => ({
+                type: act.type,
+                description: act.description,
+                date: act.date,
+                createdBy: act.createdBy,
+            })),
             notes: `Converted from lead. Estimated value: ${lead.currency} ${lead.estimatedValue || 0}`,
             createdBy: userId,
         });

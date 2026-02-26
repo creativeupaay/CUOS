@@ -53,7 +53,7 @@ import HrmsPayrollPage from './pages/HrmsPayrollPage';
 // Admin pages
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
-import AdminRolesPage from './pages/AdminRolesPage';
+import AdminPermissionsPage from './pages/AdminPermissionsPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import AdminAuditLogsPage from './pages/AdminAuditLogsPage';
 
@@ -146,7 +146,7 @@ function App() {
           {/* Admin Module */}
           <Route path="/admin" element={<AdminDashboardPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
-          <Route path="/admin/roles" element={<AdminRolesPage />} />
+          <Route path="/admin/permissions" element={<AdminPermissionsPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />
           <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
         </Route>

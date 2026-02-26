@@ -5,6 +5,7 @@ import { Project } from '../models/Project.model';
 import { Task } from '../models/Task.model';
 import { Credential } from '../models/Credential.model';
 import { Meeting } from '../models/Meeting.model';
+import { Employee } from '../../hrms/models/Employee.model';
 
 /**
  * Check if user has access to a project
@@ -33,14 +34,19 @@ export const checkProjectAccess = async (
             return next(new AppError('Project not found', 404));
         }
 
-        // Check if user is admin (assuming role field exists)
-        if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+        // Check if user is super-admin
+        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
         }
 
         // Check if user is in assignees
+        const employee = await Employee.findOne({ userId });
+        if (!employee) {
+            return next(new AppError('No matching employee record found for user', 403));
+        }
+
         const isAssigned = project.assignees.some(
-            (assignee) => assignee.userId.toString() === userId.toString()
+            (assignee) => assignee.employeeId.toString() === employee._id.toString()
         );
 
         if (!isAssigned) {
@@ -81,14 +87,19 @@ export const checkProjectManager = async (
             return next(new AppError('Project not found', 404));
         }
 
-        // Check if user is admin
-        if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+        // Check if user is super-admin
+        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
         }
 
         // Check if user is a manager
+        const employee = await Employee.findOne({ userId });
+        if (!employee) {
+            return next(new AppError('No matching employee record found for user', 403));
+        }
+
         const assignee = project.assignees.find(
-            (a) => a.userId.toString() === userId.toString()
+            (a) => a.employeeId.toString() === employee._id.toString()
         );
 
         if (!assignee || assignee.role !== 'manager') {
@@ -131,13 +142,19 @@ export const checkTaskAccess = async (
         }
 
         // Check if user is admin
-        if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
         }
 
+        const employee = await Employee.findOne({ userId });
+        if (!employee) {
+            return next(new AppError('No matching employee record found for user', 403));
+        }
+
         // Check if user is task assignee
+        // Currently, task.assignees handles an array of employeeIds explicitly now
         const isAssignee = task.assignees.some(
-            (assigneeId) => assigneeId.toString() === userId.toString()
+            (assigneeId) => assigneeId.toString() === employee._id.toString()
         );
 
         if (isAssignee) {
@@ -148,7 +165,7 @@ export const checkTaskAccess = async (
         const project = await Project.findById(task.projectId);
         if (project) {
             const assignee = project.assignees.find(
-                (a) => a.userId.toString() === userId.toString()
+                (a) => a.employeeId.toString() === employee._id.toString()
             );
 
             if (assignee && assignee.role === 'manager') {
@@ -189,8 +206,8 @@ export const checkCredentialAccess = async (
             return next(new AppError('Credential not found', 404));
         }
 
-        // Check if user is admin
-        if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+        // Check if user is super-admin
+        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
         }
 
@@ -238,18 +255,21 @@ export const checkMeetingAccess = async (
             return next(new AppError('Meeting not found', 404));
         }
 
-        // Check if user is admin
-        if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+        // Check if user is super-admin
+        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
         }
 
         // Check access level
         if (meeting.accessLevel === 'project-team') {
             // Check if user is in project
+            const employee = await Employee.findOne({ userId });
+            if (!employee) return next(new AppError('No matching employee record found', 403));
+
             const project = await Project.findById(meeting.projectId);
             if (project) {
                 const isAssigned = project.assignees.some(
-                    (assignee) => assignee.userId.toString() === userId.toString()
+                    (assignee) => assignee.employeeId.toString() === employee._id.toString()
                 );
                 if (isAssigned) {
                     return next();
@@ -257,10 +277,13 @@ export const checkMeetingAccess = async (
             }
         } else if (meeting.accessLevel === 'managers-only') {
             // Check if user is project manager
+            const employee = await Employee.findOne({ userId });
+            if (!employee) return next(new AppError('No matching employee record found', 403));
+
             const project = await Project.findById(meeting.projectId);
             if (project) {
                 const assignee = project.assignees.find(
-                    (a) => a.userId.toString() === userId.toString()
+                    (a) => a.employeeId.toString() === employee._id.toString()
                 );
                 if (assignee && assignee.role === 'manager') {
                     return next();
@@ -283,11 +306,11 @@ export const checkMeetingAccess = async (
 };
 
 /**
- * Check if user is admin
+ * Check if user is super-admin
  */
 export const checkAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (req.user?.role === 'admin' || req.user?.role === 'super-admin') {
+    if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
         return next();
     }
-    return next(new AppError('Admin access required', 403));
+    return next(new AppError('Super Admin access required', 403));
 };

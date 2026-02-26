@@ -17,7 +17,7 @@ const fmt = (mins: number) => {
 const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-const MANAGER_ROLES = ['super-admin', 'admin', 'manager', 'super_admin'];
+const SUPER_ADMIN_ROLES = ['super-admin', 'super_admin'];
 
 export default function ProjectTimeLogsTab() {
     const { id: projectId } = useParams<{ id: string }>();
@@ -30,22 +30,27 @@ export default function ProjectTimeLogsTab() {
             : String(currentUser.role).toLowerCase()
         : '';
 
-    const canViewLogs = MANAGER_ROLES.includes(roleName);
+    const isSuperAdmin = SUPER_ADMIN_ROLES.includes(roleName);
+
+    // Check project-specific sub-permission for timeLogs
+    const pmPerms = currentUser?.modulePermissions?.projectManagement;
+    const projectEntry = pmPerms?.projectPermissions?.find(p => p.projectId === projectId);
+    const hasTimeLogsAccess = isSuperAdmin || (projectEntry?.subModules?.timeLogs === true);
 
     const { data: logsData, isLoading } = useGetProjectTimeLogsQuery(
         { projectId: projectId! },
-        { skip: !canViewLogs }
+        { skip: !hasTimeLogsAccess }
     );
     const timeLogs = logsData?.data || [];
 
     const { data: tasksData } = useGetTasksQuery(
         { projectId: projectId! },
-        { skip: !canViewLogs }
+        { skip: !hasTimeLogsAccess }
     );
     const tasks = tasksData?.data || [];
 
     // ── Access Restricted screen ──────────────────────────────────────────────
-    if (!canViewLogs) {
+    if (!hasTimeLogsAccess) {
         return (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
                 <div className="w-16 h-16 rounded-2xl flex items-center justify-center"

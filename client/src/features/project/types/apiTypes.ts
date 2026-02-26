@@ -54,8 +54,27 @@ export interface UpdateProjectRequest {
 }
 
 export interface AddAssigneeRequest {
-    userId: string;
+    employeeId: string;
     role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+    subModules?: {
+        overview: boolean;
+        tasks: boolean;
+        timeLogs: boolean;
+        meetings: boolean;
+        credentials: boolean;
+        documents: boolean;
+    };
+}
+
+export interface UpdateAssigneePermissionsRequest {
+    subModules: {
+        overview: boolean;
+        tasks: boolean;
+        timeLogs: boolean;
+        meetings: boolean;
+        credentials: boolean;
+        documents: boolean;
+    };
 }
 
 export interface UploadDocumentRequest {
@@ -71,7 +90,7 @@ export interface UploadDocumentRequest {
 export interface CreateTaskRequest {
     title: string;
     description?: string;
-    status?: 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked';
+    status?: 'todo' | 'in-progress' | 'paused' | 'review' | 'completed' | 'blocked';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     parentTaskId?: string;
     startDate?: string;
@@ -84,7 +103,7 @@ export interface CreateTaskRequest {
 export interface UpdateTaskRequest {
     title?: string;
     description?: string;
-    status?: 'todo' | 'in-progress' | 'completed';
+    status?: 'todo' | 'in-progress' | 'paused' | 'completed';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     startDate?: string;
     endDate?: string;

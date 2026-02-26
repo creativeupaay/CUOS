@@ -50,7 +50,8 @@ export interface ProjectDocument {
 }
 
 export interface ProjectAssignee {
-    userId: string | User;
+    employeeId?: string | any;
+    userId?: string | User;
     role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
     assignedAt: string;
     assignedBy: string | User;
@@ -68,7 +69,7 @@ export interface Task {
     _id: string;
     title: string;
     description?: string;
-    status: 'todo' | 'in-progress' | 'completed';
+    status: 'todo' | 'in-progress' | 'paused' | 'completed';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
     projectId: string | Project;

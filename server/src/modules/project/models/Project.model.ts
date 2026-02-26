@@ -18,8 +18,8 @@ export interface IProjectDocument {
 }
 
 export interface IProjectAssignee {
-    userId: Types.ObjectId;
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+    employeeId: Types.ObjectId;
+    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     assignedAt: Date;
     assignedBy: Types.ObjectId;
 }
@@ -82,10 +82,10 @@ const ProjectDocumentSchema = new Schema<IProjectDocument>(
 
 const ProjectAssigneeSchema = new Schema<IProjectAssignee>(
     {
-        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
         role: {
             type: String,
-            enum: ['manager', 'developer', 'designer', 'qa', 'viewer'],
+            enum: ['manager', 'developer', 'designer', 'qa', 'viewer', 'member'],
             required: true,
         },
         assignedAt: { type: Date, default: Date.now },
@@ -171,7 +171,7 @@ const ProjectSchema = new Schema<IProject>(
 // Indexes for performance
 ProjectSchema.index({ clientId: 1 });
 ProjectSchema.index({ status: 1 });
-ProjectSchema.index({ 'assignees.userId': 1 });
+ProjectSchema.index({ 'assignees.employeeId': 1 });
 ProjectSchema.index({ createdAt: -1 });
 ProjectSchema.index({ isArchived: 1 });
 

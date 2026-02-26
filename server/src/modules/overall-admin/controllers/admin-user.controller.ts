@@ -83,3 +83,12 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
         message: result.message,
     });
 });
+
+export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+    const result = await adminUserService.deleteUser(req.params.id, req.user!.id);
+
+    res.json({
+        success: true,
+        message: result.message,
+    });
+});

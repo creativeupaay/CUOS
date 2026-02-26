@@ -5,7 +5,7 @@ import { Types } from 'mongoose';
 export interface CreateTaskData {
     title: string;
     description?: string;
-    status?: 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked';
+    status?: 'todo' | 'in-progress' | 'completed';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     projectId: string;
     parentTaskId?: string;
@@ -20,7 +20,7 @@ export interface CreateTaskData {
 export interface UpdateTaskData {
     title?: string;
     description?: string;
-    status?: 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked';
+    status?: 'todo' | 'in-progress' | 'completed';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     startDate?: Date;
     endDate?: Date;
@@ -63,9 +63,16 @@ export const updateTask = async (
     taskId: string,
     data: UpdateTaskData
 ): Promise<ITask | null> => {
+    // Explicitly set completedAt when status changes to completed
+    // (findByIdAndUpdate bypasses the pre-save hook)
+    const updatePayload: any = { $set: { ...data } };
+    if (data.status === 'completed') {
+        updatePayload.$set.completedAt = new Date();
+    }
+
     const task = await Task.findByIdAndUpdate(
         taskId,
-        { $set: data },
+        updatePayload,
         { new: true, runValidators: true }
     );
 

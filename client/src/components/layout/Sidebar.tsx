@@ -13,7 +13,7 @@ import {
     LogOut,
     ChevronRight,
     ChevronDown,
-    Shield,
+    ShieldCheck,
     ScrollText,
     Settings,
     DollarSign,
@@ -39,10 +39,22 @@ interface ModuleConfig {
 }
 
 /**
- * Returns module-specific navigation items based on the current route.
+ * Returns module-specific navigation items based on the current route, filtered by user permissions.
  */
-function getModuleConfig(pathname: string, projects?: { _id: string; name: string }[]): ModuleConfig | null {
+function getModuleConfig(
+    pathname: string,
+    user: any,
+    isAdmin: boolean,
+    projects?: { _id: string; name: string }[]
+): ModuleConfig | null {
+    const mp = user?.modulePermissions;
     if (pathname.startsWith('/projects')) {
+        // Enforce the same guard: no sidebar if non-admin and 0 assigned projects
+        const pmPerms = mp?.projectManagement;
+        const hasAccess = isAdmin || (pmPerms?.enabled && Array.isArray(pmPerms?.projectPermissions) && pmPerms.projectPermissions.length > 0);
+
+        if (!hasAccess) return null;
+
         const projectSubItems = projects?.map(p => ({
             label: p.name,
             path: `/projects/${p._id}`
@@ -63,137 +75,62 @@ function getModuleConfig(pathname: string, projects?: { _id: string; name: strin
     }
 
     if (pathname.startsWith('/finance')) {
+        const finSubs = mp?.finance?.subModules;
+        const allItems = [
+            { key: 'dashboard', label: 'Dashboard', path: '/finance', icon: <DollarSign size={20} />, matchPrefix: '/finance' },
+            { key: 'expenses', label: 'Expenses', path: '/finance/expenses', icon: <Receipt size={20} />, matchPrefix: '/finance/expenses' },
+            { key: 'invoices', label: 'Invoices', path: '/finance/invoices', icon: <CreditCard size={20} />, matchPrefix: '/finance/invoices' },
+            { key: 'reports', label: 'Reports', path: '/finance/reports', icon: <TrendingUp size={20} />, matchPrefix: '/finance/reports' },
+        ];
         return {
             title: 'Finance',
-            items: [
-                {
-                    label: 'Dashboard',
-                    path: '/finance',
-                    icon: <DollarSign size={20} />,
-                    matchPrefix: '/finance',
-                },
-                {
-                    label: 'Expenses',
-                    path: '/finance/expenses',
-                    icon: <Receipt size={20} />,
-                    matchPrefix: '/finance/expenses',
-                },
-                {
-                    label: 'Invoices',
-                    path: '/finance/invoices',
-                    icon: <CreditCard size={20} />,
-                    matchPrefix: '/finance/invoices',
-                },
-                {
-                    label: 'Reports',
-                    path: '/finance/reports',
-                    icon: <TrendingUp size={20} />,
-                    matchPrefix: '/finance/reports',
-                },
-            ],
+            items: isAdmin || !finSubs ? allItems : allItems.filter(i => (finSubs as any)[i.key] === true),
         };
     }
 
     if (pathname.startsWith('/crm')) {
+        const crmSubs = mp?.crm?.subModules;
+        const allItems = [
+            { key: 'pipeline', label: 'Pipeline', path: '/crm/pipeline', icon: <BarChart3 size={20} />, matchPrefix: '/crm/pipeline' },
+            { key: 'leads', label: 'Leads', path: '/crm/leads', icon: <Users2 size={20} />, matchPrefix: '/crm/leads' },
+            { key: 'proposals', label: 'Proposals', path: '/crm/proposals', icon: <FileText size={20} />, matchPrefix: '/crm/proposals' },
+            { key: 'clients', label: 'Clients', path: '/crm/clients', icon: <Users2 size={20} />, matchPrefix: '/crm/clients' },
+        ];
         return {
             title: 'CRM',
-            items: [
-                {
-                    label: 'Pipeline',
-                    path: '/crm/pipeline',
-                    icon: <BarChart3 size={20} />,
-                    matchPrefix: '/crm/pipeline',
-                },
-                {
-                    label: 'Proposals',
-                    path: '/crm/proposals',
-                    icon: <FileText size={20} />,
-                    matchPrefix: '/crm/proposals',
-                },
-                {
-                    label: 'Clients',
-                    path: '/crm/clients',
-                    icon: <Users2 size={20} />,
-                    matchPrefix: '/crm/clients',
-                },
-            ],
+            items: isAdmin || !crmSubs ? allItems : allItems.filter(i => (crmSubs as any)[i.key] === true),
         };
     }
 
     if (pathname.startsWith('/hrms')) {
+        const hrmsSubs = mp?.hrms?.subModules;
+        const allItems = [
+            { key: 'dashboard', label: 'Dashboard', path: '/hrms', icon: <BarChart3 size={20} />, matchPrefix: '/hrms' },
+            { key: 'employees', label: 'Employees', path: '/hrms/employees', icon: <Users2 size={20} />, matchPrefix: '/hrms/employees' },
+            { key: 'attendance', label: 'Attendance', path: '/hrms/attendance', icon: <Clock size={20} />, matchPrefix: '/hrms/attendance' },
+            { key: 'leaves', label: 'Leaves', path: '/hrms/leaves', icon: <ListTodo size={20} />, matchPrefix: '/hrms/leaves' },
+            { key: 'payroll', label: 'Payroll', path: '/hrms/payroll', icon: <FileText size={20} />, matchPrefix: '/hrms/payroll' },
+        ];
         return {
             title: 'HRMS',
-            items: [
-                {
-                    label: 'Dashboard',
-                    path: '/hrms',
-                    icon: <BarChart3 size={20} />,
-                    matchPrefix: '/hrms',
-                },
-                {
-                    label: 'Employees',
-                    path: '/hrms/employees',
-                    icon: <Users2 size={20} />,
-                    matchPrefix: '/hrms/employees',
-                },
-                {
-                    label: 'Attendance',
-                    path: '/hrms/attendance',
-                    icon: <Clock size={20} />,
-                    matchPrefix: '/hrms/attendance',
-                },
-                {
-                    label: 'Leaves',
-                    path: '/hrms/leaves',
-                    icon: <ListTodo size={20} />,
-                    matchPrefix: '/hrms/leaves',
-                },
-                {
-                    label: 'Payroll',
-                    path: '/hrms/payroll',
-                    icon: <FileText size={20} />,
-                    matchPrefix: '/hrms/payroll',
-                },
-            ],
+            items: isAdmin || !hrmsSubs ? allItems : allItems.filter(i => (hrmsSubs as any)[i.key] === true),
         };
     }
 
     if (pathname.startsWith('/admin')) {
-        return {
-            title: 'Admin Panel',
-            items: [
-                {
-                    label: 'Dashboard',
-                    path: '/admin',
-                    icon: <BarChart3 size={20} />,
-                    matchPrefix: '/admin',
-                },
-                {
-                    label: 'Users',
-                    path: '/admin/users',
-                    icon: <Users2 size={20} />,
-                    matchPrefix: '/admin/users',
-                },
-                {
-                    label: 'Roles & Permissions',
-                    path: '/admin/roles',
-                    icon: <Shield size={20} />,
-                    matchPrefix: '/admin/roles',
-                },
-                {
-                    label: 'Settings',
-                    path: '/admin/settings',
-                    icon: <Settings size={20} />,
-                    matchPrefix: '/admin/settings',
-                },
-                {
-                    label: 'Audit Logs',
-                    path: '/admin/audit-logs',
-                    icon: <ScrollText size={20} />,
-                    matchPrefix: '/admin/audit-logs',
-                },
-            ],
-        };
+        const adminSubs = mp?.overallAdmin?.subModules;
+        const allItems = [
+            { key: 'dashboard', label: 'Dashboard', path: '/admin', icon: <BarChart3 size={20} />, matchPrefix: '/admin' },
+            { key: 'users', label: 'Users', path: '/admin/users', icon: <Users2 size={20} />, matchPrefix: '/admin/users' },
+            { key: 'permissions', label: 'Permissions', path: '/admin/permissions', icon: <ShieldCheck size={20} />, matchPrefix: '/admin/permissions' },
+            { key: 'settings', label: 'Settings', path: '/admin/settings', icon: <Settings size={20} />, matchPrefix: '/admin/settings' },
+            { key: 'auditLogs', label: 'Audit Logs', path: '/admin/audit-logs', icon: <ScrollText size={20} />, matchPrefix: '/admin/audit-logs' },
+        ];
+        // Dashboard always shown for admin module; other items filtered by sub-perm
+        const filteredItems = isAdmin || !adminSubs
+            ? allItems
+            : allItems.filter(i => i.key === 'dashboard' || (adminSubs as any)[i.key] === true);
+        return { title: 'Admin Panel', items: filteredItems };
     }
 
     return null;
@@ -348,6 +285,11 @@ export default function Sidebar() {
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
 
+    const roleName = user?.role
+        ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
+        : '';
+    const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName);
+
     // Only fetch projects if we are in the PM module
     const isPMRoute = location.pathname.startsWith('/projects');
     const { data: projectsResponse } = useGetProjectsQuery(
@@ -356,7 +298,7 @@ export default function Sidebar() {
     );
     const projects = projectsResponse?.data || [];
 
-    const moduleConfig = getModuleConfig(location.pathname, projects);
+    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects);
 
     const handleLogout = () => {
         dispatch(logout());

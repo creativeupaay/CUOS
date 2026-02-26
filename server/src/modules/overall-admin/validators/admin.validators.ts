@@ -25,6 +25,59 @@ export const updateUserSchema = z.object({
             z.string().optional()
         ),
         isActive: z.boolean().optional(),
+        modulePermissions: z.object({
+            projectManagement: z.object({
+                enabled: z.boolean().optional(),
+                projectPermissions: z.array(z.object({
+                    projectId: z.string(),
+                    subModules: z.object({
+                        overview: z.boolean().optional(),
+                        tasks: z.boolean().optional(),
+                        timeLogs: z.boolean().optional(),
+                        meetings: z.boolean().optional(),
+                        credentials: z.boolean().optional(),
+                        documents: z.boolean().optional(),
+                    }).optional(),
+                })).optional(),
+            }).optional(),
+            finance: z.object({
+                enabled: z.boolean().optional(),
+                subModules: z.object({
+                    dashboard: z.boolean().optional(),
+                    expenses: z.boolean().optional(),
+                    invoices: z.boolean().optional(),
+                    reports: z.boolean().optional(),
+                }).optional(),
+            }).optional(),
+            crm: z.object({
+                enabled: z.boolean().optional(),
+                subModules: z.object({
+                    pipeline: z.boolean().optional(),
+                    leads: z.boolean().optional(),
+                    proposals: z.boolean().optional(),
+                    clients: z.boolean().optional(),
+                }).optional(),
+            }).optional(),
+            hrms: z.object({
+                enabled: z.boolean().optional(),
+                subModules: z.object({
+                    dashboard: z.boolean().optional(),
+                    employees: z.boolean().optional(),
+                    attendance: z.boolean().optional(),
+                    leaves: z.boolean().optional(),
+                    payroll: z.boolean().optional(),
+                }).optional(),
+            }).optional(),
+            overallAdmin: z.object({
+                enabled: z.boolean().optional(),
+                subModules: z.object({
+                    users: z.boolean().optional(),
+                    permissions: z.boolean().optional(),
+                    settings: z.boolean().optional(),
+                    auditLogs: z.boolean().optional(),
+                }).optional(),
+            }).optional(),
+        }).optional(),
     }),
 });
 

@@ -12,9 +12,6 @@ export const createTimeLogSchema = z.object({
         endTime: z.string().or(z.date()).optional(),
 
         description: z.string().optional(),
-
-        hourlyRate: z.number().positive().optional(),
-        billable: z.boolean().default(true),
     }),
 });
 
@@ -29,9 +26,6 @@ export const updateTimeLogSchema = z.object({
         endTime: z.string().or(z.date()).optional(),
 
         description: z.string().optional(),
-
-        hourlyRate: z.number().positive().optional(),
-        billable: z.boolean().optional(),
     }),
 });
 
@@ -43,7 +37,6 @@ export const getProjectTimeLogsSchema = z.object({
         userId: z.string().optional(),
         startDate: z.string().or(z.date()).optional(),
         endDate: z.string().or(z.date()).optional(),
-        billable: z.enum(['true', 'false']).optional(),
     }).optional(),
 });
 

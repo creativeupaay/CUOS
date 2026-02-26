@@ -144,7 +144,7 @@ export default function ProjectCredentialsTab() {
     const handleEnvPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
         const text = e.clipboardData.getData('text');
         const pairs = parseEnvBlock(text);
-        if (pairs.length <= 1) return;
+        if (pairs.length === 0) return;
         e.preventDefault();
         setEnvRows(pairs.map(p => ({ ...newEnvRow(), key: p.key, value: p.value })));
     };
@@ -185,19 +185,50 @@ export default function ProjectCredentialsTab() {
     };
 
     const getAccessScope = () => {
-        const scope = project?.assignees?.map((a: any) =>
-            typeof a === 'object' && 'userId' in a
-                ? (typeof a.userId === 'object' ? a.userId._id : a.userId)
-                : a
-        ) || [];
+        const scope: string[] = [];
+        
+        // Extract user IDs from assignees
+        project?.assignees?.forEach((a: any) => {
+            let userId: string | undefined;
+            
+            // Check if assignee has employeeId with nested userId
+            if (a.employeeId) {
+                const emp = typeof a.employeeId === 'object' ? a.employeeId : null;
+                if (emp) {
+                    userId = typeof emp.userId === 'object' ? emp.userId._id : emp.userId;
+                }
+            }
+            // Fallback: check if assignee has direct userId
+            else if (a.userId) {
+                userId = typeof a.userId === 'object' ? a.userId._id : a.userId;
+            }
+            
+            if (userId && !scope.includes(userId)) {
+                scope.push(userId);
+            }
+        });
+        
+        // Add project creator
         const creatorId = typeof project?.createdBy === 'object' ? (project?.createdBy as any)._id : project?.createdBy;
-        if (creatorId && !scope.includes(creatorId)) scope.push(creatorId);
+        if (creatorId && !scope.includes(creatorId)) {
+            scope.push(creatorId);
+        }
+        
         return scope;
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const accessUsers = getAccessScope();
+        
+        // Debug: Log access users
+        console.log('Access users:', accessUsers);
+        
+        if (!accessUsers || accessUsers.length === 0) {
+            alert('Error: No access users found. Project must have team members assigned.');
+            return;
+        }
+        
         let toCreate: any[] = [];
 
         switch (activeTab) {
@@ -226,13 +257,16 @@ export default function ProjectCredentialsTab() {
         if (!toCreate.length) { alert('Please fill in all required fields.'); return; }
 
         try {
+            console.log('Creating credentials:', toCreate);
             await Promise.all(toCreate.map(cred => createCredential({ projectId: projectId!, data: { ...cred, accessUsers } }).unwrap()));
             if (formRef.current) formRef.current.reset();
             setEnvRows([newEnvRow()]); setSshRows([newSshRow()]); setTestRows([newTestRow()]);
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to save. Check all required fields and try again.');
+            alert('Credentials saved successfully!');
+        } catch (err: any) {
+            console.error('Failed to save credentials:', err);
+            const errorMessage = err?.data?.message || err?.message || 'Unknown error';
+            alert(`Failed to save: ${errorMessage}`);
         }
     };
 

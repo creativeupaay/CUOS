@@ -1,7 +1,8 @@
 import { useGetProjectsQuery } from '@/features/project';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Plus, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
+import { useAppSelector } from '@/app/hooks';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
@@ -19,13 +20,21 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function ProjectsPage() {
-    const [filters, setFilters] = useState({
-        status: '',
-        priority: '',
-    });
+    const [filters, setFilters] = useState({ status: '', priority: '' });
+    const user = useAppSelector((state) => state.auth.user);
 
     const { data, isLoading, error } = useGetProjectsQuery(filters);
     const projects = data?.data || [];
+
+    // Check module-level access
+    const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
+    const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName.toLowerCase());
+    const mp = user?.modulePermissions?.projectManagement;
+    const hasProjectAccess = isAdmin || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
+
+    if (!hasProjectAccess && !isLoading) {
+        return <Navigate to="/dashboard" replace />;
+    }
 
     if (isLoading) {
         return (
@@ -64,23 +73,25 @@ export default function ProjectsPage() {
                         {projects.length} project{projects.length !== 1 ? 's' : ''} total
                     </p>
                 </div>
-                <Link
-                    to="/projects/new"
-                    className="flex items-center gap-2 px-4 text-sm font-medium text-white rounded-lg transition-colors"
-                    style={{
-                        height: '40px',
-                        backgroundColor: 'var(--color-primary)',
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-primary)';
-                    }}
-                >
-                    <Plus size={16} />
-                    New Project
-                </Link>
+                {isAdmin && (
+                    <Link
+                        to="/projects/new"
+                        className="flex items-center gap-2 px-4 text-sm font-medium text-white rounded-lg transition-colors"
+                        style={{
+                            height: '40px',
+                            backgroundColor: 'var(--color-primary)',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--color-primary)';
+                        }}
+                    >
+                        <Plus size={16} />
+                        New Project
+                    </Link>
+                )}
             </div>
 
             {/* Filters */}

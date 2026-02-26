@@ -1,6 +1,41 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+export interface IProjectPermission {
+    projectId: string;
+    subModules: {
+        overview: boolean;
+        tasks: boolean;
+        timeLogs: boolean;
+        meetings: boolean;
+        credentials: boolean;
+        documents: boolean;
+    };
+}
+
+export interface IModulePermissions {
+    projectManagement: {
+        enabled: boolean;
+        projectPermissions: IProjectPermission[];
+    };
+    finance: {
+        enabled: boolean;
+        subModules: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean };
+    };
+    crm: {
+        enabled: boolean;
+        subModules: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean };
+    };
+    hrms: {
+        enabled: boolean;
+        subModules: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean };
+    };
+    overallAdmin: {
+        enabled: boolean;
+        subModules: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean };
+    };
+}
+
 export interface IUser extends Document {
     name: string;
     email: string;
@@ -9,6 +44,7 @@ export interface IUser extends Document {
     department?: string;
     isActive: boolean;
     lastLogin?: Date;
+    modulePermissions: IModulePermissions;
     createdAt: Date;
     updatedAt: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -43,7 +79,6 @@ const UserSchema = new Schema<IUser>(
         department: {
             type: String,
             trim: true,
-            enum: ['project-management', 'finance', 'crm', 'hrms', 'admin', null],
         },
         isActive: {
             type: Boolean,
@@ -51,6 +86,59 @@ const UserSchema = new Schema<IUser>(
         },
         lastLogin: {
             type: Date,
+        },
+        modulePermissions: {
+            projectManagement: {
+                enabled: { type: Boolean, default: true },
+                projectPermissions: [{
+                    projectId: { type: String, required: true },
+                    subModules: {
+                        overview: { type: Boolean, default: false },
+                        tasks: { type: Boolean, default: false },
+                        timeLogs: { type: Boolean, default: false },
+                        meetings: { type: Boolean, default: false },
+                        credentials: { type: Boolean, default: false },
+                        documents: { type: Boolean, default: false },
+                    },
+                }],
+            },
+            finance: {
+                enabled: { type: Boolean, default: false },
+                subModules: {
+                    dashboard: { type: Boolean, default: false },
+                    expenses: { type: Boolean, default: false },
+                    invoices: { type: Boolean, default: false },
+                    reports: { type: Boolean, default: false },
+                },
+            },
+            crm: {
+                enabled: { type: Boolean, default: false },
+                subModules: {
+                    pipeline: { type: Boolean, default: false },
+                    leads: { type: Boolean, default: false },
+                    proposals: { type: Boolean, default: false },
+                    clients: { type: Boolean, default: false },
+                },
+            },
+            hrms: {
+                enabled: { type: Boolean, default: true },
+                subModules: {
+                    dashboard: { type: Boolean, default: true },
+                    employees: { type: Boolean, default: false },
+                    attendance: { type: Boolean, default: true },
+                    leaves: { type: Boolean, default: true },
+                    payroll: { type: Boolean, default: false },
+                },
+            },
+            overallAdmin: {
+                enabled: { type: Boolean, default: false },
+                subModules: {
+                    users: { type: Boolean, default: false },
+                    permissions: { type: Boolean, default: false },
+                    settings: { type: Boolean, default: false },
+                    auditLogs: { type: Boolean, default: false },
+                },
+            },
         },
     },
     {

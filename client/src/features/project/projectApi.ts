@@ -19,6 +19,7 @@ import type {
     CreateCredentialRequest,
     UpdateCredentialRequest,
     ApiResponse,
+    UpdateAssigneePermissionsRequest,
 } from './types/apiTypes';
 
 export const projectApi = api.injectEndpoints({
@@ -71,15 +72,29 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
         }),
 
-        removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; userId: string }>({
-            query: ({ projectId, userId }) => ({
-                url: `/projects/${projectId}/assignees/${userId}`,
+        removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; employeeId: string }>({
+            query: ({ projectId, employeeId }) => ({
+                url: `/projects/${projectId}/assignees/${employeeId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
+        }),
+
+        updateAssigneePermissions: builder.mutation<ApiResponse<void>, { projectId: string; employeeId: string; data: UpdateAssigneePermissionsRequest }>({
+            query: ({ projectId, employeeId, data }) => ({
+                url: `/projects/${projectId}/assignees/${employeeId}/permissions`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
+        }),
+
+        getAssigneePermissions: builder.query<ApiResponse<any>, { projectId: string; employeeId: string }>({
+            query: ({ projectId, employeeId }) => `/projects/${projectId}/assignees/${employeeId}/permissions`,
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         uploadDocument: builder.mutation<ApiResponse<Project>, { projectId: string; file: File; name: string; type: string }>({
@@ -315,6 +330,9 @@ export const {
     useDeleteProjectMutation,
     useAddAssigneeMutation,
     useRemoveAssigneeMutation,
+    useUpdateAssigneePermissionsMutation,
+    useGetAssigneePermissionsQuery,
+    useLazyGetAssigneePermissionsQuery,
     useUploadDocumentMutation,
     useGetDocumentUrlQuery,
     useLazyGetDocumentUrlQuery,

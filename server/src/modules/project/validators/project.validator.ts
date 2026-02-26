@@ -30,6 +30,14 @@ export const createProjectSchema = z.object({
         assignees: z.array(z.object({
             userId: z.string(),
             role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer']),
+            subModules: z.object({
+                overview: z.boolean(),
+                tasks: z.boolean(),
+                timeLogs: z.boolean(),
+                meetings: z.boolean(),
+                credentials: z.boolean(),
+                documents: z.boolean(),
+            }).optional(),
         })).optional(),
 
         phases: z.array(z.object({
@@ -82,15 +90,40 @@ export const addAssigneeSchema = z.object({
         id: z.string().min(1, 'Project ID is required'),
     }),
     body: z.object({
-        userId: z.string().min(1, 'User ID is required'),
+        employeeId: z.string().min(1, 'Employee ID is required'),
         role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer']),
+        subModules: z.object({
+            overview: z.boolean(),
+            tasks: z.boolean(),
+            timeLogs: z.boolean(),
+            meetings: z.boolean(),
+            credentials: z.boolean(),
+            documents: z.boolean(),
+        }).optional(),
     }),
 });
 
 export const removeAssigneeSchema = z.object({
     params: z.object({
         id: z.string().min(1, 'Project ID is required'),
-        userId: z.string().min(1, 'User ID is required'),
+        employeeId: z.string().min(1, 'Employee ID is required'),
+    }),
+});
+
+export const updateAssigneePermissionsSchema = z.object({
+    params: z.object({
+        id: z.string().min(1, 'Project ID is required'),
+        employeeId: z.string().min(1, 'Employee ID is required'),
+    }),
+    body: z.object({
+        subModules: z.object({
+            overview: z.boolean(),
+            tasks: z.boolean(),
+            timeLogs: z.boolean(),
+            meetings: z.boolean(),
+            credentials: z.boolean(),
+            documents: z.boolean(),
+        }),
     }),
 });
 

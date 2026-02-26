@@ -119,7 +119,7 @@ export default function CrmLeadsPage() {
                     <button
                         className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors hover:opacity-90"
                         style={{ backgroundColor: 'var(--color-primary)' }}
-                        onClick={() => {/* TODO: Open create modal or navigate to create page */ }}
+                        onClick={() => navigate('/crm/leads/new')}
                     >
                         <Plus size={18} />
                         New Lead

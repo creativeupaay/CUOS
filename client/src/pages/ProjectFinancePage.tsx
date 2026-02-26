@@ -89,7 +89,6 @@ export default function ProjectFinancePage() {
                                     <th style={{ textAlign: 'left' }}>Developer</th>
                                     <th>Designation</th>
                                     <th>Total Hours</th>
-                                    <th>Billable Hours</th>
                                     <th>Hourly Rate</th>
                                     <th>Cost</th>
                                 </tr>
@@ -100,7 +99,6 @@ export default function ProjectFinancePage() {
                                         <td style={{ textAlign: 'left' }}>{dev.userName}</td>
                                         <td>{dev.designation}</td>
                                         <td>{dev.totalHours}h</td>
-                                        <td>{dev.billableHours}h</td>
                                         <td>{formatCurrency(dev.hourlyRate)}/h</td>
                                         <td><strong>{formatCurrency(dev.totalCost)}</strong></td>
                                     </tr>
@@ -108,7 +106,7 @@ export default function ProjectFinancePage() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={5} style={{ textAlign: 'left' }}><strong>Total Developer Cost</strong></td>
+                                    <td colSpan={4} style={{ textAlign: 'left' }}><strong>Total Developer Cost</strong></td>
                                     <td><strong>{formatCurrency(summary.totalDeveloperCost)}</strong></td>
                                 </tr>
                             </tfoot>

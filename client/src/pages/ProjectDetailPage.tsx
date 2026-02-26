@@ -1,4 +1,6 @@
-import { useParams, Link, Outlet, useLocation } from 'react-router-dom';
+import { useParams, Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/app/store';
 import { useGetProjectByIdQuery } from '@/features/project';
 import {
     LayoutDashboard,
@@ -30,8 +32,17 @@ const priorityColors: Record<string, { bg: string; text: string }> = {
 export default function ProjectDetailPage() {
     const { id } = useParams<{ id: string }>();
     const location = useLocation();
+    const navigate = useNavigate();
     const { data, isLoading, error } = useGetProjectByIdQuery(id!);
     const project = data?.data;
+
+    const currentUser = useSelector((s: RootState) => s.auth.user);
+    const roleName = currentUser?.role
+        ? typeof currentUser.role === 'object'
+            ? (currentUser.role as any).name?.toLowerCase()
+            : String(currentUser.role).toLowerCase()
+        : '';
+    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
 
     if (isLoading) {
         return (
@@ -58,14 +69,42 @@ export default function ProjectDetailPage() {
     const sColors = statusColors[project.status] || statusColors.planning;
     const pColors = priorityColors[project.priority] || priorityColors.low;
 
-    const tabs = [
-        { name: 'Overview', path: `/projects/${id}`, icon: <LayoutDashboard size={15} /> },
-        { name: 'Tasks', path: `/projects/${id}/tasks`, icon: <ListTodo size={15} /> },
-        { name: 'Time Logs', path: `/projects/${id}/timelogs`, icon: <Clock size={15} /> },
-        { name: 'Meetings', path: `/projects/${id}/meetings`, icon: <Video size={15} /> },
-        { name: 'Credentials', path: `/projects/${id}/credentials`, icon: <KeyRound size={15} /> },
-        { name: 'Documents', path: `/projects/${id}/documents`, icon: <FileText size={15} /> },
+    const pmPerms = currentUser?.modulePermissions?.projectManagement;
+    // Find THIS project's specific permission entry
+    const projectEntry = pmPerms?.projectPermissions?.find(p => p.projectId === id);
+    const pmSubs = projectEntry?.subModules;
+
+    const allTabs = [
+        { name: 'Overview', path: `/projects/${id}`, icon: <LayoutDashboard size={15} />, exact: true, permKey: 'overview' },
+        { name: 'Tasks', path: `/projects/${id}/tasks`, icon: <ListTodo size={15} />, exact: false, permKey: 'tasks' },
+        { name: 'Time Logs', path: `/projects/${id}/timelogs`, icon: <Clock size={15} />, exact: false, permKey: 'timeLogs' },
+        { name: 'Meetings', path: `/projects/${id}/meetings`, icon: <Video size={15} />, exact: false, permKey: 'meetings' },
+        { name: 'Credentials', path: `/projects/${id}/credentials`, icon: <KeyRound size={15} />, exact: false, permKey: 'credentials' },
+        { name: 'Documents', path: `/projects/${id}/documents`, icon: <FileText size={15} />, exact: false, permKey: 'documents' },
     ];
+    const tabs = isSuperAdmin
+        ? allTabs
+        : allTabs.filter(t => pmSubs ? (pmSubs as Record<string, boolean>)[t.permKey] === true : false);
+
+    // Redirect to first allowed tab if no overview access
+    const isOnBasePath = location.pathname === `/projects/${id}`;
+    if (!isSuperAdmin && isOnBasePath && pmSubs && !pmSubs.overview && tabs.length > 0) {
+        return <Navigate to={tabs[0].path} replace />;
+    }
+
+    // No tabs at all or project not assigned = access denied
+    if (!isSuperAdmin && tabs.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#FEF2F2' }}>
+                    <AlertCircle size={28} style={{ color: '#EF4444' }} />
+                </div>
+                <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Access</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>You don't have permission to view any section of this project.</p>
+                <button onClick={() => navigate('/dashboard')} className="mt-4 px-4 py-2 text-sm rounded-lg text-white" style={{ backgroundColor: 'var(--color-primary)' }}>Back to Dashboard</button>
+            </div>
+        );
+    }
 
     return (
         <div className="px-8 py-6" style={{ maxWidth: '1280px' }}>
@@ -124,7 +163,9 @@ export default function ProjectDetailPage() {
             >
                 <nav className="flex gap-0">
                     {tabs.map((tab) => {
-                        const isActive = location.pathname === tab.path;
+                        const isActive = tab.exact
+                            ? location.pathname === tab.path
+                            : location.pathname.startsWith(tab.path);
                         return (
                             <Link
                                 key={tab.path}

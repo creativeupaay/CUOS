@@ -62,6 +62,7 @@ router.delete(
 router.post(
     '/',
     validateRequest(projectValidators.createProjectSchema),
+    checkAdmin,
     projectController.createProject
 );
 
@@ -102,10 +103,26 @@ router.post(
 
 // Remove assignee from project
 router.delete(
-    '/:id/assignees/:userId',
+    '/:id/assignees/:employeeId',
     validateRequest(projectValidators.removeAssigneeSchema),
     checkProjectManager,
     projectController.removeAssignee
+);
+
+// Get assignee permissions
+router.get(
+    '/:id/assignees/:employeeId/permissions',
+    validateRequest(projectValidators.removeAssigneeSchema), // reuse schema since it just needs id and employeeId
+    checkProjectAccess,
+    projectController.getAssigneePermissions
+);
+
+// Update assignee permissions
+router.patch(
+    '/:id/assignees/:employeeId/permissions',
+    validateRequest(projectValidators.updateAssigneePermissionsSchema),
+    checkProjectManager,
+    projectController.updateAssigneePermissions
 );
 
 // Upload document
@@ -281,7 +298,7 @@ router.delete(
 router.post(
     '/:projectId/credentials',
     validateRequest(credentialValidators.createCredentialSchema),
-    checkProjectManager,
+    checkProjectAccess,
     credentialController.createCredential
 );
 

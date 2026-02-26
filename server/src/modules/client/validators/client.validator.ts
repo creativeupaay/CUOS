@@ -86,7 +86,19 @@ export const listClientsSchema = z.object({
     }),
 });
 
+export const addClientActivitySchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid client ID'),
+    }),
+    body: z.object({
+        type: z.enum(['call', 'email', 'meeting', 'note']),
+        description: z.string().min(1, 'Description is required').trim(),
+        date: z.string().datetime().optional(),
+    }),
+});
+
 export type CreateClientInput = z.infer<typeof createClientSchema>['body'];
 export type UpdateClientInput = z.infer<typeof updateClientSchema>['body'];
 export type GetClientInput = z.infer<typeof getClientSchema>['params'];
 export type ListClientsInput = z.infer<typeof listClientsSchema>['query'];
+export type AddClientActivityInput = z.infer<typeof addClientActivitySchema>['body'];

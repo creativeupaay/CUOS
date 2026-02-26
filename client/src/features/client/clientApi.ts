@@ -6,6 +6,7 @@ import type {
     ClientResponse,
     ClientsListResponse,
     ClientProjectsResponse,
+    AddClientActivityRequest,
 } from './types/apiTypes';
 
 export const clientApi = api.injectEndpoints({
@@ -58,13 +59,22 @@ export const clientApi = api.injectEndpoints({
             invalidatesTags: ['Clients'],
         }),
 
-        // Get client projects
         getClientProjects: builder.query<ClientProjectsResponse, string>({
             query: (id) => ({
                 url: `/clients/${id}/projects`,
                 method: 'GET',
             }),
             providesTags: (_result, _error, id) => [{ type: 'Projects', id: `client-${id}` }],
+        }),
+
+        // Add activity
+        addClientActivity: builder.mutation<ClientResponse, { clientId: string; data: AddClientActivityRequest }>({
+            query: ({ clientId, data }) => ({
+                url: `/clients/${clientId}/activities`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { clientId }) => [{ type: 'Clients', id: clientId }, 'Clients'],
         }),
     }),
 });
@@ -76,5 +86,6 @@ export const {
     useUpdateClientMutation,
     useDeleteClientMutation,
     useGetClientProjectsQuery,
+    useAddClientActivityMutation,
 } = clientApi;
 

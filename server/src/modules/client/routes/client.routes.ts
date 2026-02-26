@@ -7,6 +7,7 @@ import {
     updateClientSchema,
     getClientSchema,
     listClientsSchema,
+    addClientActivitySchema,
 } from '../validators/client.validator';
 
 const router = Router();
@@ -23,5 +24,8 @@ router.delete('/:id', validateRequest(getClientSchema), clientController.deleteC
 
 // Client projects
 router.get('/:id/projects', validateRequest(getClientSchema), clientController.getClientProjects);
+
+// Client activities
+router.post('/:id/activities', validateRequest(addClientActivitySchema), clientController.addActivity);
 
 export default router;

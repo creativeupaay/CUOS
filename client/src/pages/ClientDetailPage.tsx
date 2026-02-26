@@ -14,19 +14,27 @@ import {
     FileText,
     Hash,
     Info,
-    Plus
+    Plus,
+    MessageSquare,
+    User,
+    Loader2,
+    Send
 } from 'lucide-react';
 import type { Project } from '@/features/project/types/types';
+import { useAddClientActivityMutation } from '@/features/client/clientApi';
 
-type Tab = 'info' | 'projects';
+type Tab = 'info' | 'projects' | 'activity';
 
 export default function ClientDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<Tab>('info');
+    const [activityType, setActivityType] = useState<'note' | 'call' | 'email' | 'meeting'>('note');
+    const [activityDesc, setActivityDesc] = useState('');
 
     const { data: clientData, isLoading, error } = useGetClientQuery(id!);
     const { data: projectsData } = useGetClientProjectsQuery(id!);
+    const [addActivity, { isLoading: isAddingActivity }] = useAddClientActivityMutation();
 
     if (isLoading) {
         return (
@@ -51,6 +59,32 @@ export default function ClientDetailPage() {
 
     const client = clientData.data.client;
     const projects = projectsData?.data.projects || [];
+
+    const handleAddActivity = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activityDesc.trim()) return;
+
+        try {
+            await addActivity({
+                clientId: id!,
+                data: {
+                    type: activityType,
+                    description: activityDesc,
+                    date: new Date().toISOString(),
+                },
+            }).unwrap();
+            setActivityDesc('');
+        } catch (error) {
+            console.error('Failed to add activity:', error);
+        }
+    };
+
+    const activityIcons = {
+        note: MessageSquare,
+        call: Phone,
+        email: Mail,
+        meeting: User,
+    };
 
     // Registration Type Label Helper
     const getRegistrationLabel = () => {
@@ -129,6 +163,15 @@ export default function ClientDetailPage() {
                             }`}
                     >
                         Projects ({projects.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('activity')}
+                        className={`pb-3 px-1 text-sm font-medium transition-colors border-b-2 ${activeTab === 'activity'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                            }`}
+                    >
+                        Activity Logged
                     </button>
                 </div>
             </div>
@@ -324,7 +367,7 @@ export default function ClientDetailPage() {
                         )}
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === 'projects' ? (
                 // PROJECTS TAB
                 <div className="space-y-6">
                     <div className="flex items-center justify-between">
@@ -387,6 +430,95 @@ export default function ClientDetailPage() {
                             ))}
                         </div>
                     )}
+                </div>
+            ) : (
+                // ACTIVITY TAB
+                <div className="max-w-4xl space-y-6">
+                    {/* Add Activity */}
+                    <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
+                        <div className="flex gap-2 mb-3 border-b border-neutral-100 pb-2">
+                            {(['note', 'call', 'email', 'meeting'] as const).map((type) => {
+                                const Icon = activityIcons[type];
+                                return (
+                                    <button
+                                        key={type}
+                                        onClick={() => setActivityType(type)}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${activityType === type
+                                            ? 'bg-neutral-100 text-neutral-900 font-medium'
+                                            : 'text-neutral-500 hover:bg-neutral-50'
+                                            }`}
+                                    >
+                                        <Icon size={14} />
+                                        <span className="capitalize">{type}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <form onSubmit={handleAddActivity}>
+                            <textarea
+                                value={activityDesc}
+                                onChange={(e) => setActivityDesc(e.target.value)}
+                                placeholder={`Add a ${activityType}...`}
+                                className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[80px]"
+                            />
+                            <div className="flex justify-end mt-2">
+                                <button
+                                    type="submit"
+                                    disabled={!activityDesc.trim() || isAddingActivity}
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
+                                >
+                                    {isAddingActivity ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                    Log Activity
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Activity Timeline */}
+                    <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-6">
+                        <h3 className="font-semibold text-neutral-900 mb-6">Activity Timeline</h3>
+                        <div className="space-y-6">
+                            {client.activities && client.activities.length > 0 ? (
+                                [...client.activities].reverse().map((activity: any) => {
+                                    const Icon = activityIcons[activity.type as keyof typeof activityIcons] || MessageSquare;
+                                    return (
+                                        <div key={activity._id} className="flex gap-4 relative">
+                                            {/* Line */}
+                                            <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-neutral-100 last:hidden" />
+
+                                            <div className={`flex-none w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 bg-white
+                                                    ${activity.type === 'call' ? 'border-blue-100 text-blue-600' :
+                                                    activity.type === 'meeting' ? 'border-purple-100 text-purple-600' :
+                                                        activity.type === 'email' ? 'border-yellow-100 text-yellow-600' :
+                                                            'border-neutral-100 text-neutral-600'}`}
+                                            >
+                                                <Icon size={18} />
+                                            </div>
+                                            <div className="flex-1 pt-1">
+                                                <div className="flex justify-between items-start">
+                                                    <p className="font-medium text-neutral-900 capitalize">{activity.type}</p>
+                                                    <span className="text-xs text-neutral-500">
+                                                        {new Date(activity.date).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <p className="text-neutral-600 text-sm mt-1 whitespace-pre-wrap">{activity.description}</p>
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <div className="w-5 h-5 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] text-neutral-600">
+                                                        {(activity.createdBy as any)?.name?.[0] || 'U'}
+                                                    </div>
+                                                    <span className="text-xs text-neutral-500">
+                                                        {(activity.createdBy as any)?.name}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <p className="text-center text-neutral-500 py-4">No activities logged yet.</p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

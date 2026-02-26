@@ -120,43 +120,67 @@ export default function SuperAdminDashboard() {
         navigate('/login');
     };
 
-    const departments = [
+    // Determine if current user bypasses permission checks (admin / super-admin)
+    const roleName = user?.role
+        ? typeof user.role === 'object'
+            ? (user.role as any).name?.toLowerCase()
+            : String(user.role).toLowerCase()
+        : '';
+    const isAdminUser = ['super-admin', 'admin', 'super_admin'].includes(roleName);
+
+    const mp = user?.modulePermissions;
+
+    const allDepartments = [
         {
+            key: 'projectManagement',
             title: 'Project Management',
             description: 'Manage projects, tasks, time logs and team collaboration',
             icon: <FolderKanban size={24} />,
             path: '/projects',
-            isActive: true,
         },
         {
+            key: 'finance',
             title: 'Finance',
             description: 'Track expenses, invoices, and financial reports',
             icon: <DollarSign size={24} />,
             path: '/finance',
-            isActive: true,
         },
         {
+            key: 'crm',
             title: 'CRM',
             description: 'Customer relationship management and sales tracking',
             icon: <Users size={24} />,
             path: '/crm',
-            isActive: true,
         },
         {
+            key: 'hrms',
             title: 'HRMS',
             description: 'Human resource management and employee records',
             icon: <Building2 size={24} />,
             path: '/hrms',
-            isActive: true,
         },
         {
+            key: 'overallAdmin',
             title: 'Overall Admin',
-            description: 'System administration, roles and permissions',
+            description: 'System administration, user permissions and settings',
             icon: <Shield size={24} />,
             path: '/admin',
-            isActive: true,
         },
     ];
+
+    // Admins see all; others see only permitted modules
+    const departments = isAdminUser
+        ? allDepartments.map(d => ({ ...d, isActive: true }))
+        : allDepartments.filter(d => {
+            const perm = mp?.[d.key as keyof typeof mp] as any;
+            if (!perm?.enabled) return false;
+
+            // For Project Management, also require at least one assigned project
+            if (d.key === 'projectManagement') {
+                return Array.isArray(perm.projectPermissions) && perm.projectPermissions.length > 0;
+            }
+            return true;
+        }).map(d => ({ ...d, isActive: true }));
 
     return (
         <div
@@ -258,7 +282,7 @@ export default function SuperAdminDashboard() {
 
                     {/* Department Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {departments.map((dept) => (
+                        {departments.map(({ key: _key, ...dept }) => (
                             <DepartmentCard key={dept.title} {...dept} />
                         ))}
                     </div>

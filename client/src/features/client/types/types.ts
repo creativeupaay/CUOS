@@ -1,3 +1,13 @@
+import type { User } from '@/features/auth/types/types';
+
+export interface ClientActivity {
+    _id: string;
+    type: 'call' | 'email' | 'meeting' | 'note';
+    description: string;
+    date: string;
+    createdBy: User | string;
+}
+
 export interface Client {
     _id: string;
     name: string;
@@ -14,6 +24,9 @@ export interface Client {
     contacts: ClientContact[];
     status: 'active' | 'inactive' | 'archived';
     notes?: string;
+
+    activities?: ClientActivity[];
+
     createdBy: string;
     createdAt: string;
     updatedAt: string;

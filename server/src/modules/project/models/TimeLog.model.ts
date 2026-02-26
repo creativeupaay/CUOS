@@ -12,9 +12,8 @@ export interface ITimeLog extends Document {
     endTime?: Date;
 
     description?: string;
-
+    billable?: boolean;
     hourlyRate?: number;
-    billable: boolean;
 
     createdAt: Date;
     updatedAt: Date;
@@ -32,9 +31,8 @@ const TimeLogSchema = new Schema<ITimeLog>(
         endTime: Date,
 
         description: { type: String, trim: true },
-
-        hourlyRate: Number,
         billable: { type: Boolean, default: true },
+        hourlyRate: { type: Number },
     },
     {
         timestamps: true,
@@ -48,6 +46,5 @@ TimeLogSchema.index({ userId: 1 });
 TimeLogSchema.index({ date: 1 });
 TimeLogSchema.index({ userId: 1, date: 1 }); // Compound index for user daily logs
 TimeLogSchema.index({ projectId: 1, date: 1 }); // For project time reports
-TimeLogSchema.index({ billable: 1 }); // For billing reports
 
 export const TimeLog = mongoose.model<ITimeLog>('TimeLog', TimeLogSchema);

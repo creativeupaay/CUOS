@@ -2,7 +2,7 @@ import { Client, IClient } from '../models/Client.model';
 import { IProject } from '../../project/models/Project.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
-import type { CreateClientInput, UpdateClientInput, ListClientsInput } from '../validators/client.validator';
+import type { CreateClientInput, UpdateClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
 
 export class ClientService {
     /**
@@ -60,7 +60,9 @@ export class ClientService {
      * Get client by ID
      */
     async getClientById(id: string): Promise<IClient> {
-        const client = await Client.findById(id).populate('createdBy', 'name email');
+        const client = await Client.findById(id)
+            .populate('createdBy', 'name email')
+            .populate('activities.createdBy', 'name email');
 
         if (!client) {
             throw new AppError('Client not found', 404);
@@ -114,5 +116,30 @@ export class ClientService {
             .lean();
 
         return projects as any; // Cast to any to avoid complex type issues with lean() + dynamic import, but efficiently fetched
+    }
+
+    /**
+     * Add activity to client
+     */
+    async addActivity(clientId: string, data: AddClientActivityInput, createdBy: Types.ObjectId): Promise<IClient> {
+        const client = await Client.findById(clientId);
+
+        if (!client) {
+            throw new AppError('Client not found', 404);
+        }
+
+        if (!client.activities) {
+            client.activities = [];
+        }
+
+        client.activities.push({
+            ...data,
+            date: data.date ? new Date(data.date) : new Date(),
+            createdBy,
+        } as any);
+
+        await client.save();
+
+        return this.getClientById(clientId);
     }
 }

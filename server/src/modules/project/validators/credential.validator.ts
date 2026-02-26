@@ -22,7 +22,7 @@ export const createCredentialSchema = z.object({
             // Test User
             username: z.string().optional(),
             password: z.string().optional(),
-            email: z.string().email().optional(),
+            email: z.string().email().optional().or(z.literal('')),
 
             // Account
             accountId: z.string().optional(),
@@ -34,7 +34,7 @@ export const createCredentialSchema = z.object({
             backupCodes: z.array(z.string()).optional(),
 
             // Generic
-            url: z.string().url().optional(),
+            url: z.string().optional(),
             notes: z.string().optional(),
         }),
 
@@ -59,13 +59,13 @@ export const updateCredentialSchema = z.object({
             sshPassphrase: z.string().optional(),
             username: z.string().optional(),
             password: z.string().optional(),
-            email: z.string().email().optional(),
+            email: z.string().email().optional().or(z.literal('')),
             accountId: z.string().optional(),
             apiKey: z.string().optional(),
             apiSecret: z.string().optional(),
             totpSecret: z.string().optional(),
             backupCodes: z.array(z.string()).optional(),
-            url: z.string().url().optional(),
+            url: z.string().optional(),
             notes: z.string().optional(),
         }).optional(),
 

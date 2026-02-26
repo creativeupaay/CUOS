@@ -2,6 +2,7 @@ import { User, IUser } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
 import AppError from '../../../utils/appError';
 import { AuditLog } from '../models/AuditLog.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import bcrypt from 'bcryptjs';
 
 export interface UserFilters {
@@ -27,6 +28,7 @@ export interface UpdateUserData {
     role?: string;
     department?: string;
     isActive?: boolean;
+    modulePermissions?: Record<string, any>;
 }
 
 /**
@@ -244,4 +246,36 @@ export const resetPassword = async (id: string, newPassword: string, adminId: st
     });
 
     return { message: 'Password reset successfully' };
+};
+
+/**
+ * Delete user (hard delete)
+ */
+export const deleteUser = async (id: string, adminId: string) => {
+    const user = await User.findById(id);
+    if (!user) {
+        throw new AppError('User not found', 404);
+    }
+
+    if (id === adminId) {
+        throw new AppError('Cannot delete your own account', 400);
+    }
+
+    await User.findByIdAndDelete(id);
+
+    // Cascade: Deactivate associated employee if it exists
+    await Employee.findOneAndUpdate(
+        { userId: id },
+        { status: 'terminated' }
+    );
+
+    await AuditLog.create({
+        userId: adminId,
+        action: 'user_deleted',
+        resource: 'user',
+        resourceId: id,
+        details: { name: user.name, email: user.email },
+    });
+
+    return { message: 'User deleted successfully' };
 };

@@ -1,5 +1,26 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export interface IClientActivity {
+    type: 'call' | 'email' | 'meeting' | 'note';
+    description: string;
+    date: Date;
+    createdBy: Types.ObjectId;
+}
+
+const ClientActivitySchema = new Schema<IClientActivity>(
+    {
+        type: {
+            type: String,
+            enum: ['call', 'email', 'meeting', 'note'],
+            required: true,
+        },
+        description: { type: String, required: true, trim: true },
+        date: { type: Date, default: Date.now },
+        createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    },
+    { _id: true, timestamps: false }
+);
+
 export interface IClientContact {
     name: string;
     email?: string;
@@ -55,6 +76,8 @@ export interface IClient extends Document {
     vatNumber?: string;
     customDetails?: IClientCustomDetail[];
     notes?: string;
+
+    activities: IClientActivity[];
 
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -133,6 +156,8 @@ const ClientSchema = new Schema<IClient>(
             },
         ],
         notes: { type: String, trim: true },
+
+        activities: [ClientActivitySchema],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
