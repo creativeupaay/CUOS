@@ -145,7 +145,7 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
     if (!item.matchPrefix) return false;
 
     // Check if any subItem is active specifically to avoid parent taking precedence
-    if (item.subItems?.some(sub => pathname === sub.path)) {
+    if (item.subItems?.some(sub => pathname === sub.path || pathname.startsWith(sub.path + '/'))) {
         return true;
     }
 
@@ -165,7 +165,7 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) => {
     // Default open if active or if we are in one of its subItems
     const hasSubItems = item.subItems && item.subItems.length > 0;
-    const isSubItemActive = hasSubItems && item.subItems!.some(sub => pathname === sub.path);
+    const isSubItemActive = hasSubItems && item.subItems!.some(sub => pathname === sub.path || pathname.startsWith(sub.path + '/'));
     const [isExpanded, setIsExpanded] = useState(active || isSubItemActive);
 
     // Sync expansion state when route changes
@@ -234,7 +234,7 @@ const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: b
             {hasSubItems && isExpanded && (
                 <div className="pl-10 space-y-1 mt-1">
                     {item.subItems!.map((sub) => {
-                        const isSubActive = pathname === sub.path;
+                        const isSubActive = pathname === sub.path || pathname.startsWith(sub.path + '/');
                         return (
                             <NavLink
                                 key={sub.path}
@@ -310,11 +310,10 @@ export default function Sidebar() {
 
     return (
         <aside
-            className="fixed top-0 left-0 h-screen flex flex-col border-r"
+            className="fixed top-0 left-0 h-screen flex flex-col glass-sidebar"
             style={{
                 width: 'var(--sidebar-width)',
-                backgroundColor: 'var(--color-bg-surface)',
-                borderColor: 'var(--color-border-default)',
+                zIndex: 40,
             }}
         >
             {/* Brand + Module Title */}

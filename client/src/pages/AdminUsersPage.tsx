@@ -35,7 +35,7 @@ function EditCredentialsModal({ user, onClose, onSave }: { user: any; onClose: (
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-sm rounded-xl shadow-2xl m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <div className="w-full max-w-sm rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                     <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Credentials</h3>
                     <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
@@ -167,7 +167,7 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-6 p-4 rounded-xl border" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+            <div className="flex flex-wrap gap-3 mb-6 p-4 rounded-xl shadow-premium border-0" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="relative flex-1 min-w-[200px]">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
                     <input type="text" placeholder="Search by name or email…" value={search}
@@ -183,7 +183,7 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+            <div className="rounded-xl shadow-premium overflow-hidden border-0" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 {isLoading ? (
                     <div className="p-8 text-center" style={{ color: 'var(--color-text-muted)' }}>Loading users…</div>
                 ) : users.length === 0 ? (
@@ -268,7 +268,7 @@ export default function AdminUsersPage() {
             {/* Create User Modal */}
             {showCreate && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="w-full max-w-lg rounded-xl shadow-2xl m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                    <div className="w-full max-w-lg rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                             <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Create User</h3>
                             <button onClick={() => setShowCreate(false)} className="p-1.5 rounded hover:bg-gray-100"><X size={18} /></button>
@@ -343,7 +343,7 @@ export default function AdminUsersPage() {
             {/* Delete Confirmation */}
             {deleteConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="w-full max-w-sm rounded-xl p-6 m-4 shadow-2xl" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                    <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FEF2F2' }}>
                                 <Trash2 size={18} style={{ color: '#EF4444' }} />
@@ -367,7 +367,7 @@ export default function AdminUsersPage() {
             {/* Reset Password Modal */}
             {resetPwdUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="w-full max-w-sm rounded-xl p-6 m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                    <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Reset Password</h3>
                             <button onClick={() => setResetPwdUser(null)} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>

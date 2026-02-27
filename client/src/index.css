@@ -6,28 +6,28 @@
    ============================================ */
 
 @theme {
-  /* Neutral Palette */
-  --color-bg-app: #F9FAFB;
+  /* Neutral Palette - Richer tones */
+  --color-bg-app: #FAFAFB;
   --color-bg-surface: #FFFFFF;
-  --color-bg-subtle: #F3F4F6;
-  --color-border-default: #E5E7EB;
+  --color-bg-subtle: #F4F5F7;
+  --color-border-default: rgba(17, 24, 39, 0.08); /* Softened border for premium look */
   --color-text-primary: #111827;
-  --color-text-secondary: #6B7280;
+  --color-text-secondary: #4B5563;
   --color-text-muted: #9CA3AF;
 
   /* Brand / Action Colors */
-  --color-primary: #22C55E;
-  --color-primary-dark: #16A34A;
-  --color-primary-soft: #DCFCE7;
+  --color-primary: #10B981; /* Emerald-500, a bit more premium/modern than Green-500 */
+  --color-primary-dark: #059669; /* Emerald-600 */
+  --color-primary-soft: #D1FAE5; /* Emerald-100 */
 
   /* Status Colors */
-  --color-success: #16A34A;
+  --color-success: #10B981;
   --color-warning: #F59E0B;
-  --color-danger: #DC2626;
-  --color-info: #2563EB;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
 
   /* Status Soft Backgrounds */
-  --color-success-soft: #DCFCE7;
+  --color-success-soft: #D1FAE5;
   --color-warning-soft: #FEF3C7;
   --color-danger-soft: #FEE2E2;
   --color-info-soft: #DBEAFE;
@@ -56,10 +56,7 @@ body {
   margin: 0;
   padding: 0;
   font-family:
-    "SF Pro Text",
-    "SF Pro Display",
-    -apple-system,
-    BlinkMacSystemFont,
+    "Inter",
     system-ui,
     sans-serif;
   font-size: 14px;
@@ -88,4 +85,62 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
+}
+
+/* ============================================
+   Typography Overrides
+   ============================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Outfit", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================
+   Premium Utility Classes
+   ============================================ */
+   
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+}
+
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(17, 24, 39, 0.06);
+}
+
+/* Shadows Depth */
+.shadow-premium {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shadow-premium:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+/* Micro-interactions */
+.btn-premium {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-premium:hover {
+  transform: scale(1.02);
+}
+
+.btn-premium:active {
+  transform: scale(0.98);
+}
+
+/* Premium Main Background */
+.bg-app-premium {
+  background: linear-gradient(to bottom right, #FAFAFB 0%, #F1F5F9 100%);
+  background-attachment: fixed;
 }

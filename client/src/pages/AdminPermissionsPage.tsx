@@ -77,7 +77,7 @@ function ModuleSection({ title, desc, enabled, onToggle, children }: {
     const [open, setOpen] = useState(true);
     const cardSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' };
     return (
-        <div className="rounded-xl border overflow-hidden" style={cardSty}>
+        <div className="rounded-[1rem] shadow-premium overflow-hidden border-0" style={cardSty}>
             <div className="flex items-center gap-4 px-5 py-4" style={{ backgroundColor: enabled ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)' }}>
                 <CB checked={enabled} onChange={onToggle} label="" />
                 <div className="flex-1">
@@ -145,7 +145,7 @@ function AddProjectsModal({ existingIds, onAdd, onClose }: {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-md rounded-xl shadow-2xl m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <div className="w-full max-w-md rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                     <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Add Projects</h3>
                     <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
@@ -298,7 +298,7 @@ function PMPanel({ perms, onChange }: { perms: ModulePermissions; onChange: (p: 
                     {pps.length === 0 ? 'No projects added yet.' : `${pps.length} project${pps.length !== 1 ? 's' : ''} with access`}
                 </p>
                 <button type="button" onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white btn-premium"
                     style={{ backgroundColor: 'var(--color-primary)' }}>
                     <Plus size={14} /> Add Projects
                 </button>
@@ -457,7 +457,7 @@ export default function AdminPermissionsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 {/* Left — User list */}
                 <div className="lg:col-span-1 sticky top-6">
-                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                    <div className="rounded-[1rem] shadow-premium overflow-hidden border-0" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="p-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                             <p className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>Select User</p>
                             <div className="relative">
@@ -497,8 +497,8 @@ export default function AdminPermissionsPage() {
                 {/* Right — Permissions */}
                 <div className="lg:col-span-2">
                     {!selectedUser ? (
-                        <div className="rounded-xl border flex flex-col items-center justify-center py-20"
-                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', borderStyle: 'dashed' }}>
+                        <div className="rounded-[1rem] shadow-premium border-0 flex flex-col items-center justify-center py-20"
+                            style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                             <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
                                 <User size={26} style={{ color: 'var(--color-text-muted)' }} />
                             </div>
@@ -507,8 +507,8 @@ export default function AdminPermissionsPage() {
                         </div>
                     ) : (
                         <div>
-                            <div className="flex items-center justify-between mb-5 p-4 rounded-xl border"
-                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                            <div className="flex items-center justify-between mb-5 p-4 rounded-[1rem] shadow-premium border-0"
+                                style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold" style={{ backgroundColor: 'var(--color-primary)' }}>
                                         {selectedUser.name?.charAt(0)?.toUpperCase()}
@@ -519,7 +519,7 @@ export default function AdminPermissionsPage() {
                                     </div>
                                 </div>
                                 <button onClick={handleSave} disabled={saving}
-                                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg text-white disabled:opacity-60 transition-all"
+                                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg text-white disabled:opacity-60 transition-all btn-premium"
                                     style={{ backgroundColor: saved ? '#16A34A' : 'var(--color-primary)' }}>
                                     {saved ? <><Check size={16} /> Saved!</> : saving ? 'Saving…' : <><Save size={16} /> Save Permissions</>}
                                 </button>
@@ -527,7 +527,7 @@ export default function AdminPermissionsPage() {
                             <PermissionsPanel perms={perms} onChange={setPerms} />
                             <div className="mt-4 flex justify-end">
                                 <button onClick={handleSave} disabled={saving}
-                                    className="flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg text-white disabled:opacity-60"
+                                    className="flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg text-white disabled:opacity-60 btn-premium"
                                     style={{ backgroundColor: saved ? '#16A34A' : 'var(--color-primary)' }}>
                                     {saved ? <><Check size={16} /> Saved!</> : saving ? 'Saving…' : <><Save size={16} /> Save Permissions</>}
                                 </button>

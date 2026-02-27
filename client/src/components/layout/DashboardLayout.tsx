@@ -10,7 +10,7 @@ import Sidebar from './Sidebar';
  */
 export default function DashboardLayout() {
     return (
-        <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-app)' }}>
+        <div className="min-h-screen bg-app-premium text-[color:var(--color-text-primary)]">
             <Sidebar />
             <main
                 className="min-h-screen"

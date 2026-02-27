@@ -117,7 +117,7 @@ export default function CrmLeadsPage() {
                         </button>
                     </div>
                     <button
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors hover:opacity-90"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg btn-premium"
                         style={{ backgroundColor: 'var(--color-primary)' }}
                         onClick={() => navigate('/crm/leads/new')}
                     >
@@ -136,7 +136,7 @@ export default function CrmLeadsPage() {
                         { label: 'New Leads', value: summary.stages.find(s => s.stage === 'new')?.count || 0, subtext: 'Needs attention' },
                         { label: 'Closed Deals', value: summary.stages.find(s => s.stage === 'closed')?.count || 0, subtext: 'Successfully closed' }
                     ].map((card, idx) => (
-                        <div key={idx} className="p-4 rounded-xl border bg-white shadow-sm" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <div key={idx} className="p-4 rounded-[1rem] bg-white shadow-premium border-0">
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>{card.label}</p>
                             <p className="text-2xl font-bold mt-2" style={{ color: 'var(--color-text-primary)' }}>{card.value}</p>
                             <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{card.subtext}</p>
@@ -195,7 +195,7 @@ export default function CrmLeadsPage() {
             </div>
 
             {/* Leads List Table */}
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+            <div className="bg-white rounded-[1rem] shadow-premium overflow-hidden border-0">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="border-b" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>

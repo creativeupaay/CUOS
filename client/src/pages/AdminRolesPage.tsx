@@ -195,10 +195,9 @@ export default function AdminRolesPage() {
                         return (
                             <div
                                 key={role._id}
-                                className="rounded-xl border overflow-hidden transition-shadow"
+                                className="rounded-[1rem] shadow-premium overflow-hidden border-0 transition-shadow"
                                 style={{
                                     backgroundColor: 'var(--color-bg-surface)',
-                                    borderColor: 'var(--color-border-default)',
                                 }}
                             >
                                 {/* Role Header */}
@@ -319,7 +318,7 @@ export default function AdminRolesPage() {
             {cloningRoleId && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div
-                        className="w-full max-w-sm rounded-xl p-6 m-4"
+                        className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium"
                         style={{ backgroundColor: 'var(--color-bg-surface)' }}
                     >
                         <div className="flex items-center justify-between mb-4">
@@ -368,7 +367,7 @@ export default function AdminRolesPage() {
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div
-                        className="w-full max-w-2xl rounded-xl p-6 m-4 max-h-[85vh] overflow-y-auto"
+                        className="w-full max-w-2xl rounded-[1rem] shadow-premium p-6 m-4 max-h-[85vh] overflow-y-auto"
                         style={{ backgroundColor: 'var(--color-bg-surface)' }}
                     >
                         <div className="flex items-center justify-between mb-5">

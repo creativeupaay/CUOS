@@ -134,10 +134,9 @@ export default function ProjectOverviewTab() {
             {/* Project Info - Super Admin Only */}
             {isSuperAdmin && (
                 <div
-                    className="p-5 rounded-lg border"
+                    className="p-5 rounded-[1rem] shadow-premium border-0"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
                     }}
                 >
                     <div className="flex items-center gap-2 mb-4">
@@ -170,10 +169,9 @@ export default function ProjectOverviewTab() {
 
             {/* Team Members */}
             <div
-                className="p-5 rounded-lg border"
+                className="p-5 rounded-[1rem] shadow-premium border-0"
                 style={{
                     backgroundColor: 'var(--color-bg-surface)',
-                    borderColor: 'var(--color-border-default)',
                 }}
             >
                 <div className="flex items-center justify-between mb-4">
@@ -436,13 +434,12 @@ export default function ProjectOverviewTab() {
             {isSuperAdmin && typeof project.clientId === 'object' && project.clientId && (
                 <Link
                     to={`/crm/clients/${project.clientId._id}`}
-                    className="block p-5 rounded-lg border transition-all hover:shadow-sm"
+                    className="block p-5 rounded-[1rem] shadow-premium border-0 transition-all hover:shadow-md"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-default)'}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                 >
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
@@ -515,10 +512,9 @@ function ProjectProgress({ project }: { project: Project }) {
 
     return (
         <div
-            className="p-5 rounded-lg border"
+            className="p-5 rounded-[1rem] shadow-premium border-0"
             style={{
                 backgroundColor: 'var(--color-bg-surface)',
-                borderColor: 'var(--color-border-default)',
             }}
         >
             <div className="flex items-center justify-between mb-4">
