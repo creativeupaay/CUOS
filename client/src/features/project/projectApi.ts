@@ -128,7 +128,7 @@ export const projectApi = api.injectEndpoints({
         // ============================================
         // TASK ENDPOINTS
         // ============================================
-        getTasks: builder.query<ApiResponse<Task[]>, { projectId: string; status?: string; assignee?: string }>({
+        getTasks: builder.query<ApiResponse<Task[]>, { projectId: string; status?: string; assignee?: string; includeSubtasks?: boolean }>({
             query: ({ projectId, ...params }) => ({
                 url: `/projects/${projectId}/tasks`,
                 params,
@@ -159,6 +159,8 @@ export const projectApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, { projectId, taskId }) => [
                 { type: 'Tasks', id: projectId },
                 { type: 'Tasks', id: taskId },
+                // When a status change creates a TimeLog (pause/complete), invalidate time-log caches
+                'TimeLogs',
             ],
         }),
 
@@ -172,7 +174,12 @@ export const projectApi = api.injectEndpoints({
 
         getSubtasks: builder.query<ApiResponse<Task[]>, { projectId: string; taskId: string }>({
             query: ({ projectId, taskId }) => `/projects/${projectId}/tasks/${taskId}/subtasks`,
-            providesTags: (_result, _error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
+            providesTags: (_result, _error, { projectId, taskId }) => [
+                { type: 'Tasks', id: `subtasks-${taskId}` },
+                // Also tagged with projectId so when any task in this project mutates,
+                // this subtask list automatically re-fetches (catches status changes)
+                { type: 'Tasks', id: projectId },
+            ],
         }),
 
         createSubtask: builder.mutation<ApiResponse<Task>, { projectId: string; taskId: string; data: CreateTaskRequest }>({
@@ -181,7 +188,10 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { taskId }) => [{ type: 'Tasks', id: `subtasks-${taskId}` }],
+            invalidatesTags: (_result, _error, { projectId, taskId }) => [
+                { type: 'Tasks', id: `subtasks-${taskId}` },
+                { type: 'Tasks', id: projectId }, // refreshes board view (includeSubtasks query)
+            ],
         }),
 
         // ============================================

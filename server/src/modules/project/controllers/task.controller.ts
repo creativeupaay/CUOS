@@ -26,6 +26,7 @@ export const getTasks = asyncHandler(
         const tasks = await taskService.getTasks(req.params.projectId, {
             status: req.query.status as string,
             assignee: req.query.assignee as string,
+            includeSubtasks: req.query.includeSubtasks === 'true',
         });
 
         res.status(200).json({
@@ -54,7 +55,11 @@ export const getTaskById = asyncHandler(
 
 export const updateTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const task = await taskService.updateTask(req.params.taskId, req.body);
+        const userId = req.user?.id!;
+        const userRole = (req.user?.role || '').toLowerCase();
+        // Super-admin, admin and project-manager roles bypass the assignee gate
+        const isAdmin = ['super-admin', 'super_admin', 'admin', 'manager'].some(r => userRole === r || userRole.includes(r));
+        const task = await taskService.updateTask(req.params.taskId, { ...req.body, updatedBy: userId, isAdmin });
 
         if (!task) {
             return next(new AppError('Task not found', 404));

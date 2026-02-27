@@ -21,6 +21,12 @@ export interface ITask extends Document {
     createdAt: Date;
     updatedAt: Date;
     completedAt?: Date;
+
+    activeTimers: { userId: Types.ObjectId; startedAt: Date }[];
+    /** Stores elapsed seconds (not minutes) per user across all paused/completed sessions */
+    accumulatedSeconds: { userId: Types.ObjectId; seconds: number }[];
+    /** Virtual: number of subtasks, populated by getTasks query */
+    subtaskCount?: number;
 }
 
 const TaskSchema = new Schema<ITask>(
@@ -50,6 +56,15 @@ const TaskSchema = new Schema<ITask>(
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         completedAt: Date,
+
+        activeTimers: [{
+            userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+            startedAt: { type: Date, required: true },
+        }],
+        accumulatedSeconds: [{
+            userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+            seconds: { type: Number, required: true, default: 0 },
+        }],
     },
     {
         timestamps: true,

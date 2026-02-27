@@ -43,7 +43,7 @@ export const getCredentials = async (
     // Filter by access (if not admin)
     if (userRole !== 'admin' && userRole !== 'super-admin') {
         credentials = credentials.filter((cred) =>
-            cred.accessUsers.some((id) => id.toString() === userId)
+            cred.accessUsers.some((u: any) => (u._id || u).toString() === userId)
         );
     }
 

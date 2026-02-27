@@ -48,6 +48,7 @@ export const getTasksSchema = z.object({
     query: z.object({
         status: z.enum(['todo', 'in-progress', 'paused', 'completed']).optional(),
         assignee: z.string().optional(),
+        includeSubtasks: z.string().optional(), // 'true' to include subtasks in board view
     }).optional(),
 });
 

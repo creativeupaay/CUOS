@@ -86,6 +86,11 @@ export interface Task {
     createdAt: string;
     updatedAt: string;
     completedAt?: string;
+    activeTimers?: { userId: string | User; startedAt: string }[];
+    /** Elapsed seconds per user across all past sessions (used by live timer display) */
+    accumulatedSeconds?: { userId: string | User; seconds: number }[];
+    /** Number of subtasks — populated by backend getTasks query */
+    subtaskCount?: number;
 }
 
 export interface TimeLog {

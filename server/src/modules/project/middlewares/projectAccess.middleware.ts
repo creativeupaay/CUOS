@@ -146,15 +146,11 @@ export const checkTaskAccess = async (
             return next();
         }
 
-        const employee = await Employee.findOne({ userId });
-        if (!employee) {
-            return next(new AppError('No matching employee record found for user', 403));
-        }
-
-        // Check if user is task assignee
-        // Currently, task.assignees handles an array of employeeIds explicitly now
+        // Check if user is task assignee.
+        // task.assignees stores User ObjectIds (ref: 'User'), so compare directly
+        // against the authenticated userId — NOT against an Employee._id.
         const isAssignee = task.assignees.some(
-            (assigneeId) => assigneeId.toString() === employee._id.toString()
+            (assigneeId) => assigneeId.toString() === userId
         );
 
         if (isAssignee) {
@@ -162,14 +158,16 @@ export const checkTaskAccess = async (
         }
 
         // Check if user is project manager
-        const project = await Project.findById(task.projectId);
-        if (project) {
-            const assignee = project.assignees.find(
-                (a) => a.employeeId.toString() === employee._id.toString()
-            );
-
-            if (assignee && assignee.role === 'manager') {
-                return next();
+        const employee = await Employee.findOne({ userId });
+        if (employee) {
+            const project = await Project.findById(task.projectId);
+            if (project) {
+                const assignee = project.assignees.find(
+                    (a) => a.employeeId.toString() === employee._id.toString()
+                );
+                if (assignee && assignee.role === 'manager') {
+                    return next();
+                }
             }
         }
 

@@ -363,71 +363,6 @@ export default function ProjectOverviewTab() {
                         </p>
                     )}
                 </div>
-
-                {/* Edit Permissions Modal Overlay */}
-                {editingUserId && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                        <div
-                            className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden"
-                            style={{ backgroundColor: 'var(--color-bg-surface)' }}
-                        >
-                            <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                                <h3 className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                    Edit Sub-Permissions
-                                </h3>
-                                <button
-                                    onClick={() => setEditingUserId(null)}
-                                    className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-                                    style={{ color: 'var(--color-text-muted)' }}
-                                >
-                                    <X size={16} />
-                                </button>
-                            </div>
-
-                            <div className="p-4">
-                                <p className="text-xs mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Select which tabs this team member can access in this project.
-                                </p>
-                                <div className="space-y-3">
-                                    {Object.keys(editSubModules).map((key) => (
-                                        <label key={key} className="flex items-center gap-3 text-sm cursor-pointer select-none p-2 rounded-md hover:bg-gray-50 transition-colors border" style={{ borderColor: 'var(--color-border-default)' }}>
-                                            <input
-                                                type="checkbox"
-                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                checked={(editSubModules as any)[key]}
-                                                onChange={(e) => setEditSubModules((prev) => ({ ...prev, [key]: e.target.checked }))}
-                                                disabled={isUpdatingPermissions}
-                                            />
-                                            <span className="capitalize font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                                {key.replace(/([A-Z])/g, ' $1').trim()}
-                                            </span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="p-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)' }}>
-                                <button
-                                    onClick={() => setEditingUserId(null)}
-                                    className="px-4 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50 bg-white"
-                                    style={{ borderColor: 'var(--color-border-default)' }}
-                                    disabled={isUpdatingPermissions}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSavePermissions}
-                                    disabled={isUpdatingPermissions}
-                                    className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-colors text-white disabled:opacity-50 min-w-[100px]"
-                                    style={{ backgroundColor: 'var(--color-primary)' }}
-                                >
-                                    {isUpdatingPermissions && <Loader2 size={12} className="animate-spin" />}
-                                    Save
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Client Info - Super Admin Only */}
@@ -470,6 +405,71 @@ export default function ProjectOverviewTab() {
                         )}
                     </div>
                 </Link>
+            )}
+
+            {/* Edit Permissions Modal Overlay */}
+            {editingUserId && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                    <div
+                        className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden"
+                        style={{ backgroundColor: 'var(--color-bg-surface)' }}
+                    >
+                        <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <h3 className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                Edit Sub-Permissions
+                            </h3>
+                            <button
+                                onClick={() => setEditingUserId(null)}
+                                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="p-4">
+                            <p className="text-xs mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                                Select which tabs this team member can access in this project.
+                            </p>
+                            <div className="space-y-3">
+                                {Object.keys(editSubModules).map((key) => (
+                                    <label key={key} className="flex items-center gap-3 text-sm cursor-pointer select-none p-2 rounded-md hover:bg-gray-50 transition-colors border" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            checked={(editSubModules as any)[key]}
+                                            onChange={(e) => setEditSubModules((prev) => ({ ...prev, [key]: e.target.checked }))}
+                                            disabled={isUpdatingPermissions}
+                                        />
+                                        <span className="capitalize font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                            {key.replace(/([A-Z])/g, ' $1').trim()}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <button
+                                onClick={() => setEditingUserId(null)}
+                                className="px-4 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50 bg-white"
+                                style={{ borderColor: 'var(--color-border-default)' }}
+                                disabled={isUpdatingPermissions}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSavePermissions}
+                                disabled={isUpdatingPermissions}
+                                className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-colors text-white disabled:opacity-50 min-w-[100px]"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                {isUpdatingPermissions && <Loader2 size={12} className="animate-spin" />}
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
