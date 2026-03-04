@@ -307,6 +307,20 @@ class PayrollService {
         await payroll.save();
         return payroll;
     }
+
+    // ── Employee: fetch own payslips ──────────────────────────────────
+    async getMyPayrolls(userId: string): Promise<IPayroll[]> {
+        const employee = await Employee.findOne({ userId });
+        if (!employee) throw new AppError('Employee record not found', 404);
+
+        return Payroll.find({ employeeId: employee._id })
+            .populate({
+                path: 'employeeId',
+                populate: { path: 'userId', select: 'name email' },
+            })
+            .sort({ year: -1, month: -1 });
+    }
 }
 
 export const payrollService = new PayrollService();
+

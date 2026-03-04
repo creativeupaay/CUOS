@@ -21,9 +21,11 @@ import {
     CreditCard,
     TrendingUp,
     Clock,
+    CalendarDays,
 } from 'lucide-react';
 
 interface NavItem {
+    key?: string;
     label: string;
     path: string;
     icon: React.ReactNode;
@@ -45,7 +47,8 @@ function getModuleConfig(
     pathname: string,
     user: any,
     isAdmin: boolean,
-    projects?: { _id: string; name: string }[]
+    projects?: { _id: string; name: string }[],
+    isHrAdmin?: boolean
 ): ModuleConfig | null {
     const mp = user?.modulePermissions;
     if (pathname.startsWith('/projects')) {
@@ -102,18 +105,44 @@ function getModuleConfig(
         };
     }
 
-    if (pathname.startsWith('/hrms')) {
+    if (pathname.startsWith('/hrms') && !pathname.startsWith('/my-hrms')) {
+        // Regular employees (not admin, not HR) → show the My HRMS sidebar
+        if (!isAdmin && !isHrAdmin) {
+            return {
+                title: 'My HRMS',
+                items: [
+                    { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={20} />, matchPrefix: '/my-hrms/attendance' },
+                    { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={20} />, matchPrefix: '/my-hrms/leaves' },
+                    { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={20} />, matchPrefix: '/my-hrms/holidays' },
+                    { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={20} />, matchPrefix: '/my-hrms/payroll' },
+                ],
+            };
+        }
+        // HR admin / super admin → full admin HRMS sidebar
         const hrmsSubs = mp?.hrms?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/hrms', icon: <BarChart3 size={20} />, matchPrefix: '/hrms' },
             { key: 'employees', label: 'Employees', path: '/hrms/employees', icon: <Users2 size={20} />, matchPrefix: '/hrms/employees' },
             { key: 'attendance', label: 'Attendance', path: '/hrms/attendance', icon: <Clock size={20} />, matchPrefix: '/hrms/attendance' },
             { key: 'leaves', label: 'Leaves', path: '/hrms/leaves', icon: <ListTodo size={20} />, matchPrefix: '/hrms/leaves' },
+            { key: 'holidays', label: 'Holidays', path: '/hrms/holidays', icon: <CalendarDays size={20} />, matchPrefix: '/hrms/holidays' },
             { key: 'payroll', label: 'Payroll', path: '/hrms/payroll', icon: <FileText size={20} />, matchPrefix: '/hrms/payroll' },
         ];
         return {
             title: 'HRMS',
             items: isAdmin || !hrmsSubs ? allItems : allItems.filter(i => (hrmsSubs as any)[i.key] === true),
+        };
+    }
+
+    if (pathname.startsWith('/my-hrms')) {
+        return {
+            title: 'My HRMS',
+            items: [
+                { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={20} />, matchPrefix: '/my-hrms/attendance' },
+                { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={20} />, matchPrefix: '/my-hrms/leaves' },
+                { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={20} />, matchPrefix: '/my-hrms/holidays' },
+                { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={20} />, matchPrefix: '/my-hrms/payroll' },
+            ],
         };
     }
 
@@ -289,6 +318,7 @@ export default function Sidebar() {
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
         : '';
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName);
+    const isHrAdmin = isAdmin || ['hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
 
     // Only fetch projects if we are in the PM module
     const isPMRoute = location.pathname.startsWith('/projects');
@@ -298,7 +328,7 @@ export default function Sidebar() {
     );
     const projects = projectsResponse?.data || [];
 
-    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects);
+    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects, isHrAdmin);
 
     const handleLogout = () => {
         dispatch(logout());

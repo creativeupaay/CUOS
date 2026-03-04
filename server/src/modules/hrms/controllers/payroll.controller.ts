@@ -63,6 +63,16 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     });
 });
 
+// ── Upcoming Events ─────────────────────────────────────────────────
+export const getUpcomingEvents = asyncHandler(async (req: Request, res: Response) => {
+    const events = await analyticsService.getUpcomingEvents();
+
+    res.json({
+        status: 'success',
+        data: { events },
+    });
+});
+
 // ── Working Hours Analytics ─────────────────────────────────────────
 export const getWorkingHoursAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.query.userId as string || (req.user as any).id;
@@ -104,3 +114,15 @@ export const getIncentiveSummary = asyncHandler(async (req: Request, res: Respon
         data: summary,
     });
 });
+
+// ── Employee: My Payslips ────────────────────────────────────────────
+export const getMyPayrolls = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.user as any).id;
+    const payrolls = await payrollService.getMyPayrolls(userId);
+
+    res.json({
+        status: 'success',
+        data: { payrolls },
+    });
+});
+

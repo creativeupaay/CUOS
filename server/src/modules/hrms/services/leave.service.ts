@@ -12,14 +12,23 @@ class LeaveService {
             throw new AppError('Employee record not found', 404);
         }
 
+        // Parse dates as UTC midnight to avoid server IST timezone shift
+        const [sy, sm, sd] = data.startDate.split('-').map(Number);
+        const [ey, em, ed] = data.endDate.split('-').map(Number);
+        const startDateUtc = new Date(Date.UTC(sy, sm - 1, sd));
+        const endDateUtc = new Date(Date.UTC(ey, em - 1, ed));
+
+        // days: use the value sent by the client, or calculate if missing
+        const days = data.days ?? Math.round((endDateUtc.getTime() - startDateUtc.getTime()) / 86400000) + 1;
+
         // Check for overlapping leaves
         const overlapping = await Leave.findOne({
             employeeId: employee._id,
             status: { $in: ['pending', 'approved'] },
             $or: [
                 {
-                    startDate: { $lte: new Date(data.endDate) },
-                    endDate: { $gte: new Date(data.startDate) },
+                    startDate: { $lte: endDateUtc },
+                    endDate: { $gte: startDateUtc },
                 },
             ],
         });
@@ -31,8 +40,9 @@ class LeaveService {
         const leave = await Leave.create({
             ...data,
             employeeId: employee._id,
-            startDate: new Date(data.startDate),
-            endDate: new Date(data.endDate),
+            startDate: startDateUtc,
+            endDate: endDateUtc,
+            days,
         });
 
         return leave;
@@ -142,10 +152,13 @@ class LeaveService {
     private async ensureLeaveBalance(employeeId: string, year: number) {
         let balance = await LeaveBalance.findOne({ employeeId, year });
         if (!balance) {
+            const employee = await Employee.findById(employeeId);
+            const paidLeaves = employee?.paidLeavesPerYear ?? 12;
+
             const defaultBalances = [
-                { type: 'casual', quota: 12, used: 0, pending: 12 },
-                { type: 'sick', quota: 12, used: 0, pending: 12 },
-                { type: 'earned', quota: 15, used: 0, pending: 15 },
+                { type: 'casual', quota: 0, used: 0, pending: 0 },
+                { type: 'sick', quota: 0, used: 0, pending: 0 },
+                { type: 'earned', quota: paidLeaves, used: 0, pending: paidLeaves },
                 { type: 'unpaid', quota: 365, used: 0, pending: 365 },
                 { type: 'maternity', quota: 180, used: 0, pending: 180 },
                 { type: 'paternity', quota: 15, used: 0, pending: 15 },
@@ -165,7 +178,29 @@ class LeaveService {
             throw new AppError('Employee record not found', 404);
         }
 
-        const balance = await this.ensureLeaveBalance(employee._id.toString(), year);
+        let balance = await this.ensureLeaveBalance(employee._id.toString(), year);
+
+        // ── Sync earned quota from employee's paidLeavesPerYear ────────
+        // If the employee's paid leaves per year changed after the balance
+        // was first created, we need to update the earned quota & pending.
+        const paidLeavesPerYear = employee.paidLeavesPerYear ?? 12;
+        const earnedEntry = balance.balances.find((b) => b.type === 'earned');
+        if (earnedEntry && earnedEntry.quota !== paidLeavesPerYear) {
+            const used = earnedEntry.used;
+            const newPending = Math.max(0, paidLeavesPerYear - used);
+            await LeaveBalance.updateOne(
+                { _id: balance._id, 'balances.type': 'earned' },
+                {
+                    $set: {
+                        'balances.$.quota': paidLeavesPerYear,
+                        'balances.$.pending': newPending,
+                    },
+                }
+            );
+            // Reload the updated document
+            balance = (await LeaveBalance.findById(balance._id))!;
+        }
+
         return balance.balances;
     }
 }

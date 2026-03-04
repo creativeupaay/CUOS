@@ -63,6 +63,7 @@ export interface IEmployee extends Document {
     probationEndDate?: Date;
     status: 'active' | 'on-notice' | 'relieved' | 'terminated';
     reportingTo?: Types.ObjectId;
+    paidLeavesPerYear: number;
     workSchedule: IWorkSchedule;
     personalInfo: IPersonalInfo;
     bankDetails: IBankDetails;
@@ -186,6 +187,12 @@ const EmployeeSchema = new Schema<IEmployee>(
         reportingTo: {
             type: Schema.Types.ObjectId,
             ref: 'Employee',
+        },
+        paidLeavesPerYear: {
+            type: Number,
+            default: 12,
+            min: 0,
+            max: 365,
         },
         workSchedule: {
             type: WorkScheduleSchema,

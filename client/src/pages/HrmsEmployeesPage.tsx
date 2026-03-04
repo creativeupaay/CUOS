@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetEmployeesQuery, useDeleteEmployeeMutation } from '@/features/hrms/hrmsApi';
 import {
@@ -10,10 +10,17 @@ const STATUSES = ['active', 'on-notice', 'relieved', 'terminated'];
 
 export default function HrmsEmployeesPage() {
     const navigate = useNavigate();
-    const [search, setSearch] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+    const [search, setSearch] = useState('');          // debounced value sent to API
     const [department, setDepartment] = useState('');
     const [status, setStatus] = useState('');
     const [page, setPage] = useState(1);
+
+    // Debounce: update `search` 350ms after the user stops typing
+    useEffect(() => {
+        const timer = setTimeout(() => setSearch(searchInput), 350);
+        return () => clearTimeout(timer);
+    }, [searchInput]);
 
     const { data, isLoading } = useGetEmployeesQuery({
         search: search || undefined,
@@ -84,9 +91,9 @@ export default function HrmsEmployeesPage() {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
                     <input
                         type="text"
-                        placeholder="Search employees..."
-                        value={search}
-                        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                        placeholder="Search by name, email, ID, designation..."
+                        value={searchInput}
+                        onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
                         className="w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border outline-none"
                         style={{
                             borderColor: 'var(--color-border-default)',

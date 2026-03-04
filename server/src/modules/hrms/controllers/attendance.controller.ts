@@ -59,3 +59,25 @@ export const getEmployeeAttendance = asyncHandler(async (req: Request, res: Resp
         data: records,
     });
 });
+
+// ── Admin: Bulk mark attendance ──────────────────────────────────────
+export const bulkMarkAttendance = asyncHandler(async (req: Request, res: Response) => {
+    const { date, records } = req.body;
+    const result = await AttendanceService.bulkMarkAttendance(date, records);
+    res.status(200).json({ status: 'success', data: result });
+});
+
+// ── Admin: Daily overview ────────────────────────────────────────────
+export const getDailyOverview = asyncHandler(async (req: Request, res: Response) => {
+    const { date } = req.query;
+    const result = await AttendanceService.getDailyOverview(date as string | undefined);
+    res.status(200).json({ status: 'success', data: result });
+});
+
+// ── Admin: Monthly attendance grid ──────────────────────────────────
+export const getMonthlyAttendance = asyncHandler(async (req: Request, res: Response) => {
+    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const result = await AttendanceService.getMonthlyAttendance(month, year);
+    res.status(200).json({ status: 'success', data: result });
+});

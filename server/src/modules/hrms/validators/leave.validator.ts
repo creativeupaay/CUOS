@@ -7,6 +7,7 @@ export const createLeaveSchema = z.object({
         endDate: z.string().min(1, 'End date is required'),
         days: z.number().min(0.5, 'Minimum 0.5 day leave'),
         reason: z.string().min(1, 'Reason is required'),
+        isPaid: z.boolean().default(true),
     }),
 });
 

@@ -16,6 +16,8 @@ import * as salaryController from '../controllers/salary.controller';
 import * as leaveController from '../controllers/leave.controller';
 import * as payrollController from '../controllers/payroll.controller';
 import * as attendanceController from '../controllers/attendance.controller';
+import * as holidayController from '../controllers/holiday.controller';
+
 
 const router = Router();
 
@@ -65,6 +67,10 @@ router.post(
 );
 router.get('/attendance/me', attendanceController.getMyAttendance);
 router.get('/attendance/employee/:id', checkHrmsAccess(true), attendanceController.getEmployeeAttendance);
+// Admin attendance management
+router.post('/attendance/bulk', hrAdminOnly, attendanceController.bulkMarkAttendance);
+router.get('/attendance/overview', hrAdminOnly, attendanceController.getDailyOverview);
+router.get('/attendance/monthly', hrAdminOnly, attendanceController.getMonthlyAttendance);
 
 // ══════════════════════════════════════════════════════════════════════
 // SALARY ROUTES
@@ -106,6 +112,14 @@ router.patch(
 );
 
 // ══════════════════════════════════════════════════════════════════════
+// HOLIDAY ROUTES
+// ══════════════════════════════════════════════════════════════════════
+router.post('/holidays', hrAdminOnly, holidayController.createHoliday);
+router.get('/holidays', holidayController.getHolidays);
+router.patch('/holidays/:id', hrAdminOnly, holidayController.updateHoliday);
+router.delete('/holidays/:id', hrAdminOnly, holidayController.deleteHoliday);
+
+// ══════════════════════════════════════════════════════════════════════
 // PAYROLL ROUTES
 // ══════════════════════════════════════════════════════════════════════
 router.post(
@@ -115,6 +129,7 @@ router.post(
     payrollController.generatePayroll
 );
 router.get('/payroll', hrAdminOnly, payrollController.getPayrolls);
+router.get('/payroll/me', payrollController.getMyPayrolls);
 router.get('/payroll/:id', checkHrmsAccess(true), payrollController.getPayrollById);
 router.patch(
     '/payroll/:id/status',
@@ -127,6 +142,7 @@ router.patch(
 // ANALYTICS ROUTES
 // ══════════════════════════════════════════════════════════════════════
 router.get('/analytics/dashboard', hrAdminOnly, payrollController.getDashboardStats);
+router.get('/analytics/events', hrAdminOnly, payrollController.getUpcomingEvents);
 router.get('/analytics/working-hours', payrollController.getWorkingHoursAnalytics);
 router.get('/analytics/team/:managerId', payrollController.getTeamAnalytics);
 router.get('/analytics/incentives/:employeeId', payrollController.getIncentiveSummary);

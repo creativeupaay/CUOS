@@ -16,6 +16,7 @@ export default function DashboardLayout() {
                 className="min-h-screen"
                 style={{
                     marginLeft: 'var(--sidebar-width)',
+                    padding: '28px 32px',
                 }}
             >
                 <Outlet />

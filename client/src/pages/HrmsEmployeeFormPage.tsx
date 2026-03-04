@@ -44,6 +44,7 @@ export default function HrmsEmployeeFormPage() {
         probationEndDate: '',
         status: 'active',
         reportingTo: '',
+        paidLeavesPerYear: 12,
         workSchedule: { workingDaysPerWeek: 5, hoursPerDay: 8 },
         personalInfo: { phone: '', gender: '' as string, dob: '' },
         bankDetails: { bankName: '', accountNumber: '', ifscCode: '', panNumber: '' },
@@ -64,6 +65,7 @@ export default function HrmsEmployeeFormPage() {
                 probationEndDate: emp.probationEndDate?.split('T')[0] || '',
                 status: emp.status,
                 reportingTo: (emp.reportingTo as any)?._id || '',
+                paidLeavesPerYear: (emp as any).paidLeavesPerYear ?? 12,
                 workSchedule: emp.workSchedule || { workingDaysPerWeek: 5, hoursPerDay: 8 },
                 personalInfo: {
                     phone: emp.personalInfo?.phone || '',
@@ -242,7 +244,7 @@ export default function HrmsEmployeeFormPage() {
 
                 {/* Work Schedule */}
                 <div className="rounded-lg border p-6 mb-4" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                    <h2 className="text-sm font-semibold mb-4 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Work Schedule</h2>
+                    <h2 className="text-sm font-semibold mb-4 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Work Schedule &amp; Leaves</h2>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Working Days / Week</label>
@@ -255,6 +257,22 @@ export default function HrmsEmployeeFormPage() {
                             <input type="number" min={1} max={24} value={form.workSchedule.hoursPerDay}
                                 onChange={(e) => setForm({ ...form, workSchedule: { ...form.workSchedule, hoursPerDay: parseInt(e.target.value) || 8 } })}
                                 className="w-full px-3 py-2.5 text-sm rounded-lg border" style={inputStyle} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                Paid Leaves / Year
+                                <span className="ml-1 text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(used in payroll)</span>
+                            </label>
+                            <input
+                                type="number"
+                                min={0}
+                                max={365}
+                                value={form.paidLeavesPerYear}
+                                onChange={(e) => setForm({ ...form, paidLeavesPerYear: parseInt(e.target.value) || 0 })}
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                style={inputStyle}
+                                placeholder="e.g. 12"
+                            />
                         </div>
                     </div>
                 </div>

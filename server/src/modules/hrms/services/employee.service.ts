@@ -33,27 +33,70 @@ class EmployeeService {
         limit?: number;
     }) {
         const { department, status, search, page = 1, limit = 20 } = filters;
-        const query: any = {};
+        const skip = (page - 1) * limit;
 
-        if (department) query.department = department;
-        if (status) query.status = status;
-        if (search) {
-            query.$or = [
-                { employeeId: { $regex: search, $options: 'i' } },
-                { designation: { $regex: search, $options: 'i' } },
-            ];
+        // Build pre-lookup match (fast indexed fields)
+        const preMatch: any = {};
+        if (department) preMatch.department = department;
+        if (status) preMatch.status = status;
+
+        // Aggregation pipeline so we can search on joined user.name / user.email
+        const pipeline: any[] = [
+            { $match: preMatch },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: '_user',
+                },
+            },
+            { $unwind: { path: '$_user', preserveNullAndEmptyArrays: true } },
+        ];
+
+        // Post-lookup search filter across name, email, employeeId, designation
+        if (search && search.trim()) {
+            const regex = { $regex: search.trim(), $options: 'i' };
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { '_user.name': regex },
+                        { '_user.email': regex },
+                        { employeeId: regex },
+                        { designation: regex },
+                        { department: regex },
+                    ],
+                },
+            });
         }
 
-        const skip = (page - 1) * limit;
-        const [employees, total] = await Promise.all([
-            Employee.find(query)
-                .populate('userId', 'name email')
-                .populate('reportingTo', 'employeeId designation')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit),
-            Employee.countDocuments(query),
+        // Count before pagination
+        const countPipeline = [...pipeline, { $count: 'total' }];
+
+        // Add sort + pagination
+        pipeline.push(
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            // Re-shape: move _user back into userId so the frontend interface stays the same
+            {
+                $addFields: {
+                    userId: {
+                        _id: '$_user._id',
+                        name: '$_user.name',
+                        email: '$_user.email',
+                    },
+                },
+            },
+            { $unset: '_user' },
+        );
+
+        const [employees, countResult] = await Promise.all([
+            Employee.aggregate(pipeline),
+            Employee.aggregate(countPipeline),
         ]);
+
+        const total = countResult[0]?.total ?? 0;
 
         return {
             employees,

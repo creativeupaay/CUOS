@@ -84,7 +84,9 @@ export interface CreateLeaveRequest {
     endDate: string;
     days: number;
     reason: string;
+    isPaid?: boolean;
 }
+
 
 export interface UpdateLeaveStatusRequest {
     status: 'approved' | 'rejected' | 'cancelled';

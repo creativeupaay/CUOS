@@ -48,7 +48,15 @@ import HrmsEmployeeFormPage from './pages/HrmsEmployeeFormPage';
 import HrmsEmployeeDetailPage from './pages/HrmsEmployeeDetailPage';
 import HrmsAttendancePage from './pages/HrmsAttendancePage';
 import HrmsLeavesPage from './pages/HrmsLeavesPage';
+import HrmsHolidaysPage from './pages/HrmsHolidaysPage';
 import HrmsPayrollPage from './pages/HrmsPayrollPage';
+
+// Employee HRMS pages
+import EmployeeAttendancePage from './pages/EmployeeAttendancePage';
+import EmployeeLeavesPage from './pages/EmployeeLeavesPage';
+import EmployeeHolidaysPage from './pages/EmployeeHolidaysPage';
+import EmployeePayrollPage from './pages/EmployeePayrollPage';
+
 
 // Admin pages
 import AdminDashboardPage from './pages/AdminDashboardPage';
@@ -56,6 +64,19 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminPermissionsPage from './pages/AdminPermissionsPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import AdminAuditLogsPage from './pages/AdminAuditLogsPage';
+
+/** Redirects regular employees away from /hrms/* to /my-hrms/attendance */
+function HrmsRedirect({ children }: { children: React.ReactNode }) {
+  const user = useAppSelector((state) => state.auth.user);
+  const roleName = user?.role
+    ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
+    : '';
+  const isAdminOrHr = ['super-admin', 'admin', 'super_admin', 'hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
+  if (!isAdminOrHr) {
+    return <Navigate to="/my-hrms/attendance" replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   const dispatch = useAppDispatch();
@@ -134,15 +155,23 @@ function App() {
           <Route path="/finance/invoices" element={<FinanceInvoicesPage />} />
           <Route path="/finance/reports" element={<FinanceReportsPage />} />
           <Route path="/finance/projects/:id" element={<ProjectFinancePage />} />
-          {/* HRMS Module */}
-          <Route path="/hrms" element={<HrmsDashboardPage />} />
-          <Route path="/hrms/employees" element={<HrmsEmployeesPage />} />
-          <Route path="/hrms/employees/new" element={<HrmsEmployeeFormPage />} />
-          <Route path="/hrms/employees/:id" element={<HrmsEmployeeDetailPage />} />
-          <Route path="/hrms/employees/:id/edit" element={<HrmsEmployeeFormPage />} />
-          <Route path="/hrms/attendance" element={<HrmsAttendancePage />} />
-          <Route path="/hrms/leaves" element={<HrmsLeavesPage />} />
-          <Route path="/hrms/payroll" element={<HrmsPayrollPage />} />
+          {/* HRMS Module — Admin/HR only */}
+          <Route path="/hrms" element={<HrmsRedirect><HrmsDashboardPage /></HrmsRedirect>} />
+          <Route path="/hrms/employees" element={<HrmsRedirect><HrmsEmployeesPage /></HrmsRedirect>} />
+          <Route path="/hrms/employees/new" element={<HrmsRedirect><HrmsEmployeeFormPage /></HrmsRedirect>} />
+          <Route path="/hrms/employees/:id" element={<HrmsRedirect><HrmsEmployeeDetailPage /></HrmsRedirect>} />
+          <Route path="/hrms/employees/:id/edit" element={<HrmsRedirect><HrmsEmployeeFormPage /></HrmsRedirect>} />
+          <Route path="/hrms/attendance" element={<HrmsRedirect><HrmsAttendancePage /></HrmsRedirect>} />
+          <Route path="/hrms/leaves" element={<HrmsRedirect><HrmsLeavesPage /></HrmsRedirect>} />
+          <Route path="/hrms/holidays" element={<HrmsRedirect><HrmsHolidaysPage /></HrmsRedirect>} />
+          <Route path="/hrms/payroll" element={<HrmsRedirect><HrmsPayrollPage /></HrmsRedirect>} />
+
+          {/* Employee HRMS Module */}
+          <Route path="/my-hrms/attendance" element={<EmployeeAttendancePage />} />
+          <Route path="/my-hrms/leaves" element={<EmployeeLeavesPage />} />
+          <Route path="/my-hrms/holidays" element={<EmployeeHolidaysPage />} />
+          <Route path="/my-hrms/payroll" element={<EmployeePayrollPage />} />
+
           {/* Admin Module */}
           <Route path="/admin" element={<AdminDashboardPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />

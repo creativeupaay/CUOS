@@ -121,13 +121,14 @@ export const hrmsApi = api.injectEndpoints({
             invalidatesTags: ['Leaves'],
         }),
 
-        getLeaves: builder.query<PaginatedResponse<{ leaves: Leave[] }>, { status?: string; page?: number; limit?: number }>({
+        getLeaves: builder.query<PaginatedResponse<{ leaves: Leave[] }>, { employeeId?: string; status?: string; type?: string; page?: number; limit?: number }>({
             query: (params) => ({
                 url: '/hrms/leaves',
                 params,
             }),
             providesTags: ['Leaves'],
         }),
+
 
         getMyLeaves: builder.query<PaginatedResponse<{ leaves: Leave[] }>, { status?: string; page?: number }>({
             query: (params) => ({
@@ -177,6 +178,11 @@ export const hrmsApi = api.injectEndpoints({
             providesTags: ['Payroll'],
         }),
 
+        getMyPayrolls: builder.query<ApiResponse<{ payrolls: Payroll[] }>, void>({
+            query: () => '/hrms/payroll/me',
+            providesTags: ['Payroll'],
+        }),
+
         getPayrollById: builder.query<ApiResponse<{ payroll: Payroll }>, string>({
             query: (id) => `/hrms/payroll/${id}`,
             providesTags: (_result, _error, id) => [{ type: 'Payroll', id }],
@@ -199,6 +205,20 @@ export const hrmsApi = api.injectEndpoints({
         // ══════════════════════════════════════════════════════════
         getDashboardStats: builder.query<ApiResponse<DashboardStats>, void>({
             query: () => '/hrms/analytics/dashboard',
+            providesTags: ['Employees'],
+        }),
+
+        getUpcomingEvents: builder.query<ApiResponse<{
+            events: Array<{
+                type: 'birthday' | 'probation' | 'salary';
+                title: string;
+                subtitle: string;
+                date: string;
+                daysUntil: number;
+                employeeId: string;
+            }>
+        }>, void>({
+            query: () => '/hrms/analytics/events',
             providesTags: ['Employees'],
         }),
 
@@ -266,6 +286,97 @@ export const hrmsApi = api.injectEndpoints({
                 params,
             }),
         }),
+
+        bulkMarkAttendance: builder.mutation<
+            ApiResponse<{ saved: number }>,
+            { date: string; records: Array<{ employeeId: string; status: string; notes?: string }> }
+        >({
+            query: (data) => ({
+                url: '/hrms/attendance/bulk',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Employees'],
+        }),
+
+        getDailyOverview: builder.query<
+            ApiResponse<{
+                date: string;
+                summary: { present: number; wfh: number; halfDay: number; onLeave: number; absent: number; holiday: number; total: number };
+                employees: Array<{
+                    employeeId: string; employeeCode: string; name: string; email: string;
+                    department: string; designation: string; status: string;
+                    checkIn: string | null; checkOut: string | null; totalHours: number; notes: string;
+                }>;
+            }>,
+            { date?: string } | void
+        >({
+            query: (params) => ({
+                url: '/hrms/attendance/overview',
+                params: params || {},
+            }),
+            providesTags: ['Employees'],
+        }),
+
+        getMonthlyAttendance: builder.query<
+            ApiResponse<{
+                month: number; year: number; daysInMonth: number;
+                grid: Array<{
+                    employeeId: string; employeeCode: string; name: string; department: string;
+                    days: Array<{ date: string; status: string | null }>;
+                }>;
+            }>,
+            { month: number; year: number }
+        >({
+            query: (params) => ({
+                url: '/hrms/attendance/monthly',
+                params,
+            }),
+            providesTags: ['Employees'],
+        }),
+    }),
+    overrideExisting: false,
+});
+
+// ── Holiday type ─────────────────────────────────────────────────────
+export interface Holiday {
+    _id: string;
+    name: string;
+    date: string;
+    type: 'holiday' | 'half-day' | 'wfh';
+    description?: string;
+    isPaid: boolean;
+    createdBy: string | { name: string };
+    createdAt: string;
+}
+
+// ── Holiday endpoints (separate inject) ──────────────────────────────
+const holidayApiExtension = hrmsApi.injectEndpoints({
+    endpoints: (builder) => ({
+        getHolidays: builder.query<
+            { status: string; data: { holidays: Holiday[] } },
+            { year?: number; month?: number; type?: string; upcoming?: boolean }
+        >({
+            query: (params) => ({ url: '/hrms/holidays', params }),
+        }),
+
+        createHoliday: builder.mutation<
+            { status: string; data: { holiday: Holiday } },
+            { name: string; date: string; type: string; description?: string; isPaid: boolean }
+        >({
+            query: (body) => ({ url: '/hrms/holidays', method: 'POST', body }),
+        }),
+
+        updateHoliday: builder.mutation<
+            { status: string; data: { holiday: Holiday } },
+            { id: string; data: Partial<Holiday> }
+        >({
+            query: ({ id, data }) => ({ url: `/hrms/holidays/${id}`, method: 'PATCH', body: data }),
+        }),
+
+        deleteHoliday: builder.mutation<{ status: string }, string>({
+            query: (id) => ({ url: `/hrms/holidays/${id}`, method: 'DELETE' }),
+        }),
     }),
     overrideExisting: false,
 });
@@ -293,9 +404,11 @@ export const {
     // Payroll
     useGeneratePayrollMutation,
     useGetPayrollsQuery,
+    useGetMyPayrollsQuery,
     useGetPayrollByIdQuery,
     useUpdatePayrollStatusMutation,
     useGetDashboardStatsQuery,
+    useGetUpcomingEventsQuery,
     useGetWorkingHoursQuery,
     useGetTeamAnalyticsQuery,
     useGetIncentiveSummaryQuery,
@@ -304,4 +417,14 @@ export const {
     useCheckOutMutation,
     useGetMyAttendanceQuery,
     useGetEmployeeAttendanceQuery,
+    useBulkMarkAttendanceMutation,
+    useGetDailyOverviewQuery,
+    useGetMonthlyAttendanceQuery,
 } = hrmsApi;
+
+export const {
+    useGetHolidaysQuery,
+    useCreateHolidayMutation,
+    useUpdateHolidayMutation,
+    useDeleteHolidayMutation,
+} = holidayApiExtension;

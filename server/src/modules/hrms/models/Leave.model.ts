@@ -9,6 +9,7 @@ export interface ILeave extends Document {
     days: number;
     reason: string;
     status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    isPaid: boolean;
     approvedBy?: Types.ObjectId;
     rejectionReason?: string;
     createdAt: Date;
@@ -38,6 +39,7 @@ const LeaveSchema = new Schema<ILeave>(
         },
         approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
         rejectionReason: { type: String, trim: true },
+        isPaid: { type: Boolean, default: true },
     },
     {
         timestamps: true,

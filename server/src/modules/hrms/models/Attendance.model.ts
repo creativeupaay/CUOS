@@ -7,7 +7,7 @@ export interface IAttendance extends Document {
     checkIn?: Date;
     checkOut?: Date;
     totalHours: number;
-    status: 'present' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
+    status: 'present' | 'wfh' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
     projectId?: Types.ObjectId;
     taskId?: Types.ObjectId;
     notes?: string;
@@ -29,7 +29,7 @@ const AttendanceSchema = new Schema<IAttendance>(
         status: {
             type: String,
             required: true,
-            enum: ['present', 'half-day', 'absent', 'on-leave', 'holiday'],
+            enum: ['present', 'wfh', 'half-day', 'absent', 'on-leave', 'holiday'],
             default: 'present',
         },
         projectId: {
