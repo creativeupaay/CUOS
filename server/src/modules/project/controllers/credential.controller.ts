@@ -102,3 +102,96 @@ export const deleteCredential = asyncHandler(
         });
     }
 );
+
+/**
+ * POST /:projectId/credentials/share
+ * Share specific credentials (view-only) with specific users.
+ * Requires: credential admin or super-admin.
+ */
+export const shareCredentials = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { projectId } = req.params;
+        const { credentialIds, userIds } = req.body;
+
+        if (!Array.isArray(credentialIds) || credentialIds.length === 0) {
+            return next(new AppError('credentialIds must be a non-empty array', 400));
+        }
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return next(new AppError('userIds must be a non-empty array', 400));
+        }
+
+        await credentialService.shareViewAccess(projectId, credentialIds, userIds);
+
+        res.status(200).json({
+            success: true,
+            message: 'View access granted successfully',
+        });
+    }
+);
+
+/**
+ * DELETE /:projectId/credentials/share
+ * Revoke view access for specific users from specific credentials.
+ * Requires: credential admin or super-admin.
+ */
+export const revokeCredentialAccess = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { projectId } = req.params;
+        const { credentialIds, userIds } = req.body;
+
+        if (!Array.isArray(credentialIds) || credentialIds.length === 0) {
+            return next(new AppError('credentialIds must be a non-empty array', 400));
+        }
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return next(new AppError('userIds must be a non-empty array', 400));
+        }
+
+        await credentialService.revokeViewAccess(projectId, credentialIds, userIds);
+
+        res.status(200).json({
+            success: true,
+            message: 'View access revoked successfully',
+        });
+    }
+);
+
+/**
+ * PATCH /:projectId/credential-admins
+ * Set credential admins for a project (replaces list).
+ * Requires: super-admin only.
+ */
+export const updateCredentialAdmins = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { projectId } = req.params;
+        const { userIds } = req.body;
+
+        if (!Array.isArray(userIds)) {
+            return next(new AppError('userIds must be an array', 400));
+        }
+
+        await credentialService.updateCredentialAdmins(projectId, userIds);
+
+        res.status(200).json({
+            success: true,
+            message: 'Credential admins updated successfully',
+        });
+    }
+);
+
+/**
+ * GET /:projectId/credential-admins
+ * Get credential admins for a project.
+ * Requires: project access.
+ */
+export const getCredentialAdmins = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { projectId } = req.params;
+        const admins = await credentialService.getCredentialAdmins(projectId);
+
+        res.status(200).json({
+            success: true,
+            message: 'Credential admins retrieved',
+            data: admins,
+        });
+    }
+);

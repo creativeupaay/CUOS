@@ -11,6 +11,7 @@ import {
     checkProjectManager,
     checkTaskAccess,
     checkCredentialAccess,
+    checkCredentialAdmin,
     checkMeetingAccess,
     checkAdmin,
 } from '../middlewares/projectAccess.middleware';
@@ -298,16 +299,32 @@ router.delete(
 router.post(
     '/:projectId/credentials',
     validateRequest(credentialValidators.createCredentialSchema),
-    checkProjectAccess,
+    checkCredentialAdmin,
     credentialController.createCredential
 );
 
-// Get credentials
+// Get credentials (filtered by permission level)
 router.get(
     '/:projectId/credentials',
     validateRequest(credentialValidators.getCredentialsSchema),
     checkProjectAccess,
     credentialController.getCredentials
+);
+
+// Share credentials (grant view access) — MUST be before /:id routes
+router.post(
+    '/:projectId/credentials/share',
+    validateRequest(credentialValidators.shareCredentialsSchema),
+    checkCredentialAdmin,
+    credentialController.shareCredentials
+);
+
+// Revoke view access
+router.delete(
+    '/:projectId/credentials/share',
+    validateRequest(credentialValidators.revokeCredentialAccessSchema),
+    checkCredentialAdmin,
+    credentialController.revokeCredentialAccess
 );
 
 // Get credential by ID (decrypted)
@@ -322,7 +339,7 @@ router.get(
 router.patch(
     '/:projectId/credentials/:id',
     validateRequest(credentialValidators.updateCredentialSchema),
-    checkCredentialAccess,
+    checkCredentialAdmin,
     credentialController.updateCredential
 );
 
@@ -330,8 +347,28 @@ router.patch(
 router.delete(
     '/:projectId/credentials/:id',
     validateRequest(credentialValidators.deleteCredentialSchema),
-    checkCredentialAccess,
+    checkCredentialAdmin,
     credentialController.deleteCredential
+);
+
+// ============================================
+// CREDENTIAL ADMIN MANAGEMENT ROUTES
+// ============================================
+
+// Get credential admins for a project
+router.get(
+    '/:projectId/credential-admins',
+    validateRequest(credentialValidators.getCredentialAdminsSchema),
+    checkProjectAccess,
+    credentialController.getCredentialAdmins
+);
+
+// Set credential admins for a project (super-admin only)
+router.patch(
+    '/:projectId/credential-admins',
+    validateRequest(credentialValidators.updateCredentialAdminsSchema),
+    checkAdmin,
+    credentialController.updateCredentialAdmins
 );
 
 export default router;

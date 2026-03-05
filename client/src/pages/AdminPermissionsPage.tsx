@@ -144,7 +144,8 @@ function AddProjectsModal({ existingIds, onAdd, onClose }: {
         setSelected(allSelected ? [] : filtered.map((p: any) => p._id));
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="modal-overlay">
+
             <div className="w-full max-w-md rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                     <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Add Projects</h3>

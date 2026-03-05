@@ -3,32 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useLoginMutation } from '@/features/auth/authApi';
 import { useAppDispatch } from '@/app/hooks';
 import { setCredentials } from '@/features/auth/slices/authSlice';
-import { LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+
+
 
 export default function LoginPage() {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const [login, { isLoading }] = useLoginMutation();
 
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-    });
+    const [formData, setFormData] = useState({ email: '', password: '' });
+    const [showPass, setShowPass] = useState(false);
     const [error, setError] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-
         try {
             const result = await login(formData).unwrap();
-
-            dispatch(
-                setCredentials({
-                    user: result.data.user,
-                })
-            );
-
+            dispatch(setCredentials({ user: result.data.user }));
             navigate('/dashboard');
         } catch (err: unknown) {
             const apiErr = err as { data?: { message?: string } };
@@ -37,149 +30,189 @@ export default function LoginPage() {
     };
 
     return (
-        <div
-            className="min-h-screen flex items-center justify-center px-4"
-            style={{ backgroundColor: 'var(--color-bg-app)' }}
-        >
+        <div className="min-h-screen flex">
+            {/* ── Left Brand Panel ──────────────────────────────────── */}
             <div
-                className="w-full rounded-xl border p-8"
+                className="hidden lg:flex flex-col justify-between p-12 flex-1"
                 style={{
-                    maxWidth: '400px',
-                    backgroundColor: 'var(--color-bg-surface)',
-                    borderColor: 'var(--color-border-default)',
+                    background: 'linear-gradient(145deg, #064E3B 0%, #065F46 45%, #0369a1 100%)',
                 }}
             >
-                {/* Header */}
-                <div className="text-center mb-8">
+                {/* Top brand row */}
+                <div className="flex items-center gap-3">
                     <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-4"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg"
+                        style={{ background: 'rgba(255,255,255,0.18)', color: 'white' }}
+                    >
+                        CU
+                    </div>
+                    <div>
+                        <div className="font-bold text-white text-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>CUOS</div>
+                        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Creative Upaay</div>
+                    </div>
+                </div>
+
+                {/* Centred brand hero */}
+                <div className="flex flex-col items-center text-center">
+                    {/* Large logo mark */}
+                    <div
+                        className="w-24 h-24 rounded-3xl flex items-center justify-center font-bold text-4xl mb-8"
+                        style={{
+                            background: 'rgba(255,255,255,0.12)',
+                            border: '1px solid rgba(255,255,255,0.18)',
+                            color: 'white',
+                            fontFamily: 'Outfit, sans-serif',
+                            letterSpacing: '-0.04em',
+                        }}
+                    >
+                        CU
+                    </div>
+
+                    <h1
+                        className="text-3xl font-bold text-white mb-3"
+                        style={{ fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.03em' }}
+                    >
+                        Creative Upaay<br />Operating System
+                    </h1>
+
+                    {/* Subtle divider */}
+                    <div
+                        className="w-12 h-0.5 rounded-full my-5"
+                        style={{ background: 'rgba(255,255,255,0.25)' }}
+                    />
+
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)', maxWidth: '300px' }}>
+                        One unified workspace for{' '}
+                        <span style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>EveryOne</span>
+                    </p>
+                </div>
+
+                {/* Bottom watermark */}
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    © {new Date().getFullYear()} Creative Upaay. All rights reserved.
+                </p>
+            </div>
+
+            {/* ── Right Form Panel ──────────────────────────────────── */}
+            <div
+                className="flex flex-col items-center justify-center flex-1 px-6 py-12"
+                style={{ backgroundColor: '#FAFBFA', minWidth: 0 }}
+            >
+                {/* Mobile logo */}
+                <div className="flex items-center gap-2 mb-10 lg:hidden">
+                    <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-sm"
                         style={{ backgroundColor: 'var(--color-primary)' }}
                     >
                         CU
                     </div>
-                    <h1
-                        className="text-xl font-semibold"
-                        style={{ color: 'var(--color-text-primary)' }}
-                    >
-                        Sign in to CUOS
-                    </h1>
-                    <p
-                        className="text-sm mt-1"
-                        style={{ color: 'var(--color-text-secondary)' }}
-                    >
-                        Creative Upaay Operating System
-                    </p>
+                    <span className="font-bold text-lg" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>CUOS</span>
                 </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div>
-                        <label
-                            htmlFor="email"
-                            className="block text-sm font-medium mb-1.5"
-                            style={{ color: 'var(--color-text-primary)' }}
+                <div style={{ width: '100%', maxWidth: '420px' }}>
+                    <div className="mb-8">
+                        <h2
+                            className="text-2xl font-bold mb-1.5"
+                            style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}
                         >
-                            Email Address
-                        </label>
-                        <input
-                            id="email"
-                            type="email"
-                            required
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-3 rounded-lg border text-sm outline-none transition-colors"
-                            style={{
-                                height: '40px',
-                                backgroundColor: 'var(--color-bg-surface)',
-                                borderColor: 'var(--color-border-default)',
-                                color: 'var(--color-text-primary)',
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border-default)')}
-                            placeholder="admin@creativeupaay.com"
-                        />
+                            Welcome back
+                        </h2>
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            Sign in to your CUOS workspace
+                        </p>
                     </div>
 
-                    <div>
-                        <label
-                            htmlFor="password"
-                            className="block text-sm font-medium mb-1.5"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
-                            Password
-                        </label>
-                        <input
-                            id="password"
-                            type="password"
-                            required
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            className="w-full px-3 rounded-lg border text-sm outline-none transition-colors"
-                            style={{
-                                height: '40px',
-                                backgroundColor: 'var(--color-bg-surface)',
-                                borderColor: 'var(--color-border-default)',
-                                color: 'var(--color-text-primary)',
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border-default)')}
-                            placeholder="••••••••"
-                        />
-                    </div>
-
-                    {error && (
-                        <div
-                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
-                            style={{
-                                backgroundColor: 'var(--color-danger-soft)',
-                                color: 'var(--color-danger)',
-                            }}
-                        >
-                            <AlertCircle size={16} className="shrink-0" />
-                            <span>{error}</span>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {/* Email */}
+                        <div>
+                            <label
+                                htmlFor="email"
+                                className="block text-sm font-medium mb-1.5"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                            >
+                                Email address
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                required
+                                className="input"
+                                value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                placeholder="you@creativeupaay.com"
+                            />
                         </div>
-                    )}
 
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full flex items-center justify-center gap-2 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                        style={{
-                            height: '40px',
-                            backgroundColor: isLoading ? 'var(--color-primary)' : 'var(--color-primary)',
-                        }}
-                        onMouseEnter={(e) => {
-                            if (!isLoading) e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'var(--color-primary)';
-                        }}
-                    >
-                        {isLoading ? (
-                            <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Signing in...
-                            </>
-                        ) : (
-                            <>
-                                <LogIn size={16} />
-                                Sign In
-                            </>
+                        {/* Password */}
+                        <div>
+                            <label
+                                htmlFor="password"
+                                className="block text-sm font-medium mb-1.5"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                            >
+                                Password
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="password"
+                                    type={showPass ? 'text' : 'password'}
+                                    required
+                                    className="input"
+                                    style={{ paddingRight: '44px' }}
+                                    value={formData.password}
+                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                    placeholder="••••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPass(!showPass)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                    tabIndex={-1}
+                                >
+                                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Error */}
+                        {error && (
+                            <div
+                                className="flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm"
+                                style={{ background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}
+                            >
+                                <AlertCircle size={15} className="shrink-0" />
+                                {error}
+                            </div>
                         )}
-                    </button>
-                </form>
 
-                {/* Footer */}
-                <div
-                    className="mt-6 pt-4 text-center text-xs border-t"
-                    style={{
-                        color: 'var(--color-text-muted)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <p>Default credentials</p>
-                    <p className="font-mono mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                        admin@creativeupaay.com / Admin@123
+                        {/* Submit */}
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full btn btn-primary text-base"
+                            style={{ height: '46px', borderRadius: '12px', fontSize: '15px' }}
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 size={17} className="animate-spin" />
+                                    Signing in…
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 size={17} />
+                                    Sign in
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Footer note */}
+                    <p
+                        className="mt-8 text-center text-xs"
+                        style={{ color: 'var(--color-text-muted)' }}
+                    >
+                        Contact your administrator if you don't have an account.
                     </p>
                 </div>
             </div>

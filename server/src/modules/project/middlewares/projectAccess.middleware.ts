@@ -178,8 +178,10 @@ export const checkTaskAccess = async (
 };
 
 /**
- * Check if user has access to a credential
- * User must be in credential.accessUsers array OR be an admin
+ * Check if user has access to a credential.
+ * - super-admins: always allowed
+ * - project credentialAdmins: always allowed (edit-level)
+ * - viewAccess users: allowed for read operations only
  */
 export const checkCredentialAccess = async (
     req: Request,
@@ -189,6 +191,7 @@ export const checkCredentialAccess = async (
     try {
         const credentialId = req.params.id;
         const userId = req.user?.id;
+        const projectId = req.params.projectId;
 
         if (!userId) {
             return next(new AppError('Authentication required', 401));
@@ -198,25 +201,90 @@ export const checkCredentialAccess = async (
             return next(new AppError('Credential ID is required', 400));
         }
 
-        const credential = await Credential.findById(credentialId);
+        // super-admins and admins bypass all checks
+        if (
+            req.user?.role === 'super-admin' ||
+            req.user?.role === 'super_admin' ||
+            req.user?.role === 'admin'
+        ) {
+            return next();
+        }
 
+        // Check if user is a credential admin on the project
+        if (projectId) {
+            const project = await Project.findById(projectId).select('credentialAdmins');
+            if (project) {
+                const isCredAdmin = project.credentialAdmins.some(
+                    (id) => id.toString() === userId
+                );
+                if (isCredAdmin) return next();
+            }
+        }
+
+        // Fall back to per-credential viewAccess
+        const credential = await Credential.findById(credentialId);
         if (!credential) {
             return next(new AppError('Credential not found', 404));
         }
 
-        // Check if user is super-admin
-        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
-            return next();
-        }
-
-        // Check if user is in accessUsers
-        const hasAccess = credential.accessUsers.some(
+        const hasViewAccess = credential.viewAccess.some(
             (accessUserId) => accessUserId.toString() === userId.toString()
         );
 
-        if (!hasAccess) {
+        if (!hasViewAccess) {
             return next(
                 new AppError('You do not have access to this credential', 403)
+            );
+        }
+
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Check if user is a credential admin on the project or super-admin.
+ * Used for routes like shareCredentials and updateCredentialAdmins.
+ */
+export const checkCredentialAdmin = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const projectId = req.params.projectId;
+        const userId = req.user?.id;
+
+        if (!userId) {
+            return next(new AppError('Authentication required', 401));
+        }
+
+        // super-admins and admins bypass
+        if (
+            req.user?.role === 'super-admin' ||
+            req.user?.role === 'super_admin' ||
+            req.user?.role === 'admin'
+        ) {
+            return next();
+        }
+
+        if (!projectId) {
+            return next(new AppError('Project ID is required', 400));
+        }
+
+        const project = await Project.findById(projectId).select('credentialAdmins');
+        if (!project) {
+            return next(new AppError('Project not found', 404));
+        }
+
+        const isCredAdmin = project.credentialAdmins.some(
+            (id) => id.toString() === userId
+        );
+
+        if (!isCredAdmin) {
+            return next(
+                new AppError('Only credential admins can perform this action', 403)
             );
         }
 

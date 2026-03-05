@@ -152,6 +152,45 @@ class PayrollService {
     }
 
     /**
+     * Bulk generate payroll for ALL active employees for a given month/year.
+     * Skips employees who already have payroll or who have no salary structure.
+     */
+    async generateBulkPayroll(
+        month: number,
+        year: number,
+        generatedBy: string
+    ): Promise<{ generated: number; skipped: number; failed: number; errors: string[] }> {
+        // Fetch all active employees
+        const employees = await Employee.find({ status: { $in: ['active', 'probation'] } });
+
+        let generated = 0;
+        let skipped = 0;
+        let failed = 0;
+        const errors: string[] = [];
+
+        for (const emp of employees) {
+            try {
+                // Skip if payroll already exists for this period
+                const existing = await Payroll.findOne({ employeeId: emp._id, month, year });
+                if (existing) { skipped++; continue; }
+
+                // Skip if no salary structure
+                const salary = await SalaryStructure.findOne({ employeeId: emp._id });
+                if (!salary) { skipped++; continue; }
+
+                await this.generatePayroll(emp._id.toString(), month, year, generatedBy);
+                generated++;
+            } catch (err: any) {
+                failed++;
+                const empName = emp.employeeId || emp._id.toString();
+                errors.push(`${empName}: ${err.message || 'Unknown error'}`);
+            }
+        }
+
+        return { generated, skipped, failed, errors };
+    }
+
+    /**
      * Deadline-based incentive scoring from Tasks.
      */
     private async calculateIncentives(

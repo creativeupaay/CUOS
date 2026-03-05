@@ -316,7 +316,8 @@ export default function AdminRolesPage() {
 
             {/* Clone Modal */}
             {cloningRoleId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div className="modal-overlay">
+
                     <div
                         className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium"
                         style={{ backgroundColor: 'var(--color-bg-surface)' }}
@@ -365,7 +366,8 @@ export default function AdminRolesPage() {
 
             {/* Create/Edit Role Modal */}
             {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div className="modal-overlay">
+
                     <div
                         className="w-full max-w-2xl rounded-[1rem] shadow-premium p-6 m-4 max-h-[85vh] overflow-y-auto"
                         style={{ backgroundColor: 'var(--color-bg-surface)' }}

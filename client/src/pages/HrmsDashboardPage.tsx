@@ -98,77 +98,69 @@ export default function HrmsDashboardPage() {
     ];
 
     return (
-        <div className="mx-auto" style={{ maxWidth: '1200px' }}>
+        <div className="mx-auto page-enter" style={{ maxWidth: '1200px' }}>
 
             {/* ── Header ─────────────────────────────────────── */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-1">
-                    <TrendingUp size={22} style={{ color: 'var(--color-primary)' }} />
-                    <h1
-                        className="text-2xl font-semibold"
-                        style={{ color: 'var(--color-text-primary)' }}
+                    <div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg,#10B98120,#3B82F620)', border: '1px solid #10B98130' }}
                     >
-                        HR Dashboard
-                    </h1>
+                        <TrendingUp size={20} style={{ color: 'var(--color-primary)' }} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
+                            HR Dashboard
+                        </h1>
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                    </div>
                 </div>
-                <p
-                    className="text-sm ml-9"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                >
-                    {new Date().toLocaleDateString('en-IN', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                    })}
-                </p>
             </div>
 
-            {/* ── Stat Cards (3 only) ────────────────────────── */}
+            {/* ── Stat Cards ─────────────────────────────────── */}
             <div className="grid grid-cols-3 gap-5 mb-8">
                 {statCards.map((card) => (
                     <div
                         key={card.label}
-                        className="rounded-xl border p-6"
+                        className="rounded-2xl border p-6 relative overflow-hidden"
                         style={{
                             borderColor: 'var(--color-border-default)',
                             backgroundColor: 'var(--color-bg-surface)',
+                            boxShadow: 'var(--shadow-xs)',
                         }}
                     >
+                        {/* Left accent bar */}
+                        <div className="absolute top-0 left-0 h-full" style={{ width: '3px', backgroundColor: card.color, borderRadius: '12px 0 0 12px' }} />
                         <div className="flex items-center justify-between mb-5">
                             <div
                                 className="w-11 h-11 rounded-xl flex items-center justify-center"
-                                style={{ backgroundColor: card.bg }}
+                                style={{ background: `linear-gradient(135deg,${card.color}20,${card.color}10)`, border: `1px solid ${card.color}25` }}
                             >
                                 <card.icon size={22} style={{ color: card.color }} />
                             </div>
                             <span
-                                className="text-xs font-medium px-2 py-0.5 rounded-full"
-                                style={{ backgroundColor: card.bg, color: card.color }}
+                                className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide"
+                                style={{ backgroundColor: card.color + '15', color: card.color }}
                             >
                                 {card.label}
                             </span>
                         </div>
-                        <div
-                            className="text-4xl font-bold tabular-nums"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
+                        <div className="text-4xl font-bold tabular-nums" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
                             {card.value}
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* ── Bottom Row: Departments + Events ──────────── */}
+            {/* ── Bottom Row ─────────────────────────────────── */}
             <div className="grid grid-cols-5 gap-6">
-
                 {/* Departments — 2 cols */}
                 <div
-                    className="col-span-2 rounded-xl border p-6"
-                    style={{
-                        borderColor: 'var(--color-border-default)',
-                        backgroundColor: 'var(--color-bg-surface)',
-                    }}
+                    className="col-span-2 rounded-2xl border p-6"
+                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', boxShadow: 'var(--shadow-xs)' }}
                 >
                     <div className="flex items-center gap-2 mb-6">
                         <Building2 size={17} style={{ color: 'var(--color-primary)' }} />
@@ -233,11 +225,8 @@ export default function HrmsDashboardPage() {
 
                 {/* Events — 3 cols */}
                 <div
-                    className="col-span-3 rounded-xl border p-6 flex flex-col"
-                    style={{
-                        borderColor: 'var(--color-border-default)',
-                        backgroundColor: 'var(--color-bg-surface)',
-                    }}
+                    className="col-span-3 rounded-2xl border p-6 flex flex-col"
+                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', boxShadow: 'var(--shadow-xs)' }}
                 >
                     <div className="flex items-center gap-2 mb-6">
                         <Calendar size={17} style={{ color: 'var(--color-primary)' }} />

@@ -7,7 +7,8 @@ import { checkHrmsAccess, hrAdminOnly } from '../middlewares/hrmsAccess.middlewa
 import { createEmployeeSchema, updateEmployeeSchema } from '../validators/employee.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema } from '../validators/leave.validator';
-import { generatePayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
+import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
+
 import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
 
 // Controllers
@@ -128,6 +129,13 @@ router.post(
     validateRequest(generatePayrollSchema),
     payrollController.generatePayroll
 );
+router.post(
+    '/payroll/bulk',
+    hrAdminOnly,
+    validateRequest(generateBulkPayrollSchema),
+    payrollController.generateBulkPayroll
+);
+
 router.get('/payroll', hrAdminOnly, payrollController.getPayrolls);
 router.get('/payroll/me', payrollController.getMyPayrolls);
 router.get('/payroll/:id', checkHrmsAccess(true), payrollController.getPayrollById);

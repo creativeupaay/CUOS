@@ -37,8 +37,6 @@ export const createCredentialSchema = z.object({
             url: z.string().optional(),
             notes: z.string().optional(),
         }),
-
-        accessUsers: z.array(z.string()).min(1, 'At least one access user is required'),
     }),
 });
 
@@ -68,8 +66,6 @@ export const updateCredentialSchema = z.object({
             url: z.string().optional(),
             notes: z.string().optional(),
         }).optional(),
-
-        accessUsers: z.array(z.string()).optional(),
     }),
 });
 
@@ -93,5 +89,44 @@ export const deleteCredentialSchema = z.object({
     params: z.object({
         projectId: z.string().min(1, 'Project ID is required'),
         id: z.string().min(1, 'Credential ID is required'),
+    }),
+});
+
+/** POST /:projectId/credentials/share */
+export const shareCredentialsSchema = z.object({
+    params: z.object({
+        projectId: z.string().min(1, 'Project ID is required'),
+    }),
+    body: z.object({
+        credentialIds: z.array(z.string().min(1)).min(1, 'Select at least one credential'),
+        userIds: z.array(z.string().min(1)).min(1, 'Select at least one user'),
+    }),
+});
+
+/** DELETE /:projectId/credentials/share (revoke) */
+export const revokeCredentialAccessSchema = z.object({
+    params: z.object({
+        projectId: z.string().min(1, 'Project ID is required'),
+    }),
+    body: z.object({
+        credentialIds: z.array(z.string().min(1)).min(1, 'Select at least one credential'),
+        userIds: z.array(z.string().min(1)).min(1, 'Select at least one user'),
+    }),
+});
+
+/** PATCH /:projectId/credential-admins */
+export const updateCredentialAdminsSchema = z.object({
+    params: z.object({
+        projectId: z.string().min(1, 'Project ID is required'),
+    }),
+    body: z.object({
+        userIds: z.array(z.string()).default([]),
+    }),
+});
+
+/** GET /:projectId/credential-admins */
+export const getCredentialAdminsSchema = z.object({
+    params: z.object({
+        projectId: z.string().min(1, 'Project ID is required'),
     }),
 });

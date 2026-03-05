@@ -8,6 +8,14 @@ export const generatePayrollSchema = z.object({
     }),
 });
 
+export const generateBulkPayrollSchema = z.object({
+    body: z.object({
+        month: z.coerce.number().min(1).max(12),
+        year: z.coerce.number().min(2020),
+    }),
+});
+
+
 export const updatePayrollStatusSchema = z.object({
     body: z.object({
         status: z.enum(['approved', 'paid']),
@@ -16,4 +24,5 @@ export const updatePayrollStatusSchema = z.object({
 });
 
 export type GeneratePayrollInput = z.infer<typeof generatePayrollSchema>['body'];
+export type GenerateBulkPayrollInput = z.infer<typeof generateBulkPayrollSchema>['body'];
 export type UpdatePayrollStatusInput = z.infer<typeof updatePayrollStatusSchema>['body'];

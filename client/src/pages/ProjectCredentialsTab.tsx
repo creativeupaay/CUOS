@@ -1,15 +1,19 @@
 import { useParams, useOutletContext } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/app/store';
 import {
     useGetCredentialsQuery,
     useCreateCredentialMutation,
     useGetCredentialByIdQuery,
     useDeleteCredentialMutation,
+    useGetCredentialAdminsQuery,
 } from '@/features/project';
 import type { Project } from '@/features/project';
+import CredentialShareModal from '@/features/project/components/CredentialShareModal';
 import { useState, useRef } from 'react';
 import {
     Loader2, Trash2, Shield, Code, TerminalSquare, Lock, Users, FileText,
-    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote
+    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -118,13 +122,33 @@ const textareaStyle = {
 export default function ProjectCredentialsTab() {
     const { id: projectId } = useParams<{ id: string }>();
     const { project } = useOutletContext<{ project: Project }>();
+    const currentUser = useSelector((state: RootState) => state.auth.user);
 
     const [activeTab, setActiveTab] = useState<CredentialType>('env');
+    const [showShareModal, setShowShareModal] = useState(false);
 
     const { data, isLoading } = useGetCredentialsQuery({ projectId: projectId!, type: activeTab });
     const credentials = data?.data || [];
     const [createCredential, { isLoading: isCreating }] = useCreateCredentialMutation();
     const [deleteCredential] = useDeleteCredentialMutation();
+
+    // Determine if current user is a credential admin
+    // NOTE: role can be either a plain string OR a Role object {_id, name, ...}
+    // We must handle both shapes.
+    const getRoleName = (role: any): string => {
+        if (!role) return '';
+        if (typeof role === 'string') return role;
+        return role.name ?? '';
+    };
+
+    const { data: adminsData } = useGetCredentialAdminsQuery({ projectId: projectId! });
+    const credentialAdminIds: string[] = (adminsData?.data ?? []).map((a: any) =>
+        typeof a === 'string' ? a : a._id
+    );
+    const userRoleName = getRoleName(currentUser?.role);
+    const isSuperAdmin = userRoleName === 'super-admin' || userRoleName === 'super_admin' || userRoleName === 'admin';
+    // While adminsData is still loading, super-admins should still see full access
+    const isCredAdmin = isSuperAdmin || credentialAdminIds.includes(currentUser?._id ?? '');
 
     const formRef = useRef<HTMLFormElement>(null);
 
@@ -184,51 +208,8 @@ export default function ProjectCredentialsTab() {
         setAccountRows(rows.map(r => ({ ...newAccountRow(), ...r })));
     };
 
-    const getAccessScope = () => {
-        const scope: string[] = [];
-        
-        // Extract user IDs from assignees
-        project?.assignees?.forEach((a: any) => {
-            let userId: string | undefined;
-            
-            // Check if assignee has employeeId with nested userId
-            if (a.employeeId) {
-                const emp = typeof a.employeeId === 'object' ? a.employeeId : null;
-                if (emp) {
-                    userId = typeof emp.userId === 'object' ? emp.userId._id : emp.userId;
-                }
-            }
-            // Fallback: check if assignee has direct userId
-            else if (a.userId) {
-                userId = typeof a.userId === 'object' ? a.userId._id : a.userId;
-            }
-            
-            if (userId && !scope.includes(userId)) {
-                scope.push(userId);
-            }
-        });
-        
-        // Add project creator
-        const creatorId = typeof project?.createdBy === 'object' ? (project?.createdBy as any)._id : project?.createdBy;
-        if (creatorId && !scope.includes(creatorId)) {
-            scope.push(creatorId);
-        }
-        
-        return scope;
-    };
-
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const accessUsers = getAccessScope();
-        
-        // Debug: Log access users
-        console.log('Access users:', accessUsers);
-        
-        if (!accessUsers || accessUsers.length === 0) {
-            alert('Error: No access users found. Project must have team members assigned.');
-            return;
-        }
-        
         let toCreate: any[] = [];
 
         switch (activeTab) {
@@ -257,8 +238,7 @@ export default function ProjectCredentialsTab() {
         if (!toCreate.length) { alert('Please fill in all required fields.'); return; }
 
         try {
-            console.log('Creating credentials:', toCreate);
-            await Promise.all(toCreate.map(cred => createCredential({ projectId: projectId!, data: { ...cred, accessUsers } }).unwrap()));
+            await Promise.all(toCreate.map(cred => createCredential({ projectId: projectId!, data: cred }).unwrap()));
             if (formRef.current) formRef.current.reset();
             setEnvRows([newEnvRow()]); setSshRows([newSshRow()]); setTestRows([newTestRow()]);
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
@@ -278,7 +258,51 @@ export default function ProjectCredentialsTab() {
     return (
         <div className="space-y-6">
 
-            {/* Tab Nav */}
+            {/* ─── Credentials Section Header ───────────────────────────── */}
+            <div
+                className="flex items-center justify-between px-4 py-3 rounded-xl border"
+                style={{
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border-default)',
+                }}
+            >
+                {/* Left: title + description */}
+                <div className="flex items-center gap-3">
+                    <div
+                        className="flex items-center justify-center w-8 h-8 rounded-lg"
+                        style={{ backgroundColor: 'var(--color-success-soft)' }}
+                    >
+                        <Shield size={16} style={{ color: 'var(--color-success)' }} />
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            Credentials
+                        </p>
+                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            {isCredAdmin
+                                ? 'You have full access — manage credentials and team permissions'
+                                : 'Showing credentials shared with you'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Right: Share button — only for credential admins & super-admins */}
+                {isCredAdmin && (
+                    <button
+                        onClick={() => setShowShareModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors"
+                        style={{
+                            backgroundColor: 'var(--color-success)',
+                            color: '#ffffff',
+                        }}
+                    >
+                        <Share2 size={14} />
+                        Manage Access
+                    </button>
+                )}
+            </div>
+
+            {/* ─── Type Sub-tabs ────────────────────────────────────────── */}
             <div className="flex gap-1 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                 {TABS.map(t => {
                     const isActive = activeTab === t.id;
@@ -305,12 +329,12 @@ export default function ProjectCredentialsTab() {
                 <div className="flex items-center gap-2 mb-5">
                     {(() => { const I = TABS.find(t => t.id === activeTab)?.icon; return I ? <I size={18} style={{ color: 'var(--color-success)' }} /> : null; })()}
                     <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        Add {TABS.find(t => t.id === activeTab)?.label}
+                        {isCredAdmin ? `Add ${TABS.find(t => t.id === activeTab)?.label}` : `${TABS.find(t => t.id === activeTab)?.label}`}
                     </h3>
                 </div>
 
-                {/* ─── FORM ─────────────────────────────────────────────────── */}
-                <form ref={formRef} onSubmit={handleSubmit}
+                {/* ─── FORM — only visible to credential admins ─── */}
+                {isCredAdmin && (<form ref={formRef} onSubmit={handleSubmit}
                     className="mb-8 p-5 rounded-xl border space-y-4"
                     style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
 
@@ -529,7 +553,7 @@ export default function ProjectCredentialsTab() {
                             Save {TABS.find(t => t.id === activeTab)?.label}
                         </button>
                     </div>
-                </form>
+                </form>)}
 
                 {/* ─── SAVED LIST ───────────────────────────────────────────── */}
                 {isLoading ? (
@@ -555,11 +579,23 @@ export default function ProjectCredentialsTab() {
                 )}
             </div>
 
-            {/* Encryption notice — subtle footer */}
+            {/* Encryption notice */}
             <div className="flex items-center gap-2 text-xs px-1" style={{ color: 'var(--color-text-muted)' }}>
                 <Shield size={12} style={{ flexShrink: 0 }} />
-                All credentials are encrypted at rest. Access is restricted to authorized project members.
+                All credentials are encrypted at rest. Access is restricted to authorized users.
+                {!isCredAdmin && (
+                    <span className="ml-1">Contact a credential admin to gain access to more credentials.</span>
+                )}
             </div>
+
+            {/* Share Modal */}
+            {showShareModal && project && (
+                <CredentialShareModal
+                    project={project}
+                    projectId={projectId!}
+                    onClose={() => setShowShareModal(false)}
+                />
+            )}
         </div>
     );
 }

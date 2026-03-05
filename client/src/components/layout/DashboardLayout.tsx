@@ -1,26 +1,120 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useAppSelector } from '@/app/hooks';
 
 /**
  * DashboardLayout
  *
  * Wraps all authenticated pages with:
- * - Fixed left sidebar (260px)
- * - Scrollable main content area
+ * - Fixed left sidebar (--sidebar-width)
+ * - Sticky top bar with breadcrumb / page title
+ * - Scrollable main content area with page-entry animation
  */
+
+const ROUTE_TITLES: Record<string, string> = {
+    '/projects': 'Projects',
+    '/finance': 'Finance',
+    '/finance/expenses': 'Expenses',
+    '/finance/invoices': 'Invoices',
+    '/finance/reports': 'Reports',
+    '/crm/pipeline': 'Pipeline',
+    '/crm/leads': 'Leads',
+    '/crm/proposals': 'Proposals',
+    '/crm/clients': 'Clients',
+    '/hrms': 'HR Dashboard',
+    '/hrms/employees': 'Employees',
+    '/hrms/attendance': 'Attendance',
+    '/hrms/leaves': 'Leave Management',
+    '/hrms/holidays': 'Holidays',
+    '/hrms/payroll': 'Payroll',
+    '/my-hrms/attendance': 'My Attendance',
+    '/my-hrms/leaves': 'My Leaves',
+    '/my-hrms/holidays': 'Holidays',
+    '/my-hrms/payroll': 'My Payroll',
+    '/admin': 'Admin Panel',
+    '/admin/users': 'Users',
+    '/admin/permissions': 'Permissions',
+    '/admin/settings': 'Settings',
+    '/admin/audit-logs': 'Audit Logs',
+};
+
+function resolveTitle(pathname: string): string {
+    // Exact match first
+    if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname];
+    // Project detail pages
+    if (pathname.startsWith('/projects/') && pathname !== '/projects/new') return 'Project';
+    if (pathname === '/projects/new') return 'New Project';
+    // Fallback: capitalise last segment
+    const last = pathname.split('/').filter(Boolean).pop() || '';
+    return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
+}
+
 export default function DashboardLayout() {
+    const location = useLocation();
+    const user = useAppSelector((state) => state.auth.user);
+    const pageTitle = resolveTitle(location.pathname);
+
+    const initials = user?.name
+        ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+        : 'U';
+
     return (
-        <div className="min-h-screen bg-app-premium text-[color:var(--color-text-primary)]">
+        <div
+            className="min-h-screen"
+            style={{ backgroundColor: 'var(--color-bg-app)' }}
+        >
             <Sidebar />
-            <main
-                className="min-h-screen"
-                style={{
-                    marginLeft: 'var(--sidebar-width)',
-                    padding: '28px 32px',
-                }}
-            >
-                <Outlet />
-            </main>
+
+            {/* ── Content area ───────────────────────────────────────── */}
+            <div style={{ marginLeft: 'var(--sidebar-width)' }}>
+
+                {/* ── Sticky top bar ─────────────────────────────────── */}
+                <header
+                    className="sticky top-0 z-20 flex items-center justify-between px-7"
+                    style={{
+                        height: 'var(--topbar-height)',
+                        background: 'rgba(255,255,255,0.88)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                        borderBottom: '1px solid var(--color-border-default)',
+                        boxShadow: 'var(--shadow-xs)',
+                    }}
+                >
+                    {/* Page title */}
+                    <h1
+                        className="text-base font-bold"
+                        style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)', letterSpacing: '-0.01em' }}
+                    >
+                        {pageTitle}
+                    </h1>
+
+                    {/* Right: avatar */}
+                    <div className="flex items-center gap-2.5">
+                        <div className="text-right hidden sm:block">
+                            <div className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
+                                {user?.name || 'User'}
+                            </div>
+                            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                                {user?.email || ''}
+                            </div>
+                        </div>
+                        <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
+                        >
+                            {initials}
+                        </div>
+                    </div>
+                </header>
+
+                {/* ── Page content ───────────────────────────────────── */}
+                <main
+                    className="page-enter"
+                    style={{ padding: '28px 32px', minHeight: 'calc(100vh - var(--topbar-height))' }}
+                >
+                    <Outlet />
+                </main>
+            </div>
         </div>
     );
 }

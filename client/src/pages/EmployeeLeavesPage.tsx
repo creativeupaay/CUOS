@@ -138,8 +138,7 @@ function ApplyLeaveModal({
     const today = new Date().toISOString().slice(0, 10);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
+        <div className="modal-overlay items-end sm:items-center">
             <div className="w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden"
                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                 {/* Header */}

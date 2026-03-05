@@ -201,8 +201,8 @@ export default function EmployeeHolidaysPage() {
 
             {/* Read-only preview modal */}
             {previewHoliday && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                <div className="modal-overlay">
+
                     <div className="w-full max-w-sm rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-start mb-4">

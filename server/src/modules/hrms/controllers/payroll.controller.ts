@@ -15,6 +15,18 @@ export const generatePayroll = asyncHandler(async (req: Request, res: Response) 
     });
 });
 
+// ── Bulk Generate Payroll ────────────────────────────────────────────
+export const generateBulkPayroll = asyncHandler(async (req: Request, res: Response) => {
+    const generatedBy = (req.user as any).id;
+    const { month, year } = req.body;
+    const result = await payrollService.generateBulkPayroll(month, year, generatedBy);
+
+    res.status(201).json({
+        status: 'success',
+        data: result,
+    });
+});
+
 // ── Get All Payrolls ────────────────────────────────────────────────
 export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
     const { month, year, status, page, limit } = req.query;

@@ -33,6 +33,9 @@ export interface Project {
 
     phases?: ProjectPhase[];
 
+    /** User IDs with full edit access to all credentials in this project */
+    credentialAdmins?: (string | User)[];
+
     createdBy: string | User;
     createdAt: string;
     updatedAt: string;
@@ -164,7 +167,8 @@ export interface Credential {
 
     credentials: CredentialData;
 
-    accessUsers: (string | User)[];
+    /** Users with view-only access to this specific credential */
+    viewAccess: (string | User)[];
 
     createdBy: string | User;
     createdAt: string;

@@ -170,6 +170,18 @@ export const hrmsApi = api.injectEndpoints({
             invalidatesTags: ['Payroll'],
         }),
 
+        generateBulkPayroll: builder.mutation<
+            ApiResponse<{ generated: number; skipped: number; failed: number; errors: string[] }>,
+            { month: number; year: number }
+        >({
+            query: (data) => ({
+                url: '/hrms/payroll/bulk',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Payroll'],
+        }),
+
         getPayrolls: builder.query<PaginatedResponse<{ payrolls: Payroll[] }>, { month?: number; year?: number; status?: string; page?: number }>({
             query: (params) => ({
                 url: '/hrms/payroll',
@@ -403,6 +415,7 @@ export const {
     useUpdateLeaveStatusMutation,
     // Payroll
     useGeneratePayrollMutation,
+    useGenerateBulkPayrollMutation,
     useGetPayrollsQuery,
     useGetMyPayrollsQuery,
     useGetPayrollByIdQuery,

@@ -179,14 +179,29 @@ export interface CreateCredentialRequest {
     type: 'env' | 'ssh-key' | 'test-user' | 'account' | '2fa' | 'other';
     description?: string;
     credentials: CredentialData;
-    accessUsers: string[];
 }
 
 export interface UpdateCredentialRequest {
     name?: string;
     description?: string;
     credentials?: CredentialData;
-    accessUsers?: string[];
+}
+
+/** POST /:projectId/credentials/share */
+export interface ShareCredentialsRequest {
+    credentialIds: string[];
+    userIds: string[];
+}
+
+/** DELETE /:projectId/credentials/share */
+export interface RevokeCredentialAccessRequest {
+    credentialIds: string[];
+    userIds: string[];
+}
+
+/** PATCH /:projectId/credential-admins */
+export interface UpdateCredentialAdminsRequest {
+    userIds: string[];
 }
 
 // ============================================

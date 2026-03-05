@@ -58,6 +58,13 @@ export interface IProject extends Document {
 
     phases: IProjectPhase[];
 
+    /**
+     * Users who have full edit access to all credentials in this project.
+     * These are the "Credential Admins" — they can see, edit, add, delete
+     * credentials and manage view-only access for others.
+     */
+    credentialAdmins: Types.ObjectId[];
+
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -159,6 +166,8 @@ const ProjectSchema = new Schema<IProject>(
         assignees: [ProjectAssigneeSchema],
 
         phases: [ProjectPhaseSchema],
+
+        credentialAdmins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         isArchived: { type: Boolean, default: false },

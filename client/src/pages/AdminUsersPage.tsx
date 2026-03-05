@@ -267,7 +267,8 @@ export default function AdminUsersPage() {
 
             {/* Create User Modal */}
             {showCreate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div className="modal-overlay">
+
                     <div className="w-full max-w-lg rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                             <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Create User</h3>
@@ -342,7 +343,8 @@ export default function AdminUsersPage() {
 
             {/* Delete Confirmation */}
             {deleteConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div className="modal-overlay">
+
                     <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FEF2F2' }}>
@@ -366,7 +368,8 @@ export default function AdminUsersPage() {
 
             {/* Reset Password Modal */}
             {resetPwdUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div className="modal-overlay">
+
                     <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Reset Password</h3>

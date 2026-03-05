@@ -18,6 +18,9 @@ import type {
     UpdateMeetingRequest,
     CreateCredentialRequest,
     UpdateCredentialRequest,
+    ShareCredentialsRequest,
+    RevokeCredentialAccessRequest,
+    UpdateCredentialAdminsRequest,
     ApiResponse,
     UpdateAssigneePermissionsRequest,
 } from './types/apiTypes';
@@ -327,6 +330,38 @@ export const projectApi = api.injectEndpoints({
             }),
             invalidatesTags: ['Credentials'],
         }),
+
+        shareCredentials: builder.mutation<ApiResponse<void>, { projectId: string; data: ShareCredentialsRequest }>({
+            query: ({ projectId, data }) => ({
+                url: `/projects/${projectId}/credentials/share`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Credentials'],
+        }),
+
+        revokeCredentialAccess: builder.mutation<ApiResponse<void>, { projectId: string; data: RevokeCredentialAccessRequest }>({
+            query: ({ projectId, data }) => ({
+                url: `/projects/${projectId}/credentials/share`,
+                method: 'DELETE',
+                body: data,
+            }),
+            invalidatesTags: ['Credentials'],
+        }),
+
+        getCredentialAdmins: builder.query<ApiResponse<any[]>, { projectId: string }>({
+            query: ({ projectId }) => `/projects/${projectId}/credential-admins`,
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
+        }),
+
+        updateCredentialAdmins: builder.mutation<ApiResponse<void>, { projectId: string; data: UpdateCredentialAdminsRequest }>({
+            query: ({ projectId, data }) => ({
+                url: `/projects/${projectId}/credential-admins`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects'],
+        }),
     }),
     overrideExisting: false,
 });
@@ -378,4 +413,8 @@ export const {
     useGetCredentialByIdQuery,
     useUpdateCredentialMutation,
     useDeleteCredentialMutation,
+    useShareCredentialsMutation,
+    useRevokeCredentialAccessMutation,
+    useGetCredentialAdminsQuery,
+    useUpdateCredentialAdminsMutation,
 } = projectApi;

@@ -53,9 +53,9 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            className="modal-overlay"
         >
+
             <div
                 className="w-full max-w-md rounded-xl border p-6 shadow-xl"
                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
@@ -501,7 +501,8 @@ export default function HrmsHolidaysPage() {
             {/* View/Delete Holiday Modal */}
             {selectedHoliday && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    className="modal-overlay"
+
                     style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
                 >
                     <div

@@ -40,7 +40,11 @@ export interface ICredential extends Document {
 
     credentials: ICredentialData;
 
-    accessUsers: Types.ObjectId[];
+    /**
+     * Users with view-only access to this credential.
+     * Edit/admin access is managed via project.credentialAdmins.
+     */
+    viewAccess: Types.ObjectId[];
 
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -98,7 +102,7 @@ const CredentialSchema = new Schema<ICredential>(
 
         credentials: { type: CredentialDataSchema, required: true },
 
-        accessUsers: [{ type: Schema.Types.ObjectId, ref: 'User', required: true }],
+        viewAccess: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         lastAccessedAt: Date,
@@ -112,7 +116,7 @@ const CredentialSchema = new Schema<ICredential>(
 // Indexes for performance
 CredentialSchema.index({ projectId: 1 });
 CredentialSchema.index({ type: 1 });
-CredentialSchema.index({ accessUsers: 1 });
+CredentialSchema.index({ viewAccess: 1 });
 
 // Pre-save hook to encrypt sensitive fields
 CredentialSchema.pre('save', function (next) {

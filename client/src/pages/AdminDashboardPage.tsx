@@ -14,7 +14,7 @@ import { useGetAdminDashboardStatsQuery } from '@/features/overall-admin/api/adm
 
 export default function AdminDashboardPage() {
     const navigate = useNavigate();
-    const { data, isLoading } = useGetAdminDashboardStatsQuery();
+    const { data } = useGetAdminDashboardStatsQuery();
 
     const stats = data?.data?.stats;
     const recentUsers = data?.data?.recentUsers || [];
@@ -95,44 +95,23 @@ export default function AdminDashboardPage() {
         return `${days}d ago`;
     };
 
-    if (isLoading) {
-        return (
-            <div className="p-8 mx-auto" style={{ maxWidth: '1200px' }}>
-                <div className="animate-pulse space-y-6">
-                    <div className="h-8 bg-gray-200 rounded w-48" />
-                    <div className="grid grid-cols-4 gap-5">
-                        {[1, 2, 3, 4].map((i) => (
-                            <div key={i} className="h-32 bg-gray-200 rounded-xl" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="p-8 mx-auto" style={{ maxWidth: '1200px' }}>
+        <div className="p-6 mx-auto page-enter" style={{ maxWidth: '1200px' }}>
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: '#F5F3FF', color: '#7C3AED' }}
+                        className="w-11 h-11 rounded-xl flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg,#7C3AED20,#8B5CF620)', border: '1px solid #7C3AED30' }}
                     >
-                        <Shield size={22} />
+                        <Shield size={22} style={{ color: '#7C3AED' }} />
                     </div>
                     <div>
-                        <h1
-                            className="text-2xl font-bold"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
+                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
                             Admin Panel
                         </h1>
-                        <p
-                            className="text-sm"
-                            style={{ color: 'var(--color-text-secondary)' }}
-                        >
-                            System administration & access control
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            System administration &amp; access control
                         </p>
                     </div>
                 </div>
@@ -143,28 +122,25 @@ export default function AdminDashboardPage() {
                 {statCards.map((card) => (
                     <div
                         key={card.label}
-                        className="rounded-xl border p-5 transition-all hover:shadow-sm"
+                        className="rounded-2xl border p-5 relative overflow-hidden"
                         style={{
                             backgroundColor: 'var(--color-bg-surface)',
                             borderColor: 'var(--color-border-default)',
+                            boxShadow: 'var(--shadow-xs)',
                         }}
                     >
+                        {/* Accent strip */}
+                        <div className="absolute top-0 left-0 w-1 h-full rounded-l-none" style={{ backgroundColor: card.color, borderRadius: '0 0 0 12px', width: '3px' }} />
                         <div
-                            className="w-10 h-10 rounded-lg flex items-center justify-center mb-3"
-                            style={{ backgroundColor: card.bg, color: card.color }}
+                            className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+                            style={{ background: `linear-gradient(135deg,${card.color}20,${card.color}10)`, border: `1px solid ${card.color}25` }}
                         >
-                            {card.icon}
+                            <div style={{ color: card.color }}>{card.icon}</div>
                         </div>
-                        <div
-                            className="text-3xl font-bold mb-1"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
+                        <div className="text-3xl font-bold mb-1" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
                             {card.value}
                         </div>
-                        <div
-                            className="text-sm font-medium"
-                            style={{ color: 'var(--color-text-muted)' }}
-                        >
+                        <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
                             {card.label}
                         </div>
                     </div>
@@ -175,10 +151,11 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Quick Actions */}
                 <div
-                    className="lg:col-span-2 rounded-xl border p-6"
+                    className="lg:col-span-2 rounded-2xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
                         borderColor: 'var(--color-border-default)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                 >
                     <h2
@@ -241,10 +218,11 @@ export default function AdminDashboardPage() {
 
                 {/* Role Distribution */}
                 <div
-                    className="rounded-xl border p-6"
+                    className="rounded-2xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
                         borderColor: 'var(--color-border-default)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                 >
                     <div className="flex items-center gap-2 mb-4">
@@ -305,10 +283,11 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Recent Users */}
                 <div
-                    className="rounded-xl border p-6"
+                    className="rounded-2xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
                         borderColor: 'var(--color-border-default)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                 >
                     <div className="flex items-center justify-between mb-4">
@@ -378,10 +357,11 @@ export default function AdminDashboardPage() {
 
                 {/* Recent Activity */}
                 <div
-                    className="rounded-xl border p-6"
+                    className="rounded-2xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
                         borderColor: 'var(--color-border-default)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                 >
                     <div className="flex items-center justify-between mb-4">
