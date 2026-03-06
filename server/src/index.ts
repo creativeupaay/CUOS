@@ -32,12 +32,19 @@ app.use(
 );
 
 // CORS configuration
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: allowedOrigins,
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"],
 };
+
 app.use(cors(corsOptions));
 
 app.use(cookieParser());
@@ -70,3 +77,4 @@ const PORT =
     : env.PORT;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
