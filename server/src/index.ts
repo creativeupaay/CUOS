@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import helmet from "helmet";
-import cors from "cors";
+import cors, { CorsOptions } from "cors";
 import path from "path";
 import { env } from "./config/env.config";
 import connectDB from "./config/db.config";
@@ -32,13 +32,13 @@ app.use(
 );
 
 // CORS configuration
-const allowedOrigins = [
+const allowedOrigins: string[] = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   process.env.FRONTEND_URL,
-].filter(Boolean);
+].filter((origin): origin is string => Boolean(origin));
 
-const corsOptions = {
+const corsOptions: CorsOptions = {
   origin: allowedOrigins,
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
