@@ -116,8 +116,9 @@ class PayrollService {
         }
 
         // Statutory deductions
-        const pfDeduction = basicComponent * 0.12;
-        const esiDeduction = grossSalary < 21000 ? grossSalary * 0.0075 : 0;
+        // PF and ESI are currently not deducted — set to 0
+        const pfDeduction = 0;
+        const esiDeduction = 0;
         const taxDeduction = salary.deductions.tax || 0;
 
         const totalDeductions = pfDeduction + esiDeduction + taxDeduction + leaveDeduction + penaltyAmount;

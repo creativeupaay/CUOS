@@ -283,8 +283,8 @@ function ApplyLeaveModal({
 // ── Main Page ─────────────────────────────────────────────────────────
 export default function EmployeeLeavesPage() {
     const [showModal, setShowModal] = useState(false);
-    const { data: leavesData, isLoading } = useGetMyLeavesQuery({});
-    const { data: balanceData } = useGetLeaveBalanceQuery();
+    const { data: leavesData, isLoading } = useGetMyLeavesQuery({}, { refetchOnMountOrArgChange: true, pollingInterval: 30000 });
+    const { data: balanceData } = useGetLeaveBalanceQuery(undefined, { refetchOnMountOrArgChange: true, pollingInterval: 30000 });
 
     const leaves: Leave[] = (leavesData?.data as any)?.leaves || [];
     const balanceArr: any[] = (balanceData?.data as any)?.balance || [];

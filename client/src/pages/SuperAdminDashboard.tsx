@@ -373,8 +373,8 @@ export default function SuperAdminDashboard() {
                         </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                        {departments.map(dept => (
-                            <DepartmentCard key={dept.key} {...dept} />
+                        {departments.map(({ key: deptKey, ...deptProps }) => (
+                            <DepartmentCard key={deptKey} {...deptProps} />
                         ))}
                     </div>
                 </div>
