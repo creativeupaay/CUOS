@@ -221,9 +221,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     }
 );
 
-// Indexes
-EmployeeSchema.index({ userId: 1 });
-EmployeeSchema.index({ employeeId: 1 });
+// Indexes (userId and employeeId already indexed via unique:true on the fields)
 EmployeeSchema.index({ department: 1 });
 EmployeeSchema.index({ status: 1 });
 EmployeeSchema.index({ reportingTo: 1 });

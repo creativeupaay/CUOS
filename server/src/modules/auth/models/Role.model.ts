@@ -40,8 +40,7 @@ const RoleSchema = new Schema<IRole>(
     }
 );
 
-// Index for faster queries
-RoleSchema.index({ name: 1 });
+// Index for faster queries (name is already indexed via unique:true on the field)
 RoleSchema.index({ level: 1 });
 
 export const Role = mongoose.model<IRole>('Role', RoleSchema);

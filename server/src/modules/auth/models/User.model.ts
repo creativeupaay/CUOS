@@ -146,8 +146,7 @@ const UserSchema = new Schema<IUser>(
     }
 );
 
-// Indexes
-UserSchema.index({ email: 1 });
+// Indexes (email is already indexed via unique:true on the field)
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 

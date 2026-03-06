@@ -91,7 +91,7 @@ const InvoiceSchema = new Schema<IInvoice>(
 );
 
 // ── Indexes ─────────────────────────────────────────────────────────
-InvoiceSchema.index({ invoiceNumber: 1 });
+// invoiceNumber is already indexed via unique:true on the field
 InvoiceSchema.index({ projectId: 1 });
 InvoiceSchema.index({ clientId: 1 });
 InvoiceSchema.index({ status: 1 });
