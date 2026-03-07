@@ -142,7 +142,7 @@ export default function EmployeeOnboardingFormPage() {
         if (!identityDocFile) { setSubmitError('Identity document upload is required.'); return; }
         if (!form.identityType) { setSubmitError('Identity verification type is required.'); return; }
         if (!form.identityIdNumber) { setSubmitError('Identity ID number is required.'); return; }
-            if (!form.panNumber) { setSubmitError('PAN number is required.'); return; }
+        if (!form.panNumber) { setSubmitError('PAN number is required.'); return; }
         fd.append('profilePhoto', profilePhotoFile);
         fd.append('identityDocument', identityDocFile);
 
@@ -155,7 +155,8 @@ export default function EmployeeOnboardingFormPage() {
             const json = await res.json();
             if (!res.ok) throw new Error(json.message || 'Submission failed');
             setSubmitted(true);
-            setSubmitError(err.message);
+        } catch (err: any) {
+            setSubmitError(err.message || 'An error occurred during submission.');
         } finally {
             setSubmitting(false);
         }
