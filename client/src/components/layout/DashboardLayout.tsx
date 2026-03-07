@@ -1,6 +1,8 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
+import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
+import { Settings } from 'lucide-react';
 
 /**
  * DashboardLayout
@@ -27,6 +29,7 @@ const ROUTE_TITLES: Record<string, string> = {
     '/hrms/leaves': 'Leave Management',
     '/hrms/holidays': 'Holidays',
     '/hrms/payroll': 'Payroll',
+    '/my-hrms/profile': 'My Profile',
     '/my-hrms/attendance': 'My Attendance',
     '/my-hrms/leaves': 'My Leaves',
     '/my-hrms/holidays': 'Holidays',
@@ -58,6 +61,9 @@ export default function DashboardLayout() {
         ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
         : 'U';
 
+    const { data: profileData } = useGetMyProfileQuery();
+    const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
+
     return (
         <div
             className="min-h-screen"
@@ -88,7 +94,7 @@ export default function DashboardLayout() {
                         {pageTitle}
                     </h1>
 
-                    {/* Right: avatar */}
+                    {/* Right: name + avatar + settings */}
                     <div className="flex items-center gap-2.5">
                         <div className="text-right hidden sm:block">
                             <div className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
@@ -98,12 +104,35 @@ export default function DashboardLayout() {
                                 {user?.email || ''}
                             </div>
                         </div>
-                        <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                            style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
-                        >
-                            {initials}
+
+                        {/* Avatar — display only, not clickable */}
+                        <div className="shrink-0">
+                            {profilePhotoUrl ? (
+                                <img
+                                    src={profilePhotoUrl}
+                                    alt={user?.name || 'Profile'}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                    style={{ boxShadow: 'var(--shadow-brand)' }}
+                                />
+                            ) : (
+                                <div
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                    style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
+                                >
+                                    {initials}
+                                </div>
+                            )}
                         </div>
+
+                        {/* Settings button — opens My Profile */}
+                        <Link
+                            to="/my-hrms/profile"
+                            title="My Profile &amp; Settings"
+                            className="flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors hover:bg-gray-100"
+                            style={{ color: 'var(--color-text-muted)' }}
+                        >
+                            <Settings size={15} />
+                        </Link>
                     </div>
                 </header>
 

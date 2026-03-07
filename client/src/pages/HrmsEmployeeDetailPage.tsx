@@ -4,6 +4,7 @@ import {
     useGetSalaryByEmployeeQuery,
     useCreateSalaryMutation,
     useUpdateSalaryMutation,
+    useUpdateEmployeeMutation,
     useGenerateFormTokenMutation,
 } from '@/features/hrms/hrmsApi';
 
@@ -11,7 +12,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 import {
     ArrowLeft, Edit, User, Briefcase, DollarSign,
     Plus, X, Loader2, Eye, EyeOff, Calendar,
-    Share2, CheckCircle2, Clock, ShieldCheck, Shirt,
+    Share2, CheckCircle2, Clock, ShieldCheck, Shirt, Save,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -60,12 +61,137 @@ export default function HrmsEmployeeDetailPage() {
 
     const [createSalary, { isLoading: isCreatingSalary }] = useCreateSalaryMutation();
     const [updateSalary, { isLoading: isUpdatingSalary }] = useUpdateSalaryMutation();
+    const [updateEmployee, { isLoading: isUpdatingEmployee }] = useUpdateEmployeeMutation();
     const [generateFormToken, { isLoading: isGeneratingToken }] = useGenerateFormTokenMutation();
 
     // ── Bank visibility toggle ───────────────────────────────────────
     const [showBankDetails, setShowBankDetails] = useState(false);    const [showIdNumber, setShowIdNumber] = useState(false);
     // ── Copy Link state ──────────────────────────────────────────────
     const [linkCopied, setLinkCopied] = useState(false);
+
+    // ── Admin edit modals ────────────────────────────────────────────
+    type EditModal = null | 'personal' | 'bank' | 'identity';
+    const [editModal, setEditModal] = useState<EditModal>(null);
+
+    const [personalEditForm, setPersonalEditForm] = useState({
+        phone: '', alternatePhone: '', fatherName: '', fatherPhone: '',
+        gender: '', dob: '', bloodGroup: '',
+        address_street: '', address_state: '', address_postalCode: '',
+        emergencyContact_name: '', emergencyContact_phone: '', emergencyContact_relation: '',
+    });
+
+    const [bankEditForm, setBankEditForm] = useState({
+        bankName: '', accountNumber: '', ifscCode: '', panNumber: '', bankBranch: '', upiId: '',
+    });
+
+    const [identityEditForm, setIdentityEditForm] = useState({
+        type: '', idNumber: '',
+    });
+
+    const inputCls = 'w-full px-3 py-2.5 text-sm rounded-lg border';
+    const inputStyle = {
+        borderColor: 'var(--color-border-default)',
+        backgroundColor: 'var(--color-bg-surface)',
+        color: 'var(--color-text-primary)',
+    };
+
+    const openPersonalEdit = () => {
+        const pi = (employee?.personalInfo as any) || {};
+        setPersonalEditForm({
+            phone: pi.phone || '',
+            alternatePhone: pi.alternatePhone || '',
+            fatherName: pi.fatherName || '',
+            fatherPhone: pi.fatherPhone || '',
+            gender: pi.gender || '',
+            dob: pi.dob ? pi.dob.split('T')[0] : '',
+            bloodGroup: pi.bloodGroup || '',
+            address_street: pi.address?.street || '',
+            address_state: pi.address?.state || '',
+            address_postalCode: pi.address?.postalCode || '',
+            emergencyContact_name: pi.emergencyContact?.name || '',
+            emergencyContact_phone: pi.emergencyContact?.phone || '',
+            emergencyContact_relation: pi.emergencyContact?.relation || '',
+        });
+        setEditModal('personal');
+    };
+
+    const openBankEdit = () => {
+        const bd = (employee?.bankDetails as any) || {};
+        setBankEditForm({
+            bankName: bd.bankName || '',
+            accountNumber: bd.accountNumber || '',
+            ifscCode: bd.ifscCode || '',
+            panNumber: bd.panNumber || '',
+            bankBranch: bd.bankBranch || '',
+            upiId: bd.upiId || '',
+        });
+        setEditModal('bank');
+    };
+
+    const openIdentityEdit = () => {
+        const iv = (employee as any)?.identityVerification || {};
+        setIdentityEditForm({
+            type: iv.type || '',
+            idNumber: iv.idNumber || '',
+        });
+        setEditModal('identity');
+    };
+
+    const handleSavePersonalEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await updateEmployee({
+                id: id!,
+                data: {
+                    personalInfo: {
+                        phone: personalEditForm.phone || undefined,
+                        alternatePhone: personalEditForm.alternatePhone || undefined,
+                        fatherName: personalEditForm.fatherName || undefined,
+                        fatherPhone: personalEditForm.fatherPhone || undefined,
+                        gender: (personalEditForm.gender as any) || undefined,
+                        dob: personalEditForm.dob || undefined,
+                        bloodGroup: personalEditForm.bloodGroup || undefined,
+                        address: {
+                            street: personalEditForm.address_street || undefined,
+                            state: personalEditForm.address_state || undefined,
+                            postalCode: personalEditForm.address_postalCode || undefined,
+                        },
+                        emergencyContact: {
+                            name: personalEditForm.emergencyContact_name || undefined,
+                            phone: personalEditForm.emergencyContact_phone || undefined,
+                            relation: personalEditForm.emergencyContact_relation || undefined,
+                        },
+                    } as any,
+                },
+            }).unwrap();
+            setEditModal(null);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to save personal info');
+        }
+    };
+
+    const handleSaveBankEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await updateEmployee({ id: id!, data: { bankDetails: bankEditForm as any } }).unwrap();
+            setEditModal(null);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to save bank details');
+        }
+    };
+
+    const handleSaveIdentityEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await updateEmployee({
+                id: id!,
+                data: { identityVerification: identityEditForm as any },
+            }).unwrap();
+            setEditModal(null);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to save identity info');
+        }
+    };
 
     const handleShareForm = async () => {
         if (!id) return;
@@ -298,11 +424,20 @@ export default function HrmsEmployeeDetailPage() {
                                     Personal Information
                                 </h2>
                             </div>
-                            {!(employee as any).formSubmitted && (
-                                <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#854D0E' }}>
-                                    To be filled by employee
-                                </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {!(employee as any).formSubmitted && (
+                                    <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#854D0E' }}>
+                                        To be filled by employee
+                                    </span>
+                                )}
+                                <button
+                                    onClick={openPersonalEdit}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                >
+                                    <Edit size={12} /> Edit
+                                </button>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-y-5 gap-x-10">
                             <FieldRow label="Mobile">{employee.personalInfo?.phone || '—'}</FieldRow>
@@ -437,15 +572,24 @@ export default function HrmsEmployeeDetailPage() {
                                     Bank Details
                                 </h2>
                             </div>
-                            <button
-                                onClick={() => setShowBankDetails((v) => !v)}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors"
-                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
-                                title={showBankDetails ? 'Hide bank details' : 'Show bank details'}
-                            >
-                                {showBankDetails ? <EyeOff size={13} /> : <Eye size={13} />}
-                                {showBankDetails ? 'Hide' : 'Show'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowBankDetails((v) => !v)}
+                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                    title={showBankDetails ? 'Hide bank details' : 'Show bank details'}
+                                >
+                                    {showBankDetails ? <EyeOff size={13} /> : <Eye size={13} />}
+                                    {showBankDetails ? 'Hide' : 'Show'}
+                                </button>
+                                <button
+                                    onClick={openBankEdit}
+                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                >
+                                    <Edit size={12} /> Edit
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-3">
@@ -486,11 +630,20 @@ export default function HrmsEmployeeDetailPage() {
                         className="rounded-xl border p-6"
                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
                     >
-                        <div className="flex items-center gap-2 mb-4">
-                            <ShieldCheck size={17} style={{ color: 'var(--color-primary)' }} />
-                            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                Identity Verification
-                            </h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck size={17} style={{ color: 'var(--color-primary)' }} />
+                                <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                    Identity Verification
+                                </h2>
+                            </div>
+                            <button
+                                onClick={openIdentityEdit}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                            >
+                                <Edit size={12} /> Edit
+                            </button>
                         </div>
                         {(employee as any).identityVerification?.type ? (
                             <div className="space-y-3">
@@ -651,6 +804,184 @@ export default function HrmsEmployeeDetailPage() {
                                     className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
                                     style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
                                 >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Personal Info Edit Modal ─────────────────────────── */}
+            {editModal === 'personal' && (
+                <div className="modal-overlay">
+                    <div className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
+                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Edit Personal Information
+                            </h2>
+                            <button onClick={() => setEditModal(null)} className="p-1 rounded-md hover:bg-gray-100 cursor-pointer">
+                                <X size={18} style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSavePersonalEdit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                {([
+                                    ['phone', 'Mobile'],
+                                    ['alternatePhone', 'Alternate Mobile'],
+                                    ['fatherName', "Father's Name"],
+                                    ['fatherPhone', "Father's Contact"],
+                                    ['bloodGroup', 'Blood Group'],
+                                    ['address_street', 'Address / Street'],
+                                    ['address_state', 'State'],
+                                    ['address_postalCode', 'Pincode'],
+                                    ['emergencyContact_name', 'Emergency Contact Name'],
+                                    ['emergencyContact_phone', 'Emergency Contact Phone'],
+                                    ['emergencyContact_relation', 'Relation'],
+                                ] as [string, string][]).map(([key, label]) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {label}
+                                        </label>
+                                        <input type="text" value={(personalEditForm as any)[key]}
+                                            onChange={e => setPersonalEditForm({ ...personalEditForm, [key]: e.target.value })}
+                                            className={inputCls} style={inputStyle} />
+                                    </div>
+                                ))}
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Gender</label>
+                                    <select value={personalEditForm.gender}
+                                        onChange={e => setPersonalEditForm({ ...personalEditForm, gender: e.target.value })}
+                                        className={inputCls} style={inputStyle}>
+                                        <option value="">Select</option>
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Date of Birth</label>
+                                    <input type="date" value={personalEditForm.dob}
+                                        onChange={e => setPersonalEditForm({ ...personalEditForm, dob: e.target.value })}
+                                        className={inputCls} style={inputStyle} />
+                                </div>
+                            </div>
+                            <div className="pt-2 flex gap-3">
+                                <button type="submit" disabled={isUpdatingEmployee}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    {isUpdatingEmployee ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                    Save Changes
+                                </button>
+                                <button type="button" onClick={() => setEditModal(null)}
+                                    className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Bank Details Edit Modal ──────────────────────────── */}
+            {editModal === 'bank' && (
+                <div className="modal-overlay">
+                    <div className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Edit Bank Details
+                            </h2>
+                            <button onClick={() => setEditModal(null)} className="p-1 rounded-md hover:bg-gray-100 cursor-pointer">
+                                <X size={18} style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveBankEdit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                {([
+                                    ['bankName', 'Bank Name'],
+                                    ['accountNumber', 'Account Number'],
+                                    ['ifscCode', 'IFSC Code'],
+                                    ['bankBranch', 'Branch'],
+                                    ['panNumber', 'PAN Number'],
+                                    ['upiId', 'UPI ID'],
+                                ] as [string, string][]).map(([key, label]) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {label}
+                                        </label>
+                                        <input type="text" value={(bankEditForm as any)[key]}
+                                            onChange={e => setBankEditForm({ ...bankEditForm, [key]: e.target.value })}
+                                            className={inputCls} style={inputStyle} />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="pt-2 flex gap-3">
+                                <button type="submit" disabled={isUpdatingEmployee}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    {isUpdatingEmployee ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                    Save Changes
+                                </button>
+                                <button type="button" onClick={() => setEditModal(null)}
+                                    className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Identity Verification Edit Modal ─────────────────── */}
+            {editModal === 'identity' && (
+                <div className="modal-overlay">
+                    <div className="w-full max-w-sm rounded-xl border p-6 shadow-xl"
+                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Edit Identity Verification
+                            </h2>
+                            <button onClick={() => setEditModal(null)} className="p-1 rounded-md hover:bg-gray-100 cursor-pointer">
+                                <X size={18} style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveIdentityEdit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Document Type
+                                </label>
+                                <select value={identityEditForm.type}
+                                    onChange={e => setIdentityEditForm({ ...identityEditForm, type: e.target.value })}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Select</option>
+                                    <option value="aadhaar">Aadhaar</option>
+                                    <option value="pan">PAN</option>
+                                    <option value="voter">Voter ID</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                    ID Number
+                                </label>
+                                <input type="text" value={identityEditForm.idNumber}
+                                    onChange={e => setIdentityEditForm({ ...identityEditForm, idNumber: e.target.value })}
+                                    className={inputCls} style={inputStyle} />
+                            </div>
+                            <div className="pt-2 flex gap-3">
+                                <button type="submit" disabled={isUpdatingEmployee}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    {isUpdatingEmployee ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                    Save Changes
+                                </button>
+                                <button type="button" onClick={() => setEditModal(null)}
+                                    className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
                                     Cancel
                                 </button>
                             </div>

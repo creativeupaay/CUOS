@@ -56,6 +56,7 @@ import EmployeeAttendancePage from './pages/EmployeeAttendancePage';
 import EmployeeLeavesPage from './pages/EmployeeLeavesPage';
 import EmployeeHolidaysPage from './pages/EmployeeHolidaysPage';
 import EmployeePayrollPage from './pages/EmployeePayrollPage';
+import MyProfilePage from './pages/MyProfilePage';
 // Public self-onboarding form (no login required)
 import EmployeeOnboardingFormPage from './pages/EmployeeOnboardingFormPage';
 
@@ -172,6 +173,7 @@ function App() {
           <Route path="/hrms/payroll" element={<HrmsRedirect><HrmsPayrollPage /></HrmsRedirect>} />
 
           {/* Employee HRMS Module */}
+          <Route path="/my-hrms/profile" element={<MyProfilePage />} />
           <Route path="/my-hrms/attendance" element={<EmployeeAttendancePage />} />
           <Route path="/my-hrms/leaves" element={<EmployeeLeavesPage />} />
           <Route path="/my-hrms/holidays" element={<EmployeeHolidaysPage />} />

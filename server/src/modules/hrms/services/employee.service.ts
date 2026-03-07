@@ -146,6 +146,25 @@ class EmployeeService {
         return employee;
     }
 
+    async updateMyProfile(userId: string, data: { personalInfo?: any; bankDetails?: any }): Promise<IEmployee> {
+        const employee = await Employee.findOne({ userId });
+        if (!employee) {
+            throw new AppError('Employee record not found', 404);
+        }
+
+        // Only allow updating personalInfo and bankDetails
+        if (data.personalInfo) {
+            employee.personalInfo = { ...((employee.personalInfo as any) || {}), ...data.personalInfo } as any;
+        }
+        if (data.bankDetails) {
+            employee.bankDetails = { ...((employee.bankDetails as any) || {}), ...data.bankDetails } as any;
+        }
+
+        await employee.save();
+        await employee.populate('userId', 'name email');
+        return employee;
+    }
+
     async deleteEmployee(id: string): Promise<void> {
         const employee = await Employee.findByIdAndDelete(id);
         if (!employee) {
@@ -259,6 +278,7 @@ class EmployeeService {
             accountNumber?: string;
             ifscCode?: string;
             bankBranch?: string;
+            panNumber?: string;
             upiId?: string;
             // Identity
             identityType?: string;
@@ -305,6 +325,7 @@ class EmployeeService {
             accountNumber: data.accountNumber,
             ifscCode: data.ifscCode,
             bankBranch: data.bankBranch,
+            panNumber: data.panNumber,
             upiId: data.upiId,
         };
 

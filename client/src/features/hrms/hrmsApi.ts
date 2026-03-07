@@ -44,6 +44,18 @@ export const hrmsApi = api.injectEndpoints({
             providesTags: ['Employees'],
         }),
 
+        updateMyProfile: builder.mutation<
+            ApiResponse<{ employee: Employee }>,
+            { personalInfo?: Record<string, any>; bankDetails?: Record<string, any> }
+        >({
+            query: (data) => ({
+                url: '/hrms/employees/me',
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: ['Employees'],
+        }),
+
         updateEmployee: builder.mutation<
             ApiResponse<{ employee: Employee }>,
             { id: string; data: UpdateEmployeeRequest }
@@ -416,6 +428,7 @@ export const {
     useGetEmployeesQuery,
     useGetEmployeeQuery,
     useGetMyProfileQuery,
+    useUpdateMyProfileMutation,
     useUpdateEmployeeMutation,
     useDeleteEmployeeMutation,
     useGetOnboardingEmployeesQuery,

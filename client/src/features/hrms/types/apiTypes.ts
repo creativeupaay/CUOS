@@ -45,6 +45,8 @@ export interface UpdateEmployeeRequest {
     workSchedule?: { workingDaysPerWeek?: number; hoursPerDay?: number };
     personalInfo?: any;
     bankDetails?: any;
+    tshirtSize?: string;
+    identityVerification?: { type?: string; idNumber?: string };
     onboarding?: any;
 }
 

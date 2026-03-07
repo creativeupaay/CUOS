@@ -91,6 +91,7 @@ export default function EmployeeOnboardingFormPage() {
         accountNumber: '',
         ifscCode: '',
         bankBranch: '',
+        panNumber: '',
         upiId: '',
         // Identity
         identityType: '',
@@ -141,7 +142,7 @@ export default function EmployeeOnboardingFormPage() {
         if (!identityDocFile) { setSubmitError('Identity document upload is required.'); return; }
         if (!form.identityType) { setSubmitError('Identity verification type is required.'); return; }
         if (!form.identityIdNumber) { setSubmitError('Identity ID number is required.'); return; }
-
+            if (!form.panNumber) { setSubmitError('PAN number is required.'); return; }
         fd.append('profilePhoto', profilePhotoFile);
         fd.append('identityDocument', identityDocFile);
 
@@ -154,7 +155,6 @@ export default function EmployeeOnboardingFormPage() {
             const json = await res.json();
             if (!res.ok) throw new Error(json.message || 'Submission failed');
             setSubmitted(true);
-        } catch (err: any) {
             setSubmitError(err.message);
         } finally {
             setSubmitting(false);
@@ -185,6 +185,9 @@ export default function EmployeeOnboardingFormPage() {
     }
 
     if (submitted) {
+        const loginUrl = (import.meta as any).env?.VITE_FRONTEND_URL
+            ? `${(import.meta as any).env.VITE_FRONTEND_URL}/login`
+            : `${window.location.origin}/login`;
         return (
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', padding: '24px' }}>
                 <div style={{ maxWidth: '480px', textAlign: 'center' }}>
@@ -194,15 +197,29 @@ export default function EmployeeOnboardingFormPage() {
                     <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#111827', marginBottom: '12px' }}>
                         Form Submitted!
                     </h1>
-                    <p style={{ fontSize: '15px', color: '#6B7280', lineHeight: '1.6' }}>
+                    <p style={{ fontSize: '15px', color: '#6B7280', lineHeight: '1.6', marginBottom: '28px' }}>
                         Thank you, <strong>{formInfo?.name}</strong>. Your details have been submitted successfully.
-                        The HR team will review them shortly. You may close this page.
+                        The HR team will review them shortly.
                     </p>
                     {formInfo?.formSubmitted && !submitting && (
-                        <p style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '16px' }}>
+                        <p style={{ fontSize: '13px', color: '#9CA3AF', marginBottom: '20px' }}>
                             (This form was already submitted earlier.)
                         </p>
                     )}
+                    <a
+                        href={loginUrl}
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                            padding: '12px 28px', fontSize: '14px', fontWeight: 600,
+                            color: '#FFFFFF', backgroundColor: '#22C55E',
+                            borderRadius: '10px', textDecoration: 'none',
+                            transition: 'background-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#16A34A')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#22C55E')}
+                    >
+                        Go to Login &rarr;
+                    </a>
                 </div>
             </div>
         );
@@ -392,6 +409,20 @@ export default function EmployeeOnboardingFormPage() {
                                 <input type="text" required value={form.bankBranch}
                                     onChange={(e) => setForm({ ...form, bankBranch: e.target.value })}
                                     style={INPUT_STYLE} placeholder="Branch name" />
+                            </Field>
+
+                            <Field label="PAN Number" required>
+                                <input
+                                    type="text"
+                                    required
+                                    maxLength={10}
+                                    pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                                    title="Enter a valid PAN (e.g. ABCDE1234F)"
+                                    value={form.panNumber}
+                                    onChange={(e) => setForm({ ...form, panNumber: e.target.value.toUpperCase() })}
+                                    style={INPUT_STYLE}
+                                    placeholder="e.g. ABCDE1234F"
+                                />
                             </Field>
 
                             <Field label="UPI ID">

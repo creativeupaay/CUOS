@@ -6,6 +6,9 @@ const personalInfoSchema = z.object({
     dob: z.string().optional(),
     gender: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['male', 'female', 'other']).optional()),
     phone: z.string().optional(),
+    alternatePhone: z.string().optional(),
+    fatherName: z.string().optional(),
+    fatherPhone: z.string().optional(),
     emergencyContact: z.object({
         name: z.string().optional(),
         phone: z.string().optional(),
@@ -26,6 +29,8 @@ const bankDetailsSchema = z.object({
     accountNumber: z.string().optional(),
     ifscCode: z.string().optional(),
     panNumber: z.string().optional(),
+    bankBranch: z.string().optional(),
+    upiId: z.string().optional(),
 }).optional();
 
 const workScheduleSchema = z.object({
@@ -72,6 +77,11 @@ export const updateEmployeeSchema = z.object({
         workSchedule: workScheduleSchema,
         personalInfo: personalInfoSchema,
         bankDetails: bankDetailsSchema,
+        tshirtSize: z.enum(['XS', 'S', 'M', 'L', 'XL', 'XXL']).optional(),
+        identityVerification: z.object({
+            type: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['aadhaar', 'pan', 'voter', 'other']).optional()),
+            idNumber: z.string().optional(),
+        }).optional(),
         onboarding: z.object({
             status: z.enum(['not-started', 'in-progress', 'completed']).optional(),
             checklist: z.array(onboardingChecklistItemSchema).optional(),
@@ -80,5 +90,14 @@ export const updateEmployeeSchema = z.object({
     params: z.object({ id: z.string() }),
 });
 
+// Employee self-update: only personalInfo and bankDetails
+export const selfUpdateSchema = z.object({
+    body: z.object({
+        personalInfo: personalInfoSchema,
+        bankDetails: bankDetailsSchema,
+    }),
+});
+
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>['body'];
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>['body'];
+export type SelfUpdateInput = z.infer<typeof selfUpdateSchema>['body'];

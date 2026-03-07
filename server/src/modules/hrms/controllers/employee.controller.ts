@@ -51,6 +51,17 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
     });
 });
 
+// ── Update My Profile (employee self-service) ───────────────────────
+export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.user as any).id;
+    const employee = await employeeService.updateMyProfile(userId, req.body);
+
+    res.json({
+        status: 'success',
+        data: { employee },
+    });
+});
+
 // ── Update Employee ─────────────────────────────────────────────────
 export const updateEmployee = asyncHandler(async (req: Request, res: Response) => {
     const employee = await employeeService.updateEmployee(req.params.id, req.body);

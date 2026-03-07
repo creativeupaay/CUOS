@@ -5,6 +5,7 @@ import { logout } from '@/features/auth/slices/authSlice';
 import { useLogoutMutation } from '@/features/auth/authApi';
 import { api } from '@/services/api';
 import { useGetProjectsQuery } from '@/features/project/projectApi';
+import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
@@ -252,6 +253,9 @@ export default function Sidebar() {
     const isHrAdmin = isAdmin || ['hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
     const displayRole = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : String(user.role)) : 'User';
 
+    const { data: employeeProfile } = useGetMyProfileQuery();
+    const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
+
     const isPMRoute = location.pathname.startsWith('/projects');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
     const projects = projectsResponse?.data || [];
@@ -333,12 +337,20 @@ export default function Sidebar() {
                 >
                     {/* Avatar with gradient ring */}
                     <div className="relative shrink-0">
-                        <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                            style={{ background: 'linear-gradient(135deg,#059669,#0369a1)' }}
-                        >
-                            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                        </div>
+                        {sidebarPhotoUrl ? (
+                            <img
+                                src={sidebarPhotoUrl}
+                                alt={user?.name || 'Profile'}
+                                className="w-8 h-8 rounded-full object-cover"
+                            />
+                        ) : (
+                            <div
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                style={{ background: 'linear-gradient(135deg,#059669,#0369a1)' }}
+                            >
+                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
+                        )}
                         <div
                             className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
                             style={{ backgroundColor: 'var(--color-success)' }}

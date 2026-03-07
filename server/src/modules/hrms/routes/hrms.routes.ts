@@ -4,7 +4,7 @@ import { validateRequest } from '../../../middlewares/validateRequest';
 import { checkHrmsAccess, hrAdminOnly } from '../middlewares/hrmsAccess.middleware';
 
 // Validators
-import { createEmployeeSchema, updateEmployeeSchema } from '../validators/employee.validator';
+import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
@@ -29,6 +29,7 @@ router.use(authenticate);
 // EMPLOYEE ROUTES
 // ══════════════════════════════════════════════════════════════════════
 router.get('/employees/me', employeeController.getMyProfile);
+router.patch('/employees/me', validateRequest(selfUpdateSchema), employeeController.updateMyProfile);
 router.get('/employees/onboarding', hrAdminOnly, employeeController.getOnboardingEmployees);
 router.get('/employees/:managerId/team', employeeController.getTeamMembers);
 
