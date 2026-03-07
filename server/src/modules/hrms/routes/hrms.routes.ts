@@ -53,6 +53,10 @@ router.patch(
     employeeController.updateOnboardingChecklist
 );
 
+// Self-onboarding form management
+router.post('/employees/:id/generate-form-token', hrAdminOnly, employeeController.generateFormToken);
+router.get('/employees/:id/identity-document', hrAdminOnly, employeeController.getIdentityDocumentUrl);
+
 // ══════════════════════════════════════════════════════════════════════
 // ATTENDANCE ROUTES
 // ══════════════════════════════════════════════════════════════════════

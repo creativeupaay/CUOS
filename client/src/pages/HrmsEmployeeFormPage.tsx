@@ -46,8 +46,6 @@ export default function HrmsEmployeeFormPage() {
         reportingTo: '',
         paidLeavesPerYear: 12,
         workSchedule: { workingDaysPerWeek: 5, hoursPerDay: 8 },
-        personalInfo: { phone: '', gender: '' as string, dob: '' },
-        bankDetails: { bankName: '', accountNumber: '', ifscCode: '', panNumber: '' },
     });
 
     const [errorMsg, setErrorMsg] = useState('');
@@ -67,46 +65,14 @@ export default function HrmsEmployeeFormPage() {
                 reportingTo: (emp.reportingTo as any)?._id || '',
                 paidLeavesPerYear: (emp as any).paidLeavesPerYear ?? 12,
                 workSchedule: emp.workSchedule || { workingDaysPerWeek: 5, hoursPerDay: 8 },
-                personalInfo: {
-                    phone: emp.personalInfo?.phone || '',
-                    gender: emp.personalInfo?.gender || '',
-                    dob: emp.personalInfo?.dob?.split('T')[0] || '',
-                },
-                bankDetails: {
-                    bankName: emp.bankDetails?.bankName || '',
-                    accountNumber: emp.bankDetails?.accountNumber || '',
-                    ifscCode: emp.bankDetails?.ifscCode || '',
-                    panNumber: emp.bankDetails?.panNumber || '',
-                },
             });
         }
     }, [existingData]);
 
-    // Clean the payload — remove empty strings for optional ObjectId / date fields
     const cleanPayload = (data: any) => {
         const cleaned = { ...data };
         if (!cleaned.reportingTo) delete cleaned.reportingTo;
         if (!cleaned.probationEndDate) delete cleaned.probationEndDate;
-
-        // Clean personalInfo
-        if (cleaned.personalInfo) {
-            const pi = { ...cleaned.personalInfo };
-            if (!pi.phone) delete pi.phone;
-            if (!pi.gender) delete pi.gender;
-            if (!pi.dob) delete pi.dob;
-            cleaned.personalInfo = Object.keys(pi).length > 0 ? pi : undefined;
-        }
-
-        // Clean bankDetails
-        if (cleaned.bankDetails) {
-            const bd = { ...cleaned.bankDetails };
-            if (!bd.bankName) delete bd.bankName;
-            if (!bd.accountNumber) delete bd.accountNumber;
-            if (!bd.ifscCode) delete bd.ifscCode;
-            if (!bd.panNumber) delete bd.panNumber;
-            cleaned.bankDetails = Object.keys(bd).length > 0 ? bd : undefined;
-        }
-
         return cleaned;
     };
 
@@ -157,7 +123,9 @@ export default function HrmsEmployeeFormPage() {
                             {isEdit ? 'Edit Employee' : 'Add Employee'}
                         </h1>
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                            {isEdit ? 'Update employee information' : 'Create a new employee profile'}
+                            {isEdit
+                                ? 'Update employee information'
+                                : 'Create a new employee profile. Additional details will be collected via a self-onboarding form.'}
                         </p>
                     </div>
                 </div>
@@ -243,7 +211,7 @@ export default function HrmsEmployeeFormPage() {
                 </div>
 
                 {/* Work Schedule */}
-                <div className="rounded-lg border p-6 mb-4" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                <div className="rounded-lg border p-6 mb-6" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
                     <h2 className="text-sm font-semibold mb-4 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Work Schedule &amp; Leaves</h2>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -277,54 +245,18 @@ export default function HrmsEmployeeFormPage() {
                     </div>
                 </div>
 
-                {/* Personal Info */}
-                <div className="rounded-lg border p-6 mb-4" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                    <h2 className="text-sm font-semibold mb-4 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Personal Information</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Phone</label>
-                            <input type="text" value={form.personalInfo.phone} onChange={(e) => setForm({ ...form, personalInfo: { ...form.personalInfo, phone: e.target.value } })}
-                                className="w-full px-3 py-2.5 text-sm rounded-lg border" style={inputStyle} placeholder="+91 9876543210" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Gender</label>
-                            <select value={form.personalInfo.gender} onChange={(e) => setForm({ ...form, personalInfo: { ...form.personalInfo, gender: e.target.value } })}
-                                className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
-                                <option value="">Select</option>
-                                <option value="male">Male</option>
-                                <option value="female">Female</option>
-                                <option value="other">Other</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Date of Birth</label>
-                            <input type="date" value={form.personalInfo.dob} onChange={(e) => setForm({ ...form, personalInfo: { ...form.personalInfo, dob: e.target.value } })}
-                                className="w-full px-3 py-2.5 text-sm rounded-lg border" style={inputStyle} />
-                        </div>
+                {/* Info note */}
+                {!isEdit && (
+                    <div className="mb-6 px-4 py-3 rounded-lg text-sm flex gap-2"
+                        style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                        <span>ℹ️</span>
+                        <span>
+                            Personal information, bank details, and identity documents will be collected directly from
+                            the employee via a secure self-onboarding form. You can share that form from the employee's
+                            profile page after creation.
+                        </span>
                     </div>
-                </div>
-
-                {/* Bank Details */}
-                <div className="rounded-lg border p-6 mb-6" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                    <h2 className="text-sm font-semibold mb-4 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Bank Details</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        {([
-                            ['bankName', 'Bank Name'],
-                            ['accountNumber', 'Account Number'],
-                            ['ifscCode', 'IFSC Code'],
-                            ['panNumber', 'PAN Number'],
-                        ] as const).map(([field, label]) => (
-                            <div key={field}>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                    {label}
-                                </label>
-                                <input type="text" value={(form.bankDetails as any)[field]}
-                                    onChange={(e) => setForm({ ...form, bankDetails: { ...form.bankDetails, [field]: e.target.value } })}
-                                    className="w-full px-3 py-2.5 text-sm rounded-lg border" style={inputStyle} />
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                )}
 
                 {/* Submit */}
                 <div className="flex gap-3 pb-8">
@@ -347,3 +279,4 @@ export default function HrmsEmployeeFormPage() {
         </div>
     );
 }
+

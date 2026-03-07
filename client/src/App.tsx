@@ -56,6 +56,8 @@ import EmployeeAttendancePage from './pages/EmployeeAttendancePage';
 import EmployeeLeavesPage from './pages/EmployeeLeavesPage';
 import EmployeeHolidaysPage from './pages/EmployeeHolidaysPage';
 import EmployeePayrollPage from './pages/EmployeePayrollPage';
+// Public self-onboarding form (no login required)
+import EmployeeOnboardingFormPage from './pages/EmployeeOnboardingFormPage';
 
 
 // Admin pages
@@ -100,6 +102,9 @@ function App() {
           path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
         />
+
+        {/* Employee self-onboarding form — public, no login required */}
+        <Route path="/employee-form/:token" element={<EmployeeOnboardingFormPage />} />
 
         {/* Dashboard - NO sidebar */}
         <Route

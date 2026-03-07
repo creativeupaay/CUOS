@@ -11,6 +11,9 @@ export interface IPersonalInfo {
     dob?: Date;
     gender?: 'male' | 'female' | 'other';
     phone?: string;
+    alternatePhone?: string;
+    fatherName?: string;
+    fatherPhone?: string;
     emergencyContact?: {
         name: string;
         phone: string;
@@ -30,11 +33,25 @@ export interface IBankDetails {
     bankName?: string;
     accountNumber?: string;
     ifscCode?: string;
+    bankBranch?: string;
+    upiId?: string;
     panNumber?: string;
     taxInfo?: {
         gstNumber?: string;
         tdsRate?: number;
     };
+}
+
+export interface IIdentityVerification {
+    type?: 'aadhaar' | 'pan' | 'voter' | 'other';
+    idNumber?: string;
+    documentCloudinaryId?: string;
+    documentUrl?: string;
+}
+
+export interface IProfilePhoto {
+    cloudinaryId?: string;
+    url?: string;
 }
 
 export interface IOnboardingChecklist {
@@ -67,6 +84,13 @@ export interface IEmployee extends Document {
     workSchedule: IWorkSchedule;
     personalInfo: IPersonalInfo;
     bankDetails: IBankDetails;
+    identityVerification: IIdentityVerification;
+    profilePhoto: IProfilePhoto;
+    tshirtSize?: 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL';
+    // Self-onboarding form fields
+    formToken?: string;
+    formSubmitted: boolean;
+    formSubmittedAt?: Date;
     onboarding: IOnboarding;
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -88,6 +112,9 @@ const PersonalInfoSchema = new Schema<IPersonalInfo>(
         dob: Date,
         gender: { type: String, enum: ['male', 'female', 'other'] },
         phone: { type: String, trim: true },
+        alternatePhone: { type: String, trim: true },
+        fatherName: { type: String, trim: true },
+        fatherPhone: { type: String, trim: true },
         emergencyContact: {
             name: { type: String, trim: true },
             phone: { type: String, trim: true },
@@ -110,11 +137,31 @@ const BankDetailsSchema = new Schema<IBankDetails>(
         bankName: { type: String, trim: true },
         accountNumber: { type: String, trim: true },
         ifscCode: { type: String, trim: true },
+        bankBranch: { type: String, trim: true },
+        upiId: { type: String, trim: true },
         panNumber: { type: String, trim: true },
         taxInfo: {
             gstNumber: { type: String, trim: true },
             tdsRate: { type: Number, min: 0, max: 100 },
         },
+    },
+    { _id: false }
+);
+
+const IdentityVerificationSchema = new Schema<IIdentityVerification>(
+    {
+        type: { type: String, enum: ['aadhaar', 'pan', 'voter', 'other'] },
+        idNumber: { type: String, trim: true },
+        documentCloudinaryId: { type: String, trim: true },
+        documentUrl: { type: String, trim: true },
+    },
+    { _id: false }
+);
+
+const ProfilePhotoSchema = new Schema<IProfilePhoto>(
+    {
+        cloudinaryId: { type: String, trim: true },
+        url: { type: String, trim: true },
     },
     { _id: false }
 );
@@ -205,6 +252,31 @@ const EmployeeSchema = new Schema<IEmployee>(
         bankDetails: {
             type: BankDetailsSchema,
             default: () => ({}),
+        },
+        identityVerification: {
+            type: IdentityVerificationSchema,
+            default: () => ({}),
+        },
+        profilePhoto: {
+            type: ProfilePhotoSchema,
+            default: () => ({}),
+        },
+        tshirtSize: {
+            type: String,
+            enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+        },
+        formToken: {
+            type: String,
+            unique: true,
+            sparse: true,
+            index: true,
+        },
+        formSubmitted: {
+            type: Boolean,
+            default: false,
+        },
+        formSubmittedAt: {
+            type: Date,
         },
         onboarding: {
             type: OnboardingSchema,

@@ -72,6 +72,23 @@ export const hrmsApi = api.injectEndpoints({
             providesTags: ['Employees'],
         }),
 
+        // Generate (or retrieve existing) self-onboarding form token
+        generateFormToken: builder.mutation<
+            ApiResponse<{ token: string; formUrl: string }>,
+            string
+        >({
+            query: (id) => ({
+                url: `/hrms/employees/${id}/generate-form-token`,
+                method: 'POST',
+            }),
+            invalidatesTags: (_result, _error, id) => [{ type: 'Employees', id }],
+        }),
+
+        // Get signed URL for an employee's identity document
+        getIdentityDocumentUrl: builder.query<ApiResponse<{ url: string }>, string>({
+            query: (id) => `/hrms/employees/${id}/identity-document`,
+        }),
+
         // ══════════════════════════════════════════════════════════
         // SALARY ENDPOINTS
         // ══════════════════════════════════════════════════════════
@@ -402,6 +419,8 @@ export const {
     useUpdateEmployeeMutation,
     useDeleteEmployeeMutation,
     useGetOnboardingEmployeesQuery,
+    useGenerateFormTokenMutation,
+    useGetIdentityDocumentUrlQuery,
     // Salary
     useCreateSalaryMutation,
     useGetSalariesQuery,

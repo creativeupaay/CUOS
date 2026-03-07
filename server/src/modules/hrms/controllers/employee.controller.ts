@@ -103,3 +103,43 @@ export const updateOnboardingChecklist = asyncHandler(async (req: Request, res: 
         data: { employee },
     });
 });
+
+// ── Generate / Retrieve Form Token ──────────────────────────────────
+export const generateFormToken = asyncHandler(async (req: Request, res: Response) => {
+    const result = await employeeService.generateFormToken(req.params.id);
+
+    res.json({
+        status: 'success',
+        data: result,
+    });
+});
+
+// ── Get Identity Document (proxied) ────────────────────────────────
+export const getIdentityDocumentUrl = asyncHandler(async (req: Request, res: Response) => {
+    const url = await employeeService.getIdentityDocumentUrl(req.params.id);
+
+    // Proxy the file server-side so the browser never has to deal with
+    // Cloudinary's authenticated-resource signing/cookie requirements.
+    const upstream = await fetch(url);
+    if (!upstream.ok || !upstream.body) {
+        if (upstream.status === 401) {
+            res.status(401).json({
+                status: 'error',
+                message: 'Cloudinary Security Settings are blocking PDF delivery. Please go to your Cloudinary Dashboard -> Settings -> Security, and uncheck "Block delivery of PDF and ZIP files".'
+            });
+            return;
+        }
+        res.status(502).json({ status: 'error', message: 'Could not fetch document from storage' });
+        return;
+    }
+
+    const ct = upstream.headers.get('content-type') || 'application/octet-stream';
+    const cl = upstream.headers.get('content-length');
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Content-Disposition', 'inline');
+    if (cl) res.setHeader('Content-Length', cl);
+
+    // Stream body to client (Node 22 has native fetch + ReadableStream)
+    const { Readable } = await import('stream');
+    Readable.fromWeb(upstream.body as any).pipe(res);
+});
