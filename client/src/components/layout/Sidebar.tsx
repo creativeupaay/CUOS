@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { logout } from '@/features/auth/slices/authSlice';
+import { useLogoutMutation } from '@/features/auth/authApi';
+import { api } from '@/services/api';
 import { useGetProjectsQuery } from '@/features/project/projectApi';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
@@ -234,6 +236,14 @@ export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
+    const [logoutApi] = useLogoutMutation();
+
+    const handleLogout = async () => {
+        try { await logoutApi().unwrap(); } catch { /* ignore */ }
+        dispatch(logout());
+        dispatch(api.util.resetApiState());
+        navigate('/login');
+    };
 
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
@@ -348,7 +358,7 @@ export default function Sidebar() {
                     </div>
 
                     <button
-                        onClick={() => { dispatch(logout()); navigate('/login'); }}
+                        onClick={handleLogout}
                         className="p-1.5 rounded-lg transition-all duration-150 shrink-0"
                         style={{ color: 'var(--color-text-muted)' }}
                         title="Logout"

@@ -14,6 +14,14 @@ const errorHandlerMiddleware = (
     console.log(err);
     let error: AppError;
 
+    // Guard against null/non-object errors
+    if (err == null) {
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: 'An unexpected error occurred',
+        });
+    }
+
     if (err instanceof AppError) {
         error = err;
     } else {

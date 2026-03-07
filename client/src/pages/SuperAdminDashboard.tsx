@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { logout } from '@/features/auth/slices/authSlice';
+import { useLogoutMutation } from '@/features/auth/authApi';
+import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
     ArrowRight, Clock, LogOut, Sparkles, ChevronRight,
@@ -121,8 +123,12 @@ export default function SuperAdminDashboard() {
     const navigate = useNavigate();
     const user = useAppSelector((state) => state.auth.user);
 
-    const handleLogout = () => {
+    const [logoutApi] = useLogoutMutation();
+
+    const handleLogout = async () => {
+        try { await logoutApi().unwrap(); } catch { /* ignore */ }
         dispatch(logout());
+        dispatch(api.util.resetApiState());
         navigate('/login');
     };
 

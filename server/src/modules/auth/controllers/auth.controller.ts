@@ -75,9 +75,14 @@ export const refreshToken = asyncHandler(
 
 export const logout = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        // Clear cookies
-        res.clearCookie('refreshToken');
-        res.clearCookie('accessToken');
+        const cookieOptions = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict' as const,
+            path: '/',
+        };
+        res.clearCookie('refreshToken', cookieOptions);
+        res.clearCookie('accessToken', cookieOptions);
 
         res.status(200).json({
             success: true,

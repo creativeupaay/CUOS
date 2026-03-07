@@ -9,7 +9,7 @@ import {
 } from '../utils/jwt.util';
 
 export interface RegisterData {
-    name: string;
+    name?: string;
     email: string;
     password: string;
     role?: string;
@@ -95,8 +95,11 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Get role name
+    // Get role name (role may be null if the role document was deleted)
     const role = user.role as any;
+    if (!role) {
+        throw new AppError('User role not found. Please contact an administrator.', 500);
+    }
     const roleName = role.name || 'employee';
 
     // Generate tokens
