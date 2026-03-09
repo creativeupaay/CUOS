@@ -47,6 +47,13 @@ function resolveTitle(pathname: string): string {
     // Project detail pages
     if (pathname.startsWith('/projects/') && pathname !== '/projects/new') return 'Project';
     if (pathname === '/projects/new') return 'New Project';
+
+    // Employee detail pages
+    if (pathname.startsWith('/hrms/employees/') && pathname !== '/hrms/employees/new') {
+        return pathname.endsWith('/edit') ? 'Edit Employee' : 'Employee Details';
+    }
+    if (pathname === '/hrms/employees/new') return 'New Employee';
+
     // Fallback: capitalise last segment
     const last = pathname.split('/').filter(Boolean).pop() || '';
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');

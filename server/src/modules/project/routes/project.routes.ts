@@ -5,6 +5,7 @@ import * as taskController from '../controllers/task.controller';
 import * as timeLogController from '../controllers/timeLog.controller';
 import * as meetingController from '../controllers/meeting.controller';
 import * as credentialController from '../controllers/credential.controller';
+import * as docController from '../controllers/doc.controller';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     checkProjectAccess,
@@ -150,6 +151,34 @@ router.delete(
     checkProjectManager,
     projectController.deleteDocument
 );
+
+// ============================================
+// DOC FOLDERS ROUTES (Google Drive-style)
+// ============================================
+
+router.get('/:id/doc-folders', checkProjectAccess, docController.getFolders);
+router.post('/:id/doc-folders', checkProjectAccess, docController.createFolder);
+router.patch('/:id/doc-folders/:folderId', checkProjectAccess, docController.renameFolder);
+router.delete('/:id/doc-folders/:folderId', checkProjectAccess, docController.deleteFolder);
+router.patch('/:id/doc-folders/:folderId/access', checkProjectAccess, docController.updateFolderAccess);
+
+// ============================================
+// DOC ITEMS ROUTES
+// ============================================
+
+router.get('/:id/doc-items', checkProjectAccess, docController.getDocItems);
+router.post('/:id/doc-items/upload', checkProjectAccess, upload.single('file'), docController.uploadDocItem);
+router.get('/:id/doc-items/:itemId/url', checkProjectAccess, docController.getDocItemUrl);
+router.patch('/:id/doc-items/:itemId', checkProjectAccess, docController.renameDocItem);
+router.delete('/:id/doc-items/:itemId', checkProjectAccess, docController.deleteDocItem);
+router.patch('/:id/doc-items/:itemId/access', checkProjectAccess, docController.updateDocItemAccess);
+
+// ============================================
+// DOC ADMINS ROUTES
+// ============================================
+
+router.get('/:id/doc-admins', checkProjectAccess, docController.getDocAdmins);
+router.patch('/:id/doc-admins', checkAdmin, docController.updateDocAdmins);
 
 // Get project cost summary
 router.get(

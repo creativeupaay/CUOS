@@ -158,7 +158,12 @@ export default function HrmsEmployeesPage() {
                             {employees.map((emp) => {
                                 const statusStyle = getStatusColor(emp.status);
                                 return (
-                                    <tr key={emp._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <tr
+                                        key={emp._id}
+                                        onClick={() => navigate(`/hrms/employees/${emp._id}`)}
+                                        className="border-t cursor-pointer hover:bg-neutral-50 transition-colors"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
                                                 <div
@@ -196,7 +201,7 @@ export default function HrmsEmployeesPage() {
                                             {new Date(emp.joiningDate).toLocaleDateString()}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                                 <button onClick={() => navigate(`/hrms/employees/${emp._id}`)} className="p-1.5 rounded hover:bg-gray-100 cursor-pointer" title="View">
                                                     <Eye size={16} style={{ color: 'var(--color-text-muted)' }} />
                                                 </button>

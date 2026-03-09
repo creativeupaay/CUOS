@@ -7,14 +7,16 @@ import {
     useGetCredentialByIdQuery,
     useDeleteCredentialMutation,
     useGetCredentialAdminsQuery,
+    useRevokeCredentialAccessMutation,
 } from '@/features/project';
 import type { Project } from '@/features/project';
 import CredentialShareModal from '@/features/project/components/CredentialShareModal';
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
     Loader2, Trash2, Shield, Code, TerminalSquare, Lock, Users, FileText,
-    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2
+    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2, Eye, EyeOff, Filter, FolderPlus, X, UserMinus
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type CredentialType = 'env' | 'ssh-key' | 'test-user' | 'account' | 'other';
@@ -24,6 +26,7 @@ type SshRow = { id: number; name: string; keyContent: string; fileName: string }
 type TestUserRow = { id: number; name: string; url: string; username: string; password: string };
 type AccountRow = { id: number; name: string; url: string; username: string; email: string; password: string };
 type OtherRow = { id: number; name: string; description: string; notes: string };
+type EnvGroup = { id: number; label: string; rows: EnvRow[] };
 
 const uid = () => Date.now() + Math.random();
 const newEnvRow = (): EnvRow => ({ id: uid(), key: '', value: '', note: '' });
@@ -31,6 +34,7 @@ const newSshRow = (): SshRow => ({ id: uid(), name: '', keyContent: '', fileName
 const newTestRow = (): TestUserRow => ({ id: uid(), name: '', url: '', username: '', password: '' });
 const newAccountRow = (): AccountRow => ({ id: uid(), name: '', url: '', username: '', email: '', password: '' });
 const newOtherRow = (): OtherRow => ({ id: uid(), name: '', description: '', notes: '' });
+const newEnvGroup = (label = ''): EnvGroup => ({ id: uid(), label, rows: [newEnvRow()] });
 
 // ─── Tab Config ──────────────────────────────────────────────────────────────
 const TABS: { id: CredentialType; label: string; icon: any }[] = [
@@ -126,9 +130,22 @@ export default function ProjectCredentialsTab() {
 
     const [activeTab, setActiveTab] = useState<CredentialType>('env');
     const [showShareModal, setShowShareModal] = useState(false);
+    const [envGroupFilter, setEnvGroupFilter] = useState<string>('all');
 
     const { data, isLoading } = useGetCredentialsQuery({ projectId: projectId!, type: activeTab });
     const credentials = data?.data || [];
+
+    // Derive distinct saved ENV group names for filter + form suggestions
+    const savedEnvGroups = useMemo(() => {
+        if (activeTab !== 'env') return [];
+        const seen = new Set<string>();
+        credentials.forEach((c: any) => { const g = c.description || 'General'; seen.add(g); });
+        return Array.from(seen).sort();
+    }, [credentials, activeTab]);
+
+    // Reset group filter when tab changes
+    const [_prevTab, _setPrevTab] = useState<CredentialType>('env');
+    if (activeTab !== _prevTab) { _setPrevTab(activeTab); setEnvGroupFilter('all'); }
     const [createCredential, { isLoading: isCreating }] = useCreateCredentialMutation();
     const [deleteCredential] = useDeleteCredentialMutation();
 
@@ -152,11 +169,14 @@ export default function ProjectCredentialsTab() {
 
     const formRef = useRef<HTMLFormElement>(null);
 
-    const [envRows, setEnvRows] = useState<EnvRow[]>([newEnvRow()]);
+    // ENV Groups state (replaces flat envRows)
+    const [envGroups, setEnvGroups] = useState<EnvGroup[]>([newEnvGroup('')]);
     const [sshRows, setSshRows] = useState<SshRow[]>([newSshRow()]);
     const [testRows, setTestRows] = useState<TestUserRow[]>([newTestRow()]);
     const [accountRows, setAccountRows] = useState<AccountRow[]>([newAccountRow()]);
     const [otherRows, setOtherRows] = useState<OtherRow[]>([newOtherRow()]);
+    const [showTestPw, setShowTestPw] = useState<Record<number, boolean>>({});
+    const [showAccPw, setShowAccPw] = useState<Record<number, boolean>>({});
 
     const updateRow = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, id: number, patch: Partial<T>) =>
         setter(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -164,14 +184,26 @@ export default function ProjectCredentialsTab() {
     const removeRow = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, id: number) =>
         setter(rows => rows.length > 1 ? rows.filter(r => r.id !== id) : rows);
 
-    // ── ENV paste handler
-    const handleEnvPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    // ── ENV group helpers
+    const updateEnvRow = (groupId: number, rowId: number, patch: Partial<EnvRow>) =>
+        setEnvGroups(gs => gs.map(g => g.id === groupId ? { ...g, rows: g.rows.map(r => r.id === rowId ? { ...r, ...patch } : r) } : g));
+    const removeEnvRow = (groupId: number, rowId: number) =>
+        setEnvGroups(gs => gs.map(g => g.id === groupId ? { ...g, rows: g.rows.length > 1 ? g.rows.filter(r => r.id !== rowId) : g.rows } : g));
+    const addEnvRow = (groupId: number) =>
+        setEnvGroups(gs => gs.map(g => g.id === groupId ? { ...g, rows: [...g.rows, newEnvRow()] } : g));
+
+    // ── ENV paste handler (per group)
+    const handleEnvPaste = (groupId: number, e: React.ClipboardEvent<HTMLInputElement>) => {
         const text = e.clipboardData.getData('text');
         const pairs = parseEnvBlock(text);
         if (pairs.length === 0) return;
         e.preventDefault();
-        setEnvRows(pairs.map(p => ({ ...newEnvRow(), key: p.key, value: p.value })));
+        setEnvGroups(gs => gs.map(g => g.id === groupId ? { ...g, rows: pairs.map(p => ({ ...newEnvRow(), key: p.key, value: p.value })) } : g));
     };
+
+    // ── Quick-add: select an existing saved group name for a form group
+    const applyExistingGroupName = (groupId: number, name: string) =>
+        setEnvGroups(gs => gs.map(g => g.id === groupId ? { ...g, label: name } : g));
 
     // ── SSH: paste key content OR upload file
     const handleSshFilePaste = (id: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -214,8 +246,10 @@ export default function ProjectCredentialsTab() {
 
         switch (activeTab) {
             case 'env':
-                toCreate = envRows.filter(r => r.key && r.value)
-                    .map(r => ({ name: r.key, type: 'env', description: r.note, credentials: { envKey: r.key, envValue: r.value } }));
+                toCreate = envGroups.flatMap(group =>
+                    group.rows.filter(r => r.key && r.value)
+                        .map(r => ({ name: r.key, type: 'env', description: group.label || 'General', credentials: { envKey: r.key, envValue: r.value, note: r.note } }))
+                );
                 break;
             case 'ssh-key':
                 toCreate = sshRows.filter(r => r.name && r.keyContent)
@@ -240,7 +274,7 @@ export default function ProjectCredentialsTab() {
         try {
             await Promise.all(toCreate.map(cred => createCredential({ projectId: projectId!, data: cred }).unwrap()));
             if (formRef.current) formRef.current.reset();
-            setEnvRows([newEnvRow()]); setSshRows([newSshRow()]); setTestRows([newTestRow()]);
+            setEnvGroups([newEnvGroup('')]); setSshRows([newSshRow()]); setTestRows([newTestRow()]);
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
             alert('Credentials saved successfully!');
         } catch (err: any) {
@@ -340,41 +374,99 @@ export default function ProjectCredentialsTab() {
 
                     {/* ENV VARIABLES */}
                     {activeTab === 'env' && (
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-3">
-                                <span className="flex-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>Key</span>
-                                <span className="flex-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>Value</span>
-                                <div className="w-8" />
-                            </div>
+                        <div className="space-y-3">
                             <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                                💡 Paste a full <code style={{ color: 'var(--color-success)' }}>.env</code> block into the Key field to auto-populate all rows.
+                                💡 Organise env vars into named groups (e.g. <em>Client</em>, <em>Server</em>, <em>Backend 2</em>). Paste a full <code style={{ color: 'var(--color-success)' }}>.env</code> block into any Key field to auto-fill that group's rows.
                             </p>
-                            {envRows.map(row => (
-                                <div key={row.id} className="space-y-1.5">
-                                    <div className="flex gap-3 items-center">
-                                        <input value={row.key}
-                                            onChange={e => updateRow(setEnvRows, row.id, { key: e.target.value })}
-                                            onPaste={handleEnvPaste}
-                                            className={inputCls} style={inputStyle} placeholder="KEY_NAME or paste .env block…" />
-                                        <input value={row.value}
-                                            onChange={e => updateRow(setEnvRows, row.id, { value: e.target.value })}
-                                            className={`${inputCls} font-mono`} style={inputStyle} placeholder="value" />
-                                        {envRows.length > 1 && (
-                                            <button type="button" onClick={() => removeRow(setEnvRows, row.id)}
-                                                className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
-                                                <Trash2 size={15} />
-                                            </button>
+                            {envGroups.map((group) => (
+                                <div key={group.id} className="rounded-xl border overflow-hidden"
+                                    style={{ borderColor: 'var(--color-border-default)' }}>
+                                    {/* Group header */}
+                                    <div className="space-y-2 px-3 pt-2.5 pb-2 border-b"
+                                        style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                        <div className="flex items-center gap-2">
+                                            <Code size={13} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+                                            <input
+                                                value={group.label}
+                                                onChange={e => setEnvGroups(gs => gs.map(g => g.id === group.id ? { ...g, label: e.target.value } : g))}
+                                                className="flex-1 text-sm font-semibold bg-transparent outline-none"
+                                                style={{ color: 'var(--color-text-primary)' }}
+                                                list={`env-groups-${group.id}`}
+                                                placeholder="Group name — type or pick existing…" />
+                                            <datalist id={`env-groups-${group.id}`}>
+                                                {savedEnvGroups.map(sg => <option key={sg} value={sg} />)}
+                                            </datalist>
+                                            {envGroups.length > 1 && (
+                                                <button type="button"
+                                                    onClick={() => setEnvGroups(gs => gs.filter(g => g.id !== group.id))}
+                                                    className="p-1 rounded hover:bg-red-500/10 shrink-0"
+                                                    style={{ color: 'var(--color-danger)' }} title="Remove this group card">
+                                                    <X size={13} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        {/* Existing group quick-select chips */}
+                                        {savedEnvGroups.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                <span className="text-[10px] self-center" style={{ color: 'var(--color-text-muted)' }}>Add to:</span>
+                                                {savedEnvGroups.map(sg => (
+                                                    <button key={sg} type="button"
+                                                        onClick={() => applyExistingGroupName(group.id, sg)}
+                                                        className="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
+                                                        style={{
+                                                            borderColor: group.label === sg ? 'var(--color-success)' : 'var(--color-border-default)',
+                                                            backgroundColor: group.label === sg ? 'var(--color-success-soft)' : 'transparent',
+                                                            color: group.label === sg ? 'var(--color-success)' : 'var(--color-text-secondary)',
+                                                        }}>
+                                                        {sg}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
-                                    <input value={row.note} onChange={e => updateRow(setEnvRows, row.id, { note: e.target.value })}
-                                        className="w-full bg-transparent text-[13px] outline-none pl-1"
-                                        style={{ color: 'var(--color-text-muted)' }} placeholder="Add note (optional)" />
+                                    {/* Rows */}
+                                    <div className="p-3 space-y-2" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                                        <div className="flex items-center gap-3 pb-1">
+                                            <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Key</span>
+                                            <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Value</span>
+                                            <div className="w-8" />
+                                        </div>
+                                        {group.rows.map(row => (
+                                            <div key={row.id} className="space-y-1">
+                                                <div className="flex gap-3 items-center">
+                                                    <input value={row.key}
+                                                        onChange={e => updateEnvRow(group.id, row.id, { key: e.target.value })}
+                                                        onPaste={e => handleEnvPaste(group.id, e)}
+                                                        className={inputCls} style={inputStyle} placeholder="KEY_NAME or paste .env block…" />
+                                                    <input value={row.value}
+                                                        onChange={e => updateEnvRow(group.id, row.id, { value: e.target.value })}
+                                                        className={`${inputCls} font-mono`} style={inputStyle} placeholder="value" />
+                                                    {group.rows.length > 1 && (
+                                                        <button type="button" onClick={() => removeEnvRow(group.id, row.id)}
+                                                            className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input value={row.note}
+                                                    onChange={e => updateEnvRow(group.id, row.id, { note: e.target.value })}
+                                                    className="w-full bg-transparent text-[12px] outline-none pl-1"
+                                                    style={{ color: 'var(--color-text-muted)' }}
+                                                    placeholder="Note (optional)" />
+                                            </div>
+                                        ))}
+                                        <button type="button" onClick={() => addEnvRow(group.id)}
+                                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-colors hover:bg-white/5 mt-1"
+                                            style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}>
+                                            <Plus size={12} /> Add Row
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
-                            <button type="button" onClick={() => setEnvRows(r => [...r, newEnvRow()])}
-                                className="flex items-center gap-2 text-sm px-3 py-1.5 rounded border transition-colors hover:bg-white/5"
-                                style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}>
-                                <Plus size={14} /> Add Another
+                            <button type="button" onClick={() => setEnvGroups(gs => [...gs, newEnvGroup('')])}
+                                className="flex items-center gap-2 text-sm px-3 py-1.5 rounded border transition-colors"
+                                style={{ color: 'var(--color-success)', borderColor: 'var(--color-success)', backgroundColor: 'var(--color-success-soft)' }}>
+                                <FolderPlus size={14} /> New Group
                             </button>
                         </div>
                     )}
@@ -425,36 +517,56 @@ export default function ProjectCredentialsTab() {
 
                     {/* TEST USERS */}
                     {activeTab === 'test-user' && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-4 gap-3">
-                                {['Role / Type', 'Login URL', 'Username / Email', 'Password'].map(l => (
-                                    <span key={l} className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>{l}</span>
-                                ))}
-                            </div>
+                        <div className="space-y-3">
                             <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                                 💡 Paste multiple rows in <code style={{ color: 'var(--color-success)' }}>URL|RoleName|username|password</code> format into the Role field to auto-fill.
                             </p>
                             {testRows.map(row => (
-                                <div key={row.id} className="flex gap-3 items-center">
-                                    <input value={row.name}
-                                        onChange={e => updateRow(setTestRows, row.id, { name: e.target.value })}
-                                        onPaste={handleTestPaste}
-                                        className={inputCls} style={inputStyle} placeholder="Admin / QA…" />
-                                    <input value={row.url}
-                                        onChange={e => updateRow(setTestRows, row.id, { url: e.target.value })}
-                                        className={inputCls} style={inputStyle} placeholder="https://..." />
-                                    <input value={row.username}
-                                        onChange={e => updateRow(setTestRows, row.id, { username: e.target.value })}
-                                        className={inputCls} style={inputStyle} placeholder="user@example.com" />
-                                    <input type="password" value={row.password}
-                                        onChange={e => updateRow(setTestRows, row.id, { password: e.target.value })}
-                                        className={`${inputCls} font-mono`} style={inputStyle} placeholder="Password" />
-                                    {testRows.length > 1 && (
-                                        <button type="button" onClick={() => removeRow(setTestRows, row.id)}
-                                            className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
-                                            <Trash2 size={15} />
-                                        </button>
-                                    )}
+                                <div key={row.id} className="p-3 rounded-lg border space-y-2"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                                    {/* Row 1: Role + URL + delete */}
+                                    <div className="flex gap-2 items-center">
+                                        <input value={row.name}
+                                            onChange={e => updateRow(setTestRows, row.id, { name: e.target.value })}
+                                            onPaste={handleTestPaste}
+                                            className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Role / Type (Admin, QA…)" />
+                                        <input value={row.url}
+                                            onChange={e => updateRow(setTestRows, row.id, { url: e.target.value })}
+                                            className="flex-[2] px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Login URL (https://...)" />
+                                        {testRows.length > 1 && (
+                                            <button type="button" onClick={() => removeRow(setTestRows, row.id)}
+                                                className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Row 2: Username + Password with eye */}
+                                    <div className="flex gap-2 items-center">
+                                        <input value={row.username}
+                                            onChange={e => updateRow(setTestRows, row.id, { username: e.target.value })}
+                                            className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Username / Email" />
+                                        <div className="relative flex-1">
+                                            <input
+                                                type={showTestPw[row.id] ? 'text' : 'password'}
+                                                value={row.password}
+                                                onChange={e => updateRow(setTestRows, row.id, { password: e.target.value })}
+                                                className="w-full px-3 pr-9 rounded text-sm outline-none border transition-colors font-mono"
+                                                style={{ ...inputStyle, height: '36px' }}
+                                                placeholder="Password" />
+                                            <button type="button"
+                                                onClick={() => setShowTestPw(p => ({ ...p, [row.id]: !p[row.id] }))}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5"
+                                                style={{ color: 'var(--color-text-muted)' }}>
+                                                {showTestPw[row.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
                             <button type="button" onClick={() => setTestRows(r => [...r, newTestRow()])}
@@ -467,39 +579,58 @@ export default function ProjectCredentialsTab() {
 
                     {/* ACCOUNTS */}
                     {activeTab === 'account' && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-5 gap-3">
-                                {['Platform', 'Login URL', 'Username', 'Email', 'Password'].map(l => (
-                                    <span key={l} className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>{l}</span>
-                                ))}
-                            </div>
+                        <div className="space-y-3">
                             <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                                 💡 Paste rows as <code style={{ color: 'var(--color-success)' }}>Platform|URL|username|email|password</code> into the Platform field.
                             </p>
                             {accountRows.map(row => (
-                                <div key={row.id} className="flex gap-3 items-center">
-                                    <input value={row.name}
-                                        onChange={e => updateRow(setAccountRows, row.id, { name: e.target.value })}
-                                        onPaste={handleAccountPaste}
-                                        className={inputCls} style={inputStyle} placeholder="AWS / GitHub…" />
-                                    <input value={row.url}
-                                        onChange={e => updateRow(setAccountRows, row.id, { url: e.target.value })}
-                                        className={inputCls} style={inputStyle} placeholder="https://..." />
-                                    <input value={row.username}
-                                        onChange={e => updateRow(setAccountRows, row.id, { username: e.target.value })}
-                                        className={inputCls} style={inputStyle} placeholder="Username" />
-                                    <input value={row.email}
-                                        onChange={e => updateRow(setAccountRows, row.id, { email: e.target.value })}
-                                        className={inputCls} style={inputStyle} placeholder="Email" />
-                                    <input type="password" value={row.password}
-                                        onChange={e => updateRow(setAccountRows, row.id, { password: e.target.value })}
-                                        className={`${inputCls} font-mono`} style={inputStyle} placeholder="Password" />
-                                    {accountRows.length > 1 && (
-                                        <button type="button" onClick={() => removeRow(setAccountRows, row.id)}
-                                            className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
-                                            <Trash2 size={15} />
+                                <div key={row.id} className="p-3 rounded-lg border space-y-2"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                                    {/* Row 1: Platform + URL + delete */}
+                                    <div className="flex gap-2 items-center">
+                                        <input value={row.name}
+                                            onChange={e => updateRow(setAccountRows, row.id, { name: e.target.value })}
+                                            onPaste={handleAccountPaste}
+                                            className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Platform (AWS, GitHub…)" />
+                                        <input value={row.url}
+                                            onChange={e => updateRow(setAccountRows, row.id, { url: e.target.value })}
+                                            className="flex-[2] px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Login URL (https://...)" />
+                                        {accountRows.length > 1 && (
+                                            <button type="button" onClick={() => removeRow(setAccountRows, row.id)}
+                                                className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Row 2: Username + Email + Password with eye */}
+                                    <div className="flex gap-2 items-center">
+                                        <input value={row.username}
+                                            onChange={e => updateRow(setAccountRows, row.id, { username: e.target.value })}
+                                            className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Username" />
+                                        <input value={row.email}
+                                            onChange={e => updateRow(setAccountRows, row.id, { email: e.target.value })}
+                                            className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
+                                            style={{ ...inputStyle, height: '36px' }}
+                                            placeholder="Email" />
+                                    <div className="relative flex-1">
+                                        <input type={showAccPw[row.id] ? 'text' : 'password'} value={row.password}
+                                            onChange={e => updateRow(setAccountRows, row.id, { password: e.target.value })}
+                                            className={`w-full px-3 pr-9 rounded text-sm outline-none border transition-colors font-mono`}
+                                            style={{ ...inputStyle, height: '36px' }} placeholder="Password" />
+                                        <button type="button"
+                                            onClick={() => setShowAccPw(p => ({ ...p, [row.id]: !p[row.id] }))}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5"
+                                            style={{ color: 'var(--color-text-muted)' }}>
+                                            {showAccPw[row.id] ? <EyeOff size={14} /> : <Eye size={14} />}
                                         </button>
-                                    )}
+                                    </div>
+                                    </div>
                                 </div>
                             ))}
                             <button type="button" onClick={() => setAccountRows(r => [...r, newAccountRow()])}
@@ -564,16 +695,82 @@ export default function ProjectCredentialsTab() {
                     </div>
                 ) : (
                     <div>
+                        {/* ── ENV group filter bar ── */}
+                        {activeTab === 'env' && savedEnvGroups.length > 1 && (
+                            <div className="flex items-center gap-2 mb-3 pb-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                <Filter size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                                <span className="text-xs font-medium shrink-0" style={{ color: 'var(--color-text-muted)' }}>Filter by group:</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <button
+                                        onClick={() => setEnvGroupFilter('all')}
+                                        className="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                                        style={{
+                                            borderColor: envGroupFilter === 'all' ? 'var(--color-success)' : 'var(--color-border-default)',
+                                            backgroundColor: envGroupFilter === 'all' ? 'var(--color-success)' : 'transparent',
+                                            color: envGroupFilter === 'all' ? 'white' : 'var(--color-text-secondary)',
+                                        }}>
+                                        All ({credentials.length})
+                                    </button>
+                                    {savedEnvGroups.map(sg => {
+                                        const count = credentials.filter((c: any) => (c.description || 'General') === sg).length;
+                                        const isActive = envGroupFilter === sg;
+                                        return (
+                                            <button key={sg}
+                                                onClick={() => setEnvGroupFilter(isActive ? 'all' : sg)}
+                                                className="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                                                style={{
+                                                    borderColor: isActive ? 'var(--color-success)' : 'var(--color-border-default)',
+                                                    backgroundColor: isActive ? 'var(--color-success-soft)' : 'transparent',
+                                                    color: isActive ? 'var(--color-success)' : 'var(--color-text-secondary)',
+                                                }}>
+                                                {sg} ({count})
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
                                 Saved — {TABS.find(t => t.id === activeTab)?.label} ({credentials.length})
                             </h4>
-                            {activeTab === 'env' && <CopyAllEnvButton credentials={credentials} projectId={projectId!} />}
                         </div>
                         <div className="space-y-2">
-                            {credentials.map(cred => (
-                                <CredentialListItem key={cred._id} credential={cred} projectId={projectId!} onDelete={() => handleDelete(cred._id)} />
-                            ))}
+                            {activeTab === 'env' ? (
+                                (() => {
+                                    const groups: Record<string, any[]> = {};
+                                    credentials.forEach((c: any) => {
+                                        const g = c.description || 'General';
+                                        (groups[g] = groups[g] || []).push(c);
+                                    });
+                                    return Object.entries(groups)
+                                        .filter(([gl]) => envGroupFilter === 'all' || gl === envGroupFilter)
+                                        .map(([groupLabel, creds]) => (
+                                            <div key={groupLabel} className="rounded-xl border overflow-hidden"
+                                                style={{ borderColor: 'var(--color-border-default)' }}>
+                                                <div className="flex items-center justify-between px-3 py-2 border-b"
+                                                    style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                                    <div className="flex items-center gap-2">
+                                                        <Code size={13} style={{ color: 'var(--color-success)' }} />
+                                                        <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>{groupLabel}</span>
+                                                        <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-body)', color: 'var(--color-text-muted)' }}>{creds.length}</span>
+                                                    </div>
+                                                    <CopyAllEnvButton credentials={creds} projectId={projectId!} />
+                                                </div>
+                                                <div className="divide-y" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                    {creds.map(cred => (
+                                                        <CredentialListItem key={cred._id} credential={cred} projectId={projectId!} onDelete={() => handleDelete(cred._id)} isCredAdmin={isCredAdmin} />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ));
+                                })()
+                            ) : (
+                                credentials.map(cred => (
+                                    <CredentialListItem key={cred._id} credential={cred} projectId={projectId!} onDelete={() => handleDelete(cred._id)} isCredAdmin={isCredAdmin} />
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
@@ -588,27 +785,39 @@ export default function ProjectCredentialsTab() {
                 )}
             </div>
 
-            {/* Share Modal */}
-            {showShareModal && project && (
+            {/* Share Modal — rendered via portal so position:fixed works regardless of parent */}
+            {showShareModal && project && createPortal(
                 <CredentialShareModal
                     project={project}
                     projectId={projectId!}
                     onClose={() => setShowShareModal(false)}
-                />
+                />,
+                document.body
             )}
         </div>
     );
 }
 
 // ─── Credential List Item (type-aware) ───────────────────────────────────────
-function CredentialListItem({ credential, onDelete, projectId }: { credential: any; onDelete: () => void; projectId: string }) {
+function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { credential: any; onDelete: () => void; projectId: string; isCredAdmin?: boolean }) {
     const { data, isLoading } = useGetCredentialByIdQuery({ projectId, id: credential._id });
     const full = data?.data;
     const creds = full?.credentials ?? {};
     const [expanded, setExpanded] = useState(true);
+    const [viewersOpen, setViewersOpen] = useState(false);
+    const [revokeAccess, { isLoading: isRevoking }] = useRevokeCredentialAccessMutation();
     const { copied, copy } = useCopy();
 
     const type: CredentialType = credential.type;
+    const viewers: any[] = credential.viewAccess ?? [];
+
+    const handleRevokeViewer = async (userId: string) => {
+        try {
+            await revokeAccess({ projectId, data: { credentialIds: [credential._id], userIds: [userId] } }).unwrap();
+        } catch (e) {
+            console.error('Revoke failed:', e);
+        }
+    };
 
     return (
         <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
@@ -621,18 +830,130 @@ function CredentialListItem({ credential, onDelete, projectId }: { credential: a
                     )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    {/* View-access badge — admins only */}
+                    {isCredAdmin && (
+                        <button
+                            onClick={() => setViewersOpen(s => !s)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors"
+                            style={{
+                                color: viewersOpen ? 'var(--color-success)' : viewers.length > 0 ? 'var(--color-text-secondary)' : 'var(--color-text-muted)',
+                                backgroundColor: viewersOpen ? 'var(--color-success-soft)' : 'transparent',
+                                border: `1px solid ${viewersOpen ? 'var(--color-success)' : 'var(--color-border-default)'}`,
+                            }}
+                            title="Manage who can view this credential"
+                        >
+                            <Eye size={12} />
+                            <span>{viewers.length}</span>
+                        </button>
+                    )}
                     <button onClick={() => setExpanded(s => !s)}
                         className="p-1.5 rounded transition-colors hover:bg-white/5"
                         style={{ color: 'var(--color-text-secondary)' }}>
                         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </button>
-                    <button onClick={onDelete}
-                        className="p-1.5 rounded transition-colors hover:bg-red-500/10"
-                        style={{ color: 'var(--color-danger)' }} title="Delete">
-                        <Trash2 size={14} />
-                    </button>
+                    {isCredAdmin && (
+                        <button onClick={onDelete}
+                            className="p-1.5 rounded transition-colors hover:bg-red-500/10"
+                            style={{ color: 'var(--color-danger)' }} title="Delete">
+                            <Trash2 size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {/* View-access side panel via portal */}
+            {isCredAdmin && viewersOpen && createPortal(
+                <>
+                    <div
+                        className="fixed inset-0 z-[200]"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.22)' }}
+                        onClick={() => setViewersOpen(false)}
+                    />
+                    <div
+                        className="fixed top-0 right-0 h-full z-[201] flex flex-col"
+                        style={{
+                            width: 'min(460px, 100vw)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderLeft: '1px solid var(--color-border-default)',
+                            boxShadow: '-16px 0 48px rgba(0,0,0,0.13)',
+                            animation: 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+                        }}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: 'var(--color-text-muted)' }}>View Access</p>
+                                <h2 className="text-base font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{credential.name}</h2>
+                            </div>
+                            <button
+                                onClick={() => setViewersOpen(false)}
+                                className="p-1.5 rounded transition-colors hover:bg-black/5 shrink-0 ml-3"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-5">
+                            {viewers.length === 0 ? (
+                                <div
+                                    className="flex flex-col items-center justify-center py-12 px-4 rounded-xl border border-dashed"
+                                    style={{ borderColor: 'var(--color-border-default)' }}
+                                >
+                                    <Eye size={32} className="mb-3" style={{ color: 'var(--color-text-muted)', opacity: 0.35 }} />
+                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>No view-only access yet</p>
+                                    <p className="text-xs mt-1 text-center" style={{ color: 'var(--color-text-muted)' }}>
+                                        Use “Manage Access → View Access” to grant specific users view permission for this credential.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                                        {viewers.length} {viewers.length === 1 ? 'person has' : 'people have'} view access
+                                    </p>
+                                    {viewers.map((v: any) => {
+                                        const userId = typeof v === 'string' ? v : v._id;
+                                        const name = typeof v === 'object' ? (v.name ?? 'User') : 'User';
+                                        const email = typeof v === 'object' ? (v.email ?? '') : '';
+                                        const initials = name.split(' ').map((n: string) => n[0] ?? '').join('').toUpperCase().slice(0, 2);
+                                        return (
+                                            <div
+                                                key={userId}
+                                                className="flex items-center gap-3 px-4 py-3 rounded-xl border group transition-all"
+                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
+                                            >
+                                                <div
+                                                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
+                                                    style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}
+                                                >
+                                                    {initials}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{name}</p>
+                                                    {email && <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{email}</p>}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRevokeViewer(userId)}
+                                                    disabled={isRevoking}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all disabled:opacity-40"
+                                                    style={{ color: 'var(--color-danger)', borderColor: 'var(--color-border-default)', backgroundColor: 'transparent' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.08)'; e.currentTarget.style.borderColor = 'var(--color-danger)'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border-default)'; }}
+                                                    title="Remove view access"
+                                                >
+                                                    <UserMinus size={12} /> Remove
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>,
+                document.body
+            )}
 
             {/* Type-specific detail area */}
             {expanded && (
@@ -696,6 +1017,10 @@ function CredentialListItem({ credential, onDelete, projectId }: { credential: a
                     ) : type === 'account' ? (
                         /* ACCOUNT — grid of chips */
                         <div className="flex flex-wrap gap-x-6 gap-y-2 items-center">
+                            {credential.name && (
+                                <FieldChip icon={<Users size={12} />} label="Platform" value={credential.name}
+                                    copyId={`${credential._id}-platform`} copied={copied} onCopy={copy} />
+                            )}
                             {creds.url && (
                                 <FieldChip icon={<Link size={12} />} label="URL" value={creds.url}
                                     copyId={`${credential._id}-url`} copied={copied} onCopy={copy} />

@@ -5,6 +5,9 @@ import type {
     TimeLog,
     Meeting,
     Credential,
+    DocFolder,
+    DocItem,
+    DocAdminUser,
 } from './types/types';
 import type {
     CreateProjectRequest,
@@ -362,6 +365,128 @@ export const projectApi = api.injectEndpoints({
             }),
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects'],
         }),
+
+        // ============================================
+        // DOC FOLDER ENDPOINTS
+        // ============================================
+
+        getDocFolders: builder.query<ApiResponse<DocFolder[]>, { projectId: string; parentId?: string | null }>({
+            query: ({ projectId, parentId }) => ({
+                url: `/projects/${projectId}/doc-folders`,
+                params: parentId ? { parentId } : {},
+            }),
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: projectId }],
+        }),
+
+        createDocFolder: builder.mutation<ApiResponse<DocFolder>, { projectId: string; name: string; parentId?: string | null }>({
+            query: ({ projectId, ...body }) => ({
+                url: `/projects/${projectId}/doc-folders`,
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: projectId }],
+        }),
+
+        renameDocFolder: builder.mutation<ApiResponse<DocFolder>, { projectId: string; folderId: string; name: string }>({
+            query: ({ projectId, folderId, name }) => ({
+                url: `/projects/${projectId}/doc-folders/${folderId}`,
+                method: 'PATCH',
+                body: { name },
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: projectId }],
+        }),
+
+        deleteDocFolder: builder.mutation<ApiResponse<void>, { projectId: string; folderId: string }>({
+            query: ({ projectId, folderId }) => ({
+                url: `/projects/${projectId}/doc-folders/${folderId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: projectId }],
+        }),
+
+        updateDocFolderAccess: builder.mutation<ApiResponse<DocFolder>, { projectId: string; folderId: string; viewAccess: string[] }>({
+            query: ({ projectId, folderId, viewAccess }) => ({
+                url: `/projects/${projectId}/doc-folders/${folderId}/access`,
+                method: 'PATCH',
+                body: { viewAccess },
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: projectId }],
+        }),
+
+        // ============================================
+        // DOC ITEM ENDPOINTS
+        // ============================================
+
+        getDocItems: builder.query<ApiResponse<DocItem[]>, { projectId: string; folderId?: string | null }>({
+            query: ({ projectId, folderId }) => ({
+                url: `/projects/${projectId}/doc-items`,
+                params: folderId ? { folderId } : {},
+            }),
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: `${projectId}-items` }],
+        }),
+
+        uploadDocItem: builder.mutation<ApiResponse<DocItem>, { projectId: string; formData: FormData }>({
+            query: ({ projectId, formData }) => ({
+                url: `/projects/${projectId}/doc-items/upload`,
+                method: 'POST',
+                body: formData,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [
+                { type: 'Documents', id: projectId },
+                { type: 'Documents', id: `${projectId}-items` },
+            ],
+        }),
+
+        getDocItemUrl: builder.query<ApiResponse<{ url: string }>, { projectId: string; itemId: string }>({
+            query: ({ projectId, itemId }) => `/projects/${projectId}/doc-items/${itemId}/url`,
+        }),
+
+        renameDocItem: builder.mutation<ApiResponse<DocItem>, { projectId: string; itemId: string; name: string }>({
+            query: ({ projectId, itemId, name }) => ({
+                url: `/projects/${projectId}/doc-items/${itemId}`,
+                method: 'PATCH',
+                body: { name },
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: `${projectId}-items` }],
+        }),
+
+        deleteDocItem: builder.mutation<ApiResponse<void>, { projectId: string; itemId: string }>({
+            query: ({ projectId, itemId }) => ({
+                url: `/projects/${projectId}/doc-items/${itemId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: `${projectId}-items` }],
+        }),
+
+        updateDocItemAccess: builder.mutation<ApiResponse<DocItem>, { projectId: string; itemId: string; viewAccess: string[] }>({
+            query: ({ projectId, itemId, viewAccess }) => ({
+                url: `/projects/${projectId}/doc-items/${itemId}/access`,
+                method: 'PATCH',
+                body: { viewAccess },
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: `${projectId}-items` }],
+        }),
+
+        // ============================================
+        // DOC ADMIN ENDPOINTS
+        // ============================================
+
+        getDocAdmins: builder.query<ApiResponse<DocAdminUser[]>, { projectId: string }>({
+            query: ({ projectId }) => `/projects/${projectId}/doc-admins`,
+            providesTags: (_result, _error, { projectId }) => [{ type: 'Documents', id: `${projectId}-admins` }],
+        }),
+
+        updateDocAdmins: builder.mutation<ApiResponse<void>, { projectId: string; userIds: string[] }>({
+            query: ({ projectId, userIds }) => ({
+                url: `/projects/${projectId}/doc-admins`,
+                method: 'PATCH',
+                body: { userIds },
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [
+                { type: 'Documents', id: `${projectId}-admins` },
+                { type: 'Projects', id: projectId },
+            ],
+        }),
     }),
     overrideExisting: false,
 });
@@ -417,4 +542,23 @@ export const {
     useRevokeCredentialAccessMutation,
     useGetCredentialAdminsQuery,
     useUpdateCredentialAdminsMutation,
+
+    // Doc Folders
+    useGetDocFoldersQuery,
+    useCreateDocFolderMutation,
+    useRenameDocFolderMutation,
+    useDeleteDocFolderMutation,
+    useUpdateDocFolderAccessMutation,
+
+    // Doc Items
+    useGetDocItemsQuery,
+    useUploadDocItemMutation,
+    useLazyGetDocItemUrlQuery,
+    useRenameDocItemMutation,
+    useDeleteDocItemMutation,
+    useUpdateDocItemAccessMutation,
+
+    // Doc Admins
+    useGetDocAdminsQuery,
+    useUpdateDocAdminsMutation,
 } = projectApi;

@@ -11,8 +11,9 @@ import {
     useCreateSubtaskMutation,
 } from '@/features/project';
 import type { Task } from '@/features/project';
-import { useState, useRef, useEffect } from 'react';
-import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Pause, Pencil, Clock, Lock } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Pause, Pencil, Clock, Lock, Filter } from 'lucide-react';
 
 const statusStyles: Record<string, { bg: string; text: string; dot: string; icon?: any }> = {
     todo: { bg: 'transparent', text: 'var(--color-text-secondary)', dot: '#9CA3AF', icon: Circle },
@@ -42,10 +43,23 @@ export default function ProjectTasksTab() {
     const isSuperAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
 
     const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
-    // Super admin always sees all tasks; team starts on 'my' tasks
+    // Everyone sees 'all' tasks by default (super admin) or 'my' tasks by default (team members)
     const [taskFilter, setTaskFilter] = useState<'all' | 'my'>(isSuperAdmin ? 'all' : 'my');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'in-progress' | 'paused' | 'completed'>('all');
     const [showForm, setShowForm] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+    // Estimated time fields (Days : Hours : Minutes)
+    const [estDays, setEstDays] = useState(0);
+    const [estHrs, setEstHrs] = useState(0);
+    const [estMins, setEstMins] = useState(0);
+
+    const resetEstTime = (task?: Task | null) => {
+        const totalMins = Math.round((task?.estimatedHours ?? 0) * 60);
+        setEstDays(Math.floor(totalMins / (24 * 60)));
+        setEstHrs(Math.floor((totalMins % (24 * 60)) / 60));
+        setEstMins(totalMins % 60);
+    };
 
     const { data: projectData } = useGetProjectByIdQuery(projectId!);
     const projectMembers = projectData?.data?.assignees || [];
@@ -59,7 +73,7 @@ export default function ProjectTasksTab() {
         { skip: viewMode !== 'board' }
     );
     const allBoardTasks = boardAllData?.data || [];
-    const filteredBoardTasks = isSuperAdmin || taskFilter === 'all'
+    const filteredBoardTasks = taskFilter === 'all'
         ? allBoardTasks
         : allBoardTasks.filter(t =>
             t.assignees.some((a: any) => {
@@ -68,8 +82,8 @@ export default function ProjectTasksTab() {
             })
         );
 
-    // Filter tasks based on selected tab (super admin always sees all)
-    const filteredTasks = isSuperAdmin || taskFilter === 'all'
+    // Filter tasks based on selected tab
+    const filteredTasks = taskFilter === 'all'
         ? tasks
         : tasks.filter(t => {
             const assignees = t.assignees || [];
@@ -79,7 +93,11 @@ export default function ProjectTasksTab() {
             });
         });
 
-    const mainTasks = filteredTasks.filter(t => !t.parentTaskId);
+    const _allMainTasks = filteredTasks.filter(t => !t.parentTaskId);
+    const mainTasks = useMemo(() =>
+        statusFilter === 'all' ? _allMainTasks : _allMainTasks.filter(t => t.status === statusFilter),
+        [_allMainTasks, statusFilter]
+    );
 
     const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
 
@@ -104,7 +122,9 @@ export default function ProjectTasksTab() {
             priority: formData.get('priority') as string,
             deadline: formData.get('deadline') as string || undefined,
             startDate: formData.get('startDate') as string || undefined,
-            estimatedHours: formData.get('estimatedHours') ? Number(formData.get('estimatedHours')) : undefined,
+            estimatedHours: (estDays * 24 + estHrs + estMins / 60) > 0
+                ? estDays * 24 + estHrs + estMins / 60
+                : undefined,
             assignees: selectedAssignees,
         };
 
@@ -145,27 +165,46 @@ export default function ProjectTasksTab() {
         );
     }
 
-    // Input style helper
-    const inputStyle = {
-        height: '36px',
-        borderColor: 'var(--color-border-default)',
-        backgroundColor: 'var(--color-bg-surface)',
-        color: 'var(--color-text-primary)',
-    };
+
 
     return (
         <div className="space-y-5">
-            {/* Task Filter Tabs — hidden for super admin */}
+            {/* Task Filter Tabs — all users including super admin see My Tasks / All Tasks */}
             <div className="flex items-center justify-between">
                 <div className="flex gap-1 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                    {isSuperAdmin ? (
-                        /* Super admin: no tabs, just a plain header label */
-                        <div
-                            className="px-4 py-2.5 text-sm font-medium border-b-2"
+                    <>
+                        <button
+                            onClick={() => setTaskFilter('my')}
+                            className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
                             style={{
-                                color: 'var(--color-primary)',
-                                borderColor: 'var(--color-primary)',
-                                backgroundColor: 'var(--color-primary-soft)',
+                                color: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                borderColor: taskFilter === 'my' ? 'var(--color-primary)' : 'transparent',
+                                backgroundColor: taskFilter === 'my' ? 'var(--color-primary-soft)' : 'transparent',
+                                borderTopLeftRadius: 6,
+                                borderTopRightRadius: 6,
+                            }}
+                        >
+                            My Tasks
+                            <span
+                                className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
+                                style={{
+                                    backgroundColor: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
+                                    color: taskFilter === 'my' ? 'white' : 'var(--color-text-muted)',
+                                }}
+                            >
+                                {tasks.filter(t => !t.parentTaskId && t.assignees.some((a: any) => {
+                                    const uid = typeof a === 'object' ? (a._id || a.id) : a;
+                                    return uid === currentUserId;
+                                })).length}
+                            </span>
+                        </button>
+                        <button
+                            onClick={() => setTaskFilter('all')}
+                            className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
+                            style={{
+                                color: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                borderColor: taskFilter === 'all' ? 'var(--color-primary)' : 'transparent',
+                                backgroundColor: taskFilter === 'all' ? 'var(--color-primary-soft)' : 'transparent',
                                 borderTopLeftRadius: 6,
                                 borderTopRightRadius: 6,
                             }}
@@ -174,68 +213,38 @@ export default function ProjectTasksTab() {
                             <span
                                 className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
                                 style={{
-                                    backgroundColor: 'var(--color-primary)',
-                                    color: 'white',
+                                    backgroundColor: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
+                                    color: taskFilter === 'all' ? 'white' : 'var(--color-text-muted)',
                                 }}
                             >
                                 {tasks.filter(t => !t.parentTaskId).length}
                             </span>
-                        </div>
-                    ) : (
-                        /* Team member: My Tasks + All Tasks tabs */
-                        <>
-                            <button
-                                onClick={() => setTaskFilter('my')}
-                                className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
-                                style={{
-                                    color: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                    borderColor: taskFilter === 'my' ? 'var(--color-primary)' : 'transparent',
-                                    backgroundColor: taskFilter === 'my' ? 'var(--color-primary-soft)' : 'transparent',
-                                    borderTopLeftRadius: 6,
-                                    borderTopRightRadius: 6,
-                                }}
-                            >
-                                My Tasks
-                                <span
-                                    className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                        backgroundColor: taskFilter === 'my' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
-                                        color: taskFilter === 'my' ? 'white' : 'var(--color-text-muted)',
-                                    }}
-                                >
-                                    {tasks.filter(t => !t.parentTaskId && t.assignees.some((a: any) => {
-                                        const uid = typeof a === 'object' ? (a._id || a.id) : a;
-                                        return uid === currentUserId;
-                                    })).length}
-                                </span>
-                            </button>
-                            <button
-                                onClick={() => setTaskFilter('all')}
-                                className="px-4 py-2.5 text-sm font-medium transition-colors border-b-2"
-                                style={{
-                                    color: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                    borderColor: taskFilter === 'all' ? 'var(--color-primary)' : 'transparent',
-                                    backgroundColor: taskFilter === 'all' ? 'var(--color-primary-soft)' : 'transparent',
-                                    borderTopLeftRadius: 6,
-                                    borderTopRightRadius: 6,
-                                }}
-                            >
-                                All Tasks
-                                <span
-                                    className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                        backgroundColor: taskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-bg-subtle)',
-                                        color: taskFilter === 'all' ? 'white' : 'var(--color-text-muted)',
-                                    }}
-                                >
-                                    {tasks.filter(t => !t.parentTaskId).length}
-                                </span>
-                            </button>
-                        </>
-                    )}
+                        </button>
+                    </>
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/* Status filter */}
+                    <div className="relative flex items-center">
+                        <Filter size={12} className="absolute left-2.5 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value as any)}
+                            className="pl-7 pr-3 text-xs font-medium rounded-lg border outline-none appearance-none cursor-pointer"
+                            style={{
+                                height: '32px',
+                                borderColor: statusFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-border-default)',
+                                backgroundColor: statusFilter !== 'all' ? 'var(--color-primary-soft)' : 'var(--color-bg-surface)',
+                                color: statusFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                            }}
+                        >
+                            <option value="all">All Status</option>
+                            <option value="todo">To Do</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="paused">Paused</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
                     <div
                         className="flex items-center p-0.5 rounded-lg border"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}
@@ -263,7 +272,7 @@ export default function ProjectTasksTab() {
                     </div>
 
                     <button
-                        onClick={() => { setEditingTask(null); setSelectedAssignees([]); setShowForm(true); }}
+                        onClick={() => { setEditingTask(null); setSelectedAssignees([]); resetEstTime(null); setShowForm(true); }}
                         className="flex items-center gap-1.5 px-3.5 text-sm font-medium text-white rounded-lg transition-colors"
                         style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}
                         onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)'; }}
@@ -275,163 +284,200 @@ export default function ProjectTasksTab() {
                 </div>
             </div>
 
-            {/* ── Task Create / Edit Modal ────────────────────────── */}
-            {showForm && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-                    onClick={(e) => { if (e.target === e.currentTarget) { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); } }}
-                >
+            {/* ── Task Create / Edit Side Panel ────────────────────────── */}
+            {showForm && createPortal(
+                <>
+                    {/* Dim backdrop */}
                     <div
-                        className="w-full max-w-xl rounded-xl shadow-2xl flex flex-col overflow-hidden"
-                        style={{ backgroundColor: 'var(--color-bg-surface)', maxHeight: '90vh' }}
+                        className="fixed inset-0 z-[200]"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.20)' }}
+                        onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); resetEstTime(null); }}
+                    />
+                    {/* Side panel — slides from right */}
+                    <div
+                        className="fixed top-0 right-0 h-full z-[201] flex flex-col"
+                        style={{
+                            width: 'min(520px, 100vw)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderLeft: '1px solid var(--color-border-default)',
+                            boxShadow: '-12px 0 48px rgba(0,0,0,0.14)',
+                        }}
                     >
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {editingTask ? 'Edit Task' : 'New Task'}
-                            </h3>
+                        {/* Panel header */}
+                        <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
                             <button
-                                onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); }}
-                                className="p-1.5 rounded-md hover:bg-black/5 transition-colors"
+                                onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); resetEstTime(null); }}
+                                className="p-1.5 rounded-md hover:bg-black/5 transition-colors flex-shrink-0"
                                 style={{ color: 'var(--color-text-muted)' }}
+                                title="Close"
                             >
                                 <X size={16} />
                             </button>
+                            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                                {editingTask ? 'Edit Task' : 'New Task'}
+                            </span>
                         </div>
 
-                        {/* Modal Body */}
-                        <div className="overflow-y-auto flex-1 p-5">
-                            <form id="task-form" onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Title *</label>
+                        {/* Scrollable body */}
+                        <div className="flex-1 overflow-y-auto">
+                            <form id="task-form" onSubmit={handleSubmit}>
+
+                                {/* Big title input */}
+                                <div className="px-6 pt-6 pb-3">
                                     <input
                                         type="text"
                                         name="title"
                                         defaultValue={editingTask?.title}
                                         required
                                         autoFocus
-                                        className="w-full px-3 rounded-lg border text-sm outline-none"
-                                        style={inputStyle}
-                                        placeholder="Task title"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
-                                    <textarea
-                                        name="description"
-                                        defaultValue={editingTask?.description}
-                                        rows={3}
-                                        className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
+                                        className="w-full text-2xl font-bold bg-transparent outline-none pb-1"
+                                        placeholder="Task title…"
                                         style={{
-                                            borderColor: 'var(--color-border-default)',
-                                            backgroundColor: 'var(--color-bg-surface)',
                                             color: 'var(--color-text-primary)',
+                                            borderBottom: '2px solid transparent',
+                                            transition: 'border-color 0.15s',
                                         }}
-                                        placeholder="What needs to be done?"
+                                        onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--color-primary)'; }}
+                                        onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
                                     />
                                 </div>
 
-                                {/* Assignees */}
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Assignees</label>
-                                    <div className="flex flex-wrap gap-2 mb-2">
-                                        {selectedAssignees.map(userId => {
-                                            const assigneeData = projectMembers.find((m: any) => {
-                                                const empId = typeof m.employeeId === 'object' ? m.employeeId : null;
-                                                const uid = empId ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId) : (typeof m.userId === 'object' ? m.userId._id : m.userId);
-                                                return uid === userId;
-                                            });
-                                            const empId = assigneeData?.employeeId;
-                                            const name = (typeof empId === 'object' && typeof empId?.userId === 'object')
-                                                ? (empId.userId as any).name
-                                                : ((typeof assigneeData?.userId === 'object') ? (assigneeData.userId as any).name : 'User');
-                                            return (
-                                                <div key={userId} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>
-                                                    <span>{name}</span>
-                                                    <button type="button" onClick={() => toggleAssignee(userId)} className="rounded p-0.5 hover:bg-black/10">
-                                                        <X size={12} />
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="border rounded-lg max-h-36 overflow-y-auto" style={{ borderColor: 'var(--color-border-default)' }}>
-                                        {projectMembers.length === 0 ? (
-                                            <div className="p-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>No team members in this project.</div>
-                                        ) : (
-                                            projectMembers.map((member: any) => {
-                                                const empId = typeof member.employeeId === 'object' ? member.employeeId : null;
-                                                const userId = empId
-                                                    ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId)
-                                                    : (typeof member.userId === 'object' ? member.userId._id : member.userId);
-                                                const name = empId && typeof empId.userId === 'object'
-                                                    ? (empId.userId as any).name
-                                                    : (typeof member.userId === 'object' ? (member.userId as any).name : 'User');
-                                                const isSelected = selectedAssignees.includes(userId);
-                                                return (
-                                                    <div
-                                                        key={userId}
-                                                        onClick={() => toggleAssignee(userId)}
-                                                        className={`flex items-center gap-2 p-2.5 cursor-pointer text-sm border-b last:border-0 transition-colors ${isSelected ? '' : 'hover:bg-black/[0.03]'}`}
-                                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: isSelected ? 'var(--color-primary-soft)' : 'transparent' }}
-                                                    >
-                                                        <input type="checkbox" readOnly checked={isSelected} className="rounded border-gray-300 pointer-events-none" />
-                                                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium" style={{ backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-bg-subtle)', color: isSelected ? 'white' : 'var(--color-text-muted)' }}>
-                                                            {name.charAt(0)}
-                                                        </div>
-                                                        <span style={{ color: 'var(--color-text-primary)' }}>{name}</span>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
+                                {/* Notion-style property table */}
+                                <div className="mx-6 mb-5 border rounded-xl overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
 
-                                {/* Status / Priority / Dates */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
-                                        <select name="status" defaultValue={editingTask?.status || 'todo'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-36 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Status</span>
+                                        <select name="status" defaultValue={editingTask?.status || 'todo'} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }}>
                                             <option value="todo">To Do</option>
                                             <option value="in-progress">In Progress</option>
                                             <option value="paused">Paused</option>
                                             <option value="completed">Completed</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Priority</label>
-                                        <select name="priority" defaultValue={editingTask?.priority || 'medium'} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-36 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Priority</span>
+                                        <select name="priority" defaultValue={editingTask?.priority || 'medium'} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }}>
                                             <option value="low">Low</option>
                                             <option value="medium">Medium</option>
                                             <option value="high">High</option>
                                             <option value="critical">Critical</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Start Date</label>
-                                        <input type="date" name="startDate" defaultValue={editingTask?.startDate?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-36 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Start Date</span>
+                                        <input type="date" name="startDate" defaultValue={editingTask?.startDate?.toString().split('T')[0]} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }} />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Deadline</label>
-                                        <input type="date" name="deadline" defaultValue={editingTask?.deadline?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-36 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Deadline</span>
+                                        <input type="date" name="deadline" defaultValue={editingTask?.deadline?.toString().split('T')[0]} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }} />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Estimated Hours</label>
-                                        <input type="number" name="estimatedHours" defaultValue={editingTask?.estimatedHours} min={0} step={0.5} className="w-full px-3 rounded-lg border text-sm outline-none" style={inputStyle} placeholder="0" />
+
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-36 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Est. Time</span>
+                                        <div className="flex items-center gap-2 px-3 py-2">
+                                            <div className="flex items-center gap-1">
+                                                <input type="number" value={estDays} onChange={e => setEstDays(Math.max(0, parseInt(e.target.value) || 0))} min={0} className="w-12 px-1.5 py-1 rounded-md border text-xs text-center outline-none" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }} />
+                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>d</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <input type="number" value={estHrs} onChange={e => setEstHrs(Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))} min={0} max={23} className="w-12 px-1.5 py-1 rounded-md border text-xs text-center outline-none" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }} />
+                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>h</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <input type="number" value={estMins} onChange={e => setEstMins(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} min={0} max={59} className="w-12 px-1.5 py-1 rounded-md border text-xs text-center outline-none" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }} />
+                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>m</span>
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {/* Assignees */}
+                                    <div className="flex items-start">
+                                        <span className="text-xs font-medium px-4 py-3 w-36 flex-shrink-0 border-r self-stretch flex items-start pt-3" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Assignees</span>
+                                        <div className="flex-1 px-3 py-2.5">
+                                            {selectedAssignees.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                                    {selectedAssignees.map(userId => {
+                                                        const assigneeData = projectMembers.find((m: any) => {
+                                                            const empId = typeof m.employeeId === 'object' ? m.employeeId : null;
+                                                            const uid = empId ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId) : (typeof m.userId === 'object' ? m.userId._id : m.userId);
+                                                            return uid === userId;
+                                                        });
+                                                        const empId = assigneeData?.employeeId;
+                                                        const name = (typeof empId === 'object' && typeof empId?.userId === 'object')
+                                                            ? (empId.userId as any).name
+                                                            : ((typeof assigneeData?.userId === 'object') ? (assigneeData.userId as any).name : 'User');
+                                                        return (
+                                                            <div key={userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>
+                                                                <span>{name}</span>
+                                                                <button type="button" onClick={() => toggleAssignee(userId)} className="rounded hover:bg-black/10"><X size={10} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            <div className="border rounded-lg max-h-32 overflow-y-auto" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                {projectMembers.length === 0 ? (
+                                                    <div className="p-2.5 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>No team members yet.</div>
+                                                ) : (
+                                                    projectMembers.map((member: any) => {
+                                                        const empId = typeof member.employeeId === 'object' ? member.employeeId : null;
+                                                        const userId = empId
+                                                            ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId)
+                                                            : (typeof member.userId === 'object' ? member.userId._id : member.userId);
+                                                        const name = empId && typeof empId.userId === 'object'
+                                                            ? (empId.userId as any).name
+                                                            : (typeof member.userId === 'object' ? (member.userId as any).name : 'User');
+                                                        const isSelected = selectedAssignees.includes(userId);
+                                                        return (
+                                                            <div
+                                                                key={userId}
+                                                                onClick={() => toggleAssignee(userId)}
+                                                                className={`flex items-center gap-2 p-2 cursor-pointer text-xs border-b last:border-0 transition-colors ${isSelected ? '' : 'hover:bg-black/[0.03]'}`}
+                                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: isSelected ? 'var(--color-primary-soft)' : 'transparent' }}
+                                                            >
+                                                                <input type="checkbox" readOnly checked={isSelected} className="rounded border-gray-300 pointer-events-none" />
+                                                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium" style={{ backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-bg-subtle)', color: isSelected ? 'white' : 'var(--color-text-muted)' }}>
+                                                                    {name.charAt(0)}
+                                                                </div>
+                                                                <span style={{ color: 'var(--color-text-primary)' }}>{name}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Description */}
+                                <div className="px-6 pb-6">
+                                    <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>Description</label>
+                                    <textarea
+                                        name="description"
+                                        defaultValue={editingTask?.description}
+                                        rows={6}
+                                        className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            backgroundColor: 'var(--color-bg-subtle)',
+                                            color: 'var(--color-text-primary)',
+                                        }}
+                                        placeholder="Add a description…"
+                                    />
                                 </div>
                             </form>
                         </div>
 
-                        {/* Modal Footer */}
-                        <div className="px-5 py-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
+                        {/* Panel footer */}
+                        <div className="px-5 py-3.5 border-t flex justify-end gap-2 flex-shrink-0" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
                             <button
                                 type="button"
-                                onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); }}
+                                onClick={() => { setShowForm(false); setEditingTask(null); setSelectedAssignees([]); resetEstTime(null); }}
                                 className="px-4 text-sm font-medium rounded-lg border transition-colors"
-                                style={{ height: '36px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
+                                style={{ height: '34px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
                             >
                                 Cancel
                             </button>
@@ -440,14 +486,15 @@ export default function ProjectTasksTab() {
                                 form="task-form"
                                 disabled={isCreating}
                                 className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-                                style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}
+                                style={{ height: '34px', backgroundColor: 'var(--color-primary)' }}
                             >
                                 {isCreating && <Loader2 size={14} className="animate-spin" />}
                                 {editingTask ? 'Update Task' : 'Create Task'}
                             </button>
                         </div>
                     </div>
-                </div>
+                </>,
+                document.body
             )}
 
             {/* Task Views */}
@@ -470,10 +517,10 @@ export default function ProjectTasksTab() {
                             key={task._id}
                             task={task}
                             projectId={projectId!}
-                            filterMode={taskFilter}
                             onEdit={(t) => {
                                 setEditingTask(t);
                                 setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? (a as any)._id || (a as any).id : a)) as string[]);
+                                resetEstTime(t);
                                 setShowForm(true);
                             }}
                             onDelete={handleDelete}
@@ -511,6 +558,7 @@ export default function ProjectTasksTab() {
                                 onEdit={(t) => {
                                     setEditingTask(t);
                                     setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? a._id : a)) as string[]);
+                                    resetEstTime(t);
                                     setShowForm(true);
                                 }}
                                 onNew={() => { setEditingTask(null); setShowForm(true); }}
@@ -537,13 +585,11 @@ export default function ProjectTasksTab() {
 function TaskCard({
     task,
     projectId,
-    filterMode,
     onEdit,
     onDelete,
 }: {
     task: Task;
     projectId: string;
-    filterMode: 'all' | 'my';
     onEdit: (t: Task) => void;
     onDelete: (id: string) => void;
 }) {
@@ -579,17 +625,11 @@ function TaskCard({
     );
     const allSubtasks = subtasksData?.data || [];
 
-    // Filter subtasks if in 'My Tasks' mode
-    const subtasks = filterMode === 'my'
-        ? allSubtasks.filter((sub: Task) => sub.assignees.some((a: any) => {
-            const uid = typeof a === 'object' ? (a._id || a.id) : a;
-            return uid === currentUserId;
-        }))
-        : allSubtasks;
-
-    // Use the aggregated count from the backend when the panel is collapsed
-    // (subtasks query is skipped), fall back to live array when expanded.
-    const displaySubtaskCount = subtasks.length > 0 ? subtasks.length : (task.subtaskCount ?? 0);
+    // Use the aggregated count from the backend when collapsed (query is skipped),
+    // or the live fetched count when expanded. Always count ALL subtasks, not
+    // just the ones assigned to the current user — this ensures the badge and
+    // the auto-managed gate reflect reality regardless of the My/All filter.
+    const displaySubtaskCount = allSubtasks.length > 0 ? allSubtasks.length : (task.subtaskCount ?? 0);
 
     // ── Subtask creation state ─────────────────────────────────────────────────
     const [showSubtaskForm, setShowSubtaskForm] = useState(false);
@@ -669,12 +709,6 @@ function TaskCard({
         fontSize: '12px',
     };
 
-    const modalInputStyle = {
-        height: '36px',
-        borderColor: 'var(--color-border-default)',
-        backgroundColor: 'var(--color-bg-surface)',
-        color: 'var(--color-text-primary)',
-    };
 
     return (
         <>
@@ -684,14 +718,9 @@ function TaskCard({
                     borderColor: isExpanded ? 'transparent' : 'var(--color-border-default)',
                     backgroundColor: isExpanded ? 'var(--color-bg-surface)' : 'transparent'
                 }}
-                onClick={() => {
-                    if (!isExpanded) {
-                        setIsExpanded(true);
-                    } else {
-                        onEdit(task); // Edit on click only if already expanded, or handle differently based on UI needs. Let's make the row click toggle expansion
-                        setIsExpanded(!isExpanded);
-                    }
-                }}
+                // Clicking the row only toggles expand/collapse.
+                // Editing is done exclusively via the ⋮ button (which calls onEdit).
+                onClick={() => setIsExpanded(v => !v)}
             >
                 <div
                     className={`grid grid-cols-12 gap-4 px-4 py-3 items-center ${isExpanded ? 'bg-[var(--color-primary-soft)]/20 border-b border-[var(--color-border-default)]' : ''}`}
@@ -788,7 +817,7 @@ function TaskCard({
                         {/* Subtask List Header */}
                         <div className="flex items-center justify-between px-5 py-2.5">
                             <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
-                                Subtasks <span className="font-normal">({subtasks.length})</span>
+                                Subtasks <span className="font-normal">({allSubtasks.length})</span>
                             </p>
                             {!showSubtaskForm && (
                                 <button
@@ -801,92 +830,18 @@ function TaskCard({
                             )}
                         </div>
 
-                        {/* Subtask rows */}
-                        {subtasks.length > 0 && (
-                            <div className="space-y-2 pb-2 mt-2" style={{ borderColor: 'var(--color-border-default)' }}>
-                                {subtasks.map((sub: Task) => {
-                                    const subS = statusStyles[sub.status] || statusStyles.todo;
-                                    const subP = priorityStyles[sub.priority] || priorityStyles.medium;
-                                    return (
-                                        <div
-                                            key={sub._id}
-                                            onClick={(e) => { e.stopPropagation(); openSubtaskEdit(sub); }}
-                                            className="group/sub relative grid grid-cols-12 gap-4 items-center py-2 pr-3 rounded-[0.5rem] text-xs border cursor-pointer transition-all hover:border-[var(--color-primary)] hover:shadow-sm"
-                                            style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
-                                        >
-                                            {/* Connector line for the subtask */}
-                                            <div className="absolute left-[34px] top-0 bottom-1/2 border-l-2 z-0" style={{ borderColor: 'var(--color-border-default)' }} />
-                                            <div className="absolute left-[34px] top-1/2 w-[22px] border-t-2 z-0" style={{ borderColor: 'var(--color-border-default)' }} />
-
-                                            {/* Title (Col 5 to match parent Task Name) - Indented! */}
-                                            <div className="col-span-12 md:col-span-5 flex items-center gap-2 relative z-10 pl-[64px]">
-                                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subS.dot }} />
-                                                <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{sub.title}</span>
-                                            </div>
-
-                                            {/* Status — inline dropdown for subtask */}
-                                            <div className="hidden md:flex col-span-2 relative z-10">
-                                                <StatusDropdown task={sub} projectId={projectId} currentUserId={currentUserId} canManage={isProjectManager} size="xs" />
-                                            </div>
-
-                                            {/* Assignees (Col 2 to match parent) */}
-                                            <div className="hidden md:flex flex-wrap col-span-2 items-center gap-1.5 overflow-hidden max-h-12 py-1 relative z-10">
-                                                {sub.assignees.length > 0 ? (
-                                                    sub.assignees.map((assignee: any, index: number) => {
-                                                        const name = typeof assignee === 'object' && (assignee as any).name
-                                                            ? (assignee as any).name
-                                                            : (typeof assignee === 'object' && 'userId' in assignee && typeof (assignee as any).userId === 'object'
-                                                                ? (assignee as any).userId.name
-                                                                : 'User');
-                                                        return (
-                                                            <div key={index} className="flex items-center gap-1 pr-1.5 bg-black/5 rounded-full shrink-0">
-                                                                <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium text-blue-700 shrink-0">
-                                                                    {name.charAt(0)}
-                                                                </div>
-                                                                <span className="text-[10px] font-medium truncate max-w-[60px]" style={{ color: 'var(--color-text-secondary)' }} title={name}>
-                                                                    {name}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Unassigned</span>
-                                                )}
-                                            </div>
-
-                                            {/* Due date (Col 1 to match parent) */}
-                                            <div className="hidden md:block col-span-1 text-xs relative z-10" style={{ color: 'var(--color-text-secondary)' }}>
-                                                {sub.deadline ? new Date(sub.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
-                                            </div>
-
-                                            {/* Priority (Col 1 to match parent) */}
-                                            <div className="hidden md:block col-span-1 relative z-10">
-                                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded capitalize" style={{ backgroundColor: subP.bg, color: subP.text }}>
-                                                    {sub.priority}
-                                                </span>
-                                            </div>
-
-                                            {/* Edit pencil (Col 1 to match parent Actions) */}
-                                            <div className="hidden md:flex col-span-1 justify-end relative z-10">
-                                                <Pencil size={12} className="opacity-0 group-hover/sub:opacity-60 flex-shrink-0 transition-opacity" style={{ color: 'var(--color-primary)' }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        {subtasks.length === 0 && !showSubtaskForm && (
-                            <p className="text-xs pb-3 text-center px-4 mt-2" style={{ color: 'var(--color-text-muted)' }}>No subtasks yet</p>
-                        )}
-
-                        {/* ── Subtask Form ──────────────────────────────── */}
+                        {/* ── Subtask Form (above the list so new entries appear at top) */}
                         {showSubtaskForm && (
                             <form
                                 onSubmit={handleSubtaskSubmit}
-                                className="ml-8 mr-4 mb-3 p-3 mt-2 rounded-lg border space-y-3"
-                                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                                className="mx-3 mb-3 p-3 rounded-lg border space-y-3"
+                                style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-primary)', borderStyle: 'dashed' }}
+                                onClick={e => e.stopPropagation()}
                             >
-                                <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>New Subtask</p>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>New Subtask</p>
+                                    <button type="button" onClick={() => { setShowSubtaskForm(false); setSubSelectedAssignees([]); }} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--color-text-muted)' }}><X size={12} /></button>
+                                </div>
 
                                 {/* Title */}
                                 <input
@@ -915,32 +870,21 @@ function TaskCard({
                                     <input type="date" name="deadline" className="px-2 rounded-md border outline-none" style={subInputStyle} />
                                 </div>
 
-                                {/* Assignees mini-picker — only from this task's assigned members */}
+                                {/* Assignees mini-picker */}
                                 {task.assignees.length > 0 && (
                                     <div>
-                                        <p className="text-[10px] font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
-                                            Assign to <span style={{ fontWeight: 400 }}>(task members only)</span>
-                                        </p>
+                                        <p className="text-[10px] font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Assign to (task members only)</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {task.assignees.map((assignee: any) => {
                                                 const uid = assignee._id || assignee.id || assignee;
                                                 const mName = assignee.name || 'User';
                                                 const sel = subSelectedAssignees.includes(uid);
                                                 return (
-                                                    <button
-                                                        key={uid}
-                                                        type="button"
-                                                        onClick={() => toggleSubAssignee(uid)}
+                                                    <button key={uid} type="button" onClick={() => toggleSubAssignee(uid)}
                                                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors"
-                                                        style={{
-                                                            borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)',
-                                                            backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)',
-                                                            color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                                        }}
+                                                        style={{ borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)', backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-surface)', color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
                                                     >
-                                                        <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
-                                                            {mName.charAt(0)}
-                                                        </span>
+                                                        <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>{mName.charAt(0)}</span>
                                                         {mName}
                                                     </button>
                                                 );
@@ -949,116 +893,186 @@ function TaskCard({
                                     </div>
                                 )}
 
-                                {/* Form actions */}
                                 <div className="flex gap-2 pt-0.5">
-                                    <button
-                                        type="submit"
-                                        disabled={isCreatingSubtask}
-                                        className="flex items-center gap-1 px-3 text-[11px] font-semibold text-white rounded-md disabled:opacity-50"
-                                        style={{ height: '28px', backgroundColor: 'var(--color-primary)' }}
-                                    >
+                                    <button type="submit" disabled={isCreatingSubtask} className="flex items-center gap-1 px-3 text-[11px] font-semibold text-white rounded-md disabled:opacity-50" style={{ height: '28px', backgroundColor: 'var(--color-primary)' }}>
                                         {isCreatingSubtask && <Loader2 size={10} className="animate-spin" />}
                                         Add
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowSubtaskForm(false); setSubSelectedAssignees([]); }}
-                                        className="px-3 text-[11px] font-medium rounded-md border"
-                                        style={{ height: '28px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
-                                    >
-                                        Cancel
-                                    </button>
+                                    <button type="button" onClick={() => { setShowSubtaskForm(false); setSubSelectedAssignees([]); }} className="px-3 text-[11px] font-medium rounded-md border" style={{ height: '28px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}>Cancel</button>
                                 </div>
                             </form>
+                        )}
+
+                        {/* Subtask rows — always show ALL subtasks when expanded
+                            regardless of My Tasks / All Tasks filter */}
+                        {allSubtasks.length > 0 && (
+                            <div className="space-y-1.5 px-3 pb-3 mt-1">
+                                {allSubtasks.map((sub: Task) => {
+                                    const subS = statusStyles[sub.status] || statusStyles.todo;
+                                    const subP = priorityStyles[sub.priority] || priorityStyles.medium;
+                                    return (
+                                        <div
+                                            key={sub._id}
+                                            onClick={(e) => { e.stopPropagation(); openSubtaskEdit(sub); }}
+                                            className="group/sub grid grid-cols-12 gap-4 items-center py-2.5 pl-4 pr-3 rounded-lg text-xs border cursor-pointer transition-all hover:shadow-sm"
+                                            style={{
+                                                backgroundColor: 'var(--color-bg-surface)',
+                                                borderColor: 'var(--color-border-default)',
+                                                borderLeft: `3px solid ${subS.dot}`,
+                                            }}
+                                        >
+                                            {/* Title */}
+                                            <div className="col-span-12 md:col-span-5 flex items-center gap-2 min-w-0">
+                                                <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{sub.title}</span>
+                                            </div>
+
+                                            {/* Status */}
+                                            <div className="hidden md:flex col-span-2">
+                                                <StatusDropdown task={sub} projectId={projectId} currentUserId={currentUserId} canManage={isProjectManager} size="xs" />
+                                            </div>
+
+                                            {/* Assignees — avatar stack */}
+                                            <div className="hidden md:flex col-span-2 items-center">
+                                                {sub.assignees.length > 0 ? (
+                                                    <div className="flex -space-x-1.5">
+                                                        {sub.assignees.slice(0, 4).map((assignee: any, index: number) => {
+                                                            const name = typeof assignee === 'object' && (assignee as any).name
+                                                                ? (assignee as any).name
+                                                                : (typeof assignee === 'object' && 'userId' in assignee && typeof (assignee as any).userId === 'object'
+                                                                    ? (assignee as any).userId.name
+                                                                    : 'U');
+                                                            return (
+                                                                <div key={index} className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 flex-shrink-0 ring-2 ring-white" title={name}>
+                                                                    {name.charAt(0)}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>—</span>
+                                                )}
+                                            </div>
+
+                                            {/* Due date */}
+                                            <div className="hidden md:block col-span-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                                                {sub.deadline ? new Date(sub.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+                                            </div>
+
+                                            {/* Priority badge */}
+                                            <div className="hidden md:block col-span-1">
+                                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded capitalize" style={{ backgroundColor: subP.bg, color: subP.text }}>
+                                                    {sub.priority}
+                                                </span>
+                                            </div>
+
+                                            {/* Open arrow */}
+                                            <div className="hidden md:flex col-span-1 justify-end">
+                                                <ChevronRight size={12} className="opacity-0 group-hover/sub:opacity-50 transition-opacity flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {allSubtasks.length === 0 && !showSubtaskForm && (
+                            <p className="text-xs pb-3 text-center px-4 mt-2" style={{ color: 'var(--color-text-muted)' }}>No subtasks yet. Click "Add Subtask" to create one.</p>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* ── Subtask Edit Modal ──────────────────────────────── */}
-            {
-                editingSubtask && (
+            {/* ── Subtask Edit Side Panel ─────────────────────────── */}
+            {editingSubtask && createPortal(
+                <>
+                    {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-                        style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
-                        onClick={(e) => { if (e.target === e.currentTarget) closeSubtaskEdit(); }}
+                        className="fixed inset-0 z-[200]"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.20)' }}
+                        onClick={closeSubtaskEdit}
+                    />
+                    {/* Side Panel */}
+                    <div
+                        className="fixed top-0 right-0 h-full z-[201] flex flex-col"
+                        style={{
+                            width: 'min(480px, 100vw)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderLeft: '1px solid var(--color-border-default)',
+                            boxShadow: '-12px 0 48px rgba(0,0,0,0.14)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <div
-                            className="w-full max-w-lg rounded-xl shadow-2xl flex flex-col overflow-hidden"
-                            style={{ backgroundColor: 'var(--color-bg-surface)', maxHeight: '88vh' }}
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                                <div>
-                                    <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Subtask of · {task.title}</p>
-                                    <h3 className="text-sm font-semibold mt-0.5" style={{ color: 'var(--color-text-primary)' }}>Edit Subtask</h3>
-                                </div>
-                                <button onClick={closeSubtaskEdit} className="p-1.5 rounded-md hover:bg-black/5 transition-colors" style={{ color: 'var(--color-text-muted)' }}>
-                                    <X size={16} />
-                                </button>
+                        {/* Panel Header — breadcrumb */}
+                        <div className="flex items-center gap-2.5 px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <button
+                                onClick={closeSubtaskEdit}
+                                className="p-1.5 rounded-md hover:bg-black/5 transition-colors flex-shrink-0"
+                                style={{ color: 'var(--color-text-muted)' }}
+                                title="Close"
+                            >
+                                <X size={16} />
+                            </button>
+                            <div className="flex items-center gap-1.5 text-xs min-w-0" style={{ color: 'var(--color-text-muted)' }}>
+                                <span className="truncate max-w-[140px]">{task.title}</span>
+                                <ChevronRight size={11} className="flex-shrink-0" />
+                                <span className="flex-shrink-0 font-medium" style={{ color: 'var(--color-text-secondary)' }}>Subtask</span>
                             </div>
+                        </div>
 
-                            {/* Modal Body */}
-                            <div className="overflow-y-auto flex-1 p-5">
-                                <form id="subtask-edit-form" onSubmit={handleSubtaskUpdate} className="space-y-4">
+                        {/* Panel Body */}
+                        <div className="flex-1 overflow-y-auto">
+                            <form id="subtask-edit-form" onSubmit={handleSubtaskUpdate}>
 
-                                    {/* Title */}
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Title *</label>
-                                        <input
-                                            name="title"
-                                            required
-                                            autoFocus
-                                            defaultValue={editingSubtask.title}
-                                            className="w-full px-3 rounded-lg border text-sm outline-none"
-                                            style={modalInputStyle}
-                                        />
+                                {/* Title — big editable */}
+                                <div className="px-6 pt-6 pb-3">
+                                    <input
+                                        name="title"
+                                        required
+                                        autoFocus
+                                        defaultValue={editingSubtask.title}
+                                        className="w-full text-xl font-bold bg-transparent outline-none pb-1"
+                                        placeholder="Subtask title…"
+                                        style={{
+                                            color: 'var(--color-text-primary)',
+                                            borderBottom: '2px solid transparent',
+                                            transition: 'border-color 0.15s',
+                                        }}
+                                        onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--color-primary)'; }}
+                                        onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                                    />
+                                </div>
+
+                                {/* Notion-style property table */}
+                                <div className="mx-6 mb-5 border rounded-xl overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-32 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Status</span>
+                                        <select name="status" defaultValue={editingSubtask.status} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }}>
+                                            <option value="todo">To Do</option>
+                                            <option value="in-progress">In Progress</option>
+                                            <option value="paused">Paused</option>
+                                            <option value="completed">Completed</option>
+                                        </select>
                                     </div>
 
-                                    {/* Description */}
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
-                                        <textarea
-                                            name="description"
-                                            defaultValue={editingSubtask.description}
-                                            rows={2}
-                                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
-                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                                            placeholder="Optional description"
-                                        />
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-32 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Priority</span>
+                                        <select name="priority" defaultValue={editingSubtask.priority} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }}>
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                            <option value="critical">Critical</option>
+                                        </select>
                                     </div>
 
-                                    {/* Status / Priority / Deadline */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
-                                            <select name="status" defaultValue={editingSubtask.status} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle}>
-                                                <option value="todo">To Do</option>
-                                                <option value="in-progress">In Progress</option>
-                                                <option value="paused">Paused</option>
-                                                <option value="completed">Completed</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Priority</label>
-                                            <select name="priority" defaultValue={editingSubtask.priority} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle}>
-                                                <option value="low">Low</option>
-                                                <option value="medium">Medium</option>
-                                                <option value="high">High</option>
-                                                <option value="critical">Critical</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Deadline</label>
-                                            <input type="date" name="deadline" defaultValue={editingSubtask.deadline?.toString().split('T')[0]} className="w-full px-3 rounded-lg border text-sm outline-none" style={modalInputStyle} />
-                                        </div>
+                                    <div className="flex items-center border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <span className="text-xs font-medium px-4 py-2.5 w-32 flex-shrink-0 border-r" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Deadline</span>
+                                        <input type="date" name="deadline" defaultValue={editingSubtask.deadline?.toString().split('T')[0]} className="flex-1 px-3 py-2.5 text-xs outline-none bg-transparent" style={{ color: 'var(--color-text-primary)' }} />
                                     </div>
 
-                                    {/* Assignees — only from task's members */}
                                     {task.assignees.length > 0 && (
-                                        <div>
-                                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Assignees <span className="font-normal" style={{ color: 'var(--color-text-muted)' }}>(task members only)</span></label>
-                                            <div className="flex flex-wrap gap-2">
+                                        <div className="flex items-start">
+                                            <span className="text-xs font-medium px-4 py-3 w-32 flex-shrink-0 border-r self-stretch flex items-start pt-3" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Assignees</span>
+                                            <div className="flex-1 px-3 py-2.5 flex flex-wrap gap-1.5">
                                                 {task.assignees.map((a: any) => {
                                                     const uid = a._id || a.id;
                                                     const name = a.name || 'User';
@@ -1068,41 +1082,66 @@ function TaskCard({
                                                             key={uid}
                                                             type="button"
                                                             onClick={() => toggleSubEditAssignee(uid)}
-                                                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+                                                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all"
                                                             style={{
                                                                 borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)',
                                                                 backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)',
                                                                 color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                                                             }}
                                                         >
-                                                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
+                                                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
                                                                 {name.charAt(0)}
                                                             </span>
                                                             {name}
-                                                            {sel && <span className="text-[10px]" style={{ color: 'var(--color-primary)' }}>✓</span>}
+                                                            {sel && <CheckCircle2 size={10} style={{ color: 'var(--color-primary)' }} />}
                                                         </button>
                                                     );
                                                 })}
                                             </div>
                                         </div>
                                     )}
-                                </form>
-                            </div>
+                                </div>
 
-                            {/* Modal Footer */}
-                            <div className="px-5 py-4 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
-                                <button type="button" onClick={closeSubtaskEdit} className="px-4 text-sm font-medium rounded-lg border transition-colors" style={{ height: '36px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}>
-                                    Cancel
-                                </button>
-                                <button type="submit" form="subtask-edit-form" disabled={isUpdatingSubtask} className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg disabled:opacity-50" style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}>
-                                    {isUpdatingSubtask && <Loader2 size={14} className="animate-spin" />}
-                                    Save Changes
-                                </button>
-                            </div>
+                                {/* Description */}
+                                <div className="px-6 pb-6">
+                                    <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>Description</label>
+                                    <textarea
+                                        name="description"
+                                        defaultValue={editingSubtask.description}
+                                        rows={5}
+                                        className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}
+                                        placeholder="Add a description…"
+                                    />
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Panel Footer */}
+                        <div className="px-5 py-3.5 border-t flex justify-end gap-2 flex-shrink-0" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
+                            <button
+                                type="button"
+                                onClick={closeSubtaskEdit}
+                                className="px-4 text-sm font-medium rounded-lg border transition-colors"
+                                style={{ height: '34px', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                form="subtask-edit-form"
+                                disabled={isUpdatingSubtask}
+                                className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg disabled:opacity-50"
+                                style={{ height: '34px', backgroundColor: 'var(--color-primary)' }}
+                            >
+                                {isUpdatingSubtask && <Loader2 size={14} className="animate-spin" />}
+                                Save Changes
+                            </button>
                         </div>
                     </div>
-                )
-            }
+                </>,
+                document.body
+            )}
         </>
     );
 }
@@ -1213,10 +1252,10 @@ function StatusDropdown({
     // paused      → in-progress | completed
     // completed   → locked (no transitions)
     const allowedNext: Record<string, Task['status'][]> = {
-        'todo':        ['in-progress'],
+        'todo': ['in-progress'],
         'in-progress': ['paused', 'completed'],
-        'paused':      ['in-progress', 'completed'],
-        'completed':   [],
+        'paused': ['in-progress', 'completed'],
+        'completed': [],
     };
     const validNext = allowedNext[task.status] ?? [];
 
@@ -1231,9 +1270,17 @@ function StatusDropdown({
 
     const handleOpen = () => {
         if (isLoading || isLocked || isAutoManaged || !canInteract) return;
+        // Calculate position NOW, synchronously, before opening
+        // — avoids a flash at {0,0} and works even inside transformed containers
         if (!isOpen && triggerRef.current) {
             const rect = triggerRef.current.getBoundingClientRect();
-            setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const estimatedHeight = 160;
+            const top =
+                spaceBelow < estimatedHeight && rect.top > estimatedHeight
+                    ? rect.top - estimatedHeight - 4
+                    : rect.bottom + 4;
+            setDropdownPos({ top, left: rect.left });
         }
         setIsOpen(v => !v);
     };
@@ -1262,9 +1309,8 @@ function StatusDropdown({
                 title={isLocked ? 'Task completed — status is locked' : lockTitle}
             >
                 <span
-                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border cursor-default ${
-                        size === 'xs' ? 'text-[10px]' : 'text-[11px]'
-                    } font-medium capitalize`}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border cursor-default ${size === 'xs' ? 'text-[10px]' : 'text-[11px]'
+                        } font-medium capitalize`}
                     style={{ borderColor: 'var(--color-border-default)', backgroundColor: sStyle.bg, color: sStyle.text }}
                 >
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sStyle.dot }} />
@@ -1287,11 +1333,10 @@ function StatusDropdown({
                 ref={triggerRef}
                 onClick={handleOpen}
                 disabled={isLoading}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-colors ${
-                    isLocked
-                        ? 'cursor-not-allowed opacity-80'
-                        : 'hover:brightness-95 cursor-pointer'
-                } disabled:opacity-60`}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-colors ${isLocked
+                    ? 'cursor-not-allowed opacity-80'
+                    : 'hover:brightness-95 cursor-pointer'
+                    } disabled:opacity-60`}
                 style={{ borderColor: 'var(--color-border-default)', backgroundColor: sStyle.bg }}
                 title={isLocked ? 'Task completed — status is locked' : 'Click to change status'}
             >
@@ -1315,8 +1360,9 @@ function StatusDropdown({
                 </div>
             )}
 
-            {/* Dropdown — fixed position so it's never clipped by overflow:hidden parents */}
-            {isOpen && !isLocked && (
+            {/* Dropdown — rendered in document.body via portal so it is never
+                clipped by overflow:hidden ancestors or affected by CSS transforms */}
+            {isOpen && !isLocked && createPortal(
                 <div
                     ref={dropdownRef}
                     className="z-[9999] min-w-[150px] rounded-lg border shadow-xl overflow-hidden"
@@ -1354,7 +1400,8 @@ function StatusDropdown({
                             </button>
                         );
                     })}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

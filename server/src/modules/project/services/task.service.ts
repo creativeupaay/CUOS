@@ -36,6 +36,14 @@ export interface UpdateTaskData {
 
 export const createTask = async (data: CreateTaskData): Promise<ITask> => {
     const task = await Task.create(data);
+
+    // ── Auto-start timer if task is created with in-progress status ──────────
+    if (data.status === 'in-progress' && data.createdBy) {
+        const userIdObj = new Types.ObjectId(data.createdBy);
+        task.activeTimers = [{ userId: userIdObj, startedAt: new Date() }];
+        await task.save();
+    }
+
     return task;
 };
 

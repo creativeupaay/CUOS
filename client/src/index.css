@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap');
+@import "tailwindcss";
 
 /* ============================================================
    CUOS Design System v2 — Premium CSS Custom Properties
@@ -144,6 +144,16 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes pulseSoft {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
 }
 
 /* ============================================================

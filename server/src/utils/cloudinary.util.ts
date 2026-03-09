@@ -154,16 +154,23 @@ export const getSignedUrl = (
         cleanPublicId = String(publicId).replace(new RegExp(`\\.${format}$`, 'i'), '');
     }
 
-    // cloudinary.url() correctly outputs /{resource_type}/authenticated/... in the URL path.
-    // private_download_url is for type:'private' only and does NOT work for type:'authenticated'.
-    return cloudinary.url(cleanPublicId, {
+    // Files are uploaded as type:'upload' (public delivery) — Cloudinary Free/Standard tiers
+    // forbid type:'authenticated' programmatic delivery.  We generate a signed URL against the
+    // 'upload' delivery type so the path actually exists on res.cloudinary.com.
+    // `format` must be exactly string, otherwise it's skipped.
+    const urlOptions: any = {
         secure: true,
         sign_url: true,
-        type: 'authenticated',
+        type: 'upload',
         resource_type: resourceType as any,
         expires_at: expiresAt,
-        ...(format ? { format } : {}),
-    });
+    };
+
+    if (format) {
+        urlOptions.format = format.toLowerCase();
+    }
+
+    return cloudinary.url(cleanPublicId, urlOptions);
 };
 
 /**

@@ -36,6 +36,9 @@ export interface Project {
     /** User IDs with full edit access to all credentials in this project */
     credentialAdmins?: (string | User)[];
 
+    /** User IDs with full edit access to all documents in this project */
+    docAdmins?: (string | User)[];
+
     createdBy: string | User;
     createdAt: string;
     updatedAt: string;
@@ -220,3 +223,32 @@ export interface User {
     email: string;
     role: string;
 }
+
+// ─── Document Types ───────────────────────────────────────────────────────────
+
+export interface DocFolder {
+    _id: string;
+    projectId: string;
+    name: string;
+    parentId: string | null;
+    createdBy: string | User;
+    viewAccess: (string | User)[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DocItem {
+    _id: string;
+    projectId: string;
+    folderId: string | null;
+    name: string;
+    cloudinaryId: string;
+    size: number;
+    mimeType: string;
+    uploadedBy: string | User;
+    viewAccess: (string | User)[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type DocAdminUser = User;

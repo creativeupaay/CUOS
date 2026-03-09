@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
     useCreateProjectMutation,
     useUpdateProjectMutation,
@@ -9,10 +9,14 @@ import { useState, useEffect } from 'react';
 import { ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ProjectPhase } from '@/features/project/types/types';
+import CurrencyInput from 'react-currency-input-field';
+import SelectCurrency from '@/components/ui/CurrencySelect';
 
 export default function ProjectFormPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const mode = searchParams.get('mode'); // 'details' | 'phases' | null
     const isEditing = Boolean(id);
 
     const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id });
@@ -110,21 +114,32 @@ export default function ProjectFormPage() {
             }
         }
 
-        const payload: any = {
-            name: form.name.trim(),
-            description: form.description.trim() || undefined,
-            status: form.status,
-            priority: form.priority,
-            clientId: form.clientId,
-            startDate: form.startDate,
-            endDate: form.endDate || undefined,
-            deadline: form.deadline || undefined,
-            budget: form.budget ? Number(form.budget) : undefined,
-            currency: form.currency,
-            billingType: form.billingType,
-            hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
-            phases: form.phases.length > 0 ? form.phases : undefined,
-        };
+        let payload: any = {};
+
+        if (mode === 'details' || !isEditing) {
+            payload = {
+                ...payload,
+                name: form.name.trim(),
+                description: form.description.trim() || undefined,
+                status: form.status,
+                priority: form.priority,
+                clientId: form.clientId,
+                startDate: form.startDate,
+                endDate: form.endDate || undefined,
+                deadline: form.deadline || undefined,
+                budget: form.budget ? Number(form.budget) : undefined,
+                currency: form.currency,
+                billingType: form.billingType,
+                hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
+            };
+        }
+
+        if (mode === 'phases' || !isEditing) {
+            payload = {
+                ...payload,
+                phases: form.phases.length > 0 ? form.phases : undefined,
+            };
+        }
 
         try {
             if (isEditing && id) {
@@ -171,6 +186,18 @@ export default function ProjectFormPage() {
                 >
                     Projects
                 </Link>
+                {isEditing && project && (
+                    <>
+                        <ChevronRight size={12} />
+                        <Link
+                            to={`/projects/${id}`}
+                            className="transition-colors hover:underline"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                        >
+                            {project.name}
+                        </Link>
+                    </>
+                )}
                 <ChevronRight size={12} />
                 <span style={{ color: 'var(--color-text-primary)' }}>
                     {isEditing ? 'Edit Project' : 'New Project'}
@@ -178,7 +205,7 @@ export default function ProjectFormPage() {
             </div>
 
             <h1 className="text-xl font-semibold mb-6" style={{ color: 'var(--color-text-primary)' }}>
-                {isEditing ? 'Edit Project' : 'Create New Project'}
+                {isEditing ? (mode === 'phases' ? 'Edit Project Phases' : 'Edit Project Details') : 'Create New Project'}
             </h1>
 
             {error && (
@@ -192,332 +219,344 @@ export default function ProjectFormPage() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Basic Info */}
-                <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
-                        Basic Information
-                    </h2>
+                {(mode === 'details' || !isEditing) && (
+                    <div
+                        className="p-5 rounded-lg border"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                            Basic Information
+                        </h2>
 
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Name *</label>
-                            <input
-                                name="name"
-                                value={form.name}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                                placeholder="Project name"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Description</label>
-                            <textarea
-                                name="description"
-                                value={form.description}
-                                onChange={handleChange}
-                                rows={3}
-                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                                placeholder="Brief project description"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Client *</label>
-                                <select
-                                    name="clientId"
-                                    value={form.clientId}
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Name *</label>
+                                <input
+                                    name="name"
+                                    value={form.name}
                                     onChange={handleChange}
                                     required
                                     className="w-full px-3 rounded-lg border text-sm outline-none"
                                     style={inputStyle}
-                                >
-                                    <option value="">Select a client</option>
-                                    {clients.map((client: any) => (
-                                        <option key={client._id} value={client._id}>
-                                            {client.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    placeholder="Project name"
+                                />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Status</label>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Description</label>
+                                <textarea
+                                    name="description"
+                                    value={form.description}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
+                                    style={{
+                                        borderColor: 'var(--color-border-default)',
+                                        backgroundColor: 'var(--color-bg-surface)',
+                                        color: 'var(--color-text-primary)',
+                                    }}
+                                    placeholder="Brief project description"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Client *</label>
+                                    <select
+                                        name="clientId"
+                                        value={form.clientId}
+                                        onChange={(e) => {
+                                            const selectedClientId = e.target.value;
+                                            const selectedClient = clients.find((c: any) => c._id === selectedClientId);
+
+                                            setForm({
+                                                ...form,
+                                                clientId: selectedClientId,
+                                                // Auto-fetch currency, default to INR if not set
+                                                currency: selectedClient?.billingDetails?.currency || 'INR'
+                                            });
+                                        }}
+                                        required
+                                        className="w-full px-3 rounded-lg border text-sm outline-none"
+                                        style={inputStyle}
+                                    >
+                                        <option value="">Select a client</option>
+                                        {clients.map((client: any) => (
+                                            <option key={client._id} value={client._id}>
+                                                {client.name} {client.companyName ? `(${client.companyName})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Status</label>
+                                    <select
+                                        name="status"
+                                        value={form.status}
+                                        onChange={handleChange}
+                                        className="w-full px-3 rounded-lg border text-sm outline-none"
+                                        style={inputStyle}
+                                    >
+                                        <option value="planning">Planning</option>
+                                        <option value="active">Active</option>
+                                        <option value="on-hold">On Hold</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="cancelled">Cancelled</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Priority</label>
                                 <select
-                                    name="status"
-                                    value={form.status}
+                                    name="priority"
+                                    value={form.priority}
                                     onChange={handleChange}
                                     className="w-full px-3 rounded-lg border text-sm outline-none"
                                     style={inputStyle}
                                 >
-                                    <option value="planning">Planning</option>
-                                    <option value="active">Active</option>
-                                    <option value="on-hold">On Hold</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="cancelled">Cancelled</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
                                 </select>
                             </div>
                         </div>
-
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Priority</label>
-                            <select
-                                name="priority"
-                                value={form.priority}
-                                onChange={handleChange}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            >
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                                <option value="critical">Critical</option>
-                            </select>
-                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Dates */}
-                <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
-                        Dates
-                    </h2>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Start Date *</label>
-                            <input
-                                type="date"
-                                name="startDate"
-                                value={form.startDate}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>End Date</label>
-                            <input
-                                type="date"
-                                name="endDate"
-                                value={form.endDate}
-                                onChange={handleChange}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Deadline</label>
-                            <input
-                                type="date"
-                                name="deadline"
-                                value={form.deadline}
-                                onChange={handleChange}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Budget & Billing */}
-                <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
-                        Budget & Billing
-                    </h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Budget</label>
-                            <input
-                                type="number"
-                                name="budget"
-                                value={form.budget}
-                                onChange={handleChange}
-                                min={0}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                                placeholder="0"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Currency</label>
-                            <select
-                                name="currency"
-                                value={form.currency}
-                                onChange={handleChange}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            >
-                                <option value="INR">INR</option>
-                                <option value="USD">USD</option>
-                                <option value="EUR">EUR</option>
-                                <option value="GBP">GBP</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Billing Type</label>
-                            <select
-                                name="billingType"
-                                value={form.billingType}
-                                onChange={handleChange}
-                                className="w-full px-3 rounded-lg border text-sm outline-none"
-                                style={inputStyle}
-                            >
-                                <option value="fixed">Fixed</option>
-                                <option value="hourly">Hourly</option>
-                                <option value="milestone">Milestone</option>
-                            </select>
-                        </div>
-                        {form.billingType === 'hourly' && (
+                {(mode === 'details' || !isEditing) && (
+                    <div
+                        className="p-5 rounded-lg border"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                            Dates
+                        </h2>
+                        <div className="grid grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Hourly Rate</label>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Start Date *</label>
                                 <input
-                                    type="number"
-                                    name="hourlyRate"
-                                    value={form.hourlyRate}
+                                    type="date"
+                                    name="startDate"
+                                    value={form.startDate}
                                     onChange={handleChange}
-                                    min={0}
+                                    required
                                     className="w-full px-3 rounded-lg border text-sm outline-none"
                                     style={inputStyle}
-                                    placeholder="0"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Internal Deadline</label>
+                                <input
+                                    type="date"
+                                    name="endDate"
+                                    value={form.endDate}
+                                    onChange={handleChange}
+                                    className="w-full px-3 rounded-lg border text-sm outline-none"
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Deadline</label>
+                                <input
+                                    type="date"
+                                    name="deadline"
+                                    value={form.deadline}
+                                    onChange={handleChange}
+                                    className="w-full px-3 rounded-lg border text-sm outline-none"
+                                    style={inputStyle}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Budget & Billing */}
+                {(mode === 'details' || !isEditing) && (
+                    <div
+                        className="p-5 rounded-lg border"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                            Budget & Billing
+                        </h2>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Budget</label>
+                                <CurrencyInput
+                                    id="budget"
+                                    name="budget"
+                                    placeholder="0.00"
+                                    decimalsLimit={2}
+                                    value={form.budget}
+                                    onValueChange={(value) => setForm({ ...form, budget: value || '' })}
+                                    className="w-full px-3 rounded-lg border text-sm outline-none"
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Currency</label>
+                                <SelectCurrency
+                                    value={form.currency}
+                                    onCurrencySelected={(val: string) => setForm({ ...form, currency: val })}
+                                    className="w-full px-3 rounded-lg border text-sm outline-none bg-white cursor-pointer"
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Billing Type</label>
+                                <select
+                                    name="billingType"
+                                    value={form.billingType}
+                                    onChange={handleChange}
+                                    className="w-full px-3 rounded-lg border text-sm outline-none"
+                                    style={inputStyle}
+                                >
+                                    <option value="fixed">Fixed</option>
+                                    <option value="hourly">Hourly</option>
+                                    <option value="milestone">Milestone</option>
+                                </select>
+                            </div>
+                            {form.billingType === 'hourly' && (
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Hourly Rate</label>
+                                    <CurrencyInput
+                                        id="hourlyRate"
+                                        name="hourlyRate"
+                                        placeholder="0.00"
+                                        decimalsLimit={2}
+                                        value={form.hourlyRate}
+                                        onValueChange={(value) => setForm({ ...form, hourlyRate: value || '' })}
+                                        className="w-full px-3 rounded-lg border text-sm outline-none"
+                                        style={inputStyle}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Project Phases */}
+                {(mode === 'phases' || !isEditing) && (
+                    <div
+                        className="p-5 rounded-lg border"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Project Phases
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={handleAddPhase}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-secondary)',
+                                    backgroundColor: 'var(--color-bg-surface)',
+                                }}
+                            >
+                                <Plus size={14} /> Add Phase
+                            </button>
+                        </div>
+
+                        {form.phases.length > 0 ? (
+                            <div className="space-y-4">
+                                {form.phases.map((phase, index) => (
+                                    <div
+                                        key={index}
+                                        className="p-4 rounded-lg border relative grid grid-cols-2 lg:grid-cols-4 gap-4"
+                                        style={{
+                                            backgroundColor: 'var(--color-bg-subtle)',
+                                            borderColor: 'var(--color-border-default)'
+                                        }}
+                                    >
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Phase Name *</label>
+                                            <input
+                                                value={phase.name}
+                                                onChange={(e) => handlePhaseChange(index, 'name', e.target.value)}
+                                                required
+                                                className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                                style={{ ...inputStyle, backgroundColor: 'white' }}
+                                                placeholder="e.g. Design"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Status</label>
+                                            <select
+                                                value={phase.status}
+                                                onChange={(e) => handlePhaseChange(index, 'status', e.target.value)}
+                                                className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                                style={{ ...inputStyle, backgroundColor: 'white' }}
+                                            >
+                                                <option value="pending">Pending</option>
+                                                <option value="in-progress">In Progress</option>
+                                                <option value="completed">Completed</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={phase.startDate || ''}
+                                                onChange={(e) => handlePhaseChange(index, 'startDate', e.target.value)}
+                                                className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                                style={{ ...inputStyle, backgroundColor: 'white' }}
+                                            />
+                                        </div>
+                                        <div className="relative">
+                                            <label className="block text-xs font-medium mb-1.5" style={labelStyle}>End Date</label>
+                                            <input
+                                                type="date"
+                                                value={phase.endDate || ''}
+                                                onChange={(e) => handlePhaseChange(index, 'endDate', e.target.value)}
+                                                className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                                                style={{ ...inputStyle, backgroundColor: 'white' }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemovePhase(index)}
+                                                className="absolute top-0 -right-2 p-1.5 text-red-500 hover:text-red-700 bg-white hover:bg-red-50 rounded-full border shadow-sm transition-colors cursor-pointer z-10"
+                                                style={{ transform: 'translate(50%, -50%)', borderColor: 'var(--color-border-default)' }}
+                                                title="Remove Phase"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div
+                                className="text-center py-6 px-4 rounded-lg border border-dashed"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'var(--color-bg-subtle)'
+                                }}
+                            >
+                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                    No phases created yet.
+                                </p>
                             </div>
                         )}
                     </div>
-                </div>
-
-                {/* Project Phases */}
-                <div
-                    className="p-5 rounded-lg border"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border-default)',
-                    }}
-                >
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            Project Phases
-                        </h2>
-                        <button
-                            type="button"
-                            onClick={handleAddPhase}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50"
-                            style={{
-                                borderColor: 'var(--color-border-default)',
-                                color: 'var(--color-text-secondary)',
-                                backgroundColor: 'var(--color-bg-surface)',
-                            }}
-                        >
-                            <Plus size={14} /> Add Phase
-                        </button>
-                    </div>
-
-                    {form.phases.length > 0 ? (
-                        <div className="space-y-4">
-                            {form.phases.map((phase, index) => (
-                                <div
-                                    key={index}
-                                    className="p-4 rounded-lg border relative grid grid-cols-2 lg:grid-cols-4 gap-4"
-                                    style={{
-                                        backgroundColor: 'var(--color-bg-subtle)',
-                                        borderColor: 'var(--color-border-default)'
-                                    }}
-                                >
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Phase Name *</label>
-                                        <input
-                                            value={phase.name}
-                                            onChange={(e) => handlePhaseChange(index, 'name', e.target.value)}
-                                            required
-                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
-                                            style={{ ...inputStyle, backgroundColor: 'white' }}
-                                            placeholder="e.g. Design"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Status</label>
-                                        <select
-                                            value={phase.status}
-                                            onChange={(e) => handlePhaseChange(index, 'status', e.target.value)}
-                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
-                                            style={{ ...inputStyle, backgroundColor: 'white' }}
-                                        >
-                                            <option value="pending">Pending</option>
-                                            <option value="in-progress">In Progress</option>
-                                            <option value="completed">Completed</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Start Date</label>
-                                        <input
-                                            type="date"
-                                            value={phase.startDate || ''}
-                                            onChange={(e) => handlePhaseChange(index, 'startDate', e.target.value)}
-                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
-                                            style={{ ...inputStyle, backgroundColor: 'white' }}
-                                        />
-                                    </div>
-                                    <div className="relative">
-                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>End Date</label>
-                                        <input
-                                            type="date"
-                                            value={phase.endDate || ''}
-                                            onChange={(e) => handlePhaseChange(index, 'endDate', e.target.value)}
-                                            className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
-                                            style={{ ...inputStyle, backgroundColor: 'white' }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => handleRemovePhase(index)}
-                                            className="absolute top-0 -right-2 p-1.5 text-red-500 hover:text-red-700 bg-white hover:bg-red-50 rounded-full border shadow-sm transition-colors cursor-pointer z-10"
-                                            style={{ transform: 'translate(50%, -50%)', borderColor: 'var(--color-border-default)' }}
-                                            title="Remove Phase"
-                                        >
-                                            <Trash2 size={13} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div
-                            className="text-center py-6 px-4 rounded-lg border border-dashed"
-                            style={{
-                                borderColor: 'var(--color-border-default)',
-                                backgroundColor: 'var(--color-bg-subtle)'
-                            }}
-                        >
-                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                No phases created yet.
-                            </p>
-                        </div>
-                    )}
-                </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-2">
@@ -537,7 +576,7 @@ export default function ProjectFormPage() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => navigate('/projects')}
+                        onClick={() => navigate(isEditing ? `/projects/${id}` : '/projects')}
                         className="px-5 text-sm font-medium rounded-lg border transition-colors"
                         style={{
                             height: '40px',

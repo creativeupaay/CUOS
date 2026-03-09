@@ -12,6 +12,7 @@ import {
     Loader2,
     AlertCircle,
     ChevronRight,
+    Pencil,
 } from 'lucide-react';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -140,7 +141,7 @@ export default function ProjectDetailPage() {
                     )}
                 </div>
 
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 items-center">
                     <span
                         className="text-xs font-medium px-2.5 py-1 rounded-md capitalize"
                         style={{ backgroundColor: sColors.bg, color: sColors.text }}
@@ -153,6 +154,19 @@ export default function ProjectDetailPage() {
                     >
                         {project.priority}
                     </span>
+                    {isSuperAdmin && location.pathname === `/projects/${id}` && (
+                        <Link
+                            to={`/projects/${id}/edit?mode=details`}
+                            className="flex items-center gap-1.5 px-3.5 py-2 ml-2 text-sm font-semibold rounded-lg transition-colors"
+                            style={{
+                                backgroundColor: 'var(--color-primary)',
+                                color: '#ffffff',
+                            }}
+                        >
+                            <Pencil size={14} />
+                            Edit Project
+                        </Link>
+                    )}
                 </div>
             </div>
 

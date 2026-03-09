@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateClientMutation, useUpdateClientMutation, useGetClientQuery } from '@/features/client/clientApi';
 import type { ClientContact, ClientPhone, ClientCustomDetail } from '@/features/client/types/types';
 import { ArrowLeft, Plus, X, Trash2 } from 'lucide-react';
+import SelectCurrency from '@/components/ui/CurrencySelect';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -486,16 +487,15 @@ export default function ClientFormPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-1">Currency</label>
-                                <input
-                                    type="text"
+                                <SelectCurrency
                                     value={formData.billingDetails.currency}
-                                    onChange={(e) =>
+                                    onCurrencySelected={(currencyAbbrev: string) =>
                                         setFormData({
                                             ...formData,
-                                            billingDetails: { ...formData.billingDetails, currency: e.target.value },
+                                            billingDetails: { ...formData.billingDetails, currency: currencyAbbrev },
                                         })
                                     }
-                                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
                                 />
                             </div>
                             <div>

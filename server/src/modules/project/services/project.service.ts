@@ -96,6 +96,8 @@ export const createProject = async (
 ): Promise<IProject> => {
     const projectData: any = {
         ...data,
+        // Automatically grant the creator full credential-admin access
+        credentialAdmins: [new Types.ObjectId(data.createdBy)],
         assignees: data.assignees?.map((a) => ({
             ...a,
             assignedBy: data.createdBy,

@@ -210,14 +210,15 @@ export default function ProjectsPage() {
                                             {project.assignees.length}
                                         </span>
 
-                                        {/* Deadline */}
-                                        {project.deadline && (
+                                        {/* Deadline / Internal Deadline */}
+                                        {/* Show internal deadline if available, otherwise external deadline */}
+                                        {(project.endDate || project.deadline) && (
                                             <span
                                                 className="flex items-center gap-1 ml-auto font-medium"
                                                 style={{ color: isOverdue ? 'var(--color-danger)' : 'var(--color-text-muted)' }}
                                             >
                                                 <Calendar size={11} />
-                                                {new Date(project.deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                {new Date((project.endDate || project.deadline) as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                                                 {isOverdue && ' · Overdue'}
                                             </span>
                                         )}

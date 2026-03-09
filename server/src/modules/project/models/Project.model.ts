@@ -65,6 +65,13 @@ export interface IProject extends Document {
      */
     credentialAdmins: Types.ObjectId[];
 
+    /**
+     * Users who have full edit access to all documents in this project.
+     * These are the "Document Admins" — they can upload, delete, create folders,
+     * and manage view-only access for others.
+     */
+    docAdmins: Types.ObjectId[];
+
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -168,6 +175,8 @@ const ProjectSchema = new Schema<IProject>(
         phases: [ProjectPhaseSchema],
 
         credentialAdmins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+
+        docAdmins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         isArchived: { type: Boolean, default: false },

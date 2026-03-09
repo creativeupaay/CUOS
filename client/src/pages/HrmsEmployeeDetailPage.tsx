@@ -65,7 +65,7 @@ export default function HrmsEmployeeDetailPage() {
     const [generateFormToken, { isLoading: isGeneratingToken }] = useGenerateFormTokenMutation();
 
     // ── Bank visibility toggle ───────────────────────────────────────
-    const [showBankDetails, setShowBankDetails] = useState(false);    const [showIdNumber, setShowIdNumber] = useState(false);
+    const [showBankDetails, setShowBankDetails] = useState(false); const [showIdNumber, setShowIdNumber] = useState(false);
     // ── Copy Link state ──────────────────────────────────────────────
     const [linkCopied, setLinkCopied] = useState(false);
 
@@ -311,8 +311,8 @@ export default function HrmsEmployeeDetailPage() {
                                 </span>
                             ) : null}
                         </div>
-                        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                            {employee.employeeId} · {employee.designation}
+                        <p className="text-sm capitalize" style={{ color: 'var(--color-text-secondary)' }}>
+                            {employee.designation}
                         </p>
                     </div>
                 </div>

@@ -6,7 +6,8 @@ import {
     useGetMyTimeLogsQuery,
     useGetTasksQuery,
 } from '@/features/project';
-import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown, User } from 'lucide-react';
+import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown, User, Play, Pause, SquareCheckBig, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (mins: number) => {
@@ -18,11 +19,29 @@ const fmt = (mins: number) => {
 const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
+const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+const fmtDateTime = (iso: string) =>
+    `${fmtDate(iso)}, ${fmtTime(iso)}`;
+
 const SUPER_ADMIN_ROLES = ['super-admin', 'super_admin', 'admin'];
+
+// ─── Activity event derived from a time log ────────────────────────────────
+interface ActivityEvent {
+    id: string;
+    type: 'started' | 'paused' | 'completed';
+    at: string;          // ISO date string
+    userName: string;
+    taskTitle: string;
+    durationMins?: number; // only for paused / completed events
+}
 
 export default function ProjectTimeLogsTab() {
     const { id: projectId } = useParams<{ id: string }>();
     const currentUser = useSelector((s: RootState) => s.auth.user);
+
+    const [showActivity, setShowActivity] = useState(true);
 
     // Resolve role name (role can be a Role object or a string)
     const roleName = currentUser?.role
@@ -88,6 +107,52 @@ export default function ProjectTimeLogsTab() {
     const expectedMins = tasks.reduce((sum, t) => sum + ((t.estimatedHours ?? 0) * 60), 0);
     const varianceMins = actualMins - expectedMins;
     const overEstimate = varianceMins > 0;
+
+    // ── Derive activity events from time logs ─────────────────────────────────
+    // Each time log represents one work session: startTime → endTime
+    // We derive two activity events per log:
+    //   1. "started"  at startTime
+    //   2. "paused" or "completed" at endTime
+    const activityEvents: ActivityEvent[] = [];
+    timeLogs.forEach(log => {
+        const user = typeof log.userId === 'object' ? (log.userId as any) : null;
+        const task = typeof log.taskId === 'object' ? (log.taskId as any) : null;
+        const userName = user?.name || '—';
+        const taskTitle = task?.title || '—';
+        const isCompleted = (log.description || '').toLowerCase().includes('completed');
+
+        if (log.startTime) {
+            activityEvents.push({
+                id: `${log._id}-start`,
+                type: 'started',
+                at: log.startTime,
+                userName,
+                taskTitle,
+            });
+        }
+        if (log.endTime) {
+            activityEvents.push({
+                id: `${log._id}-end`,
+                type: isCompleted ? 'completed' : 'paused',
+                at: log.endTime,
+                userName,
+                taskTitle,
+                durationMins: log.duration,
+            });
+        }
+    });
+    // Sort chronologically descending (most recent first)
+    activityEvents.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    const VISIBLE_ACTIVITY = 12;
+    const visibleEvents = showActivity ? activityEvents.slice(0, VISIBLE_ACTIVITY) : [];
+
+    // ── Activity event config ─────────────────────────────────────────────────
+    const activityConfig: Record<ActivityEvent['type'], { icon: any; color: string; bg: string; label: string }> = {
+        started:   { icon: Play,           color: '#2563EB', bg: 'rgba(37,99,235,0.08)',  label: 'Started' },
+        paused:    { icon: Pause,          color: '#D97706', bg: 'rgba(217,119,6,0.08)',  label: 'Paused'  },
+        completed: { icon: SquareCheckBig, color: '#16A34A', bg: 'rgba(22,163,74,0.08)', label: 'Completed' },
+    };
 
     return (
         <div className="space-y-6">
@@ -162,6 +227,86 @@ export default function ProjectTimeLogsTab() {
                 )}
             </div>
 
+            {/* ── Activity Feed ──────────────────────────────────────────────────── */}
+            {activityEvents.length > 0 && (
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+                    {/* Section header */}
+                    <button
+                        className="w-full flex items-center justify-between px-4 py-3 border-b text-left"
+                        style={{
+                            backgroundColor: 'var(--color-bg-subtle)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                        onClick={() => setShowActivity(v => !v)}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Clock size={14} style={{ color: 'var(--color-text-secondary)' }} />
+                            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                                Task Activity
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>
+                                {activityEvents.length} events
+                            </span>
+                        </div>
+                        {showActivity
+                            ? <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} />
+                            : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />}
+                    </button>
+
+                    {showActivity && (
+                        <div className="divide-y" style={{ borderColor: 'var(--color-border-default)' }}>
+                            {visibleEvents.map(event => {
+                                const cfg = activityConfig[event.type];
+                                const Icon = cfg.icon;
+                                return (
+                                    <div
+                                        key={event.id}
+                                        className="flex items-center gap-3 px-4 py-3"
+                                        style={{ backgroundColor: 'var(--color-bg-surface)' }}
+                                    >
+                                        {/* Icon badge */}
+                                        <div
+                                            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                                            style={{ backgroundColor: cfg.bg }}
+                                        >
+                                            <Icon size={13} style={{ color: cfg.color }} />
+                                        </div>
+
+                                        {/* Text */}
+                                        <div className="flex-1 min-w-0">
+                                            <span className="text-xs font-semibold" style={{ color: cfg.color }}>{cfg.label} </span>
+                                            <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                                {event.taskTitle}
+                                            </span>
+                                            {canSeeAll && (
+                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}> · {event.userName}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Duration (for paused / completed) */}
+                                        {event.durationMins !== undefined && (
+                                            <span className="text-xs font-semibold tabular-nums flex-shrink-0" style={{ color: 'var(--color-primary)' }}>
+                                                {fmt(event.durationMins)}
+                                            </span>
+                                        )}
+
+                                        {/* Timestamp */}
+                                        <span className="text-[10px] flex-shrink-0 text-right" style={{ color: 'var(--color-text-muted)' }}>
+                                            {fmtDateTime(event.at)}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {activityEvents.length > VISIBLE_ACTIVITY && (
+                                <div className="px-4 py-2.5 text-center text-[11px]" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
+                                    Showing {VISIBLE_ACTIVITY} of {activityEvents.length} events — view log table below for full history
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Log Table */}
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
                 {/* Column headers — Member column only for admins/managers */}
@@ -195,6 +340,8 @@ export default function ProjectTimeLogsTab() {
                     timeLogs.map(log => {
                         const user = typeof log.userId === 'object' ? (log.userId as any) : null;
                         const task = typeof log.taskId === 'object' ? (log.taskId as any) : null;
+                        const isCompleted = (log.description || '').toLowerCase().includes('completed');
+                        const descColor = isCompleted ? 'var(--color-success)' : 'var(--color-text-secondary)';
                         return (
                             <div
                                 key={log._id}
@@ -225,7 +372,7 @@ export default function ProjectTimeLogsTab() {
                                 <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--color-primary)' }}>
                                     {fmt(log.duration)}
                                 </span>
-                                <span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }} title={log.description}>
+                                <span className="text-xs truncate font-medium" style={{ color: descColor }} title={log.description}>
                                     {log.description || '—'}
                                 </span>
                             </div>

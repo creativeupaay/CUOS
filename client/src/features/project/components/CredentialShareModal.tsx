@@ -451,21 +451,23 @@ export default function CredentialShareModal({ project, projectId, onClose }: Cr
     const [activeTab, setActiveTab] = useState<ModalTab>('edit');
 
     return (
-        /* Backdrop */
-        <div
-            className="modal-overlay"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        >
-
-            {/* Modal */}
+        <>
+            {/* Dim backdrop — click to close */}
             <div
-                className="relative w-full max-w-lg rounded-xl border shadow-lg overflow-hidden"
+                className="fixed inset-0 z-[200]"
+                style={{ backgroundColor: 'rgba(0,0,0,0.22)' }}
+                onClick={onClose}
+            />
+
+            {/* Right side panel */}
+            <div
+                className="fixed top-0 right-0 h-full z-[201] flex flex-col"
                 style={{
+                    width: 'min(520px, 100vw)',
                     backgroundColor: 'var(--color-bg-surface)',
-                    borderColor: 'var(--color-border-default)',
-                    maxHeight: '90vh',
-                    display: 'flex',
-                    flexDirection: 'column',
+                    borderLeft: '1px solid var(--color-border-default)',
+                    boxShadow: '-16px 0 48px rgba(0,0,0,0.13)',
+                    animation: 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
                 }}
             >
                 {/* Header */}
@@ -481,7 +483,7 @@ export default function CredentialShareModal({ project, projectId, onClose }: Cr
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 rounded transition-colors hover:bg-gray-100"
+                        className="p-1.5 rounded transition-colors hover:bg-black/5"
                         style={{ color: 'var(--color-text-muted)' }}
                     >
                         <X size={16} />
@@ -527,7 +529,7 @@ export default function CredentialShareModal({ project, projectId, onClose }: Cr
                     })}
                 </div>
 
-                {/* Body */}
+                {/* Body — scrollable */}
                 <div className="p-5 overflow-y-auto flex-1">
                     {activeTab === 'edit' ? (
                         <EditAccessTab project={project} projectId={projectId} />
@@ -536,6 +538,6 @@ export default function CredentialShareModal({ project, projectId, onClose }: Cr
                     )}
                 </div>
             </div>
-        </div>
+        </>
     );
 }
