@@ -79,6 +79,16 @@ export interface IClient extends Document {
 
     activities: IClientActivity[];
 
+    // Onboarding form
+    onboardingToken?: string;
+    onboardingTokenExpiry?: Date;
+    onboardingStatus?: 'pending' | 'submitted';
+    onboardingSubmittedAt?: Date;
+
+    // Client Portal
+    portalEnabled: boolean;
+    portalToken?: string;
+
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -159,7 +169,20 @@ const ClientSchema = new Schema<IClient>(
 
         activities: [ClientActivitySchema],
 
+        // Onboarding form
+        onboardingToken: { type: String, sparse: true, index: true },
+        onboardingTokenExpiry: { type: Date },
+        onboardingStatus: {
+            type: String,
+            enum: ['pending', 'submitted'],
+        },
+        onboardingSubmittedAt: { type: Date },
+
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+
+        // Client Portal
+        portalEnabled: { type: Boolean, default: false },
+        portalToken: { type: String, sparse: true, index: true },
     },
     {
         timestamps: true,

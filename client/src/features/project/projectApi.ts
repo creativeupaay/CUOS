@@ -8,6 +8,7 @@ import type {
     DocFolder,
     DocItem,
     DocAdminUser,
+    Note,
 } from './types/types';
 import type {
     CreateProjectRequest,
@@ -24,6 +25,8 @@ import type {
     ShareCredentialsRequest,
     RevokeCredentialAccessRequest,
     UpdateCredentialAdminsRequest,
+    CreateNoteRequest,
+    UpdateNoteRequest,
     ApiResponse,
     UpdateAssigneePermissionsRequest,
 } from './types/apiTypes';
@@ -487,6 +490,53 @@ export const projectApi = api.injectEndpoints({
                 { type: 'Projects', id: projectId },
             ],
         }),
+
+        // ============================================
+        // NOTE ENDPOINTS
+        // ============================================
+
+        getNotes: builder.query<ApiResponse<Note[]>, string>({
+            query: (projectId) => `/projects/${projectId}/notes`,
+            providesTags: (_result, _error, projectId) => [{ type: 'Notes' as const, id: projectId }],
+        }),
+
+        createNote: builder.mutation<ApiResponse<Note>, { projectId: string; data: CreateNoteRequest }>({
+            query: ({ projectId, data }) => ({
+                url: `/projects/${projectId}/notes`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Notes' as const, id: projectId }],
+        }),
+
+        updateNote: builder.mutation<ApiResponse<Note>, { projectId: string; noteId: string; data: UpdateNoteRequest }>({
+            query: ({ projectId, noteId, data }) => ({
+                url: `/projects/${projectId}/notes/${noteId}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Notes' as const, id: projectId }],
+        }),
+
+        deleteNote: builder.mutation<ApiResponse<void>, { projectId: string; noteId: string }>({
+            query: ({ projectId, noteId }) => ({
+                url: `/projects/${projectId}/notes/${noteId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Notes' as const, id: projectId }],
+        }),
+
+        uploadNoteImage: builder.mutation<ApiResponse<{ cloudinaryId: string; url: string }>, { projectId: string; file: File }>({
+            query: ({ projectId, file }) => {
+                const formData = new FormData();
+                formData.append('image', file);
+                return {
+                    url: `/projects/${projectId}/notes/upload-image`,
+                    method: 'POST',
+                    body: formData,
+                };
+            },
+        }),
     }),
     overrideExisting: false,
 });
@@ -561,4 +611,11 @@ export const {
     // Doc Admins
     useGetDocAdminsQuery,
     useUpdateDocAdminsMutation,
+
+    // Notes
+    useGetNotesQuery,
+    useCreateNoteMutation,
+    useUpdateNoteMutation,
+    useDeleteNoteMutation,
+    useUploadNoteImageMutation,
 } = projectApi;

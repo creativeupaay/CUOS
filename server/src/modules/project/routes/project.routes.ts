@@ -6,6 +6,7 @@ import * as timeLogController from '../controllers/timeLog.controller';
 import * as meetingController from '../controllers/meeting.controller';
 import * as credentialController from '../controllers/credential.controller';
 import * as docController from '../controllers/doc.controller';
+import * as noteController from '../controllers/note.controller';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     checkProjectAccess,
@@ -21,6 +22,7 @@ import * as taskValidators from '../validators/task.validator';
 import * as timeLogValidators from '../validators/timeLog.validator';
 import * as meetingValidators from '../validators/meeting.validator';
 import * as credentialValidators from '../validators/credential.validator';
+import * as noteValidators from '../validators/note.validator';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 
 const router = Router();
@@ -398,6 +400,51 @@ router.patch(
     validateRequest(credentialValidators.updateCredentialAdminsSchema),
     checkAdmin,
     credentialController.updateCredentialAdmins
+);
+
+// ============================================
+// NOTE ROUTES
+// ============================================
+
+// Upload image for a note block (MUST be before /:noteId routes)
+router.post(
+    '/:projectId/notes/upload-image',
+    validateRequest(noteValidators.uploadNoteImageSchema),
+    checkProjectAccess,
+    upload.single('image'),
+    noteController.uploadNoteImage
+);
+
+// Get all notes for a project
+router.get(
+    '/:projectId/notes',
+    validateRequest(noteValidators.getNotesSchema),
+    checkProjectAccess,
+    noteController.getNotes
+);
+
+// Create a note
+router.post(
+    '/:projectId/notes',
+    validateRequest(noteValidators.createNoteSchema),
+    checkProjectAccess,
+    noteController.createNote
+);
+
+// Update a note (ownership enforced in service)
+router.patch(
+    '/:projectId/notes/:noteId',
+    validateRequest(noteValidators.updateNoteSchema),
+    checkProjectAccess,
+    noteController.updateNote
+);
+
+// Delete a note (ownership enforced in service)
+router.delete(
+    '/:projectId/notes/:noteId',
+    validateRequest(noteValidators.deleteNoteSchema),
+    checkProjectAccess,
+    noteController.deleteNote
 );
 
 export default router;

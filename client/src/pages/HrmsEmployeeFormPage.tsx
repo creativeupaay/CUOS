@@ -48,6 +48,7 @@ export default function HrmsEmployeeFormPage() {
         workSchedule: { workingDaysPerWeek: 5, hoursPerDay: 8 },
     });
 
+const [autoFilledDept, setAutoFilledDept] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
 
     useEffect(() => {
@@ -146,7 +147,13 @@ export default function HrmsEmployeeFormPage() {
                         {!isEdit && (
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Select User *</label>
-                                <select required value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}
+                                <select required value={form.userId} onChange={(e) => {
+                                        const selectedUser = availableUsers.find((u: any) => u._id === e.target.value);
+                                        const deptRaw = (selectedUser?.department || '').toLowerCase();
+                                        const matchedDept = DEPARTMENTS.includes(deptRaw) ? deptRaw : '';
+                                        setAutoFilledDept(!!matchedDept);
+                                        setForm({ ...form, userId: e.target.value, ...(matchedDept ? { department: matchedDept } : {}) });
+                                    }}
                                     className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
                                     <option value="">— Choose a user —</option>
                                     {availableUsers.map((u: any) => (
@@ -173,10 +180,13 @@ export default function HrmsEmployeeFormPage() {
                         </div>
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Department *</label>
-                            <select required value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}
+                            <select required value={form.department} onChange={(e) => { setAutoFilledDept(false); setForm({ ...form, department: e.target.value }); }}
                                 className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
                                 {DEPARTMENTS.map((d) => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
                             </select>
+                            {autoFilledDept && (
+                                <p className="text-xs mt-1" style={{ color: '#16A34A' }}>✓ Auto-filled from user profile</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Employment Type</label>

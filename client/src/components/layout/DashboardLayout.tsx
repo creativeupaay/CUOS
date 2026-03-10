@@ -54,6 +54,17 @@ function resolveTitle(pathname: string): string {
     }
     if (pathname === '/hrms/employees/new') return 'New Employee';
 
+    // Client detail pages
+    if (pathname.startsWith('/crm/clients/') && pathname !== '/crm/clients/new') {
+        return pathname.endsWith('/edit') ? 'Edit Client' : 'Client Details';
+    }
+    if (pathname === '/crm/clients/new') return 'New Client';
+
+    // Lead detail pages
+    if (pathname.startsWith('/crm/leads/') && pathname !== '/crm/leads/new') {
+        return 'Lead Details';
+    }
+
     // Fallback: capitalise last segment
     const last = pathname.split('/').filter(Boolean).pop() || '';
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');

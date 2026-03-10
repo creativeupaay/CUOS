@@ -6,6 +6,7 @@ import { uploadDocument, getSignedUrl } from '../../../utils/cloudinary.util';
 import { CreateEmployeeInput, UpdateEmployeeInput } from '../validators/employee.validator';
 import AppError from '../../../utils/appError';
 import { env } from '../../../config/env.config';
+import { sendEmployeeOnboardingEmail } from '../../../services/email.service';
 
 class EmployeeService {
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
@@ -222,25 +223,46 @@ class EmployeeService {
 
     /**
      * Generate a unique form token for an employee (idempotent — returns existing token if already set).
+     * Always sends (or re-sends) the onboarding email to the employee.
      */
-    async generateFormToken(employeeId: string): Promise<{ token: string; formUrl: string }> {
-        const employee = await Employee.findById(employeeId);
+    async generateFormToken(employeeId: string): Promise<{ token: string; formUrl: string; emailSent: boolean }> {
+        const employee = await Employee.findById(employeeId).populate<{
+            userId: { _id: string; name: string; email: string };
+        }>('userId', 'name email');
         if (!employee) {
             throw new AppError('Employee not found', 404);
         }
 
-        // Idempotent: if token already exists, return it
+        let token: string;
+
+        // Idempotent: if token already exists, reuse it (acts as resend)
         if (employee.formToken) {
-            const formUrl = `${env.FRONTEND_URL}/employee-form/${employee.formToken}`;
-            return { token: employee.formToken, formUrl };
+            token = employee.formToken;
+        } else {
+            token = uuidv4();
+            employee.formToken = token;
+            await employee.save();
         }
 
-        const token = uuidv4();
-        employee.formToken = token;
-        await employee.save();
-
         const formUrl = `${env.FRONTEND_URL}/employee-form/${token}`;
-        return { token, formUrl };
+
+        // Send onboarding email — non-blocking (failure doesn't break the response)
+        let emailSent = false;
+        const userEmail = employee.userId?.email;
+        if (userEmail) {
+            try {
+                await sendEmployeeOnboardingEmail({
+                    to: userEmail,
+                    employeeName: employee.userId.name,
+                    formUrl,
+                });
+                emailSent = true;
+            } catch (err) {
+                console.error('[generateFormToken] Email send failed:', err);
+            }
+        }
+
+        return { token, formUrl, emailSent };
     }
 
     /**

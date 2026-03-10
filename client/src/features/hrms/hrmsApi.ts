@@ -86,7 +86,7 @@ export const hrmsApi = api.injectEndpoints({
 
         // Generate (or retrieve existing) self-onboarding form token
         generateFormToken: builder.mutation<
-            ApiResponse<{ token: string; formUrl: string }>,
+            ApiResponse<{ token: string; formUrl: string; emailSent: boolean }>,
             string
         >({
             query: (id) => ({

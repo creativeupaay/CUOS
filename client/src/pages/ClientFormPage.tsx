@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCreateClientMutation, useUpdateClientMutation, useGetClientQuery } from '@/features/client/clientApi';
 import type { ClientContact, ClientPhone, ClientCustomDetail } from '@/features/client/types/types';
-import { ArrowLeft, Plus, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, X, Trash2, Info } from 'lucide-react';
 import SelectCurrency from '@/components/ui/CurrencySelect';
+import { useGetLeadByIdQuery } from '@/features/crm';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const fromLeadId = searchParams.get('fromLead') || undefined;
     const isEdit = !!id;
 
     const { data: clientData } = useGetClientQuery(id!, { skip: !id });
+    const { data: leadData } = useGetLeadByIdQuery(fromLeadId!, { skip: !fromLeadId });
     const [createClient, { isLoading: isCreating }] = useCreateClientMutation();
     const [updateClient, { isLoading: isUpdating }] = useUpdateClientMutation();
+
+    const [sendOnboardingForm, setSendOnboardingForm] = useState(false);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -78,16 +84,54 @@ export default function ClientFormPage() {
         }
     }, [clientData]);
 
+    // Pre-fill from lead when converting a closed lead to a client
+    useEffect(() => {
+        if (fromLeadId && leadData?.data.lead && !isEdit) {
+            const lead = leadData.data.lead;
+            setFormData((prev) => ({
+                ...prev,
+                name: lead.company || lead.name || prev.name,
+                companyName: lead.company || prev.companyName,
+                email: lead.email || prev.email,
+                phone: lead.phone || prev.phone,
+                billingDetails: {
+                    ...prev.billingDetails,
+                    currency: lead.currency || prev.billingDetails.currency,
+                },
+                contacts:
+                    lead.name
+                        ? [
+                              {
+                                  name: lead.name,
+                                  email: lead.email || '',
+                                  phone: lead.phone || '',
+                                  role: 'Primary Contact',
+                                  isPrimary: true,
+                              },
+                          ]
+                        : prev.contacts,
+                notes: lead.notes
+                    ? `[From Lead] ${lead.notes}`
+                    : `Converted from lead. Estimated value: ${lead.currency || 'INR'} ${lead.estimatedValue || 0}`,
+            }));
+        }
+    }, [fromLeadId, leadData, isEdit]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         try {
             if (isEdit) {
                 await updateClient({ id: id!, data: formData }).unwrap();
+                navigate(`/crm/clients/${id}`);
             } else {
-                await createClient(formData).unwrap();
+                const result = await createClient({
+                    ...formData,
+                    ...(fromLeadId ? { leadId: fromLeadId } : {}),
+                    sendOnboardingForm,
+                }).unwrap();
+                navigate(`/crm/clients/${result.data.client._id}`);
             }
-            navigate('/crm/clients');
         } catch (err: any) {
             console.error('Failed to save client:', err);
             const errorMessage = err.data?.message || err.message || 'Failed to save client. Please try again.';
@@ -178,9 +222,22 @@ export default function ClientFormPage() {
                         <ArrowLeft size={24} />
                     </button>
                     <h1 className="text-3xl font-bold text-neutral-900">
-                        {isEdit ? 'Edit Client' : 'New Client'}
+                        {isEdit ? 'Edit Client' : fromLeadId ? 'Convert Lead to Client' : 'New Client'}
                     </h1>
                 </div>
+
+                {/* Lead conversion info banner */}
+                {fromLeadId && !isEdit && (
+                    <div className="mb-6 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <Info size={18} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm font-medium text-blue-800">Lead details pre-filled</p>
+                            <p className="text-sm text-blue-600 mt-0.5">
+                                The form has been pre-filled with the lead's information. Review and complete any missing details before saving.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Basic Information */}
@@ -629,6 +686,37 @@ export default function ClientFormPage() {
                             placeholder="Additional notes about this client..."
                         />
                     </div>
+
+                    {/* Onboarding Form — only on create */}
+                    {!isEdit && (
+                        <div className="bg-white rounded-lg border border-neutral-200 p-6">
+                            <h2 className="text-lg font-semibold text-neutral-900 mb-4">Client Onboarding</h2>
+                            <label className="flex items-start gap-3 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={sendOnboardingForm}
+                                    onChange={(e) => setSendOnboardingForm(e.target.checked)}
+                                    className="mt-0.5 rounded border-neutral-300 text-primary focus:ring-primary"
+                                    disabled={!formData.email}
+                                />
+                                <span className="text-sm text-neutral-700">
+                                    Send detail fill form to{' '}
+                                    <span className="font-medium text-neutral-900">
+                                        {formData.email || '(add an email above)'}
+                                    </span>
+                                    <span className="block mt-1 text-neutral-500 text-xs">
+                                        An email will be sent to the client with a secure link to fill in their full details.
+                                        The link will expire in <strong>30 days</strong>.
+                                    </span>
+                                </span>
+                            </label>
+                            {sendOnboardingForm && !formData.email && (
+                                <p className="mt-2 text-xs text-amber-600">
+                                    Please enter a client email address above to enable this option.
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex gap-4">

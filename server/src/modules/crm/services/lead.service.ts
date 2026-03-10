@@ -1,5 +1,4 @@
 import { Lead, ILead } from '../models/Lead.model';
-import { Client } from '../../client/models/Client.model';
 import { Proposal } from '../models/Proposal.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
@@ -186,12 +185,10 @@ export class LeadService {
     }
 
     /**
-     * Close lead — auto-creates client, locks lead, links proposals
+     * Close lead — locks the lead so the user can create a client from it.
+     * Client creation is now a separate step done via the client form page.
      */
-    async closeLead(leadId: string, userId: Types.ObjectId): Promise<{
-        lead: ILead;
-        client: any;
-    }> {
+    async closeLead(leadId: string, _userId: Types.ObjectId): Promise<{ lead: ILead }> {
         const lead = await Lead.findById(leadId);
 
         if (!lead) {
@@ -206,59 +203,36 @@ export class LeadService {
             throw new AppError('Lead is already converted to a client', 400);
         }
 
-        // Find all proposals linked to this lead
-        const proposals = await Proposal.find({ leadId: lead._id });
-        const proposalIds = proposals.map((p) => p._id as Types.ObjectId);
-
-        // Create client from lead data
-        const client = await Client.create({
-            name: lead.company || lead.name,
-            companyName: lead.company,
-            email: lead.email,
-            phone: lead.phone,
-            contacts: [
-                {
-                    name: lead.name,
-                    email: lead.email,
-                    phone: lead.phone,
-                    role: 'Primary Contact',
-                    isPrimary: true,
-                },
-            ],
-            billingDetails: {
-                currency: lead.currency,
-            },
-            leadId: lead._id,
-            proposalIds,
-            activities: lead.activities.map((act) => ({
-                type: act.type,
-                description: act.description,
-                date: act.date,
-                createdBy: act.createdBy,
-            })),
-            notes: `Converted from lead. Estimated value: ${lead.currency} ${lead.estimatedValue || 0}`,
-            createdBy: userId,
-        });
-
-        // Update all proposals to reference the new client
-        if (proposalIds.length > 0) {
-            await Proposal.updateMany(
-                { _id: { $in: proposalIds } },
-                { $set: { clientId: client._id } }
-            );
-        }
-
-        // Lock the lead and set stage to closed
+        // Lock the lead and set stage to closed — client will be created separately
         lead.stage = 'closed';
         lead.isLocked = true;
         lead.closedAt = new Date();
-        lead.convertedClientId = client._id as Types.ObjectId;
         await lead.save();
 
-        return {
-            lead: await this.getLeadById(leadId),
-            client,
-        };
+        return { lead: await this.getLeadById(leadId) };
+    }
+
+    /**
+     * Link a converted client back to this lead
+     * Called after the client is created from the lead form
+     */
+    async linkClientToLead(leadId: string, clientId: Types.ObjectId): Promise<void> {
+        const lead = await Lead.findById(leadId);
+        if (!lead) return;
+
+        // Find all proposals linked to this lead and update them
+        const proposals = await Proposal.find({ leadId: lead._id });
+        const proposalIds = proposals.map((p) => p._id as Types.ObjectId);
+
+        if (proposalIds.length > 0) {
+            await Proposal.updateMany(
+                { _id: { $in: proposalIds } },
+                { $set: { clientId } }
+            );
+        }
+
+        lead.convertedClientId = clientId;
+        await lead.save();
     }
 
     /**

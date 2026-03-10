@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { ClientService } from '../services/client.service';
+import { Client } from '../models/Client.model';
 import asyncHandler from '../../../utils/asyncHandler';
 import type { CreateClientInput, UpdateClientInput, GetClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
 
@@ -103,6 +105,86 @@ export const addActivity = asyncHandler(async (req: Request, res: Response, next
 
     res.status(200).json({
         status: 'success',
+        data: { client },
+    });
+});
+
+// ─── Client Portal Management ─────────────────────────────────────────────────
+
+/**
+ * Generate (or regenerate) a unique portal access token for a client.
+ * Discards any existing token (old link becomes invalid immediately).
+ */
+export const generatePortalToken = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const client = await Client.findByIdAndUpdate(
+        id,
+        { portalToken: token },
+        { new: true, select: 'name email portalEnabled portalToken' }
+    ).lean();
+
+    if (!client) {
+        res.status(404).json({ status: 'fail', message: 'Client not found.' });
+        return;
+    }
+
+    res.status(200).json({
+        status: 'success',
+        message: 'Portal access link generated.',
+        data: { clientId: id, portalToken: token },
+    });
+});
+
+/**
+ * Revoke the portal access token. Existing link becomes invalid immediately.
+ */
+export const revokePortalToken = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const client = await Client.findByIdAndUpdate(
+        id,
+        { $unset: { portalToken: '' } },
+        { new: true }
+    ).lean();
+
+    if (!client) {
+        res.status(404).json({ status: 'fail', message: 'Client not found.' });
+        return;
+    }
+
+    res.status(200).json({ status: 'success', message: 'Portal access revoked.' });
+});
+
+/**
+ * Toggle the client portal on/off.
+ * Body: { enabled: boolean }
+ */
+export const togglePortal = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+        res.status(400).json({ status: 'fail', message: '`enabled` must be a boolean.' });
+        return;
+    }
+
+    const client = await Client.findByIdAndUpdate(
+        id,
+        { portalEnabled: enabled },
+        { new: true, select: 'portalEnabled portalToken name email' }
+    ).lean();
+
+    if (!client) {
+        res.status(404).json({ status: 'fail', message: 'Client not found.' });
+        return;
+    }
+
+    res.status(200).json({
+        status: 'success',
+        message: `Client portal ${enabled ? 'enabled' : 'disabled'} successfully.`,
         data: { client },
     });
 });

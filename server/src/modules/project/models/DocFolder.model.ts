@@ -7,6 +7,8 @@ export interface IDocFolder extends Document {
     parentId: Types.ObjectId | null;
     createdBy: Types.ObjectId;
     viewAccess: Types.ObjectId[];
+    isSystem: boolean;        // Cannot be deleted
+    isClientShared: boolean;  // Visible in client portal
     createdAt: Date;
     updatedAt: Date;
 }
@@ -34,6 +36,8 @@ const DocFolderSchema = new Schema<IDocFolder>(
             required: true,
         },
         viewAccess: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+        isSystem: { type: Boolean, default: false },
+        isClientShared: { type: Boolean, default: false },
     },
     { timestamps: true }
 );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil } from 'lucide-react';
+import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil, Eye, EyeOff } from 'lucide-react';
 import {
     useGetAdminUsersQuery,
     useCreateAdminUserMutation,
@@ -30,6 +30,7 @@ const PRESET_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR
 function EditCredentialsModal({ user, onClose, onSave }: { user: any; onClose: () => void; onSave: (email: string, password: string) => void }) {
     const [email, setEmail] = useState(user.email);
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const inputSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' };
     const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none';
 
@@ -49,9 +50,18 @@ function EditCredentialsModal({ user, onClose, onSave }: { user: any; onClose: (
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>New Password <span className="text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(leave blank to keep current)</span></label>
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 8 characters"
-                            autoComplete="new-password"
-                            className={inputCls} style={inputSty} />
+                        <div className="relative">
+                            <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 8 characters"
+                                autoComplete="new-password"
+                                className={inputCls} style={inputSty} />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
@@ -77,6 +87,7 @@ export default function AdminUsersPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
     const [resetPwdUser, setResetPwdUser] = useState<string | null>(null);
     const [newPassword, setNewPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
 
     const { data, isLoading } = useGetAdminUsersQuery({ search, isActive: filterStatus, page, limit: 15 });
@@ -160,7 +171,7 @@ export default function AdminUsersPage() {
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{pagination?.total || 0} total users</p>
                     </div>
                 </div>
-                <button onClick={() => { setShowCreate(true); setFormData(initialForm); setError(''); }}
+                <button onClick={() => { setShowCreate(true); setShowPassword(false); setFormData(initialForm); setError(''); }}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white font-medium text-sm" style={{ backgroundColor: 'var(--color-primary)' }}>
                     <Plus size={18} /> Add User
                 </button>
@@ -242,7 +253,7 @@ export default function AdminUsersPage() {
                                                             </button>
                                                         </>
                                                     )}
-                                                    <button onClick={() => { setResetPwdUser(user._id); setNewPassword(''); }} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Reset password">
+                                                    <button onClick={() => { setResetPwdUser(user._id); setShowPassword(false); setNewPassword(''); }} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Reset password">
                                                         <KeyRound size={16} style={{ color: 'var(--color-text-muted)' }} />
                                                     </button>
                                                 </div>
@@ -293,10 +304,19 @@ export default function AdminUsersPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Password</label>
-                                        <input required type="password" value={formData.password} minLength={8} placeholder="Min 8 characters"
-                                            autoComplete="new-password"
-                                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                            className={inputCls} style={inputSty} />
+                                        <div className="relative">
+                                            <input required type={showPassword ? "text" : "password"} value={formData.password} minLength={8} placeholder="Min 8 characters"
+                                                autoComplete="new-password"
+                                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                                className={inputCls} style={inputSty} />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                            >
+                                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Role / Designation</label>
@@ -376,9 +396,18 @@ export default function AdminUsersPage() {
                             <button onClick={() => setResetPwdUser(null)} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
                         </div>
                         <div className="space-y-4">
-                            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                                autoComplete="new-password"
-                                className={inputCls} style={inputSty} minLength={8} placeholder="New password (min 8 chars)" />
+                            <div className="relative">
+                                <input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                                    autoComplete="new-password"
+                                    className={inputCls} style={inputSty} minLength={8} placeholder="New password (min 8 chars)" />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                >
+                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                            </div>
                             <div className="flex justify-end gap-3">
                                 <button onClick={() => setResetPwdUser(null)} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
                                 <button onClick={handleResetPwd} disabled={newPassword.length < 8}

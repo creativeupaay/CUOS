@@ -49,6 +49,10 @@ export const createClientSchema = z.object({
         contacts: z.array(clientContactSchema).default([]),
         status: z.enum(['active', 'inactive', 'archived']).default('active'),
         notes: z.string().optional(),
+        // Lead conversion
+        leadId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
+        // Client onboarding email
+        sendOnboardingForm: z.boolean().optional(),
     }),
 });
 

@@ -9,3 +9,4 @@ export { default as ProjectTimeLogsTab } from './ProjectTimeLogsTab';
 export { default as ProjectMeetingsTab } from './ProjectMeetingsTab';
 export { default as ProjectCredentialsTab } from './ProjectCredentialsTab';
 export { default as ProjectDocumentsTab } from './ProjectDocumentsTab';
+export { default as ProjectNotesTab } from './ProjectNotesTab';

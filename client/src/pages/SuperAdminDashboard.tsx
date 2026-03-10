@@ -1,11 +1,13 @@
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { logout } from '@/features/auth/slices/authSlice';
 import { useLogoutMutation } from '@/features/auth/authApi';
+import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, ChevronRight,
+    ArrowRight, Clock, LogOut, Sparkles, ChevronRight, Settings
 } from 'lucide-react';
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -144,9 +146,21 @@ export default function SuperAdminDashboard() {
             : String(user.role)
         : 'User';
 
+    const { data: profileData } = useGetMyProfileQuery();
+    const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
+
     const mp = user?.modulePermissions;
 
-    const now = new Date();
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            setNow(new Date());
+        }, 1000); // Ticks every second
+
+        return () => clearInterval(intervalId); // Cleanup on unmount
+    }, []);
+
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -251,27 +265,47 @@ export default function SuperAdminDashboard() {
                     {/* User + Logout */}
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2.5 pr-3" style={{ borderRight: '1px solid var(--color-border-default)' }}>
-                            <div
-                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
-                            >
-                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                            </div>
-                            <div>
+                            <div className="text-right hidden sm:block">
                                 <div className="text-sm font-semibold leading-tight" style={{ color: 'var(--color-text-primary)' }}>
                                     {user?.name || 'User'}
                                 </div>
                                 <div
-                                    className="text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize"
+                                    className="text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize inline-block mt-0.5"
                                     style={{
                                         background: 'var(--color-primary-soft)',
                                         color: 'var(--color-primary-dark)',
-                                        display: 'inline-block',
                                     }}
                                 >
                                     {displayRole}
                                 </div>
                             </div>
+
+                            <div className="shrink-0">
+                                {profilePhotoUrl ? (
+                                    <img
+                                        src={profilePhotoUrl}
+                                        alt={user?.name || 'Profile'}
+                                        className="w-8 h-8 rounded-full object-cover"
+                                        style={{ boxShadow: 'var(--shadow-brand)' }}
+                                    />
+                                ) : (
+                                    <div
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                        style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
+                                    >
+                                        {user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                                    </div>
+                                )}
+                            </div>
+
+                            <Link
+                                to="/my-hrms/profile"
+                                title="My Profile & Settings"
+                                className="flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors hover:bg-gray-100 ml-1.5"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                <Settings size={15} />
+                            </Link>
                         </div>
                         <button
                             onClick={handleLogout}
@@ -279,7 +313,7 @@ export default function SuperAdminDashboard() {
                             style={{ height: '34px', padding: '0 12px', gap: '6px' }}
                         >
                             <LogOut size={14} />
-                            <span>Logout</span>
+                            <span className="hidden sm:inline">Logout</span>
                         </button>
                     </div>
                 </div>

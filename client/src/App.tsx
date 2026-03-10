@@ -10,6 +10,12 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import LoginPage from './pages/LoginPage';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 
+// Client Portal pages (standalone — different layout from admin)
+import ClientPortalAccessPage from './pages/ClientPortalAccessPage';
+import ClientPortalProjectsPage from './pages/ClientPortalProjectsPage';
+import ClientPortalProjectDetailPage from './pages/ClientPortalProjectDetailPage';
+import ClientPortalLayout from './components/layout/ClientPortalLayout';
+
 // Project pages
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectFormPage from './pages/ProjectFormPage';
@@ -20,6 +26,7 @@ import ProjectTimeLogsTab from './pages/ProjectTimeLogsTab';
 import ProjectMeetingsTab from './pages/ProjectMeetingsTab';
 import ProjectCredentialsTab from './pages/ProjectCredentialsTab';
 import ProjectDocumentsTab from './pages/ProjectDocumentsTab';
+import ProjectNotesTab from './pages/ProjectNotesTab';
 
 // Client pages
 import ClientsPage from './pages/ClientsPage';
@@ -59,6 +66,8 @@ import EmployeePayrollPage from './pages/EmployeePayrollPage';
 import MyProfilePage from './pages/MyProfilePage';
 // Public self-onboarding form (no login required)
 import EmployeeOnboardingFormPage from './pages/EmployeeOnboardingFormPage';
+// Public client onboarding form (no login required)
+import ClientOnboardingPage from './pages/ClientOnboardingPage';
 
 
 // Admin pages
@@ -106,6 +115,8 @@ function App() {
 
         {/* Employee self-onboarding form — public, no login required */}
         <Route path="/employee-form/:token" element={<EmployeeOnboardingFormPage />} />
+        {/* Client onboarding form — public, no login required */}
+        <Route path="/onboarding/:token" element={<ClientOnboardingPage />} />
 
         {/* Dashboard - NO sidebar */}
         <Route
@@ -137,6 +148,7 @@ function App() {
             <Route path="meetings" element={<ProjectMeetingsTab />} />
             <Route path="credentials" element={<ProjectCredentialsTab />} />
             <Route path="documents" element={<ProjectDocumentsTab />} />
+            <Route path="notes" element={<ProjectNotesTab />} />
           </Route>
 
           {/* CRM Module */}
@@ -192,6 +204,15 @@ function App() {
           path="/"
           element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
         />
+
+        {/* ── Client Portal (standalone — no admin auth required) ── */}
+        {/* Unique access link: /portal/:clientId/:token — exchanges for a session cookie */}
+        <Route path="/portal/:clientId/:token" element={<ClientPortalAccessPage />} />
+        <Route element={<ClientPortalLayout />}>
+          <Route path="/client-portal" element={<Navigate to="/client-portal/projects" replace />} />
+          <Route path="/client-portal/projects" element={<ClientPortalProjectsPage />} />
+          <Route path="/client-portal/projects/:id" element={<ClientPortalProjectDetailPage />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

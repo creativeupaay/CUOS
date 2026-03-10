@@ -74,11 +74,12 @@ export default function CrmLeadDetailPage() {
     };
 
     const handleCloseDeal = async () => {
-        if (!window.confirm('Are you sure you want to close this deal? A client record will be created automatically.')) return;
+        if (!window.confirm('Are you sure you want to close this deal? You will be taken to the Create Client form with details pre-filled.')) return;
 
         try {
-            const result = await closeDeal(id!).unwrap();
-            navigate(`/crm/clients/${result.data.client._id}`);
+            await closeDeal(id!).unwrap();
+            // Lead is now locked; redirect to client form with lead data pre-filled
+            navigate(`/crm/clients/new?fromLead=${id}`);
         } catch (error) {
             console.error('Failed to close deal:', error);
             alert('Failed to close deal. Please try again.');

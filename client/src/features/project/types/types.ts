@@ -233,6 +233,8 @@ export interface DocFolder {
     parentId: string | null;
     createdBy: string | User;
     viewAccess: (string | User)[];
+    isClientShared?: boolean;
+    isSystem?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -252,3 +254,40 @@ export interface DocItem {
 }
 
 export type DocAdminUser = User;
+
+// ─── Note Types ───────────────────────────────────────────────────────────────
+
+export interface NoteChecklistItem {
+    id: string;
+    text: string;
+    checked: boolean;
+}
+
+export type NoteBlockType = 'text' | 'checklist' | 'image';
+
+export interface NoteBlock {
+    id: string;
+    type: NoteBlockType;
+    // text block
+    content?: string;
+    // checklist block
+    items?: NoteChecklistItem[];
+    // image block
+    cloudinaryId?: string;
+    url?: string;
+    caption?: string;
+}
+
+export interface Note {
+    _id: string;
+    projectId: string;
+    title: string;
+    color: string;
+    isPinned: boolean;
+    blocks: NoteBlock[];
+    createdBy: User;
+    updatedBy?: User;
+    lastEditedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}

@@ -9,6 +9,7 @@ import {
     Video,
     KeyRound,
     FileText,
+    StickyNote,
     Loader2,
     AlertCircle,
     ChevronRight,
@@ -82,6 +83,7 @@ export default function ProjectDetailPage() {
         { name: 'Meetings', path: `/projects/${id}/meetings`, icon: <Video size={15} />, exact: false, permKey: 'meetings' },
         { name: 'Credentials', path: `/projects/${id}/credentials`, icon: <KeyRound size={15} />, exact: false, permKey: 'credentials' },
         { name: 'Documents', path: `/projects/${id}/documents`, icon: <FileText size={15} />, exact: false, permKey: 'documents' },
+        { name: 'Notes', path: `/projects/${id}/notes`, icon: <StickyNote size={15} />, exact: false, permKey: 'notes' },
     ];
     const tabs = isSuperAdmin
         ? allTabs

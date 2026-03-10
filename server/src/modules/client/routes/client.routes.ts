@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as clientController from '../controllers/client.controller';
+import * as onboardingController from '../controllers/clientOnboarding.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
@@ -27,5 +28,15 @@ router.get('/:id/projects', validateRequest(getClientSchema), clientController.g
 
 // Client activities
 router.post('/:id/activities', validateRequest(addClientActivitySchema), clientController.addActivity);
+
+// Client onboarding form — (re)send link
+router.post('/:id/send-onboarding', validateRequest(getClientSchema), onboardingController.sendOnboardingEmail);
+
+// ─── Client Portal Management ─────────────────────────────────────────────────
+// Generate or regenerate the unique portal access link
+router.post('/:id/portal/generate-link', validateRequest(getClientSchema), clientController.generatePortalToken);
+// Revoke portal access (token cleared, existing link stops working)
+router.delete('/:id/portal/revoke', validateRequest(getClientSchema), clientController.revokePortalToken);
+router.patch('/:id/portal/toggle', validateRequest(getClientSchema), clientController.togglePortal);
 
 export default router;

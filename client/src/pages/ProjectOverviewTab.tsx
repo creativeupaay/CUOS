@@ -31,6 +31,7 @@ export default function ProjectOverviewTab() {
         meetings: false,
         credentials: false,
         documents: false,
+        notes: false,
     });
 
     // Edit permissions state
@@ -42,6 +43,7 @@ export default function ProjectOverviewTab() {
         meetings: false,
         credentials: false,
         documents: false,
+        notes: false,
     });
 
     // Load all active employees — the employee list is the team pool for project assignment
@@ -68,7 +70,7 @@ export default function ProjectOverviewTab() {
             setSelectedUserId('');
             setSelectedRole('');
             setRoleError(false);
-            setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false });
+            setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
         } catch (error) {
             console.error('Failed to add assignee:', error);
         }
@@ -93,11 +95,11 @@ export default function ProjectOverviewTab() {
             if (res.data) {
                 setEditSubModules(res.data);
             } else {
-                setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false });
+                setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
             }
         } catch (error) {
             console.error("Failed to fetch assignee permissions", error);
-            setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false });
+            setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
         }
     };
 
@@ -258,7 +260,7 @@ export default function ProjectOverviewTab() {
                                     onClick={() => {
                                         setIsAddingMember(false);
                                         setSelectedUserId('');
-                                        setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false });
+                                        setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
                                     }}
                                     className="px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50 bg-white"
                                     style={{ borderColor: 'var(--color-border-default)' }}
@@ -281,7 +283,7 @@ export default function ProjectOverviewTab() {
                                         onChange={(e) => {
                                             const val = e.target.checked;
                                             setSubModules({
-                                                overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val
+                                                overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val, notes: val
                                             });
                                         }}
                                         disabled={isAdding}

@@ -12,7 +12,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 import {
     ArrowLeft, Edit, User, Briefcase, DollarSign,
     Plus, X, Loader2, Eye, EyeOff, Calendar,
-    Share2, CheckCircle2, Clock, ShieldCheck, Shirt, Save,
+    CheckCircle2, Clock, ShieldCheck, Shirt, Save, Mail, Copy,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -66,7 +66,8 @@ export default function HrmsEmployeeDetailPage() {
 
     // ── Bank visibility toggle ───────────────────────────────────────
     const [showBankDetails, setShowBankDetails] = useState(false); const [showIdNumber, setShowIdNumber] = useState(false);
-    // ── Copy Link state ──────────────────────────────────────────────
+    // ── Share form feedback state ─────────────────────────────────────
+    const [emailSent, setEmailSent] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
 
     // ── Admin edit modals ────────────────────────────────────────────
@@ -198,12 +199,23 @@ export default function HrmsEmployeeDetailPage() {
         try {
             const result = await generateFormToken(id).unwrap();
             const url = result.data.formUrl;
-            await navigator.clipboard.writeText(url);
+            // Copy to clipboard for backup
+            try { await navigator.clipboard.writeText(url); } catch { /* ignore clipboard errors */ }
             setLinkCopied(true);
-            setTimeout(() => setLinkCopied(false), 3000);
+            setEmailSent(result.data.emailSent);
+            setTimeout(() => { setLinkCopied(false); setEmailSent(false); }, 3000);
         } catch (err: any) {
             alert(err?.data?.message || 'Failed to generate form link');
         }
+    };
+
+    const handleCopyLink = async () => {
+        const token = (employee as any)?.formToken;
+        if (!token) return;
+        const url = `${window.location.origin}/employee-form/${token}`;
+        try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
     };
 
     // ── Salary modal ─────────────────────────────────────────────────
@@ -317,26 +329,54 @@ export default function HrmsEmployeeDetailPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {/* Share Onboarding Form button — hidden once form is submitted */}
+                    {/* Share Onboarding Form — hidden once form is submitted */}
                     {!(employee as any).formSubmitted && (
-                        <button
-                            onClick={handleShareForm}
-                            disabled={isGeneratingToken}
-                            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer disabled:opacity-60 transition-colors"
-                            style={{
-                                backgroundColor: linkCopied ? '#DCFCE7' : 'var(--color-primary-soft)',
-                                color: linkCopied ? '#16A34A' : 'var(--color-primary)',
-                                border: '1px solid',
-                                borderColor: linkCopied ? '#86EFAC' : '#86EFAC',
-                            }}
-                        >
-                            {isGeneratingToken
-                                ? <Loader2 size={15} className="animate-spin" />
-                                : linkCopied
-                                    ? <CheckCircle2 size={15} />
-                                    : <Share2 size={15} />}
-                            {linkCopied ? 'Link Copied!' : (employee as any).formToken ? 'Copy Form Link' : 'Share Onboarding Form'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {/* Primary — send email (+ copy to clipboard) */}
+                            <button
+                                onClick={handleShareForm}
+                                disabled={isGeneratingToken}
+                                title={(employee as any).formToken ? 'Resend onboarding email to employee' : 'Send onboarding form link via email'}
+                                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer disabled:opacity-60 transition-colors"
+                                style={{
+                                    backgroundColor: emailSent ? '#EEF2FF' : 'var(--color-primary-soft)',
+                                    color: emailSent ? '#4F46E5' : 'var(--color-primary)',
+                                    border: '1px solid',
+                                    borderColor: emailSent ? '#A5B4FC' : 'var(--color-primary-soft)',
+                                }}
+                            >
+                                {isGeneratingToken
+                                    ? <Loader2 size={15} className="animate-spin" />
+                                    : emailSent
+                                        ? <CheckCircle2 size={15} />
+                                        : <Mail size={15} />}
+                                {isGeneratingToken
+                                    ? 'Sending…'
+                                    : emailSent
+                                        ? 'Email Sent!'
+                                        : (employee as any).formToken
+                                            ? 'Resend Email'
+                                            : 'Share Onboarding Form'}
+                            </button>
+
+                            {/* Secondary — copy link (only visible once token exists) */}
+                            {(employee as any).formToken && (
+                                <button
+                                    onClick={handleCopyLink}
+                                    title="Copy form link to clipboard"
+                                    className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-colors"
+                                    style={{
+                                        backgroundColor: linkCopied ? '#DCFCE7' : 'var(--color-bg-surface)',
+                                        color: linkCopied ? '#16A34A' : 'var(--color-text-secondary)',
+                                        border: '1px solid',
+                                        borderColor: linkCopied ? '#86EFAC' : 'var(--color-border-default)',
+                                    }}
+                                >
+                                    {linkCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                                    {linkCopied ? 'Copied!' : 'Copy Link'}
+                                </button>
+                            )}
+                        </div>
                     )}
                     <button
                         onClick={() => navigate(`/hrms/employees/${id}/edit`)}

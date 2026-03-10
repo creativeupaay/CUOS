@@ -39,6 +39,29 @@ export const getFolders = async (
 ): Promise<IDocFolder[]> => {
     const admin = await isDocAdmin(projectId, userId, userRole);
 
+    // Auto-create the Shared Files system folder for projects that pre-date this feature
+    if (!parentId) {
+        const exists = await DocFolder.exists({
+            projectId: new Types.ObjectId(projectId),
+            isClientShared: true,
+            isSystem: true,
+        });
+        if (!exists) {
+            const project = await Project.findById(projectId).select('createdBy').lean();
+            if (project) {
+                await DocFolder.create({
+                    projectId: new Types.ObjectId(projectId),
+                    name: 'Shared Files',
+                    parentId: null,
+                    createdBy: project.createdBy,
+                    viewAccess: [],
+                    isSystem: true,
+                    isClientShared: true,
+                });
+            }
+        }
+    }
+
     const query: Record<string, unknown> = {
         projectId: new Types.ObjectId(projectId),
         parentId: parentId ? new Types.ObjectId(parentId) : null,
@@ -110,6 +133,11 @@ export const renameFolder = async (
  * Delete a folder and all its subfolders + files (recursive).
  */
 export const deleteFolder = async (folderId: string): Promise<void> => {
+    const folder = await DocFolder.findById(folderId).lean();
+    if (!folder) throw new AppError('Folder not found', 404);
+    if ((folder as any).isSystem) {
+        throw new AppError('The \'Shared Files\' folder cannot be deleted', 403);
+    }
     await _deleteFolderRecursive(folderId);
 };
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useGetClientQuery, useGetClientProjectsQuery } from '@/features/client/clientApi';
+import { useGetClientQuery, useGetClientProjectsQuery, useAddClientActivityMutation, useSendClientOnboardingMutation, useGeneratePortalTokenMutation, useRevokePortalTokenMutation, useTogglePortalMutation } from '@/features/client/clientApi';
 import {
     ArrowLeft,
     Mail,
@@ -18,10 +18,16 @@ import {
     MessageSquare,
     User,
     Loader2,
-    Send
+    Send,
+    CheckCircle2,
+    Clock,
+    Shield,
+    ExternalLink,
+    Copy,
+    RefreshCw,
+    Trash2,
 } from 'lucide-react';
 import type { Project } from '@/features/project/types/types';
-import { useAddClientActivityMutation } from '@/features/client/clientApi';
 
 type Tab = 'info' | 'projects' | 'activity';
 
@@ -31,10 +37,29 @@ export default function ClientDetailPage() {
     const [activeTab, setActiveTab] = useState<Tab>('info');
     const [activityType, setActivityType] = useState<'note' | 'call' | 'email' | 'meeting'>('note');
     const [activityDesc, setActivityDesc] = useState('');
+    const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+    const [portalLinkCopied, setPortalLinkCopied] = useState(false);
+    const [generatePortalToken, { isLoading: isGenerating }] = useGeneratePortalTokenMutation();
+    const [revokePortalToken, { isLoading: isRevoking }] = useRevokePortalTokenMutation();
+    const [togglePortal, { isLoading: isTogglingPortal }] = useTogglePortalMutation();
 
     const { data: clientData, isLoading, error } = useGetClientQuery(id!);
     const { data: projectsData } = useGetClientProjectsQuery(id!);
     const [addActivity, { isLoading: isAddingActivity }] = useAddClientActivityMutation();
+    const [sendOnboarding] = useSendClientOnboardingMutation();
+
+    const handleResendOnboarding = async () => {
+        if (!id) return;
+        setResendStatus('sending');
+        try {
+            await sendOnboarding(id).unwrap();
+            setResendStatus('sent');
+            setTimeout(() => setResendStatus('idle'), 3000);
+        } catch {
+            setResendStatus('error');
+            setTimeout(() => setResendStatus('idle'), 3000);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -134,6 +159,41 @@ export default function ClientDetailPage() {
                         </p>
                     )}
                 </div>
+
+                {/* Onboarding status badge */}
+                {client.onboardingStatus && (
+                    <div className="flex items-center gap-2">
+                        {client.onboardingStatus === 'submitted' ? (
+                            <span className="flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-medium">
+                                <CheckCircle2 size={12} />
+                                Form Submitted
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-medium">
+                                <Clock size={12} />
+                                Onboarding Pending
+                            </span>
+                        )}
+                    </div>
+                )}
+                {/* Resend / Send onboarding form */}
+                {client.email && client.onboardingStatus !== 'submitted' && (
+                    <button
+                        onClick={handleResendOnboarding}
+                        disabled={resendStatus === 'sending'}
+                        className="flex items-center gap-2 px-4 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors disabled:opacity-50 text-sm"
+                        title={`Send onboarding form to ${client.email}`}
+                    >
+                        {resendStatus === 'sending' ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : resendStatus === 'sent' ? (
+                            <CheckCircle2 size={16} className="text-green-500" />
+                        ) : (
+                            <Send size={16} />
+                        )}
+                        {resendStatus === 'sent' ? 'Sent!' : resendStatus === 'error' ? 'Failed' : client.onboardingStatus === 'pending' ? 'Resend Form' : 'Send Onboarding Form'}
+                    </button>
+                )}
                 <Link
                     to={`/crm/clients/${id}/edit`}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
@@ -335,6 +395,100 @@ export default function ClientDetailPage() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Client Portal Management */}
+                        <div className="bg-white rounded-lg border border-neutral-200 p-6 shadow-sm">
+                            <h2 className="text-lg font-semibold text-neutral-900 mb-4 flex items-center gap-2">
+                                <Shield size={20} className="text-primary" />
+                                Client Portal
+                            </h2>
+
+                            {/* Toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <p className="text-sm font-medium text-neutral-800">Portal Access</p>
+                                    <p className="text-xs text-neutral-500">{client.portalEnabled ? 'Client portal is enabled' : 'Access disabled'}</p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!id) return;
+                                        try { await togglePortal({ clientId: id, enabled: !client.portalEnabled }).unwrap(); } catch { }
+                                    }}
+                                    disabled={isTogglingPortal}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                                        client.portalEnabled ? 'bg-primary' : 'bg-neutral-300'
+                                    } ${isTogglingPortal ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                        client.portalEnabled ? 'translate-x-6' : 'translate-x-1'
+                                    }`} />
+                                </button>
+                            </div>
+
+                            {client.portalEnabled && (
+                                <>
+                                    {/* Current access link */}
+                                    {client.portalToken ? (
+                                        <div className="mb-4 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                                            <p className="text-xs text-neutral-500 mb-1.5">Portal Access Link</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs text-neutral-700 font-mono truncate flex-1">
+                                                    {`${window.location.origin}/portal/${id}/${client.portalToken}`}
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(`${window.location.origin}/portal/${id}/${client.portalToken}`);
+                                                        setPortalLinkCopied(true);
+                                                        setTimeout(() => setPortalLinkCopied(false), 2000);
+                                                    }}
+                                                    title="Copy link"
+                                                    className="p-1 text-neutral-500 hover:text-primary flex-shrink-0"
+                                                >
+                                                    {portalLinkCopied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                                                </button>
+                                                <a
+                                                    href={`${window.location.origin}/portal/${id}/${client.portalToken}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="p-1 text-neutral-500 hover:text-primary flex-shrink-0"
+                                                    title="Open portal"
+                                                >
+                                                    <ExternalLink size={14} />
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-neutral-500 mb-3">No access link generated yet.</p>
+                                    )}
+
+                                    {/* Actions */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={async () => { if (!id) return; try { await generatePortalToken(id).unwrap(); } catch { } }}
+                                            disabled={isGenerating}
+                                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5 disabled:opacity-60"
+                                        >
+                                            <RefreshCw size={12} className={isGenerating ? 'animate-spin' : ''} />
+                                            {client.portalToken ? 'Regenerate Link' : 'Generate Link'}
+                                        </button>
+
+                                        {client.portalToken && (
+                                            <button
+                                                onClick={async () => { if (!id) return; try { await revokePortalToken(id).unwrap(); } catch { } }}
+                                                disabled={isRevoking}
+                                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                            >
+                                                <Trash2 size={12} />
+                                                Revoke Access
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-neutral-400 mt-2">
+                                        Regenerating creates a new link and immediately invalidates the old one.
+                                    </p>
+                                </>
+                            )}
+                        </div>
 
                         {/* Billing Info */}
                         {client.billingDetails && (

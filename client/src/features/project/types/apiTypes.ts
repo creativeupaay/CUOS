@@ -63,6 +63,7 @@ export interface AddAssigneeRequest {
         meetings: boolean;
         credentials: boolean;
         documents: boolean;
+        notes: boolean;
     };
 }
 
@@ -74,6 +75,7 @@ export interface UpdateAssigneePermissionsRequest {
         meetings: boolean;
         credentials: boolean;
         documents: boolean;
+        notes: boolean;
     };
 }
 
@@ -202,6 +204,24 @@ export interface RevokeCredentialAccessRequest {
 /** PATCH /:projectId/credential-admins */
 export interface UpdateCredentialAdminsRequest {
     userIds: string[];
+}
+
+// ============================================
+// NOTE API TYPES
+// ============================================
+
+export interface CreateNoteRequest {
+    title: string;
+    color?: string;
+    isPinned?: boolean;
+    blocks?: import('./types').NoteBlock[];
+}
+
+export interface UpdateNoteRequest {
+    title?: string;
+    color?: string;
+    isPinned?: boolean;
+    blocks?: import('./types').NoteBlock[];
 }
 
 // ============================================

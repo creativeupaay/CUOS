@@ -111,14 +111,14 @@ export const crmApi = api.injectEndpoints({
         }),
 
         closeLeadDeal: builder.mutation<
-            ApiResponse<{ lead: Lead; client: any }>,
+            ApiResponse<{ lead: Lead }>,
             string
         >({
             query: (id) => ({
                 url: `/crm/leads/${id}/close`,
                 method: 'POST',
             }),
-            invalidatesTags: ['Leads', 'Pipeline', 'Clients'],
+            invalidatesTags: ['Leads', 'Pipeline'],
         }),
 
         getPipelineSummary: builder.query<

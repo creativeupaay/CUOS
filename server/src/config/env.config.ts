@@ -28,6 +28,10 @@ const envSchema = z.object({
     .url("FRONTEND_URL must be a valid URL")
     .default("http://localhost:5173"),
 
+  // Resend email service — used for client onboarding forms & admin notifications
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email().default("noreply@creativeupaay.com"),
+
 });
 
 /**

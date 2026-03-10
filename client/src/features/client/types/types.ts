@@ -25,7 +25,17 @@ export interface Client {
     status: 'active' | 'inactive' | 'archived';
     notes?: string;
 
+    leadId?: string;
     activities?: ClientActivity[];
+
+    // Onboarding form
+    onboardingStatus?: 'pending' | 'submitted';
+    onboardingSubmittedAt?: string;
+    onboardingTokenExpiry?: string;
+
+    // Client Portal
+    portalEnabled?: boolean;
+    portalToken?: string;
 
     createdBy: string;
     createdAt: string;

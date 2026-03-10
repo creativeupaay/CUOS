@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Project, IProject } from '../models/Project.model';
+import { DocFolder } from '../models/DocFolder.model';
 import { User } from '../../auth/models/User.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import AppError from '../../../utils/appError';
@@ -106,6 +107,17 @@ export const createProject = async (
     };
 
     const project = await Project.create(projectData);
+
+    // Auto-create the client-shared "Shared Files" folder for every new project
+    await DocFolder.create({
+        projectId: project._id,
+        name: 'Shared Files',
+        parentId: null,
+        createdBy: new Types.ObjectId(data.createdBy),
+        viewAccess: [],
+        isSystem: true,
+        isClientShared: true,
+    });
 
     // Auto-populate projectPermissions for all initial assignees
     if (data.assignees && data.assignees.length > 0) {

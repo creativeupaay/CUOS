@@ -130,7 +130,7 @@ export const addMeeting = asyncHandler(
 );
 
 /**
- * Close lead — auto-creates client, locks lead
+ * Close lead — locks the lead; client creation is a separate step via the form.
  */
 export const closeLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {

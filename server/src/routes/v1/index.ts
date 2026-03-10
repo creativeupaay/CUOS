@@ -2,6 +2,8 @@ import { Router } from 'express';
 import authRoutes from '../../modules/auth/routes/auth.routes';
 import projectRoutes from '../../modules/project/routes/project.routes';
 import clientRoutes from '../../modules/client/routes/client.routes';
+import clientOnboardingRoutes from '../../modules/client/routes/clientOnboarding.routes';
+import clientPortalRoutes from '../../modules/client-portal/routes/clientPortal.routes';
 import crmRoutes from '../../modules/crm/routes/crm.routes';
 import hrmsRoutes from '../../modules/hrms/routes/hrms.routes';
 import employeeFormRoutes from '../../modules/hrms/routes/employeeForm.routes';
@@ -17,6 +19,10 @@ router.use('/crm', crmRoutes);
 router.use('/hrms', hrmsRoutes);
 // Public self-onboarding form (no auth required)
 router.use('/employee-form', employeeFormRoutes);
+// Public client onboarding form (no auth required)
+router.use('/client-onboarding', clientOnboardingRoutes);
+// Client portal (public login + protected client routes)
+router.use('/client-portal', clientPortalRoutes);
 router.use('/admin', adminRoutes);
 router.use('/finance', financeRoutes);
 

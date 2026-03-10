@@ -15,6 +15,10 @@ export interface CreateClientRequest {
     contacts?: ClientContact[];
     status?: 'active' | 'inactive' | 'archived';
     notes?: string;
+    // Lead conversion link
+    leadId?: string;
+    // Send onboarding form email to client
+    sendOnboardingForm?: boolean;
 }
 
 export interface UpdateClientRequest {

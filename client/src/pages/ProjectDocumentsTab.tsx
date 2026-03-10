@@ -893,6 +893,9 @@ const ProjectDocumentsTab: React.FC = () => {
                 <>
                     <Folder size={40} className="text-[#fbbd23]" fill="currentColor" fillOpacity={0.2} />
                     <p className="text-xs font-medium text-center leading-tight max-w-full truncate w-full mt-1" style={{ color: 'var(--color-text-primary)' }} title={folder.name}>{folder.name}</p>
+                    {folder.isClientShared && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#EFF6FF', color: '#3B82F6' }}>Shared</span>
+                    )}
                     <div className="flex items-center gap-1">
                         {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
                         {isDocAdmin && (
@@ -907,9 +910,13 @@ const ProjectDocumentsTab: React.FC = () => {
                                 {openMenuId === folder._id && (
                                     <ContextMenu onClose={() => setOpenMenuId(null)} items={[
                                         { label: 'Open', icon: <FolderOpen size={14} />, onClick: () => navigateToFolder(folder) },
-                                        { label: 'Rename', icon: <Pencil size={14} />, onClick: () => handleStartRename(folder) },
-                                        { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
-                                        { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => handleDeleteFolder(folder._id), danger: true },
+                                        ...(!folder.isSystem ? [
+                                            { label: 'Rename', icon: <Pencil size={14} />, onClick: () => handleStartRename(folder) },
+                                            { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
+                                            { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => handleDeleteFolder(folder._id), danger: true },
+                                        ] : [
+                                            { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
+                                        ]),
                                     ]} />
                                 )}
                             </div>
@@ -1129,7 +1136,12 @@ const ProjectDocumentsTab: React.FC = () => {
                                         onKeyDown={(e) => { if (e.key === 'Enter') handleRenameFolder(folder._id); if (e.key === 'Escape') setRenameFolderId(null); }}
                                         onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                    <span className="flex-1 text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{folder.name}</span>
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className="flex-1 text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{folder.name}</span>
+                                        {folder.isClientShared && (
+                                            <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#EFF6FF', color: '#3B82F6' }}>Shared</span>
+                                        )}
+                                    </div>
                                 )}
                                 <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Folder</span>
                                 {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
@@ -1142,9 +1154,13 @@ const ProjectDocumentsTab: React.FC = () => {
                                         {openMenuId === folder._id && (
                                             <ContextMenu onClose={() => setOpenMenuId(null)} items={[
                                                 { label: 'Open', icon: <FolderOpen size={14} />, onClick: () => navigateToFolder(folder) },
-                                                { label: 'Rename', icon: <Pencil size={14} />, onClick: () => handleStartRename(folder) },
-                                                { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
-                                                { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => handleDeleteFolder(folder._id), danger: true },
+                                                ...(!folder.isSystem ? [
+                                                    { label: 'Rename', icon: <Pencil size={14} />, onClick: () => handleStartRename(folder) },
+                                                    { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
+                                                    { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => handleDeleteFolder(folder._id), danger: true },
+                                                ] : [
+                                                    { label: 'Manage access', icon: <Eye size={14} />, onClick: () => setShowAccessControl(true) },
+                                                ]),
                                             ]} />
                                         )}
                                     </div>

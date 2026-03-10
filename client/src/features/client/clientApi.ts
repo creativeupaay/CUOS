@@ -76,6 +76,44 @@ export const clientApi = api.injectEndpoints({
             }),
             invalidatesTags: (_result, _error, { clientId }) => [{ type: 'Clients', id: clientId }, 'Clients'],
         }),
+
+        // Send (or resend) onboarding form email to the client
+        sendClientOnboarding: builder.mutation<{ status: string; message: string; data: { expiresAt: string } }, string>({
+            query: (clientId) => ({
+                url: `/clients/${clientId}/send-onboarding`,
+                method: 'POST',
+            }),
+            invalidatesTags: (_result, _error, clientId) => [{ type: 'Clients', id: clientId }],
+        }),
+
+        // ── Client Portal Management ─────────────────────────────────────────
+        generatePortalToken: builder.mutation<
+            { status: string; message: string; data: { clientId: string; portalToken: string } },
+            string
+        >({
+            query: (clientId) => ({
+                url: `/clients/${clientId}/portal/generate-link`,
+                method: 'POST',
+            }),
+            invalidatesTags: (_result, _error, clientId) => [{ type: 'Clients', id: clientId }],
+        }),
+
+        revokePortalToken: builder.mutation<{ status: string; message: string }, string>({
+            query: (clientId) => ({
+                url: `/clients/${clientId}/portal/revoke`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: (_result, _error, clientId) => [{ type: 'Clients', id: clientId }],
+        }),
+
+        togglePortal: builder.mutation<{ status: string; message: string }, { clientId: string; enabled: boolean }>({
+            query: ({ clientId, enabled }) => ({
+                url: `/clients/${clientId}/portal/toggle`,
+                method: 'PATCH',
+                body: { enabled },
+            }),
+            invalidatesTags: (_result, _error, { clientId }) => [{ type: 'Clients', id: clientId }],
+        }),
     }),
 });
 
@@ -87,5 +125,9 @@ export const {
     useDeleteClientMutation,
     useGetClientProjectsQuery,
     useAddClientActivityMutation,
+    useSendClientOnboardingMutation,
+    useGeneratePortalTokenMutation,
+    useRevokePortalTokenMutation,
+    useTogglePortalMutation,
 } = clientApi;
 
