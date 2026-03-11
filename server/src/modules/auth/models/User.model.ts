@@ -10,6 +10,7 @@ export interface IProjectPermission {
         meetings: boolean;
         credentials: boolean;
         documents: boolean;
+        notes: boolean;
     };
 }
 
@@ -99,6 +100,7 @@ const UserSchema = new Schema<IUser>(
                         meetings: { type: Boolean, default: false },
                         credentials: { type: Boolean, default: false },
                         documents: { type: Boolean, default: false },
+                        notes: { type: Boolean, default: false },
                     },
                 }],
             },

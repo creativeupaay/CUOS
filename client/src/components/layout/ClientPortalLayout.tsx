@@ -1,21 +1,20 @@
 import { useState } from 'react';
-import { Outlet, useNavigate, NavLink } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { useAppDispatch } from '@/app/hooks';
-import { clearPortalAuth, setPortalClientInfo } from '@/features/client-portal/clientPortalSlice';
+import { setPortalClientInfo } from '@/features/client-portal/clientPortalSlice';
 import {
     useGetPortalProjectsQuery,
     useGetPortalMeQuery,
-    useLogoutPortalMutation,
     type PortalProject,
 } from '@/features/client-portal/clientPortalApi';
-import { LogOut, Building2, Loader2, Menu, X, ChevronDown, Mail, User2, AlertTriangle } from 'lucide-react';
+import { Building2, Loader2, Menu, X, Mail, User2, Phone, MapPin, AlertTriangle, Briefcase } from 'lucide-react';
 
-const STATUS_COLORS: Record<string, string> = {
-    planning: '#3B82F6',
-    active: '#16A34A',
-    'on-hold': '#D97706',
-    completed: '#059669',
-    cancelled: '#DC2626',
+const STATUS_META: Record<string, { dot: string; text: string; bg: string; label: string }> = {
+    planning:  { dot: '#3B82F6', text: '#1D4ED8', bg: '#EFF6FF',  label: 'Planning' },
+    active:    { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4',  label: 'Active' },
+    'on-hold': { dot: '#D97706', text: '#B45309', bg: '#FFFBEB',  label: 'On Hold' },
+    completed: { dot: '#059669', text: '#047857', bg: '#ECFDF5',  label: 'Done' },
+    cancelled: { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2',  label: 'Cancelled' },
 };
 
 function SidebarProjectList({ projects, isLoading, onNavigate }: { projects: PortalProject[]; isLoading: boolean; onNavigate?: () => void; }) {
@@ -27,25 +26,46 @@ function SidebarProjectList({ projects, isLoading, onNavigate }: { projects: Por
         );
     }
     if (projects.length === 0) {
-        return <p className="text-xs px-4 py-4" style={{ color: '#94A3B8' }}>No projects assigned yet.</p>;
+        return (
+            <div className="px-4 py-8 flex flex-col items-center text-center">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#F1F5F9' }}>
+                    <Briefcase size={18} style={{ color: '#94A3B8' }} />
+                </div>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>No projects assigned yet.</p>
+            </div>
+        );
     }
     return (
-        <div className="space-y-0.5 px-2">
+        <div className="space-y-1 px-2">
             {projects.map((project) => {
-                const dotColor = STATUS_COLORS[project.status] ?? '#94A3B8';
+                const meta = STATUS_META[project.status];
                 return (
                     <NavLink
                         key={project._id}
                         to={`/client-portal/projects/${project._id}`}
                         onClick={onNavigate}
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all w-full text-left ${isActive ? 'bg-neutral-900 text-white' : 'hover:bg-neutral-100 text-neutral-700'}`
-                        }
+                        style={({ isActive }) => isActive
+                            ? { background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '10px', textDecoration: 'none' }
+                            : { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '10px', textDecoration: 'none', color: '#374151' }}
+                        className={({ isActive }) => `transition-all w-full text-left ${!isActive ? 'hover:bg-slate-100' : ''}`}
                     >
                         {({ isActive }) => (
                             <>
-                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isActive ? '#FFFFFF' : dotColor }} />
-                                <span className="flex-1 text-sm font-medium truncate leading-snug">{project.name}</span>
+                                <span
+                                    className="w-2 h-2 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.8)' : (meta?.dot ?? '#94A3B8') }}
+                                />
+                                <span className="flex-1 text-sm font-medium truncate leading-snug">
+                                    {project.name}
+                                </span>
+                                {!isActive && meta && (
+                                    <span
+                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: meta.bg, color: meta.text }}
+                                    >
+                                        {meta.label}
+                                    </span>
+                                )}
                             </>
                         )}
                     </NavLink>
@@ -55,123 +75,85 @@ function SidebarProjectList({ projects, isLoading, onNavigate }: { projects: Por
     );
 }
 
-/** Client info dropdown shown in top-right of header */
-function ClientDropdown({ client, onLogout }: { client: { name: string; email: string; companyName?: string }; onLogout: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
+/** Profile modal — shows client details when the profile button is clicked */
+function ProfileModal({ client, onClose }: { client: any; onClose: () => void }) {
+    const rows = [
+        { icon: <User2 size={14} />, label: 'Name',    value: client.name },
+        { icon: <Mail size={14} />,  label: 'Email',   value: client.email },
+        ...(client.companyName ? [{ icon: <Building2 size={14} />, label: 'Company', value: client.companyName }] : []),
+        ...(client.phone       ? [{ icon: <Phone size={14} />,    label: 'Phone',   value: client.phone }]       : []),
+        ...(client.address     ? [{ icon: <MapPin size={14} />,   label: 'Address', value: client.address }]     : []),
+    ];
 
     return (
-        <div className="relative">
-            <button
-                onClick={() => setOpen(o => !o)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border transition-all hover:bg-neutral-50"
-                style={{ borderColor: '#E2E8F0' }}
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={onClose}
+        >
+            <div
+                className="rounded-2xl border shadow-2xl max-w-sm w-full overflow-hidden"
+                style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+                onClick={(e) => e.stopPropagation()}
             >
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: '#6366F1' }}>
-                    {client.name.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-sm font-medium hidden sm:block" style={{ color: '#1E293B' }}>{client.name}</span>
-                <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} style={{ color: '#94A3B8' }} />
-            </button>
-
-            {open && (
-                <>
-                    <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-                    <div
-                        className="absolute right-0 mt-2 z-40 rounded-xl border shadow-lg overflow-hidden min-w-[220px]"
-                        style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', boxShadow: '0 8px 24px rgba(0,0,0,0.10)' }}
+                {/* Gradient header */}
+                <div
+                    className="relative px-5 pt-8 pb-8"
+                    style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' }}
+                >
+                    <button
+                        onClick={onClose}
+                        className="absolute top-4 right-4 p-1.5 rounded-lg transition-colors"
+                        style={{ color: 'rgba(255,255,255,0.55)', backgroundColor: 'rgba(255,255,255,0.08)' }}
                     >
-                        {/* Profile summary */}
-                        <div className="px-4 py-3 border-b" style={{ borderColor: '#F1F5F9', backgroundColor: '#FAFAFA' }}>
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ backgroundColor: '#6366F1' }}>
-                                    {client.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold truncate" style={{ color: '#1E293B' }}>{client.name}</p>
-                                    {client.companyName && <p className="text-xs truncate" style={{ color: '#64748B' }}>{client.companyName}</p>}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* My Details */}
-                        <button
-                            onClick={() => { setShowDetails(true); setOpen(false); }}
-                            className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-neutral-50"
-                            style={{ color: '#374151' }}
-                        >
-                            <User2 size={15} style={{ color: '#6366F1' }} />
-                            My Details
-                        </button>
-
-                        {/* Sign out */}
-                        <div className="border-t" style={{ borderColor: '#F1F5F9' }}>
-                            <button
-                                onClick={onLogout}
-                                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-red-50"
-                                style={{ color: '#EF4444' }}
-                            >
-                                <LogOut size={15} />
-                                Sign Out
-                            </button>
-                        </div>
+                        <X size={15} />
+                    </button>
+                    <div
+                        className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white mb-4"
+                        style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}
+                    >
+                        {client.name.charAt(0).toUpperCase()}
                     </div>
-                </>
-            )}
+                    <p className="text-lg font-bold text-white leading-tight">{client.name}</p>
+                    {client.companyName && (
+                        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                            {client.companyName}
+                        </p>
+                    )}
+                </div>
 
-            {/* Client details modal */}
-            {showDetails && (
-                <>
-                    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowDetails(false)}>
+                {/* Fields */}
+                <div className="px-5 py-5 space-y-3">
+                    {rows.map((row) => (
                         <div
-                            className="rounded-2xl border shadow-xl max-w-sm w-full overflow-hidden"
-                            style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
-                            onClick={(e) => e.stopPropagation()}
+                            key={row.label}
+                            className="flex items-start gap-3 p-3 rounded-xl"
+                            style={{ backgroundColor: '#F8FAFC' }}
                         >
-                            {/* Modal header */}
-                            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: '#F1F5F9' }}>
-                                <span className="text-sm font-semibold" style={{ color: '#1E293B' }}>My Details</span>
-                                <button onClick={() => setShowDetails(false)} className="p-1.5 rounded-lg hover:bg-neutral-100" style={{ color: '#64748B' }}>
-                                    <X size={16} />
-                                </button>
-                            </div>
-                            {/* Modal body */}
-                            <div className="px-5 py-5 space-y-4">
-                                {/* Avatar */}
-                                <div className="flex justify-center">
-                                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white" style={{ backgroundColor: '#6366F1' }}>
-                                        {client.name.charAt(0).toUpperCase()}
-                                    </div>
-                                </div>
-                                {/* Fields */}
-                                {[
-                                    { icon: <User2 size={14} />, label: 'Name', value: client.name },
-                                    { icon: <Mail size={14} />, label: 'Email', value: client.email },
-                                    ...(client.companyName ? [{ icon: <Building2 size={14} />, label: 'Company', value: client.companyName }] : []),
-                                ].map((row) => (
-                                    <div key={row.label} className="flex items-start gap-3 p-3 rounded-xl" style={{ backgroundColor: '#F8FAFC' }}>
-                                        <span className="mt-0.5" style={{ color: '#6366F1' }}>{row.icon}</span>
-                                        <div>
-                                            <p className="text-xs font-medium mb-0.5" style={{ color: '#94A3B8' }}>{row.label}</p>
-                                            <p className="text-sm font-medium" style={{ color: '#1E293B' }}>{row.value}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                                <p className="text-xs text-center" style={{ color: '#C7D0E0' }}>Contact your account manager to update details.</p>
+                            <span className="mt-0.5 flex-shrink-0" style={{ color: '#6366F1' }}>{row.icon}</span>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#94A3B8' }}>
+                                    {row.label}
+                                </p>
+                                <p className="text-sm font-medium break-words" style={{ color: '#1E293B' }}>
+                                    {row.value}
+                                </p>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    ))}
+                    <p className="text-xs text-center pt-1" style={{ color: '#CBD5E1' }}>
+                        Contact your account manager to update details.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }
 
 export default function ClientPortalLayout() {
     const dispatch = useAppDispatch();
-    const navigate = useNavigate();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [logoutPortal] = useLogoutPortalMutation();
+    const [showProfile, setShowProfile] = useState(false);
 
     // Cookie-based auth — /me verifies the httpOnly portal_jwt cookie
     const { data: meData, isLoading: meLoading, isError: meError } = useGetPortalMeQuery();
@@ -215,29 +197,50 @@ export default function ClientPortalLayout() {
         );
     }
 
-    const handleLogout = async () => {
-        try { await logoutPortal().unwrap(); } catch { /* ignore */ }
-        dispatch(clearPortalAuth());
-        navigate('/', { replace: true });
-    };
-
     const SidebarInner = ({ onNavigate }: { onNavigate?: () => void }) => (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Brand */}
-            <div className="flex items-center gap-3 px-5 h-16 border-b flex-shrink-0" style={{ borderColor: '#E2E8F0' }}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#111827' }}>
+            {/* Brand header — matches right-side header height (h-14 = 56px) */}
+            <div
+                className="flex items-center gap-3 px-5 h-14 border-b flex-shrink-0"
+                style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+            >
+                <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}
+                >
                     <Building2 size={16} className="text-white" />
                 </div>
                 <div className="min-w-0">
-                    <p className="text-sm font-bold truncate" style={{ color: '#111827' }}>Creative Upaay</p>
-                    <p className="text-xs" style={{ color: '#64748B' }}>Client Portal</p>
+                    <p className="text-sm font-bold truncate" style={{ color: '#0F172A' }}>Creative Upaay</p>
+                    <p className="text-[11px]" style={{ color: '#94A3B8' }}>Client Portal</p>
                 </div>
             </div>
 
             {/* Projects list — fills remaining space */}
-            <div className="flex-1 overflow-y-auto pt-4 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-wider px-5 mb-2" style={{ color: '#94A3B8' }}>Projects</p>
+            <div className="flex-1 overflow-y-auto pt-5 pb-3" style={{ backgroundColor: '#FAFAFA' }}>
+                <p className="text-[11px] font-bold uppercase tracking-widest px-5 mb-3" style={{ color: '#94A3B8' }}>
+                    Your Projects
+                </p>
                 <SidebarProjectList projects={projects} isLoading={isLoading} onNavigate={onNavigate} />
+            </div>
+
+            {/* Bottom client card */}
+            <div
+                className="flex items-center gap-3 px-4 py-4 border-t flex-shrink-0"
+                style={{ borderColor: '#E2E8F0', backgroundColor: '#FAFAFA' }}
+            >
+                <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}
+                >
+                    {client.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate" style={{ color: '#1E293B' }}>{client.name}</p>
+                    {client.companyName && (
+                        <p className="text-[11px] truncate" style={{ color: '#94A3B8' }}>{client.companyName}</p>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -245,7 +248,10 @@ export default function ClientPortalLayout() {
     return (
         <div className="flex h-screen overflow-hidden" style={{ backgroundColor: '#F8FAFC' }}>
             {/* Desktop sidebar */}
-            <aside className="hidden lg:flex flex-col flex-shrink-0 border-r" style={{ width: 260, backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
+            <aside
+                className="hidden lg:flex flex-col flex-shrink-0 border-r"
+                style={{ width: 264, backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+            >
                 <SidebarInner />
             </aside>
 
@@ -253,8 +259,15 @@ export default function ClientPortalLayout() {
             {mobileOpen && (
                 <>
                     <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileOpen(false)} />
-                    <aside className="fixed inset-y-0 left-0 z-50 flex flex-col border-r lg:hidden" style={{ width: 260, backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
-                        <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg" style={{ color: '#64748B' }}>
+                    <aside
+                        className="fixed inset-y-0 left-0 z-50 flex flex-col border-r lg:hidden"
+                        style={{ width: 264, backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+                    >
+                        <button
+                            onClick={() => setMobileOpen(false)}
+                            className="absolute top-4 right-4 p-1.5 rounded-lg"
+                            style={{ color: '#64748B' }}
+                        >
                             <X size={18} />
                         </button>
                         <SidebarInner onNavigate={() => setMobileOpen(false)} />
@@ -264,26 +277,41 @@ export default function ClientPortalLayout() {
 
             {/* Main content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* Top header — always visible */}
-                <header className="flex items-center justify-between gap-3 px-4 h-14 border-b flex-shrink-0" style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
-                    {/* Left: mobile menu + brand */}
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 rounded-lg" style={{ color: '#64748B' }}><Menu size={20} /></button>
-                        <div className="hidden lg:flex items-center gap-2">
-                            {/* breadcrumb-style subtle label */}
-                            <span className="text-sm" style={{ color: '#94A3B8' }}>Client Portal</span>
-                        </div>
-                        <div className="lg:hidden flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#111827' }}>
-                                <Building2 size={13} className="text-white" />
-                            </div>
-                            <span className="text-sm font-bold" style={{ color: '#111827' }}>Creative Upaay</span>
-                        </div>
+                {/* Top header */}
+                <header
+                    className="flex items-center justify-between gap-3 px-4 h-14 border-b flex-shrink-0"
+                    style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+                >
+                    {/* Left: mobile menu toggle only */}
+                    <div className="flex items-center">
+                        <button
+                            onClick={() => setMobileOpen(true)}
+                            className="lg:hidden p-2 rounded-lg"
+                            style={{ color: '#64748B' }}
+                        >
+                            <Menu size={20} />
+                        </button>
                     </div>
 
-                    {/* Right: client dropdown */}
+                    {/* Right: Profile button (icon on left of name, click → profile modal) */}
                     {client && (
-                        <ClientDropdown client={client} onLogout={handleLogout} />
+                        <button
+                            onClick={() => setShowProfile(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all hover:bg-indigo-50 hover:border-indigo-200"
+                            style={{ borderColor: '#E2E8F0' }}
+                            title="View my profile"
+                        >
+                            {/* Profile icon — LEFT of name as requested */}
+                            <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                                style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}
+                            >
+                                {client.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-sm font-medium hidden sm:block" style={{ color: '#1E293B' }}>
+                                {client.name}
+                            </span>
+                        </button>
                     )}
                 </header>
 
@@ -291,6 +319,10 @@ export default function ClientPortalLayout() {
                     <Outlet />
                 </main>
             </div>
+
+            {/* Profile modal */}
+            {showProfile && <ProfileModal client={client} onClose={() => setShowProfile(false)} />}
         </div>
     );
 }
+

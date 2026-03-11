@@ -34,6 +34,7 @@ export interface CreateProjectData {
             meetings: boolean;
             credentials: boolean;
             documents: boolean;
+            notes: boolean;
         };
     }>;
     createdBy: string;
@@ -60,7 +61,7 @@ const defaultProjectPerm = (projectId: string) => ({
     projectId,
     subModules: {
         overview: false, tasks: false, timeLogs: false,
-        meetings: false, credentials: false, documents: false,
+        meetings: false, credentials: false, documents: false, notes: false,
     },
 });
 

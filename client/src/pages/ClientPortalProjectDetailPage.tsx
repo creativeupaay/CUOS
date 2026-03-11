@@ -398,7 +398,9 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                                     <p className="text-xs" style={{ color: '#64748B' }}>
                                         {formatDateTime(meeting.scheduledAt)}
                                         {meeting.duration ? ` · ${meeting.duration} min` : ''}
-                                        {meeting.location ? ` · ${meeting.location}` : ''}
+                                        {meeting.location && !meeting.location.startsWith('http')
+                                            ? ` · ${meeting.location}`
+                                            : ''}
                                     </p>
                                 </div>
                                 {isOpen ? (
@@ -410,6 +412,25 @@ function MeetingsTab({ projectId }: { projectId: string }) {
 
                             {isOpen && (
                                 <div className="px-4 pb-4 border-t" style={{ borderColor: '#F1F5F9' }}>
+
+                                    {/* Join Meeting CTA for URL-based locations */}
+                                    {(meeting.location?.startsWith('http') || (meeting as any).meetingLink) && (
+                                        <a
+                                            href={
+                                                meeting.location?.startsWith('http')
+                                                    ? meeting.location
+                                                    : (meeting as any).meetingLink
+                                            }
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 mt-4 mb-1 px-5 py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
+                                            style={{ background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: '#FFFFFF' }}
+                                        >
+                                            <Globe size={14} />
+                                            Join Meeting
+                                        </a>
+                                    )}
+
                                     {meeting.description && (
                                         <p className="text-sm mt-3" style={{ color: '#475569' }}>
                                             {meeting.description}
@@ -490,17 +511,34 @@ function useCopy() {
     return { copied, copy };
 }
 
+// Keys that are too sensitive or irrelevant for clients — never shown
+const HIDDEN_KEYS = new Set(['backupCodes', 'totpSecret']);
+
+// Human-readable labels for known credential field keys
+const FIELD_LABELS: Record<string, string> = {
+    envKey: 'Key', envValue: 'Value',
+    sshHost: 'Host', sshPort: 'Port', sshUser: 'Username',
+    sshPrivateKey: 'Private Key', sshPassphrase: 'Passphrase',
+    username: 'Username', password: 'Password', url: 'URL',
+    apiKey: 'API Key', apiSecret: 'API Secret',
+    fullName: 'Full Name', email: 'Email', role: 'Role',
+    notes: 'Notes', details: 'Details', accountType: 'Type',
+};
+const fieldLabel = (key: string) =>
+    FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, ' $1').replace(/^\w/, (c) => c.toUpperCase()).trim();
+
 function PortalCredCard({ credential }: { credential: PortalCredential }) {
     const { copied, copy } = useCopy();
     const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
     const SENSITIVE_KEYS = new Set([
         'envValue', 'sshPrivateKey', 'sshPassphrase', 'password',
-        'apiKey', 'apiSecret', 'totpSecret', 'backupCodes', 'notes',
+        'apiKey', 'apiSecret', 'notes',
     ]);
 
     const creds = credential.credentials ?? {};
-    const credEntries = Object.entries(creds).filter(([, v]) => v);
+    // Filter out empty values AND fields that clients should never see
+    const credEntries = Object.entries(creds).filter(([k, v]) => v && !HIDDEN_KEYS.has(k));
 
     const copyAll = () => {
         const text = credEntries.map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -540,7 +578,7 @@ function PortalCredCard({ credential }: { credential: PortalCredential }) {
                             <div key={key} className="flex items-center px-4 py-2.5 gap-3 group" style={{ borderColor: '#F8FAFC' }}>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#94A3B8' }}>
-                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                        {fieldLabel(key)}
                                     </p>
                                     <p className="text-xs font-mono truncate" style={{ color: '#1E293B' }}>{display}</p>
                                 </div>
@@ -609,7 +647,7 @@ function CredentialsTab({ projectId }: { projectId: string }) {
                             onClick={() => setActiveSubTab(sub.id)}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium flex-shrink-0 transition-all"
                             style={isActive
-                                ? { backgroundColor: '#1E293B', color: '#FFFFFF' }
+                                ? { background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: '#FFFFFF' }
                                 : { backgroundColor: '#F1F5F9', color: '#64748B' }
                             }
                         >
@@ -877,7 +915,7 @@ export default function ClientPortalProjectDetailPage() {
                             onClick={() => setActiveTab(tab.key)}
                             className="flex items-center gap-2 px-4 py-3 text-sm font-medium flex-shrink-0 transition-colors border-b-2"
                             style={activeTab === tab.key
-                                ? { color: '#111827', borderColor: '#111827' }
+                                ? { color: '#6366F1', borderColor: '#6366F1' }
                                 : { color: '#94A3B8', borderColor: 'transparent' }
                             }
                         >

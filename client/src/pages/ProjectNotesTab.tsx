@@ -7,8 +7,8 @@ import {
     useUpdateNoteMutation,
     useDeleteNoteMutation,
 } from '@/features/project';
-import type { Project, Note, NoteBlock, NoteChecklistItem } from '@/features/project';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import type { Project, Note, NoteBlock } from '@/features/project';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import {
     StickyNote,
@@ -18,7 +18,6 @@ import {
     Trash2,
     X,
     CheckSquare,
-    AlignLeft,
     Loader2,
 } from 'lucide-react';
 
@@ -58,10 +57,20 @@ function stripHtml(html: string): string {
     return (html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
 }
 
-// ── Block-level form state ─────────────────────────────────────────────────────
+// ── Block types ───────────────────────────────────────────────────────────────
 
-interface FormBlock extends NoteBlock {
-    _uploading?: boolean;
+interface ChecklistItemData {
+    id: string;
+    text: string;
+    checked: boolean;
+}
+
+/** Each block is either a text paragraph or a SINGLE checklist item (Notion-style) */
+interface FormBlock {
+    id: string;
+    type: 'text' | 'checklist';
+    content?: string;          // text blocks
+    items?: ChecklistItemData[]; // checklist blocks — always exactly 1 item
 }
 
 const emptyTextBlock = (): FormBlock => ({ id: uid(), type: 'text', content: '' });
@@ -71,7 +80,32 @@ const emptyChecklistBlock = (): FormBlock => ({
     items: [{ id: uid(), text: '', checked: false }],
 });
 
-// ── Rich text editor ──────────────────────────────────────────────────────────
+/**
+ * Flatten blocks from the API model into the flat one-item-per-row editor model.
+ * Old multi-item checklist blocks become individual single-item blocks.
+ */
+function flattenBlocks(blocks: NoteBlock[]): FormBlock[] {
+    if (!blocks || blocks.length === 0) return [emptyTextBlock()];
+    const result: FormBlock[] = [];
+    for (const block of blocks) {
+        if (block.type === 'checklist') {
+            const items = (block.items ?? []) as ChecklistItemData[];
+            if (items.length === 0) {
+                result.push(emptyChecklistBlock());
+            } else {
+                for (const item of items) {
+                    result.push({ id: uid(), type: 'checklist', items: [{ ...item }] });
+                }
+            }
+        } else if (block.type === 'text') {
+            result.push({ id: uid(), type: 'text', content: block.content ?? '' });
+        }
+        // 'image' blocks are skipped (not supported in this editor)
+    }
+    return result.length > 0 ? result : [emptyTextBlock()];
+}
+
+// ── Block components (Notion-style: one row per text paragraph or checklist item) ─────
 
 interface FormatState { bold: boolean; italic: boolean; underline: boolean }
 
@@ -83,34 +117,84 @@ function detectFormat(): FormatState {
     };
 }
 
-interface RichTextEditorProps {
-    initialHtml: string;
-    placeholder?: string;
-    onChange: (html: string) => void;
-    minHeight?: number;
+// ── TextBlock ─────────────────────────────────────────────────────────────────
+
+interface TextBlockHandle { focus: () => void; focusAtStart: () => void; }
+
+interface TextBlockProps {
+    block: FormBlock;
+    onChange: (id: string, content: string) => void;
+    onDelete: (id: string) => void;
+    onFocusPrev: (id: string) => void;
+    onFocusNext: (id: string) => void;
+    onFocused: (id: string) => void;
 }
 
-function RichTextEditor({ initialHtml, placeholder = 'Start typing…', onChange, minHeight = 80 }: RichTextEditorProps) {
+const TextBlock = forwardRef<TextBlockHandle, TextBlockProps>(function TextBlock(
+    { block, onChange, onDelete, onFocusPrev, onFocusNext, onFocused },
+    ref
+) {
     const divRef = useRef<HTMLDivElement>(null);
     const [formats, setFormats] = useState<FormatState>({ bold: false, italic: false, underline: false });
-    const [isEmpty, setIsEmpty] = useState(!initialHtml);
+    const [isEmpty, setIsEmpty] = useState(!block.content);
 
-    // Populate once on mount — uncontrolled to avoid cursor jumping
+    useImperativeHandle(ref, () => ({
+        focus: () => {
+            if (!divRef.current) return;
+            divRef.current.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(divRef.current);
+            range.collapse(false);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        },
+        focusAtStart: () => {
+            if (!divRef.current) return;
+            divRef.current.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.setStart(divRef.current, 0);
+            range.collapse(true);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        },
+    }));
+
     useEffect(() => {
-        if (divRef.current) divRef.current.innerHTML = initialHtml || '';
+        if (divRef.current) divRef.current.innerHTML = block.content || '';
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const syncFormats = () => setFormats(detectFormat());
 
-    const handleInput = useCallback(() => {
+    const handleInput = () => {
         const html = divRef.current?.innerHTML || '';
-        const effective = (html === '<br>' || html === '') ? '' : html;
+        const effective = html === '<br>' || html === '' ? '' : html;
         setIsEmpty(!effective);
-        onChange(effective);
-    }, [onChange]);
+        onChange(block.id, effective);
+    };
 
-    // onMouseDown + preventDefault preserves the text selection when toolbar button is clicked
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            // Enter always inserts a line break — no new blocks from text
+            e.preventDefault();
+            document.execCommand('insertLineBreak');
+            handleInput();
+        } else if (e.key === 'Backspace') {
+            const html = divRef.current?.innerHTML || '';
+            if (!html || html === '<br>' || stripHtml(html).trim() === '') {
+                e.preventDefault();
+                onDelete(block.id);
+                onFocusPrev(block.id);
+            }
+        } else if (e.key === 'ArrowDown') {
+            onFocusNext(block.id);
+        } else if (e.key === 'ArrowUp') {
+            onFocusPrev(block.id);
+        }
+    };
+
     const applyFormat = (cmd: string) => (e: React.MouseEvent) => {
         e.preventDefault();
         divRef.current?.focus();
@@ -126,9 +210,9 @@ function RichTextEditor({ initialHtml, placeholder = 'Start typing…', onChange
     ];
 
     return (
-        <div className="flex flex-col gap-2 group/editor">
-            {/* Formatting toolbar - show on hover/focus */}
-            <div className="flex items-center gap-1 opacity-0 group-focus-within/editor:opacity-100 group-hover/editor:opacity-100 transition-opacity">
+        <div className="group/textblock">
+            {/* Format toolbar — visible on hover/focus */}
+            <div className="flex items-center gap-1 mb-1 h-6 opacity-0 group-focus-within/textblock:opacity-100 group-hover/textblock:opacity-100 transition-opacity">
                 {FORMATS.map(({ cmd, label, title, style }) => {
                     const active = formats[cmd as keyof FormatState];
                     return (
@@ -137,7 +221,7 @@ function RichTextEditor({ initialHtml, placeholder = 'Start typing…', onChange
                             type="button"
                             onMouseDown={applyFormat(cmd)}
                             title={title}
-                            className="w-7 h-7 flex items-center justify-center text-xs rounded transition-colors"
+                            className="w-6 h-6 flex items-center justify-center text-xs rounded transition-colors"
                             style={{
                                 ...style,
                                 backgroundColor: active ? 'var(--color-primary)' : 'transparent',
@@ -151,14 +235,13 @@ function RichTextEditor({ initialHtml, placeholder = 'Start typing…', onChange
                 })}
             </div>
 
-            {/* Editable area */}
             <div className="relative">
                 {isEmpty && (
                     <span
-                        className="absolute top-0 left-2 text-sm pointer-events-none select-none opacity-50 transition-opacity"
-                        style={{ color: 'var(--color-text-secondary)', paddingTop: '4px' }}
+                        className="absolute top-0 left-0 text-sm pointer-events-none select-none opacity-40"
+                        style={{ color: 'var(--color-text-secondary)', paddingTop: '2px' }}
                     >
-                        {placeholder}
+                        Write something…
                     </span>
                 )}
                 <div
@@ -166,21 +249,97 @@ function RichTextEditor({ initialHtml, placeholder = 'Start typing…', onChange
                     contentEditable
                     suppressContentEditableWarning
                     onInput={handleInput}
+                    onKeyDown={handleKeyDown}
                     onKeyUp={syncFormats}
                     onMouseUp={syncFormats}
                     onSelect={syncFormats}
-                    onFocus={syncFormats}
-                    className="w-full text-sm outline-none leading-relaxed rounded-md px-2 py-1 transparent-selection"
-                    style={{
-                        minHeight,
-                        color: 'var(--color-text-primary)',
-                        wordBreak: 'break-word',
-                    }}
+                    onFocus={() => { syncFormats(); onFocused(block.id); }}
+                    className="w-full text-sm outline-none leading-relaxed py-0.5"
+                    style={{ minHeight: '24px', color: 'var(--color-text-primary)', wordBreak: 'break-word' }}
                 />
             </div>
         </div>
     );
+});
+
+// ── ChecklistBlock ────────────────────────────────────────────────────────────
+
+interface ChecklistBlockHandle { focus: () => void; focusAtStart: () => void; }
+
+interface ChecklistBlockProps {
+    block: FormBlock;
+    onChange: (id: string, patch: Partial<FormBlock>) => void;
+    onInsertAfter: (id: string, type: 'text' | 'checklist') => void;
+    onDelete: (id: string) => void;
+    onFocusPrev: (id: string) => void;
+    onFocusNext: (id: string) => void;
+    onFocused: (id: string) => void;
+    /** Replace this checklist block in-place with an empty text block */
+    onConvertToText: (id: string) => void;
 }
+
+const ChecklistBlock = forwardRef<ChecklistBlockHandle, ChecklistBlockProps>(function ChecklistBlock(
+    { block, onChange, onInsertAfter, onDelete, onFocusPrev, onFocusNext, onFocused, onConvertToText },
+    ref
+) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const item: ChecklistItemData = block.items?.[0] ?? { id: uid(), text: '', checked: false };
+
+    useImperativeHandle(ref, () => ({
+        focus: () => inputRef.current?.focus(),
+        focusAtStart: () => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(0, 0); },
+    }));
+
+    const updateItem = (patch: Partial<ChecklistItemData>) => {
+        onChange(block.id, { items: [{ ...item, ...patch }] });
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!item.text) {
+                // Empty checklist item — convert it to a text block in-place
+                onConvertToText(block.id);
+            } else {
+                onInsertAfter(block.id, 'checklist');
+            }
+        } else if (e.key === 'Backspace' && !item.text) {
+            e.preventDefault();
+            onDelete(block.id);
+            onFocusPrev(block.id);
+        } else if (e.key === 'ArrowDown') {
+            onFocusNext(block.id);
+        } else if (e.key === 'ArrowUp') {
+            onFocusPrev(block.id);
+        }
+    };
+
+    return (
+        <div className="flex items-center gap-2 py-0.5">
+            <input
+                type="checkbox"
+                checked={item.checked}
+                onChange={e => updateItem({ checked: e.target.checked })}
+                className="w-3.5 h-3.5 rounded flex-shrink-0 cursor-pointer accent-indigo-500"
+            />
+            <input
+                ref={inputRef}
+                type="text"
+                value={item.text}
+                onChange={e => updateItem({ text: e.target.value })}
+                onKeyDown={handleKeyDown}
+                onFocus={() => onFocused(block.id)}
+                placeholder="List item…"
+                className="flex-1 text-sm bg-transparent outline-none border-b border-transparent focus:border-gray-300 pb-0.5 transition-colors"
+                style={{
+                    color: 'var(--color-text-primary)',
+                    textDecoration: item.checked ? 'line-through' : 'none',
+                    opacity: item.checked ? 0.55 : 1,
+                }}
+            />
+        </div>
+    );
+});
 
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 
@@ -196,9 +355,10 @@ interface NoteCardProps {
 function NoteCard({ note, canModify, isAdmin, onOpen, onDelete, onTogglePin }: NoteCardProps) {
     const borderColor = note.color === '#FFFFFF' ? 'var(--color-border-default)' : note.color;
 
-    // Get a quick text preview from the first text block
     const textPreview = note.blocks.find(b => b.type === 'text')?.content || '';
     const cleanPreview = stripHtml(textPreview).slice(0, 100) + (stripHtml(textPreview).length > 100 ? '...' : '');
+    const checkCount = note.blocks.filter(b => b.type === 'checklist').length;
+    const checkedCount = note.blocks.filter(b => b.type === 'checklist' && (b.items as any)?.[0]?.checked).length;
 
     return (
         <div
@@ -217,6 +377,9 @@ function NoteCard({ note, canModify, isAdmin, onOpen, onDelete, onTogglePin }: N
                 </div>
                 {cleanPreview && (
                     <p className="text-xs text-neutral-500 truncate">{cleanPreview}</p>
+                )}
+                {!cleanPreview && checkCount > 0 && (
+                    <p className="text-xs text-neutral-400">{checkedCount}/{checkCount} items checked</p>
                 )}
             </div>
 
@@ -253,107 +416,6 @@ function NoteCard({ note, canModify, isAdmin, onOpen, onDelete, onTogglePin }: N
     );
 }
 
-// ── TextBlockEditor ────────────────────────────────────────────────────────────
-
-function TextBlockEditor({ block, onChange, onDelete }: {
-    block: FormBlock;
-    onChange: (id: string, patch: Partial<FormBlock>) => void;
-    onDelete: (id: string) => void;
-}) {
-    return (
-        <div className="relative group/block py-1">
-            <button
-                type="button"
-                onClick={() => onDelete(block.id)}
-                className="absolute -left-6 top-3 p-1 rounded text-neutral-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover/block:opacity-100 transition-opacity"
-                title="Delete block"
-            >
-                <X size={14} />
-            </button>
-            <RichTextEditor
-                initialHtml={block.content || ''}
-                onChange={html => onChange(block.id, { content: html })}
-                placeholder="Start typing…"
-                minHeight={24}
-            />
-        </div>
-    );
-}
-
-function ChecklistBlockEditor({ block, onChange, onDelete }: {
-    block: FormBlock;
-    onChange: (id: string, patch: Partial<FormBlock>) => void;
-    onDelete: (id: string) => void;
-}) {
-    const items: NoteChecklistItem[] = block.items || [];
-
-    const updateItem = (itemId: string, patch: Partial<NoteChecklistItem>) => {
-        onChange(block.id, {
-            items: items.map(i => i.id === itemId ? { ...i, ...patch } : i),
-        });
-    };
-
-    const addItem = () => {
-        onChange(block.id, { items: [...items, { id: uid(), text: '', checked: false }] });
-    };
-
-    const removeItem = (itemId: string) => {
-        const next = items.filter(i => i.id !== itemId);
-        onChange(block.id, { items: next.length ? next : [{ id: uid(), text: '', checked: false }] });
-    };
-
-    return (
-        <div className="relative group/block py-2">
-            <button
-                type="button"
-                onClick={() => onDelete(block.id)}
-                className="absolute -left-6 top-2 p-1 rounded text-neutral-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover/block:opacity-100 transition-opacity"
-                title="Delete block"
-            >
-                <X size={14} />
-            </button>
-            <div className="flex flex-col gap-1.5 pl-2">
-                {items.map((item, idx) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={item.checked}
-                            onChange={e => updateItem(item.id, { checked: e.target.checked })}
-                            className="w-3.5 h-3.5 rounded accent-green-500 flex-shrink-0 cursor-pointer"
-                        />
-                        <input
-                            type="text"
-                            value={item.text}
-                            onChange={e => updateItem(item.id, { text: e.target.value })}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') { e.preventDefault(); addItem(); }
-                                if (e.key === 'Backspace' && !item.text && items.length > 1) {
-                                    e.preventDefault(); removeItem(item.id);
-                                }
-                            }}
-                            placeholder={`Item ${idx + 1}`}
-                            className="flex-1 text-sm bg-transparent outline-none border-b border-transparent focus:border-gray-300 pb-0.5 transition-colors"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        />
-                        {items.length > 1 && (
-                            <button onClick={() => removeItem(item.id)} className="p-0.5 rounded hover:text-red-500 transition-colors opacity-40 hover:opacity-100">
-                                <X size={11} />
-                            </button>
-                        )}
-                    </div>
-                ))}
-                <button
-                    onClick={addItem}
-                    className="flex items-center gap-1 text-xs mt-1 opacity-60 hover:opacity-100 transition-opacity"
-                    style={{ color: 'var(--color-primary)' }}
-                >
-                    <Plus size={12} /> Add item
-                </button>
-            </div>
-        </div>
-    );
-}
-
 // ── NoteEditorModal ────────────────────────────────────────────────────────────
 
 interface NoteEditorModalProps {
@@ -370,106 +432,201 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     const [title, setTitle] = useState(editingNote?.title || '');
     const [color, setColor] = useState(editingNote?.color || '#FFFFFF');
     const [isPinned, setIsPinned] = useState(editingNote?.isPinned || false);
-    const [blocks, setBlocks] = useState<FormBlock[]>(
+    const [blocks, setBlocks] = useState<FormBlock[]>(() =>
         editingNote?.blocks && editingNote.blocks.length > 0
-            ? (editingNote.blocks as FormBlock[])
+            ? flattenBlocks(editingNote.blocks as NoteBlock[])
             : [emptyTextBlock()]
     );
     const [noteId, setNoteId] = useState<string | null>(editingNote?._id || null);
-    const [isDirty, setIsDirty] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+    const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+    void focusedBlockId;
 
-    const createPromiseRef = useRef<Promise<any> | null>(null);
-    const currentDataRef = useRef({ title, color, isPinned, blocks, isDirty, noteId });
+    // Stable refs so async callbacks always read latest values
+    const createResultRef = useRef<string | null>(editingNote?._id || null);
+    const isSavingRef = useRef(false);
+    const isDirtyRef = useRef(false);
+    const pendingFocusRef = useRef<{ id: string; atStart?: boolean } | null>(null);
+    const focusedBlockIdRef = useRef<string | null>(null);
+    const blockRefs = useRef<Map<string, { focus: () => void; focusAtStart: () => void }>>(new Map());
 
+    // Latest-value refs for async save
+    const titleRef = useRef(title);
+    const colorRef = useRef(color);
+    const isPinnedRef = useRef(isPinned);
+    const blocksRef = useRef(blocks);
+    const noteIdRef = useRef(noteId);
+
+    useEffect(() => { titleRef.current = title; }, [title]);
+    useEffect(() => { colorRef.current = color; }, [color]);
+    useEffect(() => { isPinnedRef.current = isPinned; }, [isPinned]);
+    useEffect(() => { blocksRef.current = blocks; }, [blocks]);
+    useEffect(() => { noteIdRef.current = noteId; }, [noteId]);
+
+    // Focus a newly inserted block after the state update lands
     useEffect(() => {
-        currentDataRef.current = { title, color, isPinned, blocks, isDirty, noteId };
-    }, [title, color, isPinned, blocks, isDirty, noteId]);
-
-    const patchBlock = useCallback((id: string, patch: Partial<FormBlock>) => {
-        setIsDirty(true);
-        setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
-    }, []);
-
-    const deleteBlock = useCallback((id: string) => {
-        setIsDirty(true);
-        setBlocks(prev => prev.filter(b => b.id !== id));
-    }, []);
-
-    const handleTitleChange = (val: string) => {
-        setTitle(val);
-        setIsDirty(true);
-    };
-
-    const handleColorChange = (val: string) => {
-        setColor(val);
-        setIsDirty(true);
-    };
-
-    const handlePinChange = () => {
-        setIsPinned(p => !p);
-        setIsDirty(true);
-    };
-
-    const handleSaveNow = async (dataState = currentDataRef.current) => {
-        const { title: t, color: c, isPinned: p, blocks: b, noteId: nid } = dataState;
-        const cleanBlocks = b.map(({ _uploading, ...rest }) => rest);
-        const finalTitle = t.trim() || 'Untitled';
-        const data = { title: finalTitle, color: c, isPinned: p, blocks: cleanBlocks as NoteBlock[] };
-
-        if (nid) {
-            await updateNote({ projectId, noteId: nid, data }).unwrap();
-        } else if (createPromiseRef.current) {
-            const res = await createPromiseRef.current;
-            if (res?.data?._id) {
-                await updateNote({ projectId, noteId: res.data._id, data }).unwrap();
-            }
-        } else {
-            const promise = createNote({ projectId, data }).unwrap();
-            createPromiseRef.current = promise;
-            const res = await promise;
-            if (res.data?._id) {
-                setNoteId(res.data._id);
+        if (pendingFocusRef.current) {
+            const { id, atStart } = pendingFocusRef.current;
+            const handle = blockRefs.current.get(id);
+            if (handle) {
+                if (atStart) handle.focusAtStart(); else handle.focus();
+                pendingFocusRef.current = null;
             }
         }
-    };
+    }, [blocks]);
 
-    const handleClose = async () => {
-        if (currentDataRef.current.isDirty) {
-            setSaveStatus('saving');
-            try {
-                await handleSaveNow(currentDataRef.current);
-            } catch (err) {
-                console.error("Save on close failed", err);
+    // ── Save helpers ──────────────────────────────────────────────────────────
+
+    const handleSaveNow = useCallback(async (): Promise<void> => {
+        if (isSavingRef.current) return;
+        isSavingRef.current = true;
+        const t = titleRef.current;
+        const c = colorRef.current;
+        const p = isPinnedRef.current;
+        const b = blocksRef.current;
+        const resolvedId = createResultRef.current ?? noteIdRef.current;
+
+        const cleanBlocks: NoteBlock[] = b.map(block =>
+            block.type === 'text'
+                ? ({ id: block.id, type: 'text', content: block.content ?? '' } as NoteBlock)
+                : ({ id: block.id, type: 'checklist', items: block.items ?? [] } as NoteBlock)
+        );
+        const data = { title: t.trim() || 'Untitled', color: c, isPinned: p, blocks: cleanBlocks };
+
+        try {
+            if (resolvedId) {
+                await updateNote({ projectId, noteId: resolvedId, data }).unwrap();
+            } else {
+                const res = await createNote({ projectId, data }).unwrap();
+                const newId = res.data?._id as string | undefined;
+                if (newId) {
+                    createResultRef.current = newId;
+                    setNoteId(newId);
+                }
             }
+        } finally {
+            isSavingRef.current = false;
         }
-        onClose();
-    };
+    }, [projectId, createNote, updateNote]);
 
-    useEffect(() => {
-        if (!isDirty) return;
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const scheduleSave = useCallback(() => {
+        isDirtyRef.current = true;
         setSaveStatus('saving');
-        const timeout = setTimeout(async () => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(async () => {
             try {
                 await handleSaveNow();
+                isDirtyRef.current = false;
                 setSaveStatus('saved');
-                setIsDirty(false);
             } catch (err) {
-                console.error("Autosave failed", err);
+                console.error('Autosave failed', err);
                 setSaveStatus('error');
             }
-        }, 800);
+        }, 900);
+    }, [handleSaveNow]);
 
-        return () => clearTimeout(timeout);
-    }, [title, color, isPinned, blocks, isDirty, noteId, projectId, createNote, updateNote]);
+    useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
 
-    // Escape to close
+    const handleClose = useCallback(async () => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        if (isDirtyRef.current) {
+            setSaveStatus('saving');
+            try { await handleSaveNow(); setSaveStatus('saved'); }
+            catch (err) { console.error('Save on close failed', err); }
+        }
+        onClose();
+    }, [handleSaveNow, onClose]);
+
     useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
     }, [handleClose]);
+
+    // ── Block mutations ───────────────────────────────────────────────────────
+
+    const handleTextChange = useCallback((id: string, content: string) => {
+        setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b));
+        scheduleSave();
+    }, [scheduleSave]);
+
+    const handleChecklistChange = useCallback((id: string, patch: Partial<FormBlock>) => {
+        setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
+        scheduleSave();
+    }, [scheduleSave]);
+
+    /** Insert a new block after the given id, or at the end if afterId is null */
+    const insertBlock = useCallback((afterId: string | null, type: 'text' | 'checklist') => {
+        const newBlock = type === 'text' ? emptyTextBlock() : emptyChecklistBlock();
+        pendingFocusRef.current = { id: newBlock.id };
+        if (afterId === null) {
+            setBlocks(prev => [...prev, newBlock]);
+        } else {
+            setBlocks(prev => {
+                const idx = prev.findIndex(b => b.id === afterId);
+                const next = [...prev];
+                next.splice(idx === -1 ? next.length : idx + 1, 0, newBlock);
+                return next;
+            });
+        }
+        isDirtyRef.current = true;
+    }, []);
+
+    const handleInsertAfter = useCallback((id: string, type: 'text' | 'checklist') => {
+        insertBlock(id, type);
+    }, [insertBlock]);
+
+    /** Convert a checklist block to a text block in-place */
+    const handleConvertToText = useCallback((id: string) => {
+        const newTextBlock = emptyTextBlock();
+        pendingFocusRef.current = { id: newTextBlock.id };
+        setBlocks(prev => {
+            const idx = prev.findIndex(b => b.id === id);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next.splice(idx, 1, newTextBlock);
+            return next;
+        });
+        isDirtyRef.current = true;
+        scheduleSave();
+    }, [scheduleSave]);
+
+    const handleDeleteBlock = useCallback((id: string) => {
+        setBlocks(prev => {
+            const next = prev.filter(b => b.id !== id);
+            if (next.length > 0) return next;
+            // Last block was deleted — drop in an empty text block and focus it
+            const replacement = emptyTextBlock();
+            pendingFocusRef.current = { id: replacement.id };
+            return [replacement];
+        });
+        scheduleSave();
+    }, [scheduleSave]);
+
+    const handleFocusPrev = useCallback((id: string) => {
+        const cur = blocksRef.current;
+        const idx = cur.findIndex(b => b.id === id);
+        if (idx > 0) blockRefs.current.get(cur[idx - 1].id)?.focus();
+    }, []);
+
+    const handleFocusNext = useCallback((id: string) => {
+        const cur = blocksRef.current;
+        const idx = cur.findIndex(b => b.id === id);
+        if (idx < cur.length - 1) blockRefs.current.get(cur[idx + 1].id)?.focus();
+    }, []);
+
+    const handleFocused = useCallback((id: string) => {
+        focusedBlockIdRef.current = id;
+        setFocusedBlockId(id);
+    }, []);
+
+    /** Header buttons: insert after the focused block or at end */
+    const handleHeaderInsert = (type: 'text' | 'checklist') => {
+        insertBlock(focusedBlockIdRef.current, type);
+        scheduleSave();
+    };
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
@@ -479,24 +636,25 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                 onClick={handleClose}
             />
 
-            {/* Note panel — background is the chosen color */}
+            {/* Note panel */}
             <div
                 className={`relative w-full max-w-xl h-full shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${isAnimating ? 'translate-x-0' : 'translate-x-full'}`}
                 style={{ backgroundColor: color, borderLeft: '1px solid rgba(0,0,0,0.1)' }}
             >
-                {/* Top bar — color swatches + pin + close */}
+                {/* ── Header: color swatches + insert buttons + pin + save + close ── */}
                 <div
-                    className="flex items-center justify-between px-5 pt-4 pb-2 gap-3"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}
+                    className="flex items-center justify-between px-4 pt-3 pb-3 gap-2 flex-wrap"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.04)', borderBottom: '1px solid rgba(0,0,0,0.07)' }}
                 >
-                    <div className="flex items-center gap-2 flex-wrap">
+                    {/* Color swatches */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
                         {NOTE_COLORS.map(c => (
                             <button
                                 key={c.value}
                                 type="button"
-                                onClick={() => handleColorChange(c.value)}
+                                onClick={() => { setColor(c.value); scheduleSave(); }}
                                 title={c.label}
-                                className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-125"
+                                className="w-4 h-4 rounded-full border-2 transition-transform hover:scale-125"
                                 style={{
                                     backgroundColor: c.value,
                                     borderColor: color === c.value ? '#6366F1' : 'rgba(0,0,0,0.2)',
@@ -505,15 +663,28 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                             />
                         ))}
                     </div>
+
+                    {/* Right: save status + insert buttons + pin + close */}
                     <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-xs mr-3 flex items-center gap-1 transition-opacity opacity-70" style={{ color: 'var(--color-text-muted)' }}>
-                            {saveStatus === 'saving' && <><Loader2 size={12} className="animate-spin" /> Saving…</>}
-                            {saveStatus === 'saved' && <span className="flex items-center gap-1 text-green-600"><CheckSquare size={12} /> Saved</span>}
-                            {saveStatus === 'error' && <span className="text-red-500">Error saving</span>}
+                        <span className="text-xs mr-1 flex items-center gap-1" style={{ color: 'var(--color-text-muted)', opacity: 0.75 }}>
+                            {saveStatus === 'saving' && <><Loader2 size={11} className="animate-spin" />Saving…</>}
+                            {saveStatus === 'saved' && <><CheckSquare size={11} className="text-green-500" />Saved</>}
+                            {saveStatus === 'error' && <span className="text-red-500 text-xs">Error saving</span>}
                         </span>
+
                         <button
                             type="button"
-                            onClick={handlePinChange}
+                            onClick={() => handleHeaderInsert('checklist')}
+                            title="Insert checklist item after current block"
+                            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors hover:bg-black/5"
+                            style={{ borderColor: 'rgba(0,0,0,0.12)', color: 'var(--color-text-secondary)' }}
+                        >
+                            <CheckSquare size={11} /> Checklist
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => { setIsPinned(p => !p); scheduleSave(); }}
                             title={isPinned ? 'Unpin' : 'Pin to top'}
                             className="p-1.5 rounded-lg transition-colors hover:bg-black/10"
                             style={{
@@ -521,81 +692,89 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                                 color: isPinned ? '#78350F' : 'var(--color-text-muted)',
                             }}
                         >
-                            {isPinned ? <Pin size={15} /> : <PinOff size={15} />}
+                            {isPinned ? <Pin size={14} /> : <PinOff size={14} />}
                         </button>
+
                         <button
                             type="button"
                             onClick={handleClose}
                             className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
                             style={{ color: 'var(--color-text-muted)' }}
                         >
-                            <X size={16} />
+                            <X size={15} />
                         </button>
                     </div>
                 </div>
 
-                {/* Scrollable body */}
-                <div className="px-6 pb-4 pt-4 flex flex-col gap-4 overflow-y-auto flex-1 h-full">
-                    {/* Title — big, Google Keep-style */}
-                    <div>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={e => handleTitleChange(e.target.value)}
-                            placeholder="Title"
-                            autoFocus
-                            className="w-full bg-transparent outline-none font-bold leading-snug border-none pb-2"
-                            style={{
-                                fontSize: '24px',
-                                color: 'var(--color-text-primary)'
-                            }}
-                        />
-                    </div>
+                {/* ── Scrollable body ── */}
+                <div className="px-6 py-5 flex flex-col overflow-y-auto flex-1">
+                    {/* Title */}
+                    <input
+                        type="text"
+                        value={title}
+                        onChange={e => { setTitle(e.target.value); scheduleSave(); }}
+                        placeholder="Title"
+                        autoFocus
+                        className="w-full bg-transparent outline-none font-bold leading-snug border-none mb-4"
+                        style={{ fontSize: '22px', color: 'var(--color-text-primary)' }}
+                    />
 
-                    {/* Content blocks */}
-                    <div className="flex flex-col gap-1 px-4">
+                    {/* Divider between title and content */}
+                    <hr className="mb-4" style={{ borderColor: 'rgba(0,0,0,0.1)' }} />
+
+                    {/* Content blocks — Notion-style flat list */}
+                    <div className="flex flex-col gap-3">
                         {blocks.map(block => {
                             if (block.type === 'text') {
-                                return <TextBlockEditor key={block.id} block={block} onChange={patchBlock} onDelete={deleteBlock} />;
+                                return (
+                                    <TextBlock
+                                        key={block.id}
+                                        block={block}
+                                        ref={el => {
+                                            if (el) blockRefs.current.set(block.id, el);
+                                            else blockRefs.current.delete(block.id);
+                                        }}
+                                        onChange={handleTextChange}
+                                        onDelete={handleDeleteBlock}
+                                        onFocusPrev={handleFocusPrev}
+                                        onFocusNext={handleFocusNext}
+                                        onFocused={handleFocused}
+                                    />
+                                );
                             }
                             if (block.type === 'checklist') {
-                                return <ChecklistBlockEditor key={block.id} block={block} onChange={patchBlock} onDelete={deleteBlock} />;
+                                return (
+                                    <ChecklistBlock
+                                        key={block.id}
+                                        block={block}
+                                        ref={el => {
+                                            if (el) blockRefs.current.set(block.id, el);
+                                            else blockRefs.current.delete(block.id);
+                                        }}
+                                        onChange={handleChecklistChange}
+                                        onInsertAfter={handleInsertAfter}
+                                        onDelete={handleDeleteBlock}
+                                        onFocusPrev={handleFocusPrev}
+                                        onFocusNext={handleFocusNext}
+                                        onFocused={handleFocused}
+                                        onConvertToText={handleConvertToText}
+                                    />
+                                );
                             }
                             return null;
                         })}
-
-                        {/* Add block buttons */}
-                        <div className="flex items-center gap-2 pt-4 mt-2 border-t opacity-40 hover:opacity-100 transition-opacity" style={{ borderColor: 'rgba(0,0,0,0.05)' }}>
-                            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>+ Add block:</span>
-                            <button
-                                type="button"
-                                onClick={() => setBlocks(p => [...p, emptyTextBlock()])}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-black/5 transition-colors font-medium"
-                                style={{ borderColor: 'rgba(0,0,0,0.1)', color: 'var(--color-text-secondary)' }}
-                            >
-                                <AlignLeft size={13} /> Text
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setBlocks(p => [...p, emptyChecklistBlock()])}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-black/5 transition-colors font-medium"
-                                style={{ borderColor: 'rgba(0,0,0,0.1)', color: 'var(--color-text-secondary)' }}
-                            >
-                                <CheckSquare size={13} /> Checklist
-                            </button>
-                        </div>
                     </div>
                 </div>
 
-                {/* Footer */}
+                {/* ── Footer ── */}
                 <div
-                    className="flex items-center justify-end gap-3 px-6 py-4 border-t"
+                    className="flex items-center justify-end gap-3 px-6 py-3 border-t"
                     style={{ borderColor: 'rgba(0,0,0,0.08)', backgroundColor: 'rgba(0,0,0,0.02)' }}
                 >
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="px-6 py-2 text-sm font-medium rounded-lg text-white transition-colors"
+                        className="px-5 py-1.5 text-sm font-medium rounded-lg text-white transition-colors"
                         style={{ backgroundColor: 'var(--color-primary)' }}
                     >
                         Done
@@ -622,7 +801,7 @@ export default function ProjectNotesTab() {
     const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
 
     const { data, isLoading } = useGetNotesQuery(projectId!);
-    const [deleteNote, { isLoading: isDeleting }] = useDeleteNoteMutation();
+    const [deleteNote] = useDeleteNoteMutation();
     const [updateNote] = useUpdateNoteMutation();
 
     const notes: Note[] = data?.data ?? [];
@@ -666,8 +845,6 @@ export default function ProjectNotesTab() {
 
     const canModify = (note: Note) =>
         isAdmin || (note.createdBy as any)?._id === currentUser?._id;
-
-    void isDeleting;
 
     if (isLoading) {
         return (

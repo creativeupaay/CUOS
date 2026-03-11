@@ -45,11 +45,8 @@ class NoteService {
         const note = await Note.findById(noteId);
         if (!note) throw new AppError('Note not found', 404);
 
-        const isAdmin = ADMIN_ROLES.includes(userRole);
-        const isOwner = note.createdBy.toString() === userId;
-        if (!isAdmin && !isOwner) {
-            throw new AppError('You do not have permission to edit this note', 403);
-        }
+        // All project members can edit notes — no ownership restriction.
+        // updatedBy is tracked for audit purposes.
 
         if (data.title !== undefined) note.title = data.title;
         if (data.color !== undefined) note.color = data.color;

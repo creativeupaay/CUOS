@@ -37,6 +37,7 @@ export const createProjectSchema = z.object({
                 meetings: z.boolean(),
                 credentials: z.boolean(),
                 documents: z.boolean(),
+                notes: z.boolean(),
             }).optional(),
         })).optional(),
 
@@ -91,7 +92,7 @@ export const addAssigneeSchema = z.object({
     }),
     body: z.object({
         employeeId: z.string().min(1, 'Employee ID is required'),
-        role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer']),
+        role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer', 'member']),
         subModules: z.object({
             overview: z.boolean(),
             tasks: z.boolean(),
@@ -99,6 +100,7 @@ export const addAssigneeSchema = z.object({
             meetings: z.boolean(),
             credentials: z.boolean(),
             documents: z.boolean(),
+            notes: z.boolean(),
         }).optional(),
     }),
 });
@@ -123,6 +125,7 @@ export const updateAssigneePermissionsSchema = z.object({
             meetings: z.boolean(),
             credentials: z.boolean(),
             documents: z.boolean(),
+            notes: z.boolean(),
         }),
     }),
 });

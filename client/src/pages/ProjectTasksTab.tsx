@@ -787,14 +787,24 @@ function TaskCard({
                     {/* Actions: Edit/Delete */}
                     <div className="col-span-1 flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         {isProjectManager && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(task._id); }}
-                                className="transition-colors hover:bg-black/5 p-1 rounded"
-                                style={{ color: 'var(--color-danger)' }}
-                                title="Delete task"
-                            >
-                                <Trash2 size={13} />
-                            </button>
+                            task.status === 'completed' ? (
+                                <span
+                                    title="Completed tasks cannot be deleted"
+                                    className="p-1 rounded opacity-40 cursor-not-allowed"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                >
+                                    <Lock size={13} />
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onDelete(task._id); }}
+                                    className="transition-colors hover:bg-black/5 p-1 rounded"
+                                    style={{ color: 'var(--color-danger)' }}
+                                    title="Delete task"
+                                >
+                                    <Trash2 size={13} />
+                                </button>
+                            )
                         )}
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(task); }}

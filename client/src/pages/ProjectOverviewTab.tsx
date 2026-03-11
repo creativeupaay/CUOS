@@ -4,7 +4,7 @@ import type { RootState } from '@/app/store';
 import type { Project, ProjectPhase } from '@/features/project';
 import { useAddAssigneeMutation, useRemoveAssigneeMutation, useUpdateAssigneePermissionsMutation, useLazyGetAssigneePermissionsQuery, useUpdateProjectMutation } from '@/features/project';
 import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
-import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -89,17 +89,17 @@ export default function ProjectOverviewTab() {
     const handleOpenEdit = async (employeeId: string) => {
         setEditingUserId(employeeId);
 
+        // Full defaults — ensures any new fields (like `notes`) missing from old DB records are present
+        const fullDefaults = { overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false };
+
         // Fetch current custom permissions from the backend instead of using defaults
         try {
             const res = await fetchAssigneePermissions({ projectId: project._id, employeeId }).unwrap();
-            if (res.data) {
-                setEditSubModules(res.data);
-            } else {
-                setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
-            }
+            // Merge: defaults first so old records without `notes` still have it, backend values win
+            setEditSubModules({ ...fullDefaults, ...(res.data ?? {}) });
         } catch (error) {
             console.error("Failed to fetch assignee permissions", error);
-            setEditSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
+            setEditSubModules(fullDefaults);
         }
     };
 
@@ -291,7 +291,7 @@ export default function ProjectOverviewTab() {
                                     <span style={{ color: 'var(--color-text-secondary)' }}>Select All</span>
                                 </label>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 {Object.keys(subModules).map((key) => (
                                     <label key={key} className="flex items-center gap-2 text-xs cursor-pointer select-none">
                                         <input
@@ -506,6 +506,7 @@ export default function ProjectOverviewTab() {
                                 { key: 'meetings', label: 'Meetings', icon: Video, desc: 'Schedule and manage meetings' },
                                 { key: 'credentials', label: 'Credentials', icon: KeyRound, desc: 'Access project credentials' },
                                 { key: 'documents', label: 'Documents', icon: FileText, desc: 'View project documents' },
+                                { key: 'notes', label: 'Notes', icon: StickyNote, desc: 'View and write project notes' },
                             ] as const).map(({ key, label, icon: Icon, desc }) => {
                                 const enabled = (editSubModules as any)[key];
                                 return (
