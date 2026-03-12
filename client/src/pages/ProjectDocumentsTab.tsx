@@ -168,7 +168,6 @@ function FolderTreeNode({
     onRemoveItems: (ids: string[]) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
-    const autoSelectedRef = useRef(false);
 
     const { data: subFoldersData, isLoading: subFoldersLoading } = useGetDocFoldersQuery(
         { projectId, parentId: folder._id },
@@ -185,38 +184,10 @@ function FolderTreeNode({
     const folderAccessIds = folder.viewAccess.map((u: any) => typeof u === 'string' ? u : u._id);
     const isSelected = selectedItems.has(folder._id);
 
-    // Once folder is selected and children finish loading, auto-select them
-    useEffect(() => {
-        if (!isSelected || isLoadingChildren || !expanded) return;
-        if (autoSelectedRef.current) return;
-        const toAdd: { id: string; type: 'folder' | 'file'; name: string; currentAccess: string[] }[] = [];
-        subFolders.forEach((sf) => {
-            if (!selectedItems.has(sf._id))
-                toAdd.push({ id: sf._id, type: 'folder', name: sf.name, currentAccess: sf.viewAccess.map((u: any) => typeof u === 'string' ? u : u._id) });
-        });
-        subItems.forEach((item) => {
-            if (!selectedItems.has(item._id))
-                toAdd.push({ id: item._id, type: 'file', name: item.name, currentAccess: item.viewAccess.map((u: any) => typeof u === 'string' ? u : u._id) });
-        });
-        if (toAdd.length > 0) onAddItems(toAdd);
-        autoSelectedRef.current = true;
-    }, [isSelected, isLoadingChildren, expanded, subFolders, subItems]);
-
-    // Reset auto-selected marker when folder is deselected
-    useEffect(() => { if (!isSelected) autoSelectedRef.current = false; }, [isSelected]);
-
     const handleFolderToggle = () => {
         if (isSelected) {
-            // Deselect folder + all currently known direct children
-            const idsToRemove = [
-                folder._id,
-                ...subItems.map((i) => i._id),
-                ...subFolders.map((f) => f._id),
-            ];
-            onRemoveItems(idsToRemove);
-            autoSelectedRef.current = false;
+            onRemoveItems([folder._id]);
         } else {
-            // Select folder, expand to load children, auto-select will fire via useEffect
             setExpanded(true);
             onAddItems([{ id: folder._id, type: 'folder', name: folder.name, currentAccess: folderAccessIds }]);
         }
@@ -728,9 +699,122 @@ function AccessBadge({ count, onClick }: { count: number; onClick: (e: React.Mou
             style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-primary-soft)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
-            title="Manage view access">
+            title="View who has access">
             <Eye size={12} /><span>{count}</span>
         </button>
+    );
+}
+
+// ─── Viewers Panel (shows who has access to a specific folder/file) ───────────
+type ViewTarget = { id: string; type: 'folder' | 'file'; name: string; viewAccess: any[] };
+
+function ViewersPanel({
+    target,
+    projectId,
+    members,
+    updateFolderAccess,
+    updateItemAccess,
+    onClose,
+}: {
+    target: ViewTarget;
+    projectId: string;
+    members: { userId: string; name: string; email: string }[];
+    updateFolderAccess: any;
+    updateItemAccess: any;
+    onClose: () => void;
+}) {
+    const [removing, setRemoving] = useState<string | null>(null);
+    const [localAccess, setLocalAccess] = useState<any[]>(target.viewAccess);
+
+    const viewers = localAccess.map((u: any) => {
+        const uid = typeof u === 'string' ? u : u._id;
+        const populated = typeof u === 'object' && u.name ? u.name : undefined;
+        const member = members.find(m => m.userId === uid);
+        return { userId: uid, name: populated || member?.name || 'Unknown', email: member?.email || '' };
+    });
+
+    const handleRemove = async (userId: string) => {
+        setRemoving(userId);
+        try {
+            const newAccess = localAccess
+                .map((u: any) => typeof u === 'string' ? u : u._id)
+                .filter((id: string) => id !== userId);
+            if (target.type === 'folder') {
+                await updateFolderAccess({ projectId, folderId: target.id, viewAccess: newAccess }).unwrap();
+            } else {
+                await updateItemAccess({ projectId, itemId: target.id, viewAccess: newAccess }).unwrap();
+            }
+            setLocalAccess(prev => prev.filter((u: any) => (typeof u === 'string' ? u : u._id) !== userId));
+        } finally {
+            setRemoving(null);
+        }
+    };
+
+    return createPortal(
+        <>
+            <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+            <div
+                className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 rounded-xl border shadow-2xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3.5 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--color-primary-soft)' }}>
+                            <Eye size={14} style={{ color: 'var(--color-primary)' }} />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>View Access</p>
+                            <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--color-text-muted)' }}>{target.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--color-text-muted)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 max-h-72 overflow-y-auto">
+                    {viewers.length === 0 ? (
+                        <div className="text-center py-6">
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                No one has view access to this {target.type} yet.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {viewers.map((v) => (
+                                <div key={v.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 ${avatarColor(v.name)}`}>
+                                        {initials(v.name)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{v.name}</p>
+                                        {v.email && <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{v.email}</p>}
+                                    </div>
+                                    <button
+                                        onClick={() => handleRemove(v.userId)}
+                                        disabled={removing === v.userId}
+                                        className="p-1.5 rounded-lg transition-colors flex-shrink-0 disabled:opacity-40"
+                                        style={{ color: 'var(--color-danger)' }}
+                                        title="Remove access"
+                                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-danger-soft, #FEE2E2)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        {removing === v.userId ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </>,
+        document.body
     );
 }
 
@@ -745,6 +829,7 @@ const ProjectDocumentsTab: React.FC = () => {
     const [breadcrumb, setBreadcrumb] = useState<{ id: string; name: string }[]>([]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
     const [showAccessControl, setShowAccessControl] = useState(false);
+    const [viewTarget, setViewTarget] = useState<ViewTarget | null>(null);
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const newFolderInputRef = useRef<HTMLInputElement>(null);
@@ -897,7 +982,7 @@ const ProjectDocumentsTab: React.FC = () => {
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#EFF6FF', color: '#3B82F6' }}>Shared</span>
                     )}
                     <div className="flex items-center gap-1">
-                        {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
+                        {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
                         {isDocAdmin && (
                             <div className="relative">
                                 <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === folder._id ? null : folder._id); }}
@@ -959,7 +1044,7 @@ const ProjectDocumentsTab: React.FC = () => {
                         <p className="text-xs font-medium text-center leading-tight max-w-full truncate w-full mt-1" style={{ color: 'var(--color-text-primary)' }} title={item.name}>{item.name}</p>
                         <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{formatSize(item.size)}</p>
                         <div className="flex items-center gap-1">
-                            {isDocAdmin && <AccessBadge count={item.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
+                            {isDocAdmin && <AccessBadge count={item.viewAccess.length} onClick={() => setViewTarget({ id: item._id, type: 'file', name: item.name, viewAccess: item.viewAccess })} />}
                             {isDocAdmin && (
                                 <div className="relative">
                                     <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === item._id ? null : item._id); }}
@@ -1144,7 +1229,7 @@ const ProjectDocumentsTab: React.FC = () => {
                                     </div>
                                 )}
                                 <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Folder</span>
-                                {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
+                                {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
                                 {isDocAdmin && (
                                     <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === folder._id ? null : folder._id); }}
@@ -1189,7 +1274,7 @@ const ProjectDocumentsTab: React.FC = () => {
                                     <span className="text-xs w-16 text-right" style={{ color: 'var(--color-text-muted)' }}>{formatSize(item.size)}</span>
                                     {uploader && <span className="text-xs hidden sm:block w-28 text-right truncate" style={{ color: 'var(--color-text-muted)' }}>{uploader.name}</span>}
                                     <span className="text-xs hidden sm:block w-16 text-right" style={{ color: 'var(--color-text-muted)' }}>{timeAgo(item.createdAt)}</span>
-                                    {isDocAdmin && <AccessBadge count={item.viewAccess.length} onClick={() => setShowAccessControl(true)} />}
+                                    {isDocAdmin && <AccessBadge count={item.viewAccess.length} onClick={() => setViewTarget({ id: item._id, type: 'file', name: item.name, viewAccess: item.viewAccess })} />}
                                     {isDocAdmin && (
                                         <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === item._id ? null : item._id); }}
@@ -1223,6 +1308,18 @@ const ProjectDocumentsTab: React.FC = () => {
                     updateFolderAccess={updateFolderAccess}
                     updateItemAccess={updateItemAccess}
                     updateAdmins={updateAdmins}
+                />
+            )}
+
+            {/* Viewers Panel */}
+            {viewTarget && projectId && (
+                <ViewersPanel
+                    target={viewTarget}
+                    projectId={projectId}
+                    members={members}
+                    updateFolderAccess={updateFolderAccess}
+                    updateItemAccess={updateItemAccess}
+                    onClose={() => setViewTarget(null)}
                 />
             )}
         </div>

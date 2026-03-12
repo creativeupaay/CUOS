@@ -49,8 +49,8 @@ app.use(cors(corsOptions));
 
 app.use(cookieParser());
 // Apply express.json() to all other routes
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use("/api/v1", v1Routes);
 

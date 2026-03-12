@@ -407,6 +407,11 @@ export default function HrmsEmployeeDetailPage() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-y-5 gap-x-10">
+                            <FieldRow label="Employee ID">
+                                <span className="font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
+                                    {(employee as any).employeeId || '—'}
+                                </span>
+                            </FieldRow>
                             <FieldRow label="Email">
                                 {(employee.userId as any)?.email || '—'}
                             </FieldRow>

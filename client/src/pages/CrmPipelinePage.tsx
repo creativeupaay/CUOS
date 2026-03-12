@@ -1,28 +1,24 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
     Search,
     LayoutDashboard,
     List,
-    DollarSign,
     Calendar,
     Loader2,
     AlertCircle,
-    GripVertical,
     Mail,
     MessageSquare,
     User,
 } from 'lucide-react';
 import {
     DndContext,
-    DragOverlay,
     PointerSensor,
     useSensor,
     useSensors,
     useDroppable,
     useDraggable,
-    type DragStartEvent,
     type DragEndEvent,
 } from '@dnd-kit/core';
 import { useGetLeadsQuery, useUpdateLeadMutation } from '@/features/crm';
@@ -40,15 +36,6 @@ const stages = [
     { id: 'follow-up', label: 'Follow Up', color: '#1D4ED8' },
 ];
 
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        compactDisplay: 'short',
-        maximumFractionDigits: 0,
-    }).format(amount);
-};
-
 // ============================================
 // DRAGGABLE LEAD CARD
 // ============================================
@@ -58,105 +45,81 @@ function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void 
         data: { lead },
     });
 
+    const wasDragging = useRef(false);
+    useEffect(() => {
+        if (isDragging) wasDragging.current = true;
+    }, [isDragging]);
+
     const style: React.CSSProperties = {
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        opacity: isDragging ? 0.4 : 1,
-        cursor: 'grab',
+        opacity: isDragging ? 0.85 : 1,
+        boxShadow: isDragging ? '0 16px 40px rgba(0,0,0,0.18)' : undefined,
+        rotate: isDragging ? '2deg' : undefined,
+        zIndex: isDragging ? 9999 : undefined,
+        cursor: isDragging ? 'grabbing' : 'grab',
+        position: 'relative',
     };
 
     return (
         <div
             ref={setNodeRef}
             style={style}
-            className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow group"
+            {...listeners}
+            {...attributes}
+            onClick={() => {
+                if (wasDragging.current) { wasDragging.current = false; return; }
+                onClick();
+            }}
+            className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
         >
-            {/* Drag handle + content */}
-            <div className="flex items-start gap-2">
-                <div
-                    {...listeners}
-                    {...attributes}
-                    className="flex-none mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <GripVertical size={14} />
-                </div>
-                <div className="flex-1 min-w-0" onClick={onClick}>
-                    <div className="cursor-pointer">
-                        <h3 className="font-medium text-sm text-gray-900 line-clamp-2">{lead.name}</h3>
-                        {lead.company && <p className="text-xs text-gray-500 truncate">{lead.company}</p>}
-                        {lead.email && (
-                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-                                <Mail size={10} className="shrink-0" />
-                                <span className="truncate">{lead.email}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex justify-between items-center text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                        <div className="flex items-center gap-1">
-                            <DollarSign size={12} />
-                            <span className="font-medium text-gray-700">
-                                {formatCurrency(lead.estimatedValue || 0)}
-                            </span>
-                        </div>
-                        {lead.expectedCloseDate && (
-                            <div className="flex items-center gap-1">
-                                <Calendar size={12} />
-                                <span>
-                                    {new Date(lead.expectedCloseDate).toLocaleDateString(undefined, {
-                                        month: 'short',
-                                        day: 'numeric',
-                                    })}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Notes preview */}
-                    {lead.notes && (
-                        <div className="flex items-start gap-1 text-xs text-gray-400 mt-1.5 mb-1">
-                            <MessageSquare size={10} className="shrink-0 mt-0.5" />
-                            <span className="line-clamp-1">{lead.notes}</span>
-                        </div>
-                    )}
-
-                    <div className="mt-2 flex justify-between items-center">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold shrink-0" style={{ color: 'var(--color-primary)' }}>
-                                {(lead.assignedTo as any)?.name?.[0]?.toUpperCase() || <User size={10} />}
-                            </div>
-                            <span className="text-xs text-gray-500 truncate">
-                                {(lead.assignedTo as any)?.name || 'Unassigned'}
-                            </span>
-                        </div>
-                        <div
-                            className="w-2 h-2 rounded-full"
-                            style={{
-                                backgroundColor:
-                                    lead.priority === 'critical' ? 'var(--color-danger)' :
-                                        lead.priority === 'high' ? '#EA580C' :
-                                            lead.priority === 'medium' ? 'var(--color-warning)' :
-                                                'var(--color-success)',
-                            }}
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ============================================
-// OVERLAY CARD (shown while dragging)
-// ============================================
-function LeadCardOverlay({ lead }: { lead: Lead }) {
-    return (
-        <div className="bg-white p-3 rounded-lg border-2 border-primary shadow-xl w-72 rotate-2 opacity-90">
             <h3 className="font-medium text-sm text-gray-900 line-clamp-2">{lead.name}</h3>
             {lead.company && <p className="text-xs text-gray-500 truncate">{lead.company}</p>}
-            <div className="flex items-center gap-1 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
-                <DollarSign size={12} />
-                <span className="font-medium text-gray-700">{formatCurrency(lead.estimatedValue || 0)}</span>
+            {lead.email && (
+                <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+                    <Mail size={10} className="shrink-0" />
+                    <span className="truncate">{lead.email}</span>
+                </div>
+            )}
+
+            {lead.expectedCloseDate && (
+                <div className="flex items-center gap-1 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                    <Calendar size={12} />
+                    <span>
+                        {new Date(lead.expectedCloseDate).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                        })}
+                    </span>
+                </div>
+            )}
+
+            {/* Notes preview */}
+            {lead.notes && (
+                <div className="flex items-start gap-1 text-xs text-gray-400 mt-1.5 mb-1">
+                    <MessageSquare size={10} className="shrink-0 mt-0.5" />
+                    <span className="line-clamp-1">{lead.notes}</span>
+                </div>
+            )}
+
+            <div className="mt-2 flex justify-between items-center">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold shrink-0" style={{ color: 'var(--color-primary)' }}>
+                        {(lead.assignedTo as any)?.name?.[0]?.toUpperCase() || <User size={10} />}
+                    </div>
+                    <span className="text-xs text-gray-500 truncate">
+                        {(lead.assignedTo as any)?.name || 'Unassigned'}
+                    </span>
+                </div>
+                <div
+                    className="w-2 h-2 rounded-full"
+                    style={{
+                        backgroundColor:
+                            lead.priority === 'critical' ? 'var(--color-danger)' :
+                                lead.priority === 'high' ? '#EA580C' :
+                                    lead.priority === 'medium' ? 'var(--color-warning)' :
+                                        'var(--color-success)',
+                    }}
+                />
             </div>
         </div>
     );
@@ -168,12 +131,10 @@ function LeadCardOverlay({ lead }: { lead: Lead }) {
 function StageColumn({
     stage,
     leads,
-    totalValue,
     navigate,
 }: {
     stage: { id: string; label: string; color: string };
     leads: Lead[];
-    totalValue: number;
     navigate: (path: string) => void;
 }) {
     const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -188,7 +149,7 @@ function StageColumn({
         >
             {/* Column Header */}
             <div className="p-3 border-b border-gray-200 bg-white rounded-t-xl">
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex justify-between items-center">
                     <span
                         className="text-xs font-semibold px-2 py-1 rounded-full uppercase"
                         style={{ backgroundColor: `${stage.color}20`, color: stage.color }}
@@ -196,9 +157,6 @@ function StageColumn({
                         {stage.label}
                     </span>
                     <span className="text-xs text-gray-500 font-medium">{leads.length}</span>
-                </div>
-                <div className="text-xs text-gray-500 font-medium px-1">
-                    {formatCurrency(totalValue)}
                 </div>
             </div>
 
@@ -232,8 +190,6 @@ function StageColumn({
 export default function CrmPipelinePage() {
     const navigate = useNavigate();
     const [search, setSearch] = useState('');
-    const [activeLead, setActiveLead] = useState<Lead | null>(null);
-
     const { data, isLoading, error } = useGetLeadsQuery({ limit: 200, search });
     const [updateLead] = useUpdateLeadMutation();
 
@@ -241,8 +197,7 @@ export default function CrmPipelinePage() {
 
     const columns = stages.map((stage) => {
         const stageLeads = leads.filter((lead) => lead.stage === stage.id);
-        const totalValue = stageLeads.reduce((sum, lead) => sum + (lead.estimatedValue || 0), 0);
-        return { ...stage, leads: stageLeads, totalValue };
+        return { ...stage, leads: stageLeads };
     });
 
     // DnD sensors — activate after 5px movement to allow click-through
@@ -252,14 +207,7 @@ export default function CrmPipelinePage() {
         })
     );
 
-    const handleDragStart = (event: DragStartEvent) => {
-        const lead = event.active.data.current?.lead as Lead;
-        if (lead) setActiveLead(lead);
-    };
-
     const handleDragEnd = async (event: DragEndEvent) => {
-        setActiveLead(null);
-
         const { active, over } = event;
         if (!over) return;
 
@@ -343,7 +291,6 @@ export default function CrmPipelinePage() {
             {/* Kanban Board with DnD */}
             <DndContext
                 sensors={sensors}
-                onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
             >
                 <div className="flex-1 overflow-x-auto p-6 bg-gray-50">
@@ -353,16 +300,11 @@ export default function CrmPipelinePage() {
                                 key={column.id}
                                 stage={column}
                                 leads={column.leads}
-                                totalValue={column.totalValue}
                                 navigate={navigate}
                             />
                         ))}
                     </div>
                 </div>
-
-                <DragOverlay>
-                    {activeLead ? <LeadCardOverlay lead={activeLead} /> : null}
-                </DragOverlay>
             </DndContext>
         </div>
     );

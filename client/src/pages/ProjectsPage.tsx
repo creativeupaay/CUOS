@@ -198,6 +198,9 @@ export default function ProjectsPage() {
                                         borderColor: 'var(--color-border-default)',
                                         boxShadow: 'var(--shadow-xs)',
                                         borderLeft: `3px solid ${borderAccent}`,
+                                        minHeight: '150px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
                                     }}
                                     onMouseEnter={(e) => {
                                         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -210,7 +213,7 @@ export default function ProjectsPage() {
                                         e.currentTarget.style.borderColor = 'var(--color-border-default)';
                                     }}
                                 >
-                                    <div className="p-5">
+                                    <div className="p-5 flex flex-col h-full flex-1">
                                         {/* Top row: name + status */}
                                         <div className="flex items-start justify-between gap-2 mb-2">
                                             <h3
@@ -236,7 +239,7 @@ export default function ProjectsPage() {
                                         )}
 
                                         {/* Meta row */}
-                                        <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                        <div className="flex items-center gap-3 text-xs mt-auto" style={{ color: 'var(--color-text-muted)' }}>
                                             {/* Priority */}
                                             <span className="flex items-center gap-1 font-medium" style={{ color: pc.color }}>
                                                 <Flame size={11} />

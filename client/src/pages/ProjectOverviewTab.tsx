@@ -618,7 +618,12 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
             const cleaned = localPhases
                 .filter(p => p.name.trim())
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .map(({ _id, __v, ...rest }: any) => rest);
+                .map(({ _id, __v, ...rest }: any) => {
+                    const phase = { ...rest };
+                    if (!phase.endDate) delete phase.endDate;
+                    if (!phase.startDate) delete phase.startDate;
+                    return phase;
+                });
             await updateProject({ id: String(project._id), data: { phases: cleaned } }).unwrap();
             setShowPhasePanel(false);
         } catch (e) {

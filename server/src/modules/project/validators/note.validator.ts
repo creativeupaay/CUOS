@@ -10,7 +10,7 @@ const contentBlockSchema = z.discriminatedUnion('type', [
     z.object({
         id: z.string().min(1),
         type: z.literal('text'),
-        content: z.string().max(10000).optional(),
+        content: z.string().optional(),
     }),
     z.object({
         id: z.string().min(1),
@@ -34,7 +34,7 @@ export const createNoteSchema = z.object({
         title: z.string().min(1, 'Title is required').max(200),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
         isPinned: z.boolean().optional(),
-        blocks: z.array(contentBlockSchema).max(50).optional(),
+        blocks: z.array(contentBlockSchema).optional(),
     }),
 });
 
@@ -47,7 +47,7 @@ export const updateNoteSchema = z.object({
         title: z.string().min(1).max(200).optional(),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
         isPinned: z.boolean().optional(),
-        blocks: z.array(contentBlockSchema).max(50).optional(),
+        blocks: z.array(contentBlockSchema).optional(),
     }),
 });
 

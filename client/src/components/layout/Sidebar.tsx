@@ -20,6 +20,7 @@ interface NavItem {
     icon: React.ReactNode;
     matchPrefix?: string;
     subItems?: { label: string; path: string }[];
+    alwaysExpanded?: boolean;
 }
 interface ModuleConfig { title: string; items: NavItem[] }
 
@@ -39,7 +40,7 @@ function getModuleConfig(
         const projectSubItems = projects?.map(p => ({ label: p.name, path: `/projects/${p._id}` })) || [];
         return {
             title: 'Project Management',
-            items: [{ label: 'Projects', path: '/projects', icon: <FolderKanban size={18} />, matchPrefix: '/projects', subItems: projectSubItems }],
+            items: [{ label: 'Projects', path: '/projects', icon: <FolderKanban size={18} />, matchPrefix: '/projects', subItems: projectSubItems, alwaysExpanded: true }],
         };
     }
     if (pathname.startsWith('/finance')) {
@@ -125,14 +126,14 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) => {
     const hasSubItems = item.subItems && item.subItems.length > 0;
     const isSubItemActive = hasSubItems && item.subItems!.some(sub => pathname === sub.path || pathname.startsWith(sub.path + '/'));
-    const [isExpanded, setIsExpanded] = useState(active || isSubItemActive);
+    const [isExpanded, setIsExpanded] = useState(item.alwaysExpanded || active || isSubItemActive);
 
     useEffect(() => {
-        if (active || isSubItemActive) setIsExpanded(true);
-    }, [pathname, active, isSubItemActive]);
+        if (item.alwaysExpanded || active || isSubItemActive) setIsExpanded(true);
+    }, [pathname, active, isSubItemActive, item.alwaysExpanded]);
 
     const toggleExpand = (e: React.MouseEvent) => {
-        if (hasSubItems) { e.preventDefault(); setIsExpanded(!isExpanded); }
+        if (hasSubItems && !item.alwaysExpanded) { e.preventDefault(); setIsExpanded(!isExpanded); }
     };
 
     const isItemHighlighted = active && !isSubItemActive;
@@ -189,7 +190,7 @@ const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: b
 
                 <span className="flex-1 truncate">{item.label}</span>
 
-                {hasSubItems && (
+                {hasSubItems && !item.alwaysExpanded && (
                     <span style={{ color: 'var(--color-text-muted)' }}>
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </span>
