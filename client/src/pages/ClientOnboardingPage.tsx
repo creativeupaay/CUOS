@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import CurrencySelect from '@/components/ui/CurrencySelect';
 
 // ── Types ─────────────────────────────────────────────────────────────
 interface OnboardingFormData {
@@ -21,8 +22,6 @@ interface OnboardingFormData {
     };
     billingDetails: {
         billingEmail: string;
-        taxId: string;
-        paymentTerms: string;
         currency: string;
     };
     contacts: {
@@ -63,7 +62,7 @@ const emptyForm = (): OnboardingFormData => ({
     gstNumber: '',
     vatNumber: '',
     address: { street: '', city: '', state: '', country: '', postalCode: '' },
-    billingDetails: { billingEmail: '', taxId: '', paymentTerms: '', currency: 'INR' },
+    billingDetails: { billingEmail: '', currency: 'INR' },
     contacts: [],
 
 });
@@ -111,8 +110,6 @@ export default function ClientOnboardingPage() {
                     },
                     billingDetails: {
                         billingEmail: d.billingDetails?.billingEmail ?? '',
-                        taxId: d.billingDetails?.taxId ?? '',
-                        paymentTerms: d.billingDetails?.paymentTerms ?? '',
                         currency: d.billingDetails?.currency ?? 'INR',
                     },
                     contacts: (d.contacts ?? []).map((c: any) => ({
@@ -342,35 +339,55 @@ export default function ClientOnboardingPage() {
 
                         {/* Additional phones */}
                         <div className="mt-4">
-                            <p className={LABEL}>Additional Phone Numbers</p>
-                            {formData.otherPhones.map((ph, i) => (
-                                <div key={i} className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Label (e.g. Work)"
-                                        value={ph.label}
-                                        onChange={(e) => updatePhone(i, 'label', e.target.value)}
-                                        className={`${INPUT} w-1/3`}
-                                    />
-                                    <input
-                                        type="tel"
-                                        placeholder="Number"
-                                        value={ph.number}
-                                        onChange={(e) => updatePhone(i, 'number', e.target.value)}
-                                        className={`${INPUT} flex-1`}
-                                    />
-                                    <button type="button" onClick={() => removePhone(i)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={addPhone}
-                                className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-1"
-                            >
-                                <Plus size={14} /> Add Number
-                            </button>
+                            <div className="flex items-center justify-between mb-3">
+                                <p className={LABEL + ' mb-0'}>Additional Phone Numbers</p>
+                                <button
+                                    type="button"
+                                    onClick={addPhone}
+                                    className="text-xs text-emerald-600 font-medium flex items-center gap-1 border border-emerald-300 rounded-lg px-3 py-1.5 hover:bg-emerald-50"
+                                >
+                                    <Plus size={13} /> Add Number
+                                </button>
+                            </div>
+                            {formData.otherPhones.length === 0 && (
+                                <p className="text-xs text-neutral-400">No additional numbers added.</p>
+                            )}
+                            <div className="space-y-3">
+                                {formData.otherPhones.map((ph, i) => (
+                                    <div key={i} className="p-3 border border-neutral-200 rounded-lg bg-neutral-50">
+                                        <div className="flex items-start justify-between mb-2">
+                                            <span className="text-xs font-medium text-neutral-500">Phone #{i + 1}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => removePhone(i)}
+                                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <Field label="Label">
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. Work, Home, Office"
+                                                    value={ph.label}
+                                                    onChange={(e) => updatePhone(i, 'label', e.target.value)}
+                                                    className={INPUT}
+                                                />
+                                            </Field>
+                                            <Field label="Number">
+                                                <input
+                                                    type="tel"
+                                                    placeholder="+91 98765 43210"
+                                                    value={ph.number}
+                                                    onChange={(e) => updatePhone(i, 'number', e.target.value)}
+                                                    className={INPUT}
+                                                />
+                                            </Field>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </section>
 
@@ -404,13 +421,11 @@ export default function ClientOnboardingPage() {
                                 <input type="email" value={formData.billingDetails.billingEmail} onChange={(e) => setField('billingDetails.billingEmail', e.target.value)} className={INPUT} placeholder="billing@company.com" />
                             </Field>
                             <Field label="Currency">
-                                <input type="text" value={formData.billingDetails.currency} onChange={(e) => setField('billingDetails.currency', e.target.value)} className={INPUT} placeholder="INR" />
-                            </Field>
-                            <Field label="Tax ID">
-                                <input type="text" value={formData.billingDetails.taxId} onChange={(e) => setField('billingDetails.taxId', e.target.value)} className={INPUT} placeholder="PAN / TAN / Other" />
-                            </Field>
-                            <Field label="Payment Terms">
-                                <input type="text" value={formData.billingDetails.paymentTerms} onChange={(e) => setField('billingDetails.paymentTerms', e.target.value)} className={INPUT} placeholder="e.g. Net 30" />
+                                <CurrencySelect
+                                    value={formData.billingDetails.currency}
+                                    onCurrencySelected={(c) => setField('billingDetails.currency', c)}
+                                    className={INPUT}
+                                />
                             </Field>
                         </div>
                     </section>

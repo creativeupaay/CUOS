@@ -10,6 +10,9 @@ import {
     Loader2,
     AlertCircle,
     GripVertical,
+    Mail,
+    MessageSquare,
+    User,
 } from 'lucide-react';
 import {
     DndContext,
@@ -81,6 +84,12 @@ function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void 
                     <div className="cursor-pointer">
                         <h3 className="font-medium text-sm text-gray-900 line-clamp-2">{lead.name}</h3>
                         {lead.company && <p className="text-xs text-gray-500 truncate">{lead.company}</p>}
+                        {lead.email && (
+                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+                                <Mail size={10} className="shrink-0" />
+                                <span className="truncate">{lead.email}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-between items-center text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
@@ -103,11 +112,22 @@ function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void 
                         )}
                     </div>
 
+                    {/* Notes preview */}
+                    {lead.notes && (
+                        <div className="flex items-start gap-1 text-xs text-gray-400 mt-1.5 mb-1">
+                            <MessageSquare size={10} className="shrink-0 mt-0.5" />
+                            <span className="line-clamp-1">{lead.notes}</span>
+                        </div>
+                    )}
+
                     <div className="mt-2 flex justify-between items-center">
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500">
-                                {(lead.assignedTo as any)?.name?.[0] || 'U'}
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold shrink-0" style={{ color: 'var(--color-primary)' }}>
+                                {(lead.assignedTo as any)?.name?.[0]?.toUpperCase() || <User size={10} />}
                             </div>
+                            <span className="text-xs text-gray-500 truncate">
+                                {(lead.assignedTo as any)?.name || 'Unassigned'}
+                            </span>
                         </div>
                         <div
                             className="w-2 h-2 rounded-full"

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
@@ -13,8 +13,10 @@ import {
     LayoutDashboard,
     List,
     Lock,
+    Pencil,
+    Trash2,
 } from 'lucide-react';
-import { useGetLeadsQuery, useGetPipelineSummaryQuery } from '@/features/crm';
+import { useGetLeadsQuery, useGetPipelineSummaryQuery, useDeleteLeadMutation } from '@/features/crm';
 
 const stageColors: Record<string, { bg: string; text: string }> = {
     new: { bg: 'var(--color-info-soft)', text: 'var(--color-info)' },
@@ -38,11 +40,24 @@ const priorityColors: Record<string, string> = {
 export default function CrmLeadsPage() {
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+    const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [filters, setFilters] = useState({
         search: '',
         stage: '',
         priority: '',
     });
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (openMenuId && menuRefs.current[openMenuId] && !menuRefs.current[openMenuId]!.contains(e.target as Node)) {
+                setOpenMenuId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [openMenuId]);
 
     // Determine query params (debounced search handled by user typing pause effectively in simple implementations, or just pass directly)
     const queryParams: any = {};
@@ -52,9 +67,20 @@ export default function CrmLeadsPage() {
 
     const { data, isLoading, error } = useGetLeadsQuery(queryParams);
     const { data: pipelineData } = useGetPipelineSummaryQuery();
+    const [deleteLead, { isLoading: isDeletingLead }] = useDeleteLeadMutation();
 
     const leads = data?.data.leads || [];
     const summary = pipelineData?.data;
+
+    const handleDeleteLead = async () => {
+        if (!deleteConfirm) return;
+        try {
+            await deleteLead(deleteConfirm.id).unwrap();
+            setDeleteConfirm(null);
+        } catch (error) {
+            console.error('Failed to delete lead:', error);
+        }
+    };
 
     // Format currency
     const formatCurrency = (amount: number, currency: string) => {
@@ -88,6 +114,7 @@ export default function CrmLeadsPage() {
     }
 
     return (
+        <>
         <div className="px-8 py-6 max-w-[1600px] mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-8">
@@ -282,8 +309,36 @@ export default function CrmLeadsPage() {
                                         {new Date(lead.createdAt).toLocaleDateString()}
                                     </div>
                                 </td>
-                                <td className="px-6 py-4 text-right">
-                                    <MoreVertical size={16} className="text-gray-400 group-hover:text-gray-600" />
+                                <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <div
+                                        className="relative inline-block"
+                                        ref={(el) => { menuRefs.current[lead._id] = el; }}
+                                    >
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === lead._id ? null : lead._id); }}
+                                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                        >
+                                            <MoreVertical size={16} />
+                                        </button>
+                                        {openMenuId === lead._id && (
+                                            <div className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-lg border border-gray-200 z-20 py-1">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); navigate(`/crm/leads/${lead._id}/edit`); }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl"
+                                                >
+                                                    <Pencil size={14} />
+                                                    Edit Lead
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); setDeleteConfirm({ id: lead._id, name: lead.name }); }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-b-xl"
+                                                >
+                                                    <Trash2 size={14} />
+                                                    Delete Lead
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -311,5 +366,37 @@ export default function CrmLeadsPage() {
                  Pagination controls would go here
             </div> */}
         </div>
+
+        {/* Delete Lead Confirmation Modal */}
+        {deleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+                    <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                        Delete Lead
+                    </h3>
+                    <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+                        Are you sure you want to permanently delete <strong>{deleteConfirm.name}</strong>? All activities and data will be lost. This action cannot be undone.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50 transition-colors"
+                            style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleDeleteLead}
+                            disabled={isDeletingLead}
+                            className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isDeletingLead ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            Delete Lead
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+    </>
     );
 }

@@ -1,7 +1,7 @@
-import { useGetProjectsQuery } from '@/features/project';
+import { useGetProjectsQuery, useDeleteProjectMutation, useUpdateProjectMutation } from '@/features/project';
 import { Link, Navigate } from 'react-router-dom';
-import { useState } from 'react';
-import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 
 /* ── Status map ──────────────────────────────────────────── */
@@ -50,15 +50,53 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 export default function ProjectsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+    const [statusModal, setStatusModal] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
+    const [selectedStatus, setSelectedStatus] = useState('');
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const user = useAppSelector((state) => state.auth.user);
 
     const { data, isLoading, error } = useGetProjectsQuery({ status: statusFilter, priority: priorityFilter });
+    const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
+    const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const projects = data?.data || [];
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (openMenuId && menuRefs.current[openMenuId] && !menuRefs.current[openMenuId]!.contains(e.target as Node)) {
+                setOpenMenuId(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openMenuId]);
 
     const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes((roleName as string).toLowerCase());
+    const isSuperAdmin = ['super-admin', 'super_admin'].includes((roleName as string).toLowerCase());
     const mp = user?.modulePermissions?.projectManagement;
     const hasProjectAccess = isAdmin || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
+
+    const handleDeleteProject = async () => {
+        if (!deleteConfirm) return;
+        try {
+            await deleteProject(deleteConfirm.id).unwrap();
+            setDeleteConfirm(null);
+        } catch (err) {
+            console.error('Failed to delete project:', err);
+        }
+    };
+
+    const handleStatusUpdate = async () => {
+        if (!statusModal || !selectedStatus) return;
+        try {
+            await updateProject({ id: statusModal.id, data: { status: selectedStatus as any } }).unwrap();
+            setStatusModal(null);
+        } catch (err) {
+            console.error('Failed to update project status:', err);
+        }
+    };
 
     if (!hasProjectAccess && !isLoading) return <Navigate to="/dashboard" replace />;
 
@@ -87,6 +125,7 @@ export default function ProjectsPage() {
     const priorityOptions = ['', 'low', 'medium', 'high', 'critical'];
 
     return (
+        <>
         <div className="px-6 py-6 page-enter" style={{ maxWidth: '1280px' }}>
             {/* ── Header ────────────────────────────────────────────── */}
             <div className="flex justify-between items-start mb-6">
@@ -150,81 +189,138 @@ export default function ProjectsPage() {
                         const isOverdue = project.deadline && new Date(project.deadline) < new Date() && project.status !== 'completed';
 
                         return (
-                            <Link
-                                key={project._id}
-                                to={`/projects/${project._id}`}
-                                className="block rounded-2xl border overflow-hidden transition-all duration-200 group"
-                                style={{
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    borderColor: 'var(--color-border-default)',
-                                    boxShadow: 'var(--shadow-xs)',
-                                    borderLeft: `3px solid ${borderAccent}`,
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(-2px)';
-                                    e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                                    e.currentTarget.style.borderColor = borderAccent + '60';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
-                                    e.currentTarget.style.borderColor = 'var(--color-border-default)';
-                                }}
-                            >
-                                <div className="p-5">
-                                    {/* Top row: name + status */}
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                        <h3
-                                            className="text-sm font-bold leading-tight flex-1"
-                                            style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                            {project.name}
-                                        </h3>
-                                        <span
-                                            className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0"
-                                            style={{ backgroundColor: sc.bg, color: sc.text }}
-                                        >
-                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc.dot }} />
-                                            {project.status?.replace('-', ' ')}
-                                        </span>
-                                    </div>
-
-                                    {/* Description */}
-                                    {project.description && (
-                                        <p className="text-xs leading-relaxed mb-3 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>
-                                            {project.description}
-                                        </p>
-                                    )}
-
-                                    {/* Meta row */}
-                                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                        {/* Priority */}
-                                        <span className="flex items-center gap-1 font-medium" style={{ color: pc.color }}>
-                                            <Flame size={11} />
-                                            {pc.label}
-                                        </span>
-
-                                        {/* Assignees */}
-                                        <span className="flex items-center gap-1">
-                                            <Users size={11} />
-                                            {project.assignees.length}
-                                        </span>
-
-                                        {/* Deadline / Internal Deadline */}
-                                        {/* Show internal deadline if available, otherwise external deadline */}
-                                        {(project.endDate || project.deadline) && (
-                                            <span
-                                                className="flex items-center gap-1 ml-auto font-medium"
-                                                style={{ color: isOverdue ? 'var(--color-danger)' : 'var(--color-text-muted)' }}
+                            <div key={project._id} className="relative group">
+                                <Link
+                                    to={`/projects/${project._id}`}
+                                    className="block rounded-2xl border overflow-hidden transition-all duration-200"
+                                    style={{
+                                        backgroundColor: 'var(--color-bg-surface)',
+                                        borderColor: 'var(--color-border-default)',
+                                        boxShadow: 'var(--shadow-xs)',
+                                        borderLeft: `3px solid ${borderAccent}`,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                                        e.currentTarget.style.borderColor = borderAccent + '60';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = 'translateY(0)';
+                                        e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
+                                        e.currentTarget.style.borderColor = 'var(--color-border-default)';
+                                    }}
+                                >
+                                    <div className="p-5">
+                                        {/* Top row: name + status */}
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <h3
+                                                className="text-sm font-bold leading-tight flex-1"
+                                                style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}
                                             >
-                                                <Calendar size={11} />
-                                                {new Date((project.endDate || project.deadline) as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                                {isOverdue && ' · Overdue'}
+                                                {project.name}
+                                            </h3>
+                                            <span
+                                                className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0"
+                                                style={{ backgroundColor: sc.bg, color: sc.text }}
+                                            >
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc.dot }} />
+                                                {project.status?.replace('-', ' ')}
                                             </span>
+                                        </div>
+
+                                        {/* Description */}
+                                        {project.description && (
+                                            <p className="text-xs leading-relaxed mb-3 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>
+                                                {project.description}
+                                            </p>
+                                        )}
+
+                                        {/* Meta row */}
+                                        <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            {/* Priority */}
+                                            <span className="flex items-center gap-1 font-medium" style={{ color: pc.color }}>
+                                                <Flame size={11} />
+                                                {pc.label}
+                                            </span>
+
+                                            {/* Assignees */}
+                                            <span className="flex items-center gap-1">
+                                                <Users size={11} />
+                                                {project.assignees.length}
+                                            </span>
+
+                                            {/* Deadline / Internal Deadline */}
+                                            {(project.endDate || project.deadline) && (
+                                                <span
+                                                    className="flex items-center gap-1 ml-auto font-medium"
+                                                    style={{ color: isOverdue ? 'var(--color-danger)' : 'var(--color-text-muted)' }}
+                                                >
+                                                    <Calendar size={11} />
+                                                    {new Date((project.endDate || project.deadline) as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    {isOverdue && ' · Overdue'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </Link>
+
+                                {/* 3-dot menu — super admin only, visible on hover */}
+                                {isSuperAdmin && (
+                                    <div
+                                        className="absolute top-2.5 right-2.5 z-10"
+                                        ref={(el) => { menuRefs.current[project._id] = el; }}
+                                    >
+                                        <button
+                                            type="button"
+                                            title="Project options"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpenMenuId(openMenuId === project._id ? null : project._id);
+                                            }}
+                                            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-black/10 transition-all"
+                                            style={{ color: 'var(--color-text-secondary)' }}
+                                        >
+                                            <MoreVertical size={15} />
+                                        </button>
+
+                                        {openMenuId === project._id && (
+                                            <div
+                                                className="absolute right-0 top-8 w-44 bg-white rounded-xl shadow-lg border py-1 z-20"
+                                                style={{ borderColor: 'var(--color-border-default)' }}
+                                            >
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setOpenMenuId(null);
+                                                        setSelectedStatus(project.status);
+                                                        setStatusModal({ id: project._id, name: project.name, currentStatus: project.status });
+                                                    }}
+                                                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm hover:bg-gray-50 transition-colors text-left"
+                                                    style={{ color: 'var(--color-text-primary)' }}
+                                                >
+                                                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                                                    Change Status
+                                                </button>
+                                                <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-default)' }} />
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setOpenMenuId(null);
+                                                        setDeleteConfirm({ id: project._id, name: project.name });
+                                                    }}
+                                                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm hover:bg-red-50 transition-colors text-left text-red-600"
+                                                >
+                                                    <Trash2 size={13} />
+                                                    Delete Project
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
-                                </div>
-                            </Link>
+                                )}
+                            </div>
                         );
                     })}
                 </div>
@@ -253,5 +349,83 @@ export default function ProjectsPage() {
                 </div>
             )}
         </div>
-    );
-}
+
+        {/* ── Delete project confirmation modal ─────────────────── */}
+        {/* ── Status change modal ──────────────────────────────── */}
+        {statusModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+                    <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>
+                        Change Project Status
+                    </h3>
+                    <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
+                        {statusModal.name}
+                    </p>
+                    <select
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg border text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    >
+                        <option value="planning">Planning</option>
+                        <option value="active">Active</option>
+                        <option value="on-hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            onClick={() => setStatusModal(null)}
+                            className="px-4 py-2 text-sm rounded-lg border transition-colors hover:bg-gray-50"
+                            style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleStatusUpdate}
+                            disabled={isUpdatingStatus || selectedStatus === statusModal.currentStatus}
+                            className="px-4 py-2 text-sm rounded-lg text-white transition-colors disabled:opacity-50 flex items-center gap-2"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            {isUpdatingStatus ? <Loader2 size={14} className="animate-spin" /> : null}
+                            Update Status
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* ── Delete project confirmation modal ─────────────────── */}
+        {deleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+                    <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                        Delete Project
+                    </h3>
+                    <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+                        Are you sure you want to permanently delete <strong>{deleteConfirm.name}</strong>?
+                        This will remove all associated tasks, time logs, and documents. This action cannot be undone.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-4 py-2 text-sm rounded-lg border transition-colors hover:bg-gray-50"
+                            style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleDeleteProject}
+                            disabled={isDeletingProject}
+                            className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isDeletingProject ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            Delete Project
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>)
+
+    }

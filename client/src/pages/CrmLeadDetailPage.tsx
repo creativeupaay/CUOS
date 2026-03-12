@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -7,7 +7,7 @@ import {
     Building,
     Clock,
     CheckCircle,
-    FileText,
+    Pencil,
     User,
     MessageSquare,
     Loader2,
@@ -16,12 +16,14 @@ import {
     Send,
     UserCircle,
     Lock,
+    Trash2,
 } from 'lucide-react';
 import {
     useGetLeadByIdQuery,
     useAddLeadActivityMutation,
     useCloseLeadDealMutation,
     useUpdateLeadMutation,
+    useDeleteLeadMutation,
     useGetProposalsQuery,
 } from '@/features/crm';
 import type { Lead } from '@/features/crm';
@@ -43,6 +45,19 @@ export default function CrmLeadDetailPage() {
     const navigate = useNavigate();
     const [activityType, setActivityType] = useState<'note' | 'call' | 'email' | 'meeting'>('note');
     const [activityDesc, setActivityDesc] = useState('');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const { data: leadData, isLoading: leadLoading, error: leadError } = useGetLeadByIdQuery(id!);
     const { data: proposalsData } = useGetProposalsQuery({ leadId: id }, { skip: !id });
@@ -50,6 +65,7 @@ export default function CrmLeadDetailPage() {
     const [addActivity, { isLoading: isAddingActivity }] = useAddLeadActivityMutation();
     const [closeDeal, { isLoading: isClosingDeal }] = useCloseLeadDealMutation();
     const [updateLead, { isLoading: isUpdating }] = useUpdateLeadMutation();
+    const [deleteLead, { isLoading: isDeletingLead }] = useDeleteLeadMutation();
 
     const lead = leadData?.data.lead;
     const proposals = proposalsData?.data.proposals || [];
@@ -95,6 +111,15 @@ export default function CrmLeadDetailPage() {
         }
     };
 
+    const handleDeleteLead = async () => {
+        try {
+            await deleteLead(id!).unwrap();
+            navigate('/crm/leads');
+        } catch (error) {
+            console.error('Failed to delete lead:', error);
+        }
+    };
+
     const formatCurrency = (amount?: number, currency = 'INR') => {
         if (amount === undefined) return '—';
         return new Intl.NumberFormat('en-IN', {
@@ -130,6 +155,7 @@ export default function CrmLeadDetailPage() {
     };
 
     return (
+        <>
         <div className="max-w-[1600px] mx-auto p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
@@ -215,14 +241,32 @@ export default function CrmLeadDetailPage() {
                     )}
                     <button
                         onClick={() => navigate(`/crm/leads/${id}/edit`)}
-                        className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
+                        className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 flex items-center gap-2 px-3 text-sm"
                         title="Edit Lead"
                     >
-                        <FileText size={20} />
+                        <Pencil size={16} />
+                        Edit
                     </button>
-                    <button className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
-                        <MoreVertical size={20} />
-                    </button>
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
+                            title="More options"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-200 z-20 py-1">
+                                <button
+                                    onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                    <Trash2 size={15} />
+                                    Delete Lead
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -454,5 +498,34 @@ export default function CrmLeadDetailPage() {
                 </div>
             </div>
         </div>
+
+        {/* Delete Lead Confirmation Modal */}
+        {showDeleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+                    <h3 className="text-base font-semibold mb-2 text-gray-900">Delete Lead</h3>
+                    <p className="text-sm text-gray-600 mb-5">
+                        Are you sure you want to permanently delete <strong>{lead.name}</strong>? All activities and meetings will be lost. This action cannot be undone.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleDeleteLead}
+                            disabled={isDeletingLead}
+                            className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isDeletingLead ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            Delete Lead
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+    </>
     );
 }

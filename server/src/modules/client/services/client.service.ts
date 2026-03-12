@@ -146,14 +146,10 @@ export class ClientService {
     }
 
     /**
-     * Delete client (soft delete by archiving)
+     * Delete client — permanently removes from database
      */
     async deleteClient(id: string): Promise<void> {
-        const client = await Client.findByIdAndUpdate(
-            id,
-            { $set: { status: 'archived' } },
-            { new: true }
-        );
+        const client = await Client.findByIdAndDelete(id);
 
         if (!client) {
             throw new AppError('Client not found', 404);
