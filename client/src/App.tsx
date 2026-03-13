@@ -1,81 +1,73 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import { useGetMeQuery } from './features/auth/authApi';
 import { setInitialized, setUser } from './features/auth/slices/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
-import DashboardLayout from './components/layout/DashboardLayout';
+const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout'));
+const ClientPortalLayout = lazy(() => import('./components/layout/ClientPortalLayout'));
 
-// Auth pages
-import LoginPage from './pages/LoginPage';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
+const ClientPortalAccessPage = lazy(() => import('./pages/ClientPortalAccessPage'));
+const ClientPortalProjectsPage = lazy(() => import('./pages/ClientPortalProjectsPage'));
+const ClientPortalProjectDetailPage = lazy(() => import('./pages/ClientPortalProjectDetailPage'));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+const ProjectFormPage = lazy(() => import('./pages/ProjectFormPage'));
+const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
+const ProjectOverviewTab = lazy(() => import('./pages/ProjectOverviewTab'));
+const ProjectTasksTab = lazy(() => import('./pages/ProjectTasksTab'));
+const ProjectTimeLogsTab = lazy(() => import('./pages/ProjectTimeLogsTab'));
+const ProjectMeetingsTab = lazy(() => import('./pages/ProjectMeetingsTab'));
+const ProjectCredentialsTab = lazy(() => import('./pages/ProjectCredentialsTab'));
+const ProjectDocumentsTab = lazy(() => import('./pages/ProjectDocumentsTab'));
+const ProjectNotesTab = lazy(() => import('./pages/ProjectNotesTab'));
+const ClientsPage = lazy(() => import('./pages/ClientsPage'));
+const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'));
+const ClientFormPage = lazy(() => import('./pages/ClientFormPage'));
+const CrmLeadsPage = lazy(() => import('./pages/CrmLeadsPage'));
+const CrmLeadFormPage = lazy(() => import('./pages/CrmLeadFormPage'));
+const CrmPipelinePage = lazy(() => import('./pages/CrmPipelinePage'));
+const CrmLeadDetailPage = lazy(() => import('./pages/CrmLeadDetailPage'));
+const CrmProposalsPage = lazy(() => import('./pages/CrmProposalsPage'));
+const CrmProposalFormPage = lazy(() => import('./pages/CrmProposalFormPage'));
+const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
+const FinanceExpensesPage = lazy(() => import('./pages/FinanceExpensesPage'));
+const FinanceInvoicesPage = lazy(() => import('./pages/FinanceInvoicesPage'));
+const FinanceReportsPage = lazy(() => import('./pages/FinanceReportsPage'));
+const ProjectFinancePage = lazy(() => import('./pages/ProjectFinancePage'));
+const HrmsDashboardPage = lazy(() => import('./pages/HrmsDashboardPage'));
+const HrmsEmployeesPage = lazy(() => import('./pages/HrmsEmployeesPage'));
+const HrmsEmployeeFormPage = lazy(() => import('./pages/HrmsEmployeeFormPage'));
+const HrmsEmployeeDetailPage = lazy(() => import('./pages/HrmsEmployeeDetailPage'));
+const HrmsAttendancePage = lazy(() => import('./pages/HrmsAttendancePage'));
+const HrmsLeavesPage = lazy(() => import('./pages/HrmsLeavesPage'));
+const HrmsHolidaysPage = lazy(() => import('./pages/HrmsHolidaysPage'));
+const HrmsPayrollPage = lazy(() => import('./pages/HrmsPayrollPage'));
+const EmployeeAttendancePage = lazy(() => import('./pages/EmployeeAttendancePage'));
+const EmployeeLeavesPage = lazy(() => import('./pages/EmployeeLeavesPage'));
+const EmployeeHolidaysPage = lazy(() => import('./pages/EmployeeHolidaysPage'));
+const EmployeePayrollPage = lazy(() => import('./pages/EmployeePayrollPage'));
+const MyProfilePage = lazy(() => import('./pages/MyProfilePage'));
+const EmployeeOnboardingFormPage = lazy(() => import('./pages/EmployeeOnboardingFormPage'));
+const ClientOnboardingPage = lazy(() => import('./pages/ClientOnboardingPage'));
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
+const AdminPermissionsPage = lazy(() => import('./pages/AdminPermissionsPage'));
+const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
+const AdminAuditLogsPage = lazy(() => import('./pages/AdminAuditLogsPage'));
 
-// Client Portal pages (standalone — different layout from admin)
-import ClientPortalAccessPage from './pages/ClientPortalAccessPage';
-import ClientPortalProjectsPage from './pages/ClientPortalProjectsPage';
-import ClientPortalProjectDetailPage from './pages/ClientPortalProjectDetailPage';
-import ClientPortalLayout from './components/layout/ClientPortalLayout';
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-gray-500">
+      Loading...
+    </div>
+  );
+}
 
-// Project pages
-import ProjectsPage from './pages/ProjectsPage';
-import ProjectFormPage from './pages/ProjectFormPage';
-import ProjectDetailPage from './pages/ProjectDetailPage';
-import ProjectOverviewTab from './pages/ProjectOverviewTab';
-import ProjectTasksTab from './pages/ProjectTasksTab';
-import ProjectTimeLogsTab from './pages/ProjectTimeLogsTab';
-import ProjectMeetingsTab from './pages/ProjectMeetingsTab';
-import ProjectCredentialsTab from './pages/ProjectCredentialsTab';
-import ProjectDocumentsTab from './pages/ProjectDocumentsTab';
-import ProjectNotesTab from './pages/ProjectNotesTab';
-
-// Client pages
-import ClientsPage from './pages/ClientsPage';
-import ClientDetailPage from './pages/ClientDetailPage';
-import ClientFormPage from './pages/ClientFormPage';
-
-// CRM pages
-import CrmLeadsPage from './pages/CrmLeadsPage';
-import CrmLeadFormPage from './pages/CrmLeadFormPage';
-import CrmPipelinePage from './pages/CrmPipelinePage';
-import CrmLeadDetailPage from './pages/CrmLeadDetailPage';
-import CrmProposalsPage from './pages/CrmProposalsPage';
-import CrmProposalFormPage from './pages/CrmProposalFormPage';
-
-// Finance pages
-import FinanceDashboardPage from './pages/FinanceDashboardPage';
-import FinanceExpensesPage from './pages/FinanceExpensesPage';
-import FinanceInvoicesPage from './pages/FinanceInvoicesPage';
-import FinanceReportsPage from './pages/FinanceReportsPage';
-import ProjectFinancePage from './pages/ProjectFinancePage';
-
-// HRMS pages
-import HrmsDashboardPage from './pages/HrmsDashboardPage';
-import HrmsEmployeesPage from './pages/HrmsEmployeesPage';
-import HrmsEmployeeFormPage from './pages/HrmsEmployeeFormPage';
-import HrmsEmployeeDetailPage from './pages/HrmsEmployeeDetailPage';
-import HrmsAttendancePage from './pages/HrmsAttendancePage';
-import HrmsLeavesPage from './pages/HrmsLeavesPage';
-import HrmsHolidaysPage from './pages/HrmsHolidaysPage';
-import HrmsPayrollPage from './pages/HrmsPayrollPage';
-
-// Employee HRMS pages
-import EmployeeAttendancePage from './pages/EmployeeAttendancePage';
-import EmployeeLeavesPage from './pages/EmployeeLeavesPage';
-import EmployeeHolidaysPage from './pages/EmployeeHolidaysPage';
-import EmployeePayrollPage from './pages/EmployeePayrollPage';
-import MyProfilePage from './pages/MyProfilePage';
-// Public self-onboarding form (no login required)
-import EmployeeOnboardingFormPage from './pages/EmployeeOnboardingFormPage';
-// Public client onboarding form (no login required)
-import ClientOnboardingPage from './pages/ClientOnboardingPage';
-
-
-// Admin pages
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import AdminPermissionsPage from './pages/AdminPermissionsPage';
-import AdminSettingsPage from './pages/AdminSettingsPage';
-import AdminAuditLogsPage from './pages/AdminAuditLogsPage';
+function loadable(element: React.ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+}
 
 /** Redirects regular employees away from /hrms/* to /my-hrms/attendance */
 function HrmsRedirect({ children }: { children: React.ReactNode }) {
@@ -110,20 +102,20 @@ function App() {
         {/* Public routes */}
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<LoginPage />)}
         />
 
         {/* Employee self-onboarding form — public, no login required */}
-        <Route path="/employee-form/:token" element={<EmployeeOnboardingFormPage />} />
+        <Route path="/employee-form/:token" element={loadable(<EmployeeOnboardingFormPage />)} />
         {/* Client onboarding form — public, no login required */}
-        <Route path="/onboarding/:token" element={<ClientOnboardingPage />} />
+        <Route path="/onboarding/:token" element={loadable(<ClientOnboardingPage />)} />
 
         {/* Dashboard - NO sidebar */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <SuperAdminDashboard />
+              {loadable(<SuperAdminDashboard />)}
             </ProtectedRoute>
           }
         />
@@ -132,71 +124,71 @@ function App() {
         <Route
           element={
             <ProtectedRoute>
-              <DashboardLayout />
+              {loadable(<DashboardLayout />)}
             </ProtectedRoute>
           }
         >
           {/* Project Management Module */}
           {/* Projects */}
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/new" element={<ProjectFormPage />} />
-          <Route path="/projects/:id/edit" element={<ProjectFormPage />} />
-          <Route path="/projects/:id" element={<ProjectDetailPage />}>
-            <Route index element={<ProjectOverviewTab />} />
-            <Route path="tasks" element={<ProjectTasksTab />} />
-            <Route path="timelogs" element={<ProjectTimeLogsTab />} />
-            <Route path="meetings" element={<ProjectMeetingsTab />} />
-            <Route path="credentials" element={<ProjectCredentialsTab />} />
-            <Route path="documents" element={<ProjectDocumentsTab />} />
-            <Route path="notes" element={<ProjectNotesTab />} />
+          <Route path="/projects" element={loadable(<ProjectsPage />)} />
+          <Route path="/projects/new" element={loadable(<ProjectFormPage />)} />
+          <Route path="/projects/:id/edit" element={loadable(<ProjectFormPage />)} />
+          <Route path="/projects/:id" element={loadable(<ProjectDetailPage />)}>
+            <Route index element={loadable(<ProjectOverviewTab />)} />
+            <Route path="tasks" element={loadable(<ProjectTasksTab />)} />
+            <Route path="timelogs" element={loadable(<ProjectTimeLogsTab />)} />
+            <Route path="meetings" element={loadable(<ProjectMeetingsTab />)} />
+            <Route path="credentials" element={loadable(<ProjectCredentialsTab />)} />
+            <Route path="documents" element={loadable(<ProjectDocumentsTab />)} />
+            <Route path="notes" element={loadable(<ProjectNotesTab />)} />
           </Route>
 
           {/* CRM Module */}
           <Route path="/crm" element={<Navigate to="/crm/pipeline" replace />} />
-          <Route path="/crm/pipeline" element={<CrmPipelinePage />} />
-          <Route path="/crm/leads" element={<CrmLeadsPage />} />
-          <Route path="/crm/leads/new" element={<CrmLeadFormPage />} />
-          <Route path="/crm/leads/:id" element={<CrmLeadDetailPage />} />
-          <Route path="/crm/leads/:id/edit" element={<CrmLeadFormPage />} />
-          <Route path="/crm/proposals" element={<CrmProposalsPage />} />
-          <Route path="/crm/proposals/new" element={<CrmProposalFormPage />} />
-          <Route path="/crm/proposals/:id/edit" element={<CrmProposalFormPage />} />
+          <Route path="/crm/pipeline" element={loadable(<CrmPipelinePage />)} />
+          <Route path="/crm/leads" element={loadable(<CrmLeadsPage />)} />
+          <Route path="/crm/leads/new" element={loadable(<CrmLeadFormPage />)} />
+          <Route path="/crm/leads/:id" element={loadable(<CrmLeadDetailPage />)} />
+          <Route path="/crm/leads/:id/edit" element={loadable(<CrmLeadFormPage />)} />
+          <Route path="/crm/proposals" element={loadable(<CrmProposalsPage />)} />
+          <Route path="/crm/proposals/new" element={loadable(<CrmProposalFormPage />)} />
+          <Route path="/crm/proposals/:id/edit" element={loadable(<CrmProposalFormPage />)} />
           {/* CRM Clients (moved from Project Management) */}
-          <Route path="/crm/clients" element={<ClientsPage />} />
-          <Route path="/crm/clients/new" element={<ClientFormPage />} />
-          <Route path="/crm/clients/:id" element={<ClientDetailPage />} />
-          <Route path="/crm/clients/:id/edit" element={<ClientFormPage />} />
+          <Route path="/crm/clients" element={loadable(<ClientsPage />)} />
+          <Route path="/crm/clients/new" element={loadable(<ClientFormPage />)} />
+          <Route path="/crm/clients/:id" element={loadable(<ClientDetailPage />)} />
+          <Route path="/crm/clients/:id/edit" element={loadable(<ClientFormPage />)} />
 
           {/* Finance Module */}
-          <Route path="/finance" element={<FinanceDashboardPage />} />
-          <Route path="/finance/expenses" element={<FinanceExpensesPage />} />
-          <Route path="/finance/invoices" element={<FinanceInvoicesPage />} />
-          <Route path="/finance/reports" element={<FinanceReportsPage />} />
-          <Route path="/finance/projects/:id" element={<ProjectFinancePage />} />
+          <Route path="/finance" element={loadable(<FinanceDashboardPage />)} />
+          <Route path="/finance/expenses" element={loadable(<FinanceExpensesPage />)} />
+          <Route path="/finance/invoices" element={loadable(<FinanceInvoicesPage />)} />
+          <Route path="/finance/reports" element={loadable(<FinanceReportsPage />)} />
+          <Route path="/finance/projects/:id" element={loadable(<ProjectFinancePage />)} />
           {/* HRMS Module — Admin/HR only */}
-          <Route path="/hrms" element={<HrmsRedirect><HrmsDashboardPage /></HrmsRedirect>} />
-          <Route path="/hrms/employees" element={<HrmsRedirect><HrmsEmployeesPage /></HrmsRedirect>} />
-          <Route path="/hrms/employees/new" element={<HrmsRedirect><HrmsEmployeeFormPage /></HrmsRedirect>} />
-          <Route path="/hrms/employees/:id" element={<HrmsRedirect><HrmsEmployeeDetailPage /></HrmsRedirect>} />
-          <Route path="/hrms/employees/:id/edit" element={<HrmsRedirect><HrmsEmployeeFormPage /></HrmsRedirect>} />
-          <Route path="/hrms/attendance" element={<HrmsRedirect><HrmsAttendancePage /></HrmsRedirect>} />
-          <Route path="/hrms/leaves" element={<HrmsRedirect><HrmsLeavesPage /></HrmsRedirect>} />
-          <Route path="/hrms/holidays" element={<HrmsRedirect><HrmsHolidaysPage /></HrmsRedirect>} />
-          <Route path="/hrms/payroll" element={<HrmsRedirect><HrmsPayrollPage /></HrmsRedirect>} />
+          <Route path="/hrms" element={<HrmsRedirect>{loadable(<HrmsDashboardPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/employees" element={<HrmsRedirect>{loadable(<HrmsEmployeesPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/employees/new" element={<HrmsRedirect>{loadable(<HrmsEmployeeFormPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/employees/:id" element={<HrmsRedirect>{loadable(<HrmsEmployeeDetailPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/employees/:id/edit" element={<HrmsRedirect>{loadable(<HrmsEmployeeFormPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/attendance" element={<HrmsRedirect>{loadable(<HrmsAttendancePage />)}</HrmsRedirect>} />
+          <Route path="/hrms/leaves" element={<HrmsRedirect>{loadable(<HrmsLeavesPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
 
           {/* Employee HRMS Module */}
-          <Route path="/my-hrms/profile" element={<MyProfilePage />} />
-          <Route path="/my-hrms/attendance" element={<EmployeeAttendancePage />} />
-          <Route path="/my-hrms/leaves" element={<EmployeeLeavesPage />} />
-          <Route path="/my-hrms/holidays" element={<EmployeeHolidaysPage />} />
-          <Route path="/my-hrms/payroll" element={<EmployeePayrollPage />} />
+          <Route path="/my-hrms/profile" element={loadable(<MyProfilePage />)} />
+          <Route path="/my-hrms/attendance" element={loadable(<EmployeeAttendancePage />)} />
+          <Route path="/my-hrms/leaves" element={loadable(<EmployeeLeavesPage />)} />
+          <Route path="/my-hrms/holidays" element={loadable(<EmployeeHolidaysPage />)} />
+          <Route path="/my-hrms/payroll" element={loadable(<EmployeePayrollPage />)} />
 
           {/* Admin Module */}
-          <Route path="/admin" element={<AdminDashboardPage />} />
-          <Route path="/admin/users" element={<AdminUsersPage />} />
-          <Route path="/admin/permissions" element={<AdminPermissionsPage />} />
-          <Route path="/admin/settings" element={<AdminSettingsPage />} />
-          <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
+          <Route path="/admin" element={loadable(<AdminDashboardPage />)} />
+          <Route path="/admin/users" element={loadable(<AdminUsersPage />)} />
+          <Route path="/admin/permissions" element={loadable(<AdminPermissionsPage />)} />
+          <Route path="/admin/settings" element={loadable(<AdminSettingsPage />)} />
+          <Route path="/admin/audit-logs" element={loadable(<AdminAuditLogsPage />)} />
         </Route>
 
         {/* Default redirect */}
@@ -207,11 +199,11 @@ function App() {
 
         {/* ── Client Portal (standalone — no admin auth required) ── */}
         {/* Unique access link: /portal/:clientId/:token — exchanges for a session cookie */}
-        <Route path="/portal/:clientId/:token" element={<ClientPortalAccessPage />} />
-        <Route element={<ClientPortalLayout />}>
+        <Route path="/portal/:clientId/:token" element={loadable(<ClientPortalAccessPage />)} />
+        <Route element={loadable(<ClientPortalLayout />)}>
           <Route path="/client-portal" element={<Navigate to="/client-portal/projects" replace />} />
-          <Route path="/client-portal/projects" element={<ClientPortalProjectsPage />} />
-          <Route path="/client-portal/projects/:id" element={<ClientPortalProjectDetailPage />} />
+          <Route path="/client-portal/projects" element={loadable(<ClientPortalProjectsPage />)} />
+          <Route path="/client-portal/projects/:id" element={loadable(<ClientPortalProjectDetailPage />)} />
         </Route>
       </Routes>
     </BrowserRouter>

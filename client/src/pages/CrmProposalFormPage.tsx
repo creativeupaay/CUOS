@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm, useFieldArray, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,8 +24,6 @@ import {
     useUpdateProposalMutation,
 } from '@/features/crm';
 import type { Proposal } from '@/features/crm/types/types';
-import { PDFDownloadLink } from '@react-pdf/renderer';
-import ProposalPDF from '../features/crm/components/Proposal/ProposalPDF';
 
 // Tab Components
 import OverviewTab from '../features/crm/components/Proposal/OverviewTab';
@@ -33,6 +31,8 @@ import ScopeTab from '../features/crm/components/Proposal/ScopeTab';
 import TechTab from '../features/crm/components/Proposal/TechTab';
 import ExecutionTab from '../features/crm/components/Proposal/ExecutionTab';
 import BudgetTab from '../features/crm/components/Proposal/BudgetTab';
+
+const ProposalPdfDownloadButton = lazy(() => import('../features/crm/components/Proposal/ProposalPdfDownloadButton'));
 
 // Schema - We can use a looser schema for portions or the full one. 
 // For now, let's keep the base required fields tight and others optional/flexible as defined in validator.
@@ -199,18 +199,20 @@ export default function CrmProposalFormPage() {
                         Cancel
                     </button>
                     {isEditMode && proposalData?.data.proposal && (
-                        <PDFDownloadLink
-                            document={<ProposalPDF proposal={proposalData.data.proposal} />}
-                            fileName={`Proposal-${proposalData.data.proposal.title.replace(/\s+/g, '-')}.pdf`}
-                            className="flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100"
-                        >
-                            {({ loading }) => (
-                                <>
+                        <Suspense
+                            fallback={
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg opacity-70"
+                                >
                                     <FileText size={18} />
-                                    {loading ? 'Generating PDF...' : 'Download PDF'}
-                                </>
-                            )}
-                        </PDFDownloadLink>
+                                    Loading PDF...
+                                </button>
+                            }
+                        >
+                            <ProposalPdfDownloadButton proposal={proposalData.data.proposal} />
+                        </Suspense>
                     )}
                     <button
                         onClick={handleSubmit(onSubmit)}
