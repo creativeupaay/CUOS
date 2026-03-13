@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
@@ -14,12 +15,15 @@ import {
 } from 'lucide-react';
 import {
     DndContext,
+    DragOverlay,
     PointerSensor,
     useSensor,
     useSensors,
     useDroppable,
     useDraggable,
+    type DragCancelEvent,
     type DragEndEvent,
+    type DragStartEvent,
 } from '@dnd-kit/core';
 import { useGetLeadsQuery, useUpdateLeadMutation } from '@/features/crm';
 import type { Lead } from '@/features/crm';
@@ -37,40 +41,34 @@ const stages = [
 ];
 
 // ============================================
-// DRAGGABLE LEAD CARD
+// LEAD CARD
 // ============================================
-function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-        id: lead._id,
-        data: { lead },
-    });
-
-    const wasDragging = useRef(false);
-    useEffect(() => {
-        if (isDragging) wasDragging.current = true;
-    }, [isDragging]);
-
-    const style: React.CSSProperties = {
-        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        opacity: isDragging ? 0.85 : 1,
-        boxShadow: isDragging ? '0 16px 40px rgba(0,0,0,0.18)' : undefined,
-        rotate: isDragging ? '2deg' : undefined,
-        zIndex: isDragging ? 9999 : undefined,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        position: 'relative',
+function LeadCard({
+    lead,
+    onClick,
+    dragProps,
+    isDragging = false,
+}: {
+    lead: Lead;
+    onClick?: () => void;
+    dragProps?: {
+        setNodeRef?: (element: HTMLElement | null) => void;
+        attributes?: Record<string, any>;
+        listeners?: Record<string, any>;
     };
-
+    isDragging?: boolean;
+}) {
     return (
         <div
-            ref={setNodeRef}
-            style={style}
-            {...listeners}
-            {...attributes}
-            onClick={() => {
-                if (wasDragging.current) { wasDragging.current = false; return; }
-                onClick();
+            ref={dragProps?.setNodeRef}
+            {...dragProps?.listeners}
+            {...dragProps?.attributes}
+            onClick={onClick}
+            style={{
+                cursor: dragProps ? (isDragging ? 'grabbing' : 'grab') : undefined,
+                opacity: isDragging ? 0.35 : 1,
             }}
-            className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+            className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow touch-none"
         >
             <h3 className="font-medium text-sm text-gray-900 line-clamp-2">{lead.name}</h3>
             {lead.company && <p className="text-xs text-gray-500 truncate">{lead.company}</p>}
@@ -122,6 +120,40 @@ function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void 
                 />
             </div>
         </div>
+    );
+}
+
+function DraggableLeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: lead._id,
+        data: { lead },
+    });
+
+    const wasDragging = useRef(false);
+    useEffect(() => {
+        if (isDragging) {
+            wasDragging.current = true;
+            return;
+        }
+
+        if (wasDragging.current) {
+            const timeoutId = window.setTimeout(() => {
+                wasDragging.current = false;
+            }, 0);
+            return () => window.clearTimeout(timeoutId);
+        }
+    }, [isDragging]);
+
+    return (
+        <LeadCard
+            lead={lead}
+            dragProps={{ setNodeRef, listeners, attributes }}
+            isDragging={isDragging}
+            onClick={() => {
+                if (wasDragging.current) return;
+                onClick();
+            }}
+        />
     );
 }
 
@@ -190,6 +222,8 @@ function StageColumn({
 export default function CrmPipelinePage() {
     const navigate = useNavigate();
     const [search, setSearch] = useState('');
+    const [activeLead, setActiveLead] = useState<Lead | null>(null);
+    const [activeLeadWidth, setActiveLeadWidth] = useState<number | null>(null);
     const { data, isLoading, error } = useGetLeadsQuery({ limit: 200, search });
     const [updateLead] = useUpdateLeadMutation();
 
@@ -207,8 +241,20 @@ export default function CrmPipelinePage() {
         })
     );
 
+    const handleDragStart = (event: DragStartEvent) => {
+        setActiveLead(event.active.data.current?.lead ?? null);
+        setActiveLeadWidth(event.active.rect.current.initial?.width ?? null);
+    };
+
+    const handleDragCancel = (_event: DragCancelEvent) => {
+        setActiveLead(null);
+        setActiveLeadWidth(null);
+    };
+
     const handleDragEnd = async (event: DragEndEvent) => {
         const { active, over } = event;
+        setActiveLead(null);
+        setActiveLeadWidth(null);
         if (!over) return;
 
         const leadId = active.id as string;
@@ -291,6 +337,8 @@ export default function CrmPipelinePage() {
             {/* Kanban Board with DnD */}
             <DndContext
                 sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
                 onDragEnd={handleDragEnd}
             >
                 <div className="flex-1 overflow-x-auto p-6 bg-gray-50">
@@ -305,6 +353,21 @@ export default function CrmPipelinePage() {
                         ))}
                     </div>
                 </div>
+                {typeof document !== 'undefined'
+                    ? createPortal(
+                        <DragOverlay zIndex={9999}>
+                            {activeLead ? (
+                                <div
+                                    className="rotate-0 shadow-2xl"
+                                    style={{ width: activeLeadWidth ?? undefined }}
+                                >
+                                    <LeadCard lead={activeLead} />
+                                </div>
+                            ) : null}
+                        </DragOverlay>,
+                        document.body
+                    )
+                    : null}
             </DndContext>
         </div>
     );
