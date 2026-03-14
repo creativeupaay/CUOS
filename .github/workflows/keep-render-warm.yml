@@ -18,4 +18,27 @@ jobs:
             exit 1
           fi
 
-          curl --fail --silent --show-error --max-time 30 "$HEALTHCHECK_URL"
+          case "$HEALTHCHECK_URL" in
+            */api/v1/health|*/health)
+              TARGET_URL="$HEALTHCHECK_URL"
+              ;;
+            */)
+              TARGET_URL="${HEALTHCHECK_URL}api/v1/health"
+              ;;
+            *)
+              TARGET_URL="${HEALTHCHECK_URL}/api/v1/health"
+              ;;
+          esac
+
+          echo "Pinging $TARGET_URL"
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 10 \
+            --max-time 60 \
+            --retry 2 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "$TARGET_URL"
