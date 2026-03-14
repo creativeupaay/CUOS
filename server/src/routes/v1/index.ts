@@ -9,6 +9,7 @@ import hrmsRoutes from '../../modules/hrms/routes/hrms.routes';
 import employeeFormRoutes from '../../modules/hrms/routes/employeeForm.routes';
 import adminRoutes from '../../modules/overall-admin/routes/admin.routes';
 import financeRoutes from '../../modules/finance/routes/finance.routes';
+import hiringRoutes from '../../modules/hiring/routes/hiring.routes';
 
 const router = Router();
 
@@ -33,5 +34,7 @@ router.use('/client-onboarding', clientOnboardingRoutes);
 router.use('/client-portal', clientPortalRoutes);
 router.use('/admin', adminRoutes);
 router.use('/finance', financeRoutes);
+// Hiring Management — also registers /public/jobs (no auth)
+router.use('/hiring', hiringRoutes);
 
 export default router;

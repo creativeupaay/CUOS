@@ -56,6 +56,14 @@ const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminPermissionsPage = lazy(() => import('./pages/AdminPermissionsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const AdminAuditLogsPage = lazy(() => import('./pages/AdminAuditLogsPage'));
+const HiringJobsPage = lazy(() => import('./pages/HiringJobsPage'));
+const HiringJobFormPage = lazy(() => import('./pages/HiringJobFormPage'));
+const HiringApplicationsPage = lazy(() => import('./pages/HiringApplicationsPage'));
+const HiringApplicationDetailPage = lazy(() => import('./pages/HiringApplicationDetailPage'));
+const PublicJobApplyPage = lazy(() => import('./pages/PublicJobApplyPage'));
+const AssignmentReviewPage = lazy(() => import('./pages/AssignmentReviewPage'));
+const PublicAssignmentSubmissionPage = lazy(() => import('./pages/PublicAssignmentSubmissionPage'));
+const HiringInterviewsPage = lazy(() => import('./pages/HiringInterviewsPage'));
 
 function RouteFallback() {
   return (
@@ -109,6 +117,9 @@ function App() {
         <Route path="/employee-form/:token" element={loadable(<EmployeeOnboardingFormPage />)} />
         {/* Client onboarding form — public, no login required */}
         <Route path="/onboarding/:token" element={loadable(<ClientOnboardingPage />)} />
+        {/* Public candidate application form */}
+        <Route path="/apply/:jobId" element={loadable(<PublicJobApplyPage />)} />
+        <Route path="/assignment/:applicationId" element={loadable(<PublicAssignmentSubmissionPage />)} />
 
         {/* Dashboard - NO sidebar */}
         <Route
@@ -189,6 +200,16 @@ function App() {
           <Route path="/admin/permissions" element={loadable(<AdminPermissionsPage />)} />
           <Route path="/admin/settings" element={loadable(<AdminSettingsPage />)} />
           <Route path="/admin/audit-logs" element={loadable(<AdminAuditLogsPage />)} />
+
+          {/* Hiring Module */}
+          <Route path="/hiring" element={<Navigate to="/hiring/jobs" replace />} />
+          <Route path="/hiring/jobs" element={loadable(<HiringJobsPage />)} />
+          <Route path="/hiring/jobs/new" element={loadable(<HiringJobFormPage />)} />
+          <Route path="/hiring/jobs/:id/edit" element={loadable(<HiringJobFormPage />)} />
+          <Route path="/hiring/applications" element={loadable(<HiringApplicationsPage />)} />
+          <Route path="/hiring/applications/:id" element={loadable(<HiringApplicationDetailPage />)} />
+          <Route path="/hiring/assignments/review" element={loadable(<AssignmentReviewPage />)} />
+          <Route path="/hiring/interviews" element={loadable(<HiringInterviewsPage />)} />
         </Route>
 
         {/* Default redirect */}

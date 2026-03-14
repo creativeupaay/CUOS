@@ -10,7 +10,7 @@ import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, CreditCard,
-    TrendingUp, Clock, CalendarDays,
+    TrendingUp, Clock, CalendarDays, Briefcase, CheckCircle,
 } from 'lucide-react';
 
 interface NavItem {
@@ -110,6 +110,15 @@ function getModuleConfig(
             ? allItems
             : allItems.filter(i => i.key === 'dashboard' || (adminSubs as any)[i.key] === true);
         return { title: 'Admin Panel', items: filteredItems };
+    }
+    if (pathname.startsWith('/hiring')) {
+        const allItems = [
+            { key: 'jobs', label: 'Job Postings', path: '/hiring/jobs', icon: <Briefcase size={18} />, matchPrefix: '/hiring/jobs' },
+            { key: 'applications', label: 'Applications', path: '/hiring/applications', icon: <FileText size={18} />, matchPrefix: '/hiring/applications' },
+            { key: 'assignments', label: 'Assignment Review', path: '/hiring/assignments/review', icon: <CheckCircle size={18} />, matchPrefix: '/hiring/assignments' },
+            { key: 'interviews', label: 'Interviews', path: '/hiring/interviews', icon: <CalendarDays size={18} />, matchPrefix: '/hiring/interviews' },
+        ];
+        return { title: 'Hiring', items: isAdmin ? allItems : allItems };
     }
     return null;
 }

@@ -397,7 +397,7 @@ export default function EmployeeLeavesPage() {
                 )}
             </div>
 }
-            /* FAB — Apply for Leave */ 
+            {/* FAB — Apply for Leave  */}
             <button
                 onClick={() => setShowModal(true)}
                 className="fixed bottom-8 right-8 flex items-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-xl cursor-pointer hover:scale-105 active:scale-95 transition-transform z-40"

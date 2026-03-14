@@ -7,7 +7,7 @@ import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, ChevronRight, Settings
+    ArrowRight, Clock, LogOut, Sparkles, ChevronRight, Settings, Briefcase
 } from 'lucide-react';
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -28,6 +28,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     crm: { from: '#EA580C', to: '#F59E0B' },
     hrms: { from: '#0369A1', to: '#06B6D4' },
     overallAdmin: { from: '#374151', to: '#6B7280' },
+    hiring: { from: '#0F766E', to: '#0EA5E9' },
 };
 
 /* ── Department Card ─────────────────────────────────────── */
@@ -199,6 +200,13 @@ export default function SuperAdminDashboard() {
             description: 'System administration, user permissions and settings',
             icon: <Shield size={22} />,
             path: '/admin',
+        },
+        {
+            key: 'hiring',
+            title: 'Hiring',
+            description: 'Manage job postings, candidates, assignments, and interviews',
+            icon: <Briefcase size={22} />,
+            path: '/hiring',
         },
     ];
 

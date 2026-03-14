@@ -32,6 +32,10 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().default("noreply@creativeupaay.com"),
 
+  // Cal.com booking page used in interview invite emails
+  CALCOM_BOOKING_URL: z.string().url().optional(),
+  CALCOM_WEBHOOK_SECRET: z.string().optional(),
+
 });
 
 /**
