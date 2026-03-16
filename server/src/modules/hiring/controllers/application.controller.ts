@@ -53,6 +53,15 @@ export const getApplication = asyncHandler(async (req: Request, res: Response) =
     });
 });
 
+export const getApplicationTimeline = asyncHandler(async (req: Request, res: Response) => {
+    const timeline = await applicationService.getApplicationTimeline(req.params.id);
+
+    res.status(200).json({
+        status: 'success',
+        data: timeline,
+    });
+});
+
 export const updateApplication = asyncHandler(async (req: Request, res: Response) => {
     const data: UpdateApplicationInput = req.body;
     const application = await applicationService.updateApplication(req.params.id, data);
@@ -65,7 +74,8 @@ export const updateApplication = asyncHandler(async (req: Request, res: Response
 
 export const updateApplicationStatus = asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body as UpdateStatusInput;
-    const application = await applicationService.updateStatus(req.params.id, status);
+    const actorId = (req.user as any)?.id;
+    const application = await applicationService.updateStatus(req.params.id, status, actorId);
 
     res.status(200).json({
         status: 'success',
@@ -75,7 +85,8 @@ export const updateApplicationStatus = asyncHandler(async (req: Request, res: Re
 
 export const addApplicationTag = asyncHandler(async (req: Request, res: Response) => {
     const { tag } = req.body as TagInput;
-    const application = await applicationService.addTag(req.params.id, tag);
+    const actorId = (req.user as any)?.id;
+    const application = await applicationService.addTag(req.params.id, tag, actorId);
 
     res.status(200).json({
         status: 'success',
@@ -85,7 +96,8 @@ export const addApplicationTag = asyncHandler(async (req: Request, res: Response
 
 export const removeApplicationTag = asyncHandler(async (req: Request, res: Response) => {
     const { tag } = req.body as TagInput;
-    const application = await applicationService.removeTag(req.params.id, tag);
+    const actorId = (req.user as any)?.id;
+    const application = await applicationService.removeTag(req.params.id, tag, actorId);
 
     res.status(200).json({
         status: 'success',
@@ -96,8 +108,9 @@ export const removeApplicationTag = asyncHandler(async (req: Request, res: Respo
 export const applyFinalDecision = asyncHandler(async (req: Request, res: Response) => {
     const data: ApplicationDecisionInput = req.body;
     const offerLetter = req.file;
+    const actorId = (req.user as any)?.id;
 
-    const result = await applicationService.makeFinalDecision(req.params.id, data, offerLetter);
+    const result = await applicationService.makeFinalDecision(req.params.id, data, offerLetter, actorId);
 
     res.status(200).json({
         status: 'success',

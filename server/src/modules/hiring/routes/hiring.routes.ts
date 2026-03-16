@@ -4,6 +4,7 @@ import * as jobController from '../controllers/job.controller';
 import * as applicationController from '../controllers/application.controller';
 import * as assignmentController from '../controllers/assignment.controller';
 import * as interviewController from '../controllers/interview.controller';
+import * as reportController from '../controllers/report.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { authorize } from '../../auth/middlewares/authorize.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
@@ -27,6 +28,7 @@ import {
     createAssignmentSchema,
     getAssignmentForApplicationSchema,
     getAssignmentsByJobSchema,
+    startAssignmentSchema,
     submitAssignmentSchema,
     updateAssignmentSchema,
 } from '../validators/assignment.validator';
@@ -38,6 +40,7 @@ import {
     saveInterviewNoteSchema,
     updateInterviewStatusSchema,
 } from '../validators/interview.validator';
+import { hiringReportSummarySchema } from '../validators/report.validator';
 
 const router = Router();
 const upload = multer({
@@ -73,6 +76,12 @@ router.get(
     '/assignment/:applicationId',
     validateRequest(getAssignmentForApplicationSchema),
     assignmentController.getAssignmentForApplication
+);
+
+router.post(
+    '/assignment/start/:applicationId',
+    validateRequest(startAssignmentSchema),
+    assignmentController.startAssignment
 );
 
 router.post(
@@ -125,6 +134,13 @@ router.get(
     interviewController.getInterviews
 );
 
+router.get(
+    '/reports/summary',
+    authorize(viewRoles),
+    validateRequest(hiringReportSummarySchema),
+    reportController.getHiringReportSummary
+);
+
 router.patch(
     '/interviews/:id/status',
     authorize(manageRoles),
@@ -165,6 +181,13 @@ router.get(
     authorize(viewRoles),
     validateRequest(getApplicationSchema),
     applicationController.getApplication
+);
+
+router.get(
+    '/applications/:id/timeline',
+    authorize(viewRoles),
+    validateRequest(getApplicationSchema),
+    applicationController.getApplicationTimeline
 );
 
 router.patch(

@@ -115,7 +115,7 @@ function getModuleConfig(
         const allItems = [
             { key: 'jobs', label: 'Job Postings', path: '/hiring/jobs', icon: <Briefcase size={18} />, matchPrefix: '/hiring/jobs' },
             { key: 'applications', label: 'Applications', path: '/hiring/applications', icon: <FileText size={18} />, matchPrefix: '/hiring/applications' },
-            { key: 'assignments', label: 'Assignment Review', path: '/hiring/assignments/review', icon: <CheckCircle size={18} />, matchPrefix: '/hiring/assignments' },
+            { key: 'assignments', label: 'Assignment', path: '/hiring/assignments', icon: <CheckCircle size={18} />, matchPrefix: '/hiring/assignments' },
             { key: 'interviews', label: 'Interviews', path: '/hiring/interviews', icon: <CalendarDays size={18} />, matchPrefix: '/hiring/interviews' },
         ];
         return { title: 'Hiring', items: isAdmin ? allItems : allItems };
@@ -132,7 +132,17 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 }
 
 /* ── Nav Item ──────────────────────────────────────────────── */
-const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) => {
+const NavItemComponent = ({
+    item,
+    active,
+    pathname,
+    onNavigate,
+}: {
+    item: NavItem;
+    active: boolean;
+    pathname: string;
+    onNavigate?: () => void;
+}) => {
     const hasSubItems = item.subItems && item.subItems.length > 0;
     const isSubItemActive = hasSubItems && item.subItems!.some(sub => pathname === sub.path || pathname.startsWith(sub.path + '/'));
     const [isExpanded, setIsExpanded] = useState(item.alwaysExpanded || active || isSubItemActive);
@@ -152,7 +162,12 @@ const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: b
             <NavLink
                 to={item.path}
                 end={item.path === '/projects'}
-                onClick={toggleExpand}
+                onClick={(e) => {
+                    toggleExpand(e);
+                    if (!hasSubItems || item.alwaysExpanded) {
+                        onNavigate?.();
+                    }
+                }}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 select-none relative"
                 style={
                     isItemHighlighted
@@ -218,6 +233,7 @@ const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: b
                             <NavLink
                                 key={sub.path}
                                 to={sub.path}
+                                onClick={() => onNavigate?.()}
                                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all"
                                 style={
                                     isSubActive
@@ -242,7 +258,13 @@ const NavItemComponent = ({ item, active, pathname }: { item: NavItem; active: b
 };
 
 /* ── Sidebar ─────────────────────────────────────────────── */
-export default function Sidebar() {
+export default function Sidebar({
+    onNavigate,
+    mobile = false,
+}: {
+    onNavigate?: () => void;
+    mobile?: boolean;
+}) {
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const location = useLocation();
@@ -275,9 +297,9 @@ export default function Sidebar() {
 
     return (
         <aside
-            className="fixed top-0 left-0 h-screen flex flex-col"
+            className={mobile ? 'h-full flex flex-col' : 'fixed top-0 left-0 h-screen flex flex-col'}
             style={{
-                width: 'var(--sidebar-width)',
+                width: mobile ? '100%' : 'var(--sidebar-width)',
                 zIndex: 40,
                 background: 'rgba(255,255,255,0.94)',
                 backdropFilter: 'blur(20px)',
@@ -302,7 +324,10 @@ export default function Sidebar() {
 
                 {/* Back + Module name */}
                 <button
-                    onClick={() => navigate('/dashboard')}
+                    onClick={() => {
+                        navigate('/dashboard');
+                        onNavigate?.();
+                    }}
                     className="flex items-center gap-1.5 text-xs font-medium mb-2 transition-colors duration-150"
                     style={{ color: 'var(--color-text-muted)' }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; }}
@@ -333,6 +358,7 @@ export default function Sidebar() {
                                 item={item}
                                 active={active}
                                 pathname={location.pathname}
+                                onNavigate={onNavigate}
                             />
                         );
                     })}
@@ -380,7 +406,10 @@ export default function Sidebar() {
                     </div>
 
                     <button
-                        onClick={handleLogout}
+                        onClick={async () => {
+                            await handleLogout();
+                            onNavigate?.();
+                        }}
                         className="p-1.5 rounded-lg transition-all duration-150 shrink-0"
                         style={{ color: 'var(--color-text-muted)' }}
                         title="Logout"

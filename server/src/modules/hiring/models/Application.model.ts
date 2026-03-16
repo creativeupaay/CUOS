@@ -5,6 +5,7 @@ export type ApplicationStatus =
     | 'screening'
     | 'shortlisted'
     | 'assignment-round'
+    | 'assignment-submitted'
     | 'interview'
     | 'rejected'
     | 'offered'
@@ -24,6 +25,8 @@ export interface IApplication extends Document {
     coverLetter?: string;
     status: ApplicationStatus;
     tags: string[];
+    assignmentWindowStartedAt?: Date;
+    assignmentWindowExpiresAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -47,6 +50,7 @@ const ApplicationSchema = new Schema<IApplication>(
                 'screening',
                 'shortlisted',
                 'assignment-round',
+                'assignment-submitted',
                 'interview',
                 'rejected',
                 'offered',
@@ -55,6 +59,8 @@ const ApplicationSchema = new Schema<IApplication>(
             default: 'new',
         },
         tags: [{ type: String, trim: true, lowercase: true }],
+        assignmentWindowStartedAt: { type: Date },
+        assignmentWindowExpiresAt: { type: Date },
     },
     {
         timestamps: true,

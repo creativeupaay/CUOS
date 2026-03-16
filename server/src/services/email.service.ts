@@ -20,6 +20,23 @@ function getResend(): Resend {
     return resend;
 }
 
+async function sendEmailOrThrow(
+    client: Resend,
+    payload: Parameters<Resend['emails']['send']>[0]
+): Promise<string | undefined> {
+    const result: any = await client.emails.send(payload);
+
+    if (result?.error) {
+        throw new Error(
+            typeof result.error === 'string'
+                ? result.error
+                : result.error.message || 'Resend failed to send email'
+        );
+    }
+
+    return result?.data?.id;
+}
+
 // ============================================================
 // Send client onboarding form link
 // ============================================================
@@ -38,7 +55,7 @@ export async function sendClientOnboardingEmail(opts: {
         year: 'numeric',
     });
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: 'Please complete your onboarding details — Creative Upaay',
@@ -114,7 +131,7 @@ export async function sendEmployeeOnboardingEmail(opts: {
     const { to, employeeName, formUrl } = opts;
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: 'Complete your employee onboarding — Creative Upaay',
@@ -192,7 +209,7 @@ export async function sendOnboardingSubmittedNotification(opts: {
 
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to: opts.adminEmails,
         subject: `Onboarding form submitted — ${opts.clientName}`,
@@ -254,7 +271,7 @@ export async function sendHiringRejectionEmail(opts: {
     const { to, candidateName, jobTitle } = opts;
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: `Update on your application — ${jobTitle}`,
@@ -310,7 +327,7 @@ export async function sendHiringApplicationReceivedEmail(opts: {
     const { to, candidateName, jobTitle } = opts;
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: 'Application Received',
@@ -356,6 +373,73 @@ export async function sendHiringApplicationReceivedEmail(opts: {
 }
 
 // ============================================================
+// Send assignment submission email with assignment link
+// ============================================================
+export async function sendHiringAssignmentEmail(opts: {
+    to: string;
+    candidateName: string;
+    jobTitle: string;
+    assignmentTitle: string;
+    assignmentUrl: string;
+    timeLimitHours: number;
+}): Promise<void> {
+    const { to, candidateName, jobTitle, assignmentTitle, assignmentUrl, timeLimitHours } = opts;
+    const client = getResend();
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: `Assignment Round - ${jobTitle}`,
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background:#111827;padding:24px 32px;">
+              <p style="margin:0;color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.3px;">Creative Upaay</p>
+              <p style="margin:4px 0 0;color:#9CA3AF;font-size:13px;">Hiring Team</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:15px;color:#111827;font-weight:500;">Hello ${candidateName},</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
+                You have moved to the assignment round for <strong>${jobTitle}</strong>.
+              </p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
+                Assignment: <strong>${assignmentTitle}</strong><br/>
+                Time Limit: <strong>${timeLimitHours} hours</strong>
+              </p>
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#22C55E;border-radius:6px;">
+                    <a href="${assignmentUrl}" style="display:inline-block;padding:12px 24px;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:500;">Open Assignment</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:20px 0 0;font-size:13px;color:#6B7280;">If the button does not work, use this link:<br/><a href="${assignmentUrl}" style="color:#2563EB;word-break:break-all;">${assignmentUrl}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">&copy; Creative Upaay. This is an automated email, please do not reply.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}
+
+// ============================================================
 // Send interview invite email with slot booking link
 // ============================================================
 export async function sendInterviewInviteEmail(opts: {
@@ -367,7 +451,7 @@ export async function sendInterviewInviteEmail(opts: {
     const { to, candidateName, jobTitle, bookingUrl } = opts;
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: `Select interview slot — ${jobTitle}`,
@@ -420,7 +504,7 @@ export async function sendInterviewScheduledForCandidateEmail(opts: {
         minute: '2-digit',
     });
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: `Interview confirmed — ${jobTitle}`,
@@ -470,7 +554,7 @@ export async function sendInterviewScheduledForHrEmail(opts: {
         minute: '2-digit',
     });
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: `Interview booked: ${candidateName} (${jobTitle})`,
@@ -509,7 +593,7 @@ export async function sendHiringOfferEmail(opts: {
     const { to, candidateName, position, salary, offerLetterUrl } = opts;
     const client = getResend();
 
-    await client.emails.send({
+    await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
         to,
         subject: 'Offer from Creative Upaay.',

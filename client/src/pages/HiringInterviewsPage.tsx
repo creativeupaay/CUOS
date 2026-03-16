@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ExternalLink, Loader2, Save } from 'lucide-react';
+import { AlertCircle, ExternalLink, Loader2, Save, ChevronDown } from 'lucide-react';
 import {
     useGetInterviewDetailsQuery,
     useGetInterviewsQuery,
@@ -22,6 +22,14 @@ const STATUS_LABEL: Record<InterviewStatus, string> = {
     cancelled: 'Cancelled',
     rescheduled: 'Rescheduled',
     'no-show': 'No Show',
+};
+
+const STATUS_META: Record<InterviewStatus, { color: string; bg: string }> = {
+    scheduled: { color: '#0F766E', bg: '#CCFBF1' },
+    completed: { color: '#15803D', bg: '#DCFCE7' },
+    cancelled: { color: '#B91C1C', bg: '#FEE2E2' },
+    rescheduled: { color: '#7C3AED', bg: '#F3E8FF' },
+    'no-show': { color: '#92400E', bg: '#FEF3C7' },
 };
 
 export default function HiringInterviewsPage() {
@@ -49,7 +57,13 @@ export default function HiringInterviewsPage() {
     const interviews = data?.data.interviews || [];
 
     useEffect(() => {
-        if (!selectedInterviewId && interviews.length > 0) {
+        if (interviews.length === 0) {
+            setSelectedInterviewId('');
+            return;
+        }
+
+        const hasSelectedInterview = interviews.some((item: any) => item._id === selectedInterviewId);
+        if (!selectedInterviewId || !hasSelectedInterview) {
             setSelectedInterviewId(interviews[0]._id);
         }
     }, [selectedInterviewId, interviews]);
@@ -62,14 +76,22 @@ export default function HiringInterviewsPage() {
     const details = detailsData?.data;
 
     useEffect(() => {
-        if (!details?.note) {
+        if (!details) {
+            return;
+        }
+
+        if (!details.note) {
+            setRating(7);
+            setTechnicalScore(7);
+            setCommunicationScore(7);
+            setNoteText('');
             return;
         }
         setRating(details.note.rating);
         setTechnicalScore(details.note.technicalScore);
         setCommunicationScore(details.note.communicationScore);
         setNoteText(details.note.notes);
-    }, [details?.note]);
+    }, [details]);
 
     const selectedApplication: any = useMemo(() => {
         const app = details?.interview?.applicationId;
@@ -82,7 +104,7 @@ export default function HiringInterviewsPage() {
     }, [selectedApplication]);
 
     async function onUpdateStatus(id: string, nextStatus: InterviewStatus) {
-        await updateInterviewStatus({ id, status: nextStatus });
+        await updateInterviewStatus({ id, status: nextStatus }).unwrap();
     }
 
     async function onSaveNotes() {
@@ -195,6 +217,7 @@ export default function HiringInterviewsPage() {
                                     typeof interview.applicationId === 'object' ? interview.applicationId : undefined;
                                 const job = application && typeof application.jobId === 'object' ? application.jobId : undefined;
                                 const isSelected = selectedInterviewId === interview._id;
+                                const interviewStatus = interview.status as InterviewStatus;
 
                                 return (
                                     <tr
@@ -222,27 +245,39 @@ export default function HiringInterviewsPage() {
                                             })}
                                         </td>
                                         <td className="px-3 py-3">
-                                            <select
-                                                value={interview.status}
-                                                onChange={(e) => {
-                                                    e.stopPropagation();
-                                                    onUpdateStatus(interview._id, e.target.value as InterviewStatus);
-                                                }}
-                                                disabled={updating}
-                                                className="h-8 px-2 text-xs rounded-md border outline-none"
-                                                style={{
-                                                    borderColor: 'var(--color-border-default)',
-                                                    backgroundColor: 'var(--color-bg-surface)',
-                                                    color: 'var(--color-text-primary)',
-                                                    opacity: updating ? 0.6 : 1,
-                                                }}
+                                            <div
+                                                className="relative inline-flex items-center"
+                                                style={{ opacity: updating ? 0.6 : 1 }}
                                             >
-                                                {STATUS_OPTIONS.map((item) => (
-                                                    <option key={item} value={item}>
-                                                        {STATUS_LABEL[item]}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                <select
+                                                    value={interview.status}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        onUpdateStatus(interview._id, e.target.value as InterviewStatus);
+                                                    }}
+                                                    disabled={updating}
+                                                    className="h-9 min-w-[136px] appearance-none pl-3 pr-9 text-xs rounded-full border outline-none shadow-sm"
+                                                    style={{
+                                                        borderColor: STATUS_META[interviewStatus].bg,
+                                                        backgroundColor: '#FFFFFF',
+                                                        color: STATUS_META[interviewStatus].color,
+                                                        fontWeight: 600,
+                                                        boxShadow: `inset 0 0 0 1px ${STATUS_META[interviewStatus].bg}`,
+                                                    }}
+                                                >
+                                                    {STATUS_OPTIONS.map((item) => (
+                                                        <option key={item} value={item}>
+                                                            {STATUS_LABEL[item]}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <span
+                                                    className="pointer-events-none absolute right-3"
+                                                    style={{ color: STATUS_META[interviewStatus].color }}
+                                                >
+                                                    <ChevronDown size={14} />
+                                                </span>
+                                            </div>
                                         </td>
                                     </tr>
                                 );

@@ -14,6 +14,12 @@ export interface IInterview extends Document {
     meetLink: string;
     interviewer: string;
     status: InterviewStatus;
+    calcomBookingId?: string;
+    calcomBookingUid?: string;
+    calcomEventTypeId?: number;
+    lastWebhookEvent?: string;
+    lastWebhookHash?: string;
+    lastWebhookAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -36,6 +42,12 @@ const InterviewSchema = new Schema<IInterview>(
             default: 'scheduled',
             index: true,
         },
+        calcomBookingId: { type: String, trim: true, index: true, sparse: true },
+        calcomBookingUid: { type: String, trim: true, index: true, sparse: true },
+        calcomEventTypeId: { type: Number, index: true, sparse: true },
+        lastWebhookEvent: { type: String, trim: true },
+        lastWebhookHash: { type: String, trim: true },
+        lastWebhookAt: { type: Date },
     },
     {
         timestamps: true,
@@ -43,5 +55,6 @@ const InterviewSchema = new Schema<IInterview>(
 );
 
 InterviewSchema.index({ status: 1, scheduledTime: 1 });
+InterviewSchema.index({ applicationId: 1, calcomBookingUid: 1 });
 
 export const Interview = mongoose.model<IInterview>('Interview', InterviewSchema);

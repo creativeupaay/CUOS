@@ -1,6 +1,78 @@
 import { z } from 'zod';
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+const hhmmRegex = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+const interviewDailySlotSchema = z
+    .object({
+        startTime: z.string().regex(hhmmRegex, 'Invalid time format. Use HH:mm'),
+        endTime: z.string().regex(hhmmRegex, 'Invalid time format. Use HH:mm'),
+    })
+    .refine((value) => value.endTime > value.startTime, {
+        message: 'endTime must be later than startTime',
+        path: ['endTime'],
+    });
+
+const interviewSchedulingSchema = z
+    .object({
+        enabled: z.boolean().default(false),
+        active: z.boolean().default(false),
+        timezone: z.string().min(1).default('Asia/Kolkata'),
+        organizerName: z.string().min(1).default('HR Team'),
+        availableFrom: z.string().datetime().optional(),
+        availableTo: z.string().datetime().optional(),
+        weekdays: z
+            .array(z.number().int().min(0).max(6))
+            .min(1, 'Select at least one weekday')
+            .default([1, 2, 3, 4, 5]),
+        dailySlots: z.array(interviewDailySlotSchema).min(1).default([
+            {
+                startTime: '10:00',
+                endTime: '18:00',
+            },
+        ]),
+        durationMinutes: z.number().int().min(10).max(240).default(45),
+        slotIntervalMinutes: z.number().int().min(5).max(180).default(30),
+        minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).default(60),
+        beforeEventBufferMinutes: z.number().int().min(0).max(120).default(5),
+        afterEventBufferMinutes: z.number().int().min(0).max(120).default(5),
+    })
+    .refine(
+        (value) => !value.availableFrom || !value.availableTo || value.availableFrom <= value.availableTo,
+        {
+            message: 'availableTo must be later than or equal to availableFrom',
+            path: ['availableTo'],
+        }
+    );
+
+const interviewSchedulingUpdateSchema = z
+    .object({
+        enabled: z.boolean().optional(),
+        active: z.boolean().optional(),
+        timezone: z.string().min(1).optional(),
+        organizerName: z.string().min(1).optional(),
+        availableFrom: z.string().datetime().nullable().optional(),
+        availableTo: z.string().datetime().nullable().optional(),
+        weekdays: z.array(z.number().int().min(0).max(6)).min(1).optional(),
+        dailySlots: z.array(interviewDailySlotSchema).min(1).optional(),
+        durationMinutes: z.number().int().min(10).max(240).optional(),
+        slotIntervalMinutes: z.number().int().min(5).max(180).optional(),
+        minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).optional(),
+        beforeEventBufferMinutes: z.number().int().min(0).max(120).optional(),
+        afterEventBufferMinutes: z.number().int().min(0).max(120).optional(),
+    })
+    .refine(
+        (value) => {
+            if (!value.availableFrom || !value.availableTo) {
+                return true;
+            }
+            return value.availableFrom <= value.availableTo;
+        },
+        {
+            message: 'availableTo must be later than or equal to availableFrom',
+            path: ['availableTo'],
+        }
+    );
 
 // ============================================
 // JOB VALIDATORS
@@ -17,6 +89,7 @@ export const createJobSchema = z.object({
             .default('full-time'),
         isHiring: z.boolean().default(false),
         assignmentRequired: z.boolean().default(false),
+        interviewScheduling: interviewSchedulingSchema.optional(),
     }),
 });
 
@@ -32,6 +105,7 @@ export const updateJobSchema = z.object({
             .optional(),
         isHiring: z.boolean().optional(),
         assignmentRequired: z.boolean().optional(),
+        interviewScheduling: interviewSchedulingUpdateSchema.optional(),
     }),
 });
 
@@ -70,3 +144,5 @@ export type CreateJobInput = z.infer<typeof createJobSchema>['body'];
 export type UpdateJobInput = z.infer<typeof updateJobSchema>['body'];
 export type GetJobInput = z.infer<typeof getJobSchema>['params'];
 export type ListJobsInput = z.infer<typeof listJobsSchema>['query'];
+export type InterviewSchedulingInput = NonNullable<CreateJobInput['interviewScheduling']>;
+export type InterviewSchedulingUpdateInput = NonNullable<UpdateJobInput['interviewScheduling']>;

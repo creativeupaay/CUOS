@@ -60,6 +60,7 @@ const HiringJobsPage = lazy(() => import('./pages/HiringJobsPage'));
 const HiringJobFormPage = lazy(() => import('./pages/HiringJobFormPage'));
 const HiringApplicationsPage = lazy(() => import('./pages/HiringApplicationsPage'));
 const HiringApplicationDetailPage = lazy(() => import('./pages/HiringApplicationDetailPage'));
+const HiringReportsPage = lazy(() => import('./pages/HiringReportsPage'));
 const PublicJobApplyPage = lazy(() => import('./pages/PublicJobApplyPage'));
 const AssignmentReviewPage = lazy(() => import('./pages/AssignmentReviewPage'));
 const PublicAssignmentSubmissionPage = lazy(() => import('./pages/PublicAssignmentSubmissionPage'));
@@ -208,7 +209,9 @@ function App() {
           <Route path="/hiring/jobs/:id/edit" element={loadable(<HiringJobFormPage />)} />
           <Route path="/hiring/applications" element={loadable(<HiringApplicationsPage />)} />
           <Route path="/hiring/applications/:id" element={loadable(<HiringApplicationDetailPage />)} />
-          <Route path="/hiring/assignments/review" element={loadable(<AssignmentReviewPage />)} />
+          <Route path="/hiring/reports" element={loadable(<HiringReportsPage />)} />
+          <Route path="/hiring/assignments" element={loadable(<AssignmentReviewPage />)} />
+          <Route path="/hiring/assignments/review" element={<Navigate to="/hiring/assignments" replace />} />
           <Route path="/hiring/interviews" element={loadable(<HiringInterviewsPage />)} />
         </Route>
 

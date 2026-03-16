@@ -23,6 +23,7 @@ import type {
     AssignmentForApplicationResponse,
     AssignmentSubmissionsResponse,
     CreateAssignmentRequest,
+    StartAssignmentResponse,
     SubmitAssignmentRequest,
     UpdateAssignmentRequest,
     InterviewDetailsResponse,
@@ -30,6 +31,8 @@ import type {
     ListInterviewsResponse,
     SaveInterviewNoteRequest,
     SaveInterviewNoteResponse,
+    ApplicationTimelineResponse,
+    HiringReportSummaryResponse,
 } from './types/apiTypes';
 
 export const hiringApi = api.injectEndpoints({
@@ -117,6 +120,22 @@ export const hiringApi = api.injectEndpoints({
         getApplicationById: builder.query<ApiResponse<{ application: Application }>, string>({
             query: (id) => `/hiring/applications/${id}`,
             providesTags: (_result, _error, id) => [{ type: 'Applications', id }],
+        }),
+
+        getApplicationTimeline: builder.query<ApiResponse<ApplicationTimelineResponse>, string>({
+            query: (id) => `/hiring/applications/${id}/timeline`,
+            providesTags: (_result, _error, id) => [{ type: 'Applications', id }],
+        }),
+
+        getHiringReportSummary: builder.query<
+            ApiResponse<HiringReportSummaryResponse>,
+            { lastDays?: number }
+        >({
+            query: (params) => ({
+                url: '/hiring/reports/summary',
+                params,
+            }),
+            providesTags: ['Applications', 'Interviews', 'Jobs'],
         }),
 
         updateApplication: builder.mutation<
@@ -289,6 +308,19 @@ export const hiringApi = api.injectEndpoints({
             ],
         }),
 
+        startAssignment: builder.mutation<
+            ApiResponse<StartAssignmentResponse>,
+            string
+        >({
+            query: (applicationId) => ({
+                url: `/hiring/assignment/start/${applicationId}`,
+                method: 'POST',
+            }),
+            invalidatesTags: (_result, _error, applicationId) => [
+                { type: 'Assignments', id: applicationId },
+            ],
+        }),
+
         submitAssignment: builder.mutation<
             ApiResponse<{ submission: AssignmentSubmission }>,
             { applicationId: string; data: SubmitAssignmentRequest }
@@ -367,6 +399,8 @@ export const {
     useDeleteJobMutation,
     useGetApplicationsQuery,
     useGetApplicationByIdQuery,
+    useGetApplicationTimelineQuery,
+    useGetHiringReportSummaryQuery,
     useUpdateApplicationMutation,
     useUpdateApplicationStatusMutation,
     useApplyFinalDecisionMutation,
@@ -379,6 +413,7 @@ export const {
     useDeleteAssignmentMutation,
     useGetAssignmentSubmissionsQuery,
     useGetAssignmentForApplicationQuery,
+    useStartAssignmentMutation,
     useSubmitAssignmentMutation,
     useSendInterviewInviteMutation,
     useGetInterviewsQuery,

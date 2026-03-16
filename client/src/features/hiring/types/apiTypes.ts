@@ -11,6 +11,9 @@ import type {
     InterviewNote,
     InterviewStatus,
     Offer,
+    ApplicationActivity,
+    HiringReportSummary,
+    InterviewDailySlot,
 } from './types';
 
 // ============================================
@@ -52,6 +55,21 @@ export interface CreateJobRequest {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    interviewScheduling?: {
+        enabled: boolean;
+        active: boolean;
+        timezone: string;
+        organizerName: string;
+        availableFrom?: string;
+        availableTo?: string;
+        weekdays: number[];
+        dailySlots: InterviewDailySlot[];
+        durationMinutes: number;
+        slotIntervalMinutes: number;
+        minimumBookingNoticeMinutes: number;
+        beforeEventBufferMinutes: number;
+        afterEventBufferMinutes: number;
+    };
 }
 
 export interface UpdateJobRequest {
@@ -63,6 +81,21 @@ export interface UpdateJobRequest {
     employmentType?: EmploymentType;
     isHiring?: boolean;
     assignmentRequired?: boolean;
+    interviewScheduling?: {
+        enabled?: boolean;
+        active?: boolean;
+        timezone?: string;
+        organizerName?: string;
+        availableFrom?: string | null;
+        availableTo?: string | null;
+        weekdays?: number[];
+        dailySlots?: InterviewDailySlot[];
+        durationMinutes?: number;
+        slotIntervalMinutes?: number;
+        minimumBookingNoticeMinutes?: number;
+        beforeEventBufferMinutes?: number;
+        afterEventBufferMinutes?: number;
+    };
 }
 
 // ============================================
@@ -136,6 +169,15 @@ export interface AssignmentForApplicationResponse {
     assignment: Assignment;
     applicationId: string;
     hasSubmitted: boolean;
+    hasStarted: boolean;
+    startedAt: string | null;
+    expiresAt: string | null;
+    isExpired: boolean;
+}
+
+export interface StartAssignmentResponse {
+    startedAt: string;
+    expiresAt: string;
 }
 
 export interface AssignmentSubmissionsResponse {
@@ -182,3 +224,9 @@ export interface ApplicationDecisionResponse {
     application: Application;
     offer: Offer | null;
 }
+
+export interface ApplicationTimelineResponse {
+    activities: ApplicationActivity[];
+}
+
+export interface HiringReportSummaryResponse extends HiringReportSummary {}

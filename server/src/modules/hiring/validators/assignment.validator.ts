@@ -51,6 +51,12 @@ export const getAssignmentForApplicationSchema = z.object({
     }),
 });
 
+export const startAssignmentSchema = z.object({
+    params: z.object({
+        applicationId: z.string().regex(objectIdRegex, 'Invalid application ID'),
+    }),
+});
+
 const optionalUrl = z.string().trim().url().optional().or(z.literal(''));
 
 export const submitAssignmentSchema = z.object({

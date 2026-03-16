@@ -2,7 +2,8 @@ import { Outlet, useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Settings } from 'lucide-react';
+import { Settings, Menu, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 /**
  * DashboardLayout
@@ -39,6 +40,7 @@ const ROUTE_TITLES: Record<string, string> = {
     '/admin/permissions': 'Permissions',
     '/admin/settings': 'Settings',
     '/admin/audit-logs': 'Audit Logs',
+    '/hiring/assignments': 'Assignment',
 };
 
 function resolveTitle(pathname: string): string {
@@ -65,6 +67,17 @@ function resolveTitle(pathname: string): string {
         return 'Lead Details';
     }
 
+    // Hiring detail pages
+    if (pathname.startsWith('/hiring/applications/')) {
+        return 'Application Details';
+    }
+    if (pathname === '/hiring/applications') return 'Applications';
+    if (pathname.startsWith('/hiring/jobs/') && pathname.endsWith('/edit')) return 'Edit Job Posting';
+    if (pathname === '/hiring/jobs/new') return 'Create Job Posting';
+    if (pathname === '/hiring/jobs') return 'Job Postings';
+    if (pathname === '/hiring/interviews') return 'Interviews';
+    if (pathname === '/hiring/reports') return 'Reports';
+
     // Fallback: capitalise last segment
     const last = pathname.split('/').filter(Boolean).pop() || '';
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
@@ -74,6 +87,7 @@ export default function DashboardLayout() {
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
     const pageTitle = resolveTitle(location.pathname);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
     const initials = user?.name
         ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -82,19 +96,53 @@ export default function DashboardLayout() {
     const { data: profileData } = useGetMyProfileQuery();
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
+    useEffect(() => {
+        setMobileSidebarOpen(false);
+    }, [location.pathname]);
+
     return (
         <div
             className="min-h-screen"
             style={{ backgroundColor: 'var(--color-bg-app)' }}
         >
-            <Sidebar />
+            <div className="hidden lg:block">
+                <Sidebar />
+            </div>
+
+            {mobileSidebarOpen && (
+                <>
+                    <div
+                        className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+                        onClick={() => setMobileSidebarOpen(false)}
+                    />
+                    <aside
+                        className="fixed inset-y-0 left-0 z-50 lg:hidden"
+                        style={{ width: 'min(88vw, var(--sidebar-width))' }}
+                    >
+                        <div className="relative h-full">
+                            <button
+                                onClick={() => setMobileSidebarOpen(false)}
+                                className="absolute top-4 right-4 z-10 p-2 rounded-lg"
+                                style={{
+                                    color: 'var(--color-text-secondary)',
+                                    backgroundColor: 'rgba(255,255,255,0.92)',
+                                    border: '1px solid var(--color-border-default)',
+                                }}
+                            >
+                                <X size={18} />
+                            </button>
+                            <Sidebar mobile onNavigate={() => setMobileSidebarOpen(false)} />
+                        </div>
+                    </aside>
+                </>
+            )}
 
             {/* ── Content area ───────────────────────────────────────── */}
-            <div style={{ marginLeft: 'var(--sidebar-width)' }}>
+            <div className="lg:ml-[var(--sidebar-width)]">
 
                 {/* ── Sticky top bar ─────────────────────────────────── */}
                 <header
-                    className="sticky top-0 z-20 flex items-center justify-between px-7"
+                    className="sticky top-0 z-20 flex items-center justify-between px-4 sm:px-5 lg:px-7"
                     style={{
                         height: 'var(--topbar-height)',
                         background: 'rgba(255,255,255,0.88)',
@@ -105,12 +153,22 @@ export default function DashboardLayout() {
                     }}
                 >
                     {/* Page title */}
-                    <h1
-                        className="text-base font-bold"
-                        style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)', letterSpacing: '-0.01em' }}
-                    >
-                        {pageTitle}
-                    </h1>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <button
+                            onClick={() => setMobileSidebarOpen(true)}
+                            className="lg:hidden p-2 -ml-2 rounded-lg"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                            aria-label="Open navigation"
+                        >
+                            <Menu size={20} />
+                        </button>
+                        <h1
+                            className="text-base font-bold truncate"
+                            style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)', letterSpacing: '-0.01em' }}
+                        >
+                            {pageTitle}
+                        </h1>
+                    </div>
 
                     {/* Right: name + avatar + settings */}
                     <div className="flex items-center gap-2.5">
@@ -157,9 +215,11 @@ export default function DashboardLayout() {
                 {/* ── Page content ───────────────────────────────────── */}
                 <main
                     className="page-enter"
-                    style={{ padding: '28px 32px', minHeight: 'calc(100vh - var(--topbar-height))' }}
+                    style={{ minHeight: 'calc(100vh - var(--topbar-height))' }}
                 >
-                    <Outlet />
+                    <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
+                        <Outlet />
+                    </div>
                 </main>
             </div>
         </div>

@@ -1,24 +1,59 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ExternalLink, Loader2, Search, LayoutList, Columns2 } from 'lucide-react';
+import { AlertCircle, Loader2, Search, LayoutList, Columns2, ChevronDown } from 'lucide-react';
 import {
     useGetApplicationsQuery,
     useGetJobsQuery,
     useUpdateApplicationStatusMutation,
 } from '@/features/hiring/hiringApi';
 import KanbanBoard from '@/features/hiring/components/KanbanBoard';
-import type { ApplicationStatus } from '@/features/hiring/types/types';
+import type { Application, ApplicationStatus } from '@/features/hiring/types/types';
 
 const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg: string }> = {
     new: { label: 'New', color: '#1D4ED8', bg: '#DBEAFE' },
     screening: { label: 'Screening', color: '#92400E', bg: '#FEF3C7' },
     shortlisted: { label: 'Shortlisted', color: '#166534', bg: '#DCFCE7' },
     'assignment-round': { label: 'Assignment', color: '#6D28D9', bg: '#EDE9FE' },
+    'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
     hired: { label: 'Hired', color: '#15803D', bg: '#DCFCE7' },
 };
+
+const STATUS_FILTER_OPTIONS: ApplicationStatus[] = [
+    'new',
+    'screening',
+    'shortlisted',
+    'assignment-round',
+    'assignment-submitted',
+    'interview',
+    'offered',
+    'rejected',
+    'hired',
+];
+
+function getStatusUpdateOptions(currentStatus: ApplicationStatus): ApplicationStatus[] {
+    const pipelineOptions: ApplicationStatus[] = [
+        'new',
+        'screening',
+        'shortlisted',
+        'assignment-round',
+        'assignment-submitted',
+        'interview',
+        'rejected',
+    ];
+
+    if (currentStatus === 'offered') {
+        return [...pipelineOptions, 'offered', 'hired'];
+    }
+
+    if (currentStatus === 'hired') {
+        return [...pipelineOptions, 'offered', 'hired'];
+    }
+
+    return pipelineOptions;
+}
 
 type ViewMode = 'table' | 'kanban';
 
@@ -29,15 +64,28 @@ export default function HiringApplicationsPage() {
     const [status, setStatus] = useState<ApplicationStatus | ''>('');
     const [jobId, setJobId] = useState('');
     const [tags, setTags] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [debouncedTags, setDebouncedTags] = useState('');
+    const [optimisticApplications, setOptimisticApplications] = useState<Application[]>([]);
+    const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearch(search.trim());
+            setDebouncedTags(tags.trim());
+        }, 300);
+
+        return () => window.clearTimeout(timer);
+    }, [search, tags]);
 
     const { data: jobsData } = useGetJobsQuery({ limit: 200 });
     const jobs = jobsData?.data.jobs || [];
 
     const params: Record<string, string> = {};
-    if (search) params.search = search;
+    if (debouncedSearch) params.search = debouncedSearch;
     if (status) params.status = status;
     if (jobId) params.jobId = jobId;
-    if (tags) params.tags = tags;
+    if (debouncedTags) params.tags = debouncedTags;
 
     const { data, isLoading, error } = useGetApplicationsQuery(
         params as any,
@@ -45,16 +93,45 @@ export default function HiringApplicationsPage() {
     );
     const applications = data?.data.applications || [];
 
+    useEffect(() => {
+        setOptimisticApplications(applications);
+    }, [applications]);
+
     const [updateStatus, { isLoading: isUpdatingStatus }] = useUpdateApplicationStatusMutation();
 
     async function handleStatusChange(id: string, newStatus: ApplicationStatus) {
-        await updateStatus({ id, data: { status: newStatus } });
+        const current = optimisticApplications.find((app) => app._id === id);
+        if (!current || current.status === newStatus) {
+            return;
+        }
+
+        const previousStatus = current.status;
+
+        setOptimisticApplications((prev) =>
+            prev.map((app) => (app._id === id ? { ...app, status: newStatus } : app))
+        );
+        setUpdatingIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+
+        try {
+            await updateStatus({ id, data: { status: newStatus } }).unwrap();
+        } catch {
+            setOptimisticApplications((prev) =>
+                prev.map((app) => (app._id === id ? { ...app, status: previousStatus } : app))
+            );
+        } finally {
+            setUpdatingIds((prev) => prev.filter((item) => item !== id));
+        }
     }
 
-    const total = applications.length;
-    const newCount = applications.filter((a: any) => a.status === 'new').length;
-    const shortlisted = applications.filter((a: any) => a.status === 'shortlisted').length;
-    const rejected = applications.filter((a: any) => a.status === 'rejected').length;
+    const displayedApplications = useMemo(
+        () => optimisticApplications,
+        [optimisticApplications]
+    );
+
+    const total = displayedApplications.length;
+    const newCount = displayedApplications.filter((a: any) => a.status === 'new').length;
+    const shortlisted = displayedApplications.filter((a: any) => a.status === 'shortlisted').length;
+    const rejected = displayedApplications.filter((a: any) => a.status === 'rejected').length;
 
     if (isLoading) {
         return (
@@ -131,6 +208,17 @@ export default function HiringApplicationsPage() {
                             Kanban
                         </button>
                     </div>
+                    <button
+                        onClick={() => navigate('/hiring/reports')}
+                        className="px-3 py-2 rounded-lg text-sm border"
+                        style={{
+                            borderColor: 'var(--color-border-default)',
+                            color: 'var(--color-text-secondary)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                        }}
+                    >
+                        Reports
+                    </button>
                     <button
                         onClick={() => navigate('/hiring/jobs')}
                         className="px-3 py-2 rounded-lg text-sm border"
@@ -220,11 +308,11 @@ export default function HiringApplicationsPage() {
                         }}
                     >
                         <option value="">All Statuses</option>
-                        {(Object.entries(STATUS_META) as [ApplicationStatus, { label: string }][]).map(
-                            ([val, meta]) => (
-                                <option key={val} value={val}>{meta.label}</option>
-                            )
-                        )}
+                        {STATUS_FILTER_OPTIONS.map((statusValue) => (
+                            <option key={statusValue} value={statusValue}>
+                                {STATUS_META[statusValue].label}
+                            </option>
+                        ))}
                     </select>
                     <input
                         value={tags}
@@ -238,6 +326,11 @@ export default function HiringApplicationsPage() {
                         }}
                     />
                 </div>
+                {(search.trim() !== debouncedSearch || tags.trim() !== debouncedTags) && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+                        Updating filters...
+                    </p>
+                )}
             </div>
 
             {/* Table view */}
@@ -257,12 +350,10 @@ export default function HiringApplicationsPage() {
                                     borderBottom: '1px solid var(--color-border-default)',
                                 }}
                             >
-                                {['Candidate', 'Job Role', 'Email', 'Applied', 'Status', 'Tags', ''].map((h) => (
+                                {['Candidate', 'Job Role', 'Email', 'Applied', 'Status', 'Tags'].map((h) => (
                                     <th
                                         key={h}
-                                        className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide ${
-                                            h === '' ? 'text-right' : 'text-left'
-                                        }`}
+                                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide"
                                         style={{ color: 'var(--color-text-secondary)' }}
                                     >
                                         {h}
@@ -271,7 +362,7 @@ export default function HiringApplicationsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {applications.length === 0 && (
+                            {displayedApplications.length === 0 && (
                                 <tr>
                                     <td
                                         colSpan={7}
@@ -282,19 +373,30 @@ export default function HiringApplicationsPage() {
                                     </td>
                                 </tr>
                             )}
-                            {applications.map((app: any, idx: number) => {
+                            {displayedApplications.map((app: any, idx: number) => {
                                 const jobTitle =
-                                    typeof app.jobId === 'object' ? app.jobId.title : '—';
+                                    app.jobId && typeof app.jobId === 'object'
+                                        ? app.jobId.title || '—'
+                                        : '—';
                                 const meta =
                                     STATUS_META[app.status as ApplicationStatus] || STATUS_META.new;
+                                const isRowUpdating = updatingIds.includes(app._id);
                                 return (
                                     <tr
                                         key={app._id}
+                                        onClick={() => navigate(`/hiring/applications/${app._id}`)}
                                         style={{
+                                            cursor: 'pointer',
                                             borderBottom:
-                                                idx === applications.length - 1
+                                                idx === displayedApplications.length - 1
                                                     ? 'none'
                                                     : '1px solid var(--color-border-default)',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
                                         }}
                                     >
                                         <td
@@ -326,36 +428,51 @@ export default function HiringApplicationsPage() {
                                             })}
                                         </td>
                                         <td className="px-4 py-3.5">
-                                            <span
-                                                className="px-2 py-1 rounded-md text-xs font-medium"
-                                                style={{
-                                                    backgroundColor: meta.bg,
-                                                    color: meta.color,
-                                                }}
+                                            <div
+                                                className="relative inline-flex items-center"
+                                                style={{ opacity: isRowUpdating ? 0.65 : 1 }}
+                                                onClick={(e) => e.stopPropagation()}
                                             >
-                                                {meta.label}
-                                            </span>
+                                                <select
+                                                    value={app.status}
+                                                    onChange={(e) =>
+                                                        handleStatusChange(
+                                                            app._id,
+                                                            e.target.value as ApplicationStatus
+                                                        )
+                                                    }
+                                                    disabled={isRowUpdating}
+                                                    className="h-9 min-w-[148px] appearance-none pl-3 pr-9 text-xs rounded-full border outline-none shadow-sm transition-all"
+                                                    style={{
+                                                        borderColor: meta.bg,
+                                                        backgroundColor: '#FFFFFF',
+                                                        color: meta.color,
+                                                        fontWeight: 600,
+                                                        boxShadow: `inset 0 0 0 1px ${meta.bg}`,
+                                                        cursor: isRowUpdating ? 'not-allowed' : 'pointer',
+                                                    }}
+                                                >
+                                                    {getStatusUpdateOptions(
+                                                        app.status as ApplicationStatus
+                                                    ).map((statusValue) => (
+                                                        <option key={statusValue} value={statusValue}>
+                                                            {STATUS_META[statusValue].label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <span
+                                                    className="pointer-events-none absolute right-3"
+                                                    style={{ color: meta.color }}
+                                                >
+                                                    <ChevronDown size={14} />
+                                                </span>
+                                            </div>
                                         </td>
                                         <td
                                             className="px-4 py-3.5 text-xs"
                                             style={{ color: 'var(--color-text-secondary)' }}
                                         >
                                             {app.tags?.length ? app.tags.join(', ') : '—'}
-                                        </td>
-                                        <td className="px-4 py-3.5 text-right">
-                                            <button
-                                                onClick={() =>
-                                                    navigate(`/hiring/applications/${app._id}`)
-                                                }
-                                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
-                                                style={{
-                                                    borderColor: 'var(--color-border-default)',
-                                                    color: 'var(--color-text-secondary)',
-                                                }}
-                                            >
-                                                View
-                                                <ExternalLink size={12} />
-                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -368,9 +485,10 @@ export default function HiringApplicationsPage() {
             {/* Kanban view */}
             {view === 'kanban' && (
                 <KanbanBoard
-                    applications={applications}
+                    applications={displayedApplications}
                     onStatusChange={handleStatusChange}
                     isUpdating={isUpdatingStatus}
+                    updatingIds={updatingIds}
                 />
             )}
         </div>

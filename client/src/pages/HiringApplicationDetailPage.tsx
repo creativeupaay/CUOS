@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     AlertCircle,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import {
     useGetApplicationByIdQuery,
+    useGetApplicationTimelineQuery,
     useApplyFinalDecisionMutation,
     useSendInterviewInviteMutation,
     useUpdateApplicationStatusMutation,
@@ -28,6 +29,7 @@ const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg:
     screening: { label: 'Screening', color: '#92400E', bg: '#FEF3C7' },
     shortlisted: { label: 'Shortlisted', color: '#166534', bg: '#DCFCE7' },
     'assignment-round': { label: 'Assignment', color: '#6D28D9', bg: '#EDE9FE' },
+    'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
@@ -39,9 +41,8 @@ const STATUS_ORDER: ApplicationStatus[] = [
     'screening',
     'shortlisted',
     'assignment-round',
+    'assignment-submitted',
     'interview',
-    'offered',
-    'hired',
 ];
 
 export default function HiringApplicationDetailPage() {
@@ -51,13 +52,32 @@ export default function HiringApplicationDetailPage() {
     const [tagInput, setTagInput] = useState('');
     const [assignmentLinkCopied, setAssignmentLinkCopied] = useState(false);
     const [inviteSent, setInviteSent] = useState(false);
+    const [inviteError, setInviteError] = useState('');
     const [salaryInput, setSalaryInput] = useState('');
     const [positionInput, setPositionInput] = useState('');
     const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
     const [decisionMessage, setDecisionMessage] = useState('');
+    const [pipelineError, setPipelineError] = useState('');
 
     const { data, isLoading, error } = useGetApplicationByIdQuery(id!, { skip: !id });
     const application = data?.data.application;
+    const { data: timelineData } = useGetApplicationTimelineQuery(id!, { skip: !id });
+    const activities = timelineData?.data.activities || [];
+    const majorActivities = useMemo(
+        () =>
+            activities.filter((activity: any) =>
+                [
+                    'application.received',
+                    'assignment.started',
+                    'assignment.submitted',
+                    'application.rejected',
+                    'application.offer_sent',
+                    'interview.invite_sent',
+                    'interview.webhook_updated',
+                ].includes(activity.type)
+            ),
+        [activities]
+    );
 
     const [updateStatus, { isLoading: updatingStatus }] = useUpdateApplicationStatusMutation();
     const [applyFinalDecision, { isLoading: deciding }] = useApplyFinalDecisionMutation();
@@ -67,7 +87,12 @@ export default function HiringApplicationDetailPage() {
 
     async function handleStatusChange(newStatus: ApplicationStatus) {
         if (!id || application?.status === newStatus) return;
-        await updateStatus({ id, data: { status: newStatus } });
+        setPipelineError('');
+        try {
+            await updateStatus({ id, data: { status: newStatus } }).unwrap();
+        } catch (error: any) {
+            setPipelineError(error?.data?.message || 'Could not update pipeline stage right now.');
+        }
     }
 
     async function handleAddTag(e: React.FormEvent) {
@@ -93,9 +118,17 @@ export default function HiringApplicationDetailPage() {
 
     async function handleSendInterviewInvite() {
         if (!id) return;
-        await sendInterviewInvite(id).unwrap();
-        setInviteSent(true);
-        window.setTimeout(() => setInviteSent(false), 2000);
+        setInviteError('');
+        try {
+            await sendInterviewInvite(id).unwrap();
+            setInviteSent(true);
+            window.setTimeout(() => setInviteSent(false), 2000);
+        } catch (error: any) {
+            setInviteError(
+                error?.data?.message ||
+                    'Interview scheduling is not ready for this job. Update job scheduling settings and retry.'
+            );
+        }
     }
 
     async function handleRejectDecision() {
@@ -164,9 +197,13 @@ export default function HiringApplicationDetailPage() {
     }
 
     const jobTitle =
-        typeof application.jobId === 'object' ? application.jobId.title : '—';
+        application.jobId && typeof application.jobId === 'object'
+            ? application.jobId.title || '—'
+            : '—';
     const jobDept =
-        typeof application.jobId === 'object' ? application.jobId.department : undefined;
+        application.jobId && typeof application.jobId === 'object'
+            ? application.jobId.department
+            : undefined;
     const currentMeta = STATUS_META[application.status] || STATUS_META.new;
 
     return (
@@ -347,6 +384,64 @@ export default function HiringApplicationDetailPage() {
                             </p>
                         </div>
                     )}
+
+                    {/* Activity Timeline */}
+                    <div
+                        className="rounded-xl border p-5"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <p
+                            className="text-xs font-semibold uppercase tracking-wide mb-3"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                        >
+                            Hiring Timeline
+                        </p>
+
+                        {majorActivities.length === 0 ? (
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                No timeline events yet.
+                            </p>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                {majorActivities.map((activity: any) => (
+                                    <div
+                                        key={activity._id}
+                                        className="rounded-lg border px-3 py-2.5"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p
+                                                className="text-sm font-medium"
+                                                style={{ color: 'var(--color-text-primary)' }}
+                                            >
+                                                {activity.title}
+                                            </p>
+                                            <span
+                                                className="text-xs"
+                                                style={{ color: 'var(--color-text-muted)' }}
+                                            >
+                                                {new Date(activity.createdAt).toLocaleString('en-IN', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
+                                            </span>
+                                        </div>
+                                        <p
+                                            className="text-xs mt-1"
+                                            style={{ color: 'var(--color-text-secondary)' }}
+                                        >
+                                            {activity.description}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Right — pipeline + tags + meta */}
@@ -432,6 +527,41 @@ export default function HiringApplicationDetailPage() {
                                 Rejected
                             </button>
                         </div>
+
+                        {(application.status === 'offered' || application.status === 'hired') && (
+                            <div
+                                className="mt-3 rounded-lg border px-3 py-2.5"
+                                style={{
+                                    borderColor: currentMeta.bg,
+                                    backgroundColor: '#FFFFFF',
+                                }}
+                            >
+                                <p
+                                    className="text-xs font-semibold uppercase tracking-wide"
+                                    style={{ color: 'var(--color-text-secondary)' }}
+                                >
+                                    Current Outcome
+                                </p>
+                                <p
+                                    className="text-sm mt-1 font-medium"
+                                    style={{ color: currentMeta.color }}
+                                >
+                                    {currentMeta.label}
+                                </p>
+                                <p
+                                    className="text-xs mt-1"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                >
+                                    Offers should be sent from the Final Decision section. Use Hired only after the candidate accepts the offer.
+                                </p>
+                            </div>
+                        )}
+
+                        {pipelineError && (
+                            <p className="text-xs mt-3" style={{ color: 'var(--color-danger)' }}>
+                                {pipelineError}
+                            </p>
+                        )}
                     </div>
 
                     {/* Tags */}
@@ -551,6 +681,12 @@ export default function HiringApplicationDetailPage() {
                         {inviteSent && (
                             <p className="text-xs mt-2" style={{ color: '#166534' }}>
                                 Interview invite sent to candidate email.
+                            </p>
+                        )}
+
+                        {inviteError && (
+                            <p className="text-xs mt-2" style={{ color: 'var(--color-danger)' }}>
+                                {inviteError}
                             </p>
                         )}
                     </div>

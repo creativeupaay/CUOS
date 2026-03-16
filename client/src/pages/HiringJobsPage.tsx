@@ -64,6 +64,7 @@ export default function HiringJobsPage() {
     const [filterType, setFilterType] = useState<EmploymentType | ''>('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+    const [deleteError, setDeleteError] = useState('');
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -99,10 +100,11 @@ export default function HiringJobsPage() {
     const handleDelete = async () => {
         if (!deleteConfirm) return;
         try {
+            setDeleteError('');
             await deleteJob(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
-        } catch {
-            // error handled by server
+        } catch (error: any) {
+            setDeleteError(error?.data?.message || 'Could not delete this job right now.');
         }
     };
 
@@ -173,6 +175,17 @@ export default function HiringJobsPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => navigate('/hiring/reports')}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                color: 'var(--color-text-secondary)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                            }}
+                        >
+                            Reports
+                        </button>
                         <button
                             onClick={() => navigate('/hiring/applications')}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border"
@@ -413,6 +426,12 @@ export default function HiringJobsPage() {
                                         className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide"
                                         style={{ color: 'var(--color-text-secondary)' }}
                                     >
+                                        Interview Schedule
+                                    </th>
+                                    <th
+                                        className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide"
+                                        style={{ color: 'var(--color-text-secondary)' }}
+                                    >
                                         Created
                                     </th>
                                     {canManage && (
@@ -534,6 +553,40 @@ export default function HiringJobsPage() {
                                                 )}
                                             </td>
 
+                                            <td className="px-4 py-4">
+                                                {!job.interviewScheduling?.enabled ? (
+                                                    <span
+                                                        className="text-xs"
+                                                        style={{ color: 'var(--color-text-muted)' }}
+                                                    >
+                                                        Disabled
+                                                    </span>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span
+                                                            className="text-xs font-medium"
+                                                            style={{
+                                                                color:
+                                                                    job.interviewScheduling.syncStatus === 'synced'
+                                                                        ? 'var(--color-success)'
+                                                                        : job.interviewScheduling.syncStatus ===
+                                                                          'failed'
+                                                                        ? 'var(--color-danger)'
+                                                                        : 'var(--color-text-secondary)',
+                                                            }}
+                                                        >
+                                                            {job.interviewScheduling.syncStatus}
+                                                        </span>
+                                                        <span
+                                                            className="text-[11px]"
+                                                            style={{ color: 'var(--color-text-muted)' }}
+                                                        >
+                                                            {job.interviewScheduling.bookingUrl ? 'URL ready' : 'URL missing'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+
                                             {/* Date */}
                                             <td
                                                 className="px-4 py-4 text-sm"
@@ -641,6 +694,7 @@ export default function HiringJobsPage() {
                                                                 <button
                                                                     onClick={() => {
                                                                         setOpenMenuId(null);
+                                                                        setDeleteError('');
                                                                         setDeleteConfirm({
                                                                             id: job._id,
                                                                             title: job.title,
@@ -735,6 +789,11 @@ export default function HiringJobsPage() {
                                 Delete
                             </button>
                         </div>
+                        {deleteError && (
+                            <p className="text-xs mt-3" style={{ color: 'var(--color-danger)' }}>
+                                {deleteError}
+                            </p>
+                        )}
                     </div>
                 </div>
             )}

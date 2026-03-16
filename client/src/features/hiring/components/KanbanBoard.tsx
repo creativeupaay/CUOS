@@ -9,6 +9,8 @@ interface KanbanColumn {
     color: string;
     bg: string;
     headerBg: string;
+    droppable?: boolean;
+    allowedSourceStatuses?: ApplicationStatus[];
 }
 
 export const KANBAN_COLUMNS: KanbanColumn[] = [
@@ -16,8 +18,24 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
     { status: 'screening', label: 'Screening', color: '#92400E', bg: '#FEF3C7', headerBg: '#FFFBEB' },
     { status: 'shortlisted', label: 'Shortlisted', color: '#166534', bg: '#DCFCE7', headerBg: '#F0FDF4' },
     { status: 'assignment-round', label: 'Assignment', color: '#6D28D9', bg: '#EDE9FE', headerBg: '#F5F3FF' },
+    { status: 'assignment-submitted', label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF', headerBg: '#FAF5FF' },
     { status: 'interview', label: 'Interview', color: '#0F766E', bg: '#CCFBF1', headerBg: '#F0FDFA' },
-    { status: 'offered', label: 'Offered', color: '#0369A1', bg: '#E0F2FE', headerBg: '#F0F9FF' },
+    {
+        status: 'offered',
+        label: 'Offered',
+        color: '#0369A1',
+        bg: '#E0F2FE',
+        headerBg: '#F0F9FF',
+        droppable: false,
+    },
+    {
+        status: 'hired',
+        label: 'Hired',
+        color: '#15803D',
+        bg: '#DCFCE7',
+        headerBg: '#F0FDF4',
+        allowedSourceStatuses: ['offered'],
+    },
     { status: 'rejected', label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2', headerBg: '#FFF5F5' },
 ];
 
@@ -25,26 +43,32 @@ interface KanbanBoardProps {
     applications: Application[];
     onStatusChange: (id: string, status: ApplicationStatus) => void;
     isUpdating: boolean;
+    updatingIds?: string[];
 }
 
 function KanbanCard({
     app,
     onDragStart,
+    isPending,
 }: {
     app: Application;
     onDragStart: (e: React.DragEvent, id: string) => void;
+    isPending: boolean;
 }) {
     const navigate = useNavigate();
-    const jobTitle = typeof app.jobId === 'object' ? app.jobId.title : '—';
+    const jobTitle =
+        app.jobId && typeof app.jobId === 'object' ? app.jobId.title || '—' : '—';
 
     return (
         <div
-            draggable
+            draggable={!isPending}
             onDragStart={(e) => onDragStart(e, app._id)}
             className="rounded-lg border p-3 cursor-grab active:cursor-grabbing select-none"
             style={{
                 backgroundColor: 'var(--color-bg-surface)',
                 borderColor: 'var(--color-border-default)',
+                opacity: isPending ? 0.65 : 1,
+                cursor: isPending ? 'not-allowed' : 'grab',
             }}
         >
             <div className="flex items-start justify-between gap-2 mb-2">
@@ -101,7 +125,7 @@ function KanbanCard({
     );
 }
 
-export default function KanbanBoard({ applications, onStatusChange, isUpdating }: KanbanBoardProps) {
+export default function KanbanBoard({ applications, onStatusChange, isUpdating, updatingIds = [] }: KanbanBoardProps) {
     const dragItemId = useRef<string | null>(null);
     const [draggingOver, setDraggingOver] = useState<ApplicationStatus | null>(null);
 
@@ -111,6 +135,10 @@ export default function KanbanBoard({ applications, onStatusChange, isUpdating }
     }
 
     function handleDragOver(e: React.DragEvent, status: ApplicationStatus) {
+        const targetColumn = KANBAN_COLUMNS.find((col) => col.status === status);
+        if (targetColumn?.droppable === false) {
+            return;
+        }
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         setDraggingOver(status);
@@ -123,6 +151,14 @@ export default function KanbanBoard({ applications, onStatusChange, isUpdating }
         if (!id) return;
         const app = applications.find((a) => a._id === id);
         if (!app || app.status === targetStatus) return;
+        const targetColumn = KANBAN_COLUMNS.find((col) => col.status === targetStatus);
+        if (targetColumn?.droppable === false) return;
+        if (
+            targetColumn?.allowedSourceStatuses &&
+            !targetColumn.allowedSourceStatuses.includes(app.status)
+        ) {
+            return;
+        }
         onStatusChange(id, targetStatus);
         dragItemId.current = null;
     }
@@ -144,6 +180,7 @@ export default function KanbanBoard({ applications, onStatusChange, isUpdating }
             {KANBAN_COLUMNS.map((col) => {
                 const cards = grouped[col.status] || [];
                 const isOver = draggingOver === col.status;
+                const isDroppable = col.droppable !== false;
                 return (
                     <div
                         key={col.status}
@@ -195,11 +232,14 @@ export default function KanbanBoard({ applications, onStatusChange, isUpdating }
                                 <div
                                     className="flex items-center justify-center h-16 text-xs rounded-lg border-2 border-dashed"
                                     style={{
-                                        borderColor: isOver ? col.color : 'var(--color-border-default)',
+                                        borderColor:
+                                            isDroppable && isOver
+                                                ? col.color
+                                                : 'var(--color-border-default)',
                                         color: 'var(--color-text-muted)',
                                     }}
                                 >
-                                    Drop here
+                                    {isDroppable ? 'Drop here' : 'Updated from final decision'}
                                 </div>
                             )}
                             {cards.map((app) => (
@@ -207,6 +247,7 @@ export default function KanbanBoard({ applications, onStatusChange, isUpdating }
                                     key={app._id}
                                     app={app}
                                     onDragStart={handleDragStart}
+                                    isPending={updatingIds.includes(app._id)}
                                 />
                             ))}
                         </div>

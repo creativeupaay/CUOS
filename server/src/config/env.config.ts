@@ -33,8 +33,38 @@ const envSchema = z.object({
   RESEND_FROM_EMAIL: z.string().email().default("noreply@creativeupaay.com"),
 
   // Cal.com booking page used in interview invite emails
-  CALCOM_BOOKING_URL: z.string().url().optional(),
-  CALCOM_WEBHOOK_SECRET: z.string().optional(),
+  CALCOM_BOOKING_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().url().optional()
+  ),
+  CALCOM_FALLBACK_BOOKING_URL_TEMPLATE: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
+  CALCOM_API_BASE_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().url().default("https://api.cal.com")
+  ),
+  CALCOM_API_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
+  CALCOM_API_VERSION: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().default("2024-06-14")
+  ),
+  CALCOM_DEFAULT_ORGANIZER: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().default("HR Team")
+  ),
+  CALCOM_EVENT_LOCATION_INTEGRATION: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().default("google-meet")
+  ),
+  CALCOM_WEBHOOK_SECRET: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
 
 });
 

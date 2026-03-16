@@ -56,6 +56,16 @@ export const getAssignmentForApplication = asyncHandler(async (req: Request, res
     });
 });
 
+export const startAssignment = asyncHandler(async (req: Request, res: Response) => {
+    const result = await assignmentService.startAssignment(req.params.applicationId);
+
+    res.status(200).json({
+        status: 'success',
+        message: 'Assignment timer started',
+        data: result,
+    });
+});
+
 export const submitAssignment = asyncHandler(async (req: Request, res: Response) => {
     const data: SubmitAssignmentInput = req.body;
     const submission = await assignmentService.submitAssignment(req.params.applicationId, data);

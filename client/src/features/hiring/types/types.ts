@@ -3,6 +3,40 @@
 // ============================================
 export type EmploymentType = 'full-time' | 'part-time' | 'contract' | 'internship';
 
+export type InterviewScheduleSyncStatus =
+    | 'not_configured'
+    | 'pending'
+    | 'synced'
+    | 'failed';
+
+export interface InterviewDailySlot {
+    startTime: string;
+    endTime: string;
+}
+
+export interface InterviewSchedulingConfig {
+    enabled: boolean;
+    active: boolean;
+    timezone: string;
+    organizerName: string;
+    eventTypeId?: number;
+    eventTypeSlug?: string;
+    bookingUrl?: string;
+    availableFrom?: string;
+    availableTo?: string;
+    weekdays: number[];
+    dailySlots: InterviewDailySlot[];
+    durationMinutes: number;
+    slotIntervalMinutes: number;
+    minimumBookingNoticeMinutes: number;
+    beforeEventBufferMinutes: number;
+    afterEventBufferMinutes: number;
+    syncStatus: InterviewScheduleSyncStatus;
+    syncError?: string;
+    lastSyncedAt?: string;
+    externalUpdatedAt?: string;
+}
+
 export interface Job {
     _id: string;
     title: string;
@@ -13,6 +47,7 @@ export interface Job {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    interviewScheduling: InterviewSchedulingConfig;
     createdBy: string | { _id: string; name: string; email: string };
     createdAt: string;
     updatedAt: string;
@@ -23,6 +58,7 @@ export type ApplicationStatus =
     | 'screening'
     | 'shortlisted'
     | 'assignment-round'
+    | 'assignment-submitted'
     | 'interview'
     | 'rejected'
     | 'offered'
@@ -50,6 +86,25 @@ export interface Application {
     coverLetter?: string;
     status: ApplicationStatus;
     tags: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ApplicationActivity {
+    _id: string;
+    applicationId: string;
+    type: string;
+    title: string;
+    description: string;
+    actorType: 'candidate' | 'user' | 'system';
+    actorId?:
+        | string
+        | {
+              _id: string;
+              name?: string;
+              email?: string;
+          };
+    metadata?: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
 }
@@ -168,4 +223,38 @@ export interface Offer {
     status: OfferStatus;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface HiringOverviewMetrics {
+    totalApplications: number;
+    activeJobs: number;
+    hiredCount: number;
+    offersCount: number;
+    rejectedCount: number;
+    rejectionRate: number;
+}
+
+export interface HiringPipelineMetric {
+    status: ApplicationStatus;
+    count: number;
+    avgAgingDays: number;
+    conversionFromPrevious: number | null;
+}
+
+export interface RecruiterPerformanceMetric {
+    userId: string;
+    name?: string;
+    email?: string;
+    totalActions: number;
+    statusChanges: number;
+    offersSent: number;
+    rejections: number;
+    interviewNotes: number;
+    lastActiveAt: string;
+}
+
+export interface HiringReportSummary {
+    overview: HiringOverviewMetrics;
+    pipeline: HiringPipelineMetric[];
+    recruiterPerformance: RecruiterPerformanceMetric[];
 }

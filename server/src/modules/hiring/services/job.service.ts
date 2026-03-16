@@ -1,21 +1,126 @@
 import { Job, IJob } from '../models/Job.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
+import { env } from '../../../config/env.config';
+import { calcomService } from './calcom.service';
+import { Application } from '../models/Application.model';
+import { Assignment } from '../models/Assignment.model';
 import type {
     CreateJobInput,
     UpdateJobInput,
     ListJobsInput,
+    InterviewSchedulingInput,
+    InterviewSchedulingUpdateInput,
 } from '../validators/job.validator';
+
+function toDate(value?: string | null): Date | undefined {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return undefined;
+    }
+    return parsed;
+}
+
+function normalizeCreateScheduling(input?: InterviewSchedulingInput) {
+    return {
+        enabled: input?.enabled ?? false,
+        active: input?.active ?? input?.enabled ?? false,
+        timezone: input?.timezone ?? 'Asia/Kolkata',
+        organizerName: input?.organizerName ?? env.CALCOM_DEFAULT_ORGANIZER,
+        availableFrom: toDate(input?.availableFrom),
+        availableTo: toDate(input?.availableTo),
+        weekdays: input?.weekdays ?? [1, 2, 3, 4, 5],
+        dailySlots: input?.dailySlots ?? [{ startTime: '10:00', endTime: '18:00' }],
+        durationMinutes: input?.durationMinutes ?? 45,
+        slotIntervalMinutes: input?.slotIntervalMinutes ?? 30,
+        minimumBookingNoticeMinutes: input?.minimumBookingNoticeMinutes ?? 60,
+        beforeEventBufferMinutes: input?.beforeEventBufferMinutes ?? 5,
+        afterEventBufferMinutes: input?.afterEventBufferMinutes ?? 5,
+        syncStatus: 'not_configured' as const,
+        syncError: undefined,
+    };
+}
+
+function toPlainScheduling(existing: any) {
+    if (!existing) return {};
+    if (typeof existing.toObject === 'function') {
+        return existing.toObject();
+    }
+    return { ...existing };
+}
+
+function mergeSchedulingUpdate(existing: any, updates: InterviewSchedulingUpdateInput) {
+    const base = normalizeCreateScheduling();
+    const existingScheduling = toPlainScheduling(existing);
+    const merged = {
+        ...base,
+        ...existingScheduling,
+        ...updates,
+    };
+
+    const enabled = updates.enabled ?? merged.enabled ?? false;
+    const active = updates.active ?? enabled;
+
+    return {
+        ...merged,
+        enabled,
+        active,
+        availableFrom:
+            updates.availableFrom === null
+                ? undefined
+                : updates.availableFrom !== undefined
+                ? toDate(updates.availableFrom)
+                : toDate(existingScheduling?.availableFrom as any),
+        availableTo:
+            updates.availableTo === null
+                ? undefined
+                : updates.availableTo !== undefined
+                ? toDate(updates.availableTo)
+                : toDate(existingScheduling?.availableTo as any),
+    };
+}
 
 export class JobService {
     /**
      * Create a new job posting
      */
     async createJob(data: CreateJobInput, createdBy: Types.ObjectId): Promise<IJob> {
+        const scheduling = normalizeCreateScheduling(data.interviewScheduling);
+
         const job = await Job.create({
             ...data,
+            interviewScheduling: scheduling,
             createdBy,
         });
+
+        if (scheduling.enabled) {
+            try {
+                const synced = await calcomService.syncJobEventType({
+                    jobId: String(job._id),
+                    jobTitle: job.title,
+                    jobDepartment: job.department,
+                    scheduling: job.interviewScheduling as any,
+                });
+
+                job.interviewScheduling.eventTypeId = synced.eventTypeId;
+                job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
+                job.interviewScheduling.bookingUrl = synced.bookingUrl;
+                job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
+                job.interviewScheduling.lastSyncedAt = new Date();
+                job.interviewScheduling.syncStatus = 'synced';
+                job.interviewScheduling.syncError = undefined;
+                job.interviewScheduling.active = true;
+                await job.save();
+            } catch (error: any) {
+                job.interviewScheduling.syncStatus = 'failed';
+                job.interviewScheduling.syncError =
+                    error?.message || 'Failed to sync interview scheduling with Cal.com';
+                job.interviewScheduling.active = false;
+                await job.save();
+            }
+        }
+
         return job.populate('createdBy', 'name email');
     }
 
@@ -78,15 +183,67 @@ export class JobService {
      * Update a job posting
      */
     async updateJob(id: string, data: UpdateJobInput): Promise<IJob> {
-        const job = await Job.findByIdAndUpdate(id, data, {
+        const existing = await Job.findById(id);
+
+        if (!existing) {
+            throw new AppError('Job not found', 404);
+        }
+
+        const updatePayload: any = { ...data };
+
+        if (data.interviewScheduling) {
+            updatePayload.interviewScheduling = mergeSchedulingUpdate(
+                existing.interviewScheduling,
+                data.interviewScheduling
+            );
+        }
+
+        const job = await Job.findByIdAndUpdate(id, updatePayload, {
             new: true,
             runValidators: true,
-        }).populate('createdBy', 'name email');
+        });
 
         if (!job) {
             throw new AppError('Job not found', 404);
         }
-        return job;
+
+        if (job.interviewScheduling?.enabled) {
+            job.interviewScheduling.syncStatus = 'pending';
+            job.interviewScheduling.syncError = undefined;
+            await job.save();
+
+            try {
+                const synced = await calcomService.syncJobEventType({
+                    jobId: String(job._id),
+                    jobTitle: job.title,
+                    jobDepartment: job.department,
+                    scheduling: job.interviewScheduling as any,
+                });
+
+                job.interviewScheduling.eventTypeId = synced.eventTypeId;
+                job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
+                job.interviewScheduling.bookingUrl = synced.bookingUrl;
+                job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
+                job.interviewScheduling.lastSyncedAt = new Date();
+                job.interviewScheduling.syncStatus = 'synced';
+                job.interviewScheduling.syncError = undefined;
+                job.interviewScheduling.active = true;
+                await job.save();
+            } catch (error: any) {
+                job.interviewScheduling.syncStatus = 'failed';
+                job.interviewScheduling.syncError =
+                    error?.message || 'Failed to sync interview scheduling with Cal.com';
+                job.interviewScheduling.active = false;
+                await job.save();
+            }
+        } else if (job.interviewScheduling) {
+            job.interviewScheduling.active = false;
+            job.interviewScheduling.syncStatus = 'not_configured';
+            job.interviewScheduling.syncError = undefined;
+            await job.save();
+        }
+
+        return job.populate('createdBy', 'name email');
     }
 
     /**
@@ -107,10 +264,24 @@ export class JobService {
      * Delete a job posting
      */
     async deleteJob(id: string): Promise<void> {
-        const job = await Job.findByIdAndDelete(id);
+        const job = await Job.findById(id).select('_id title');
         if (!job) {
             throw new AppError('Job not found', 404);
         }
+
+        const [applicationCount, assignmentCount] = await Promise.all([
+            Application.countDocuments({ jobId: job._id }),
+            Assignment.countDocuments({ jobId: job._id }),
+        ]);
+
+        if (applicationCount > 0 || assignmentCount > 0) {
+            throw new AppError(
+                'This job already has hiring data linked to it. Close the job instead of deleting it.',
+                400
+            );
+        }
+
+        await Job.findByIdAndDelete(id);
     }
 
     /**

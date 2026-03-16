@@ -10,7 +10,8 @@ import type {
 const interviewService = new InterviewService();
 
 export const sendInterviewInvite = asyncHandler(async (req: Request, res: Response) => {
-    const bookingUrl = await interviewService.sendInterviewInvite(req.params.applicationId);
+    const actorId = (req.user as any)?.id;
+    const bookingUrl = await interviewService.sendInterviewInvite(req.params.applicationId, actorId);
 
     res.status(200).json({
         status: 'success',
@@ -40,7 +41,8 @@ export const getInterviews = asyncHandler(async (req: Request, res: Response) =>
 
 export const updateInterviewStatus = asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body as UpdateInterviewStatusInput;
-    const interview = await interviewService.updateInterviewStatus(req.params.id, status);
+    const actorId = (req.user as any)?.id;
+    const interview = await interviewService.updateInterviewStatus(req.params.id, status, actorId);
 
     res.status(200).json({
         status: 'success',

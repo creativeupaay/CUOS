@@ -1,18 +1,27 @@
 import { env } from '../../../config/env.config';
 import AppError from '../../../utils/appError';
 import type { IncomingHttpHeaders } from 'http';
+import { createHash } from 'crypto';
 import { Application } from '../models/Application.model';
 import { Assignment } from '../models/Assignment.model';
 import { AssignmentSubmission } from '../models/AssignmentSubmission.model';
 import { Interview, IInterview, InterviewStatus } from '../models/Interview.model';
 import { InterviewNote, IInterviewNote } from '../models/InterviewNote.model';
+import { InterviewNotification } from '../models/InterviewNotification.model';
+import { Job } from '../models/Job.model';
+import { User } from '../../auth/models/User.model';
+import { Role } from '../../auth/models/Role.model';
 import type {
     ListInterviewsInput,
     SaveInterviewNoteInput,
 } from '../validators/interview.validator';
 import {
     sendInterviewInviteEmail,
+    sendInterviewScheduledForCandidateEmail,
+    sendInterviewScheduledForHrEmail,
 } from '../../../services/email.service';
+import { logApplicationActivity } from './activity.service';
+import { calcomService } from './calcom.service';
 
 function getNested(obj: any, path: string): any {
     return path.split('.').reduce((acc, part) => (acc == null ? undefined : acc[part]), obj);
@@ -43,32 +52,238 @@ function parseCalcomStatus(payload: any): InterviewStatus {
 
     if (raw.includes('cancel')) return 'cancelled';
     if (raw.includes('resched')) return 'rescheduled';
+    if (raw.includes('complete')) return 'completed';
     if (raw.includes('no_show') || raw.includes('no-show')) return 'no-show';
     return 'scheduled';
 }
 
-function buildInterviewBookingUrl(applicationId: string): string {
-    const baseUrl = env.CALCOM_BOOKING_URL;
-    if (!baseUrl) {
-        throw new AppError('CALCOM_BOOKING_URL is not configured', 500);
+function sanitizeHeaderValue(headerValue: string | string[] | undefined): string {
+    if (Array.isArray(headerValue)) {
+        return String(headerValue[0] || '').trim();
     }
+    return String(headerValue || '').trim();
+}
 
-    const url = new URL(baseUrl);
-    url.searchParams.set('applicationId', applicationId);
-    return url.toString();
+function extractWebhookIdentifiers(payload: any): {
+    applicationId?: string;
+    jobId?: string;
+    candidateEmail?: string;
+    bookingUid?: string;
+    bookingId?: string;
+    eventTypeId?: number;
+} {
+    const applicationId = String(
+        pickFirst(payload, [
+            'payload.metadata.applicationId',
+            'data.metadata.applicationId',
+            'metadata.applicationId',
+            'payload.booking.metadata.applicationId',
+            'data.booking.metadata.applicationId',
+            'booking.metadata.applicationId',
+            'payload.responses.applicationId',
+            'data.responses.applicationId',
+            'responses.applicationId',
+            'payload.booking.responses.applicationId',
+            'data.booking.responses.applicationId',
+            'booking.responses.applicationId',
+            'payload.customInputs.applicationId',
+            'data.customInputs.applicationId',
+            'customInputs.applicationId',
+            'payload.booking.customInputs.applicationId',
+            'data.booking.customInputs.applicationId',
+            'booking.customInputs.applicationId',
+            'payload.applicationId',
+            'applicationId',
+        ]) || ''
+    ).trim();
+
+    const jobId = String(
+        pickFirst(payload, [
+            'payload.metadata.jobId',
+            'data.metadata.jobId',
+            'metadata.jobId',
+            'payload.booking.metadata.jobId',
+            'data.booking.metadata.jobId',
+            'booking.metadata.jobId',
+            'payload.responses.jobId',
+            'data.responses.jobId',
+            'responses.jobId',
+            'payload.booking.responses.jobId',
+            'data.booking.responses.jobId',
+            'booking.responses.jobId',
+            'payload.customInputs.jobId',
+            'data.customInputs.jobId',
+            'customInputs.jobId',
+            'payload.booking.customInputs.jobId',
+            'data.booking.customInputs.jobId',
+            'booking.customInputs.jobId',
+            'payload.jobId',
+            'jobId',
+        ]) || ''
+    ).trim();
+
+    const candidateEmail = String(
+        pickFirst(payload, [
+            'payload.metadata.candidateEmail',
+            'data.metadata.candidateEmail',
+            'metadata.candidateEmail',
+            'payload.responses.candidateEmail',
+            'data.responses.candidateEmail',
+            'responses.candidateEmail',
+            'payload.booking.responses.candidateEmail',
+            'data.booking.responses.candidateEmail',
+            'booking.responses.candidateEmail',
+            'payload.customInputs.candidateEmail',
+            'data.customInputs.candidateEmail',
+            'customInputs.candidateEmail',
+            'payload.booking.customInputs.candidateEmail',
+            'data.booking.customInputs.candidateEmail',
+            'booking.customInputs.candidateEmail',
+            'payload.attendees.0.email',
+            'data.attendees.0.email',
+            'booking.attendees.0.email',
+            'attendees.0.email',
+        ]) || ''
+    ).trim();
+
+    const bookingUid = String(
+        pickFirst(payload, [
+            'payload.uid',
+            'data.uid',
+            'booking.uid',
+            'uid',
+            'payload.booking.uid',
+            'data.booking.uid',
+        ]) || ''
+    ).trim();
+
+    const bookingId = String(
+        pickFirst(payload, [
+            'payload.id',
+            'data.id',
+            'booking.id',
+            'payload.booking.id',
+            'data.booking.id',
+        ]) || ''
+    ).trim();
+
+    const eventTypeIdRaw = pickFirst(payload, [
+        'payload.eventTypeId',
+        'data.eventTypeId',
+        'booking.eventTypeId',
+        'payload.eventType.id',
+        'data.eventType.id',
+        'eventType.id',
+    ]);
+
+    const eventTypeId = eventTypeIdRaw !== undefined ? Number(eventTypeIdRaw) : undefined;
+
+    return {
+        applicationId: applicationId || undefined,
+        jobId: jobId || undefined,
+        candidateEmail: candidateEmail || undefined,
+        bookingUid: bookingUid || undefined,
+        bookingId: bookingId || undefined,
+        eventTypeId: Number.isFinite(eventTypeId) ? eventTypeId : undefined,
+    };
+}
+
+function buildWebhookFingerprint(input: {
+    bookingUid?: string;
+    bookingId?: string;
+    eventTypeId?: number;
+    status: InterviewStatus;
+    scheduledTimeIso?: string;
+    meetLink?: string;
+    rawEvent?: string;
+}): string {
+    const source = [
+        input.bookingUid || '',
+        input.bookingId || '',
+        String(input.eventTypeId || ''),
+        input.status,
+        input.scheduledTimeIso || '',
+        input.meetLink || '',
+        input.rawEvent || '',
+    ].join('|');
+    return createHash('sha256').update(source).digest('hex');
 }
 
 export class InterviewService {
-    async sendInterviewInvite(applicationId: string): Promise<string> {
-        const application = await Application.findById(applicationId).populate('jobId', 'title');
+    async sendInterviewInvite(applicationId: string, actorId?: string): Promise<string> {
+        const application = await Application.findById(applicationId).populate(
+            'jobId',
+            'title interviewScheduling'
+        );
         if (!application) {
             throw new AppError('Application not found', 404);
         }
 
-        const bookingUrl = buildInterviewBookingUrl(applicationId);
-        const url = new URL(bookingUrl);
-        url.searchParams.set('name', application.name);
-        url.searchParams.set('email', application.email);
+        const job =
+            application.jobId && typeof application.jobId === 'object'
+                ? (application.jobId as any)
+                : null;
+
+        if (!job) {
+            throw new AppError('Job details are missing on this application', 422);
+        }
+
+        let scheduling = job.interviewScheduling;
+        const hasJobScheduling = Boolean(scheduling?.enabled);
+        if (hasJobScheduling && (!scheduling?.active || scheduling?.syncStatus !== 'synced')) {
+            const jobDoc = await Job.findById(String(job._id));
+
+            if (!jobDoc?.interviewScheduling?.enabled) {
+                throw new AppError(
+                    'Interview scheduling is not enabled for this job',
+                    422
+                );
+            }
+
+            jobDoc.interviewScheduling.syncStatus = 'pending';
+            jobDoc.interviewScheduling.syncError = undefined;
+            await jobDoc.save();
+
+            try {
+                const synced = await calcomService.syncJobEventType({
+                    jobId: String(jobDoc._id),
+                    jobTitle: jobDoc.title,
+                    jobDepartment: jobDoc.department,
+                    scheduling: jobDoc.interviewScheduling as any,
+                });
+
+                jobDoc.interviewScheduling.eventTypeId = synced.eventTypeId;
+                jobDoc.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
+                jobDoc.interviewScheduling.bookingUrl = synced.bookingUrl;
+                jobDoc.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
+                jobDoc.interviewScheduling.lastSyncedAt = new Date();
+                jobDoc.interviewScheduling.syncStatus = 'synced';
+                jobDoc.interviewScheduling.syncError = undefined;
+                jobDoc.interviewScheduling.active = true;
+                await jobDoc.save();
+
+                scheduling = jobDoc.interviewScheduling;
+            } catch (error: any) {
+                jobDoc.interviewScheduling.syncStatus = 'failed';
+                jobDoc.interviewScheduling.syncError =
+                    error?.message || 'Failed to sync interview scheduling with Cal.com';
+                jobDoc.interviewScheduling.active = false;
+                await jobDoc.save();
+
+                throw new AppError(
+                    `Interview scheduling sync failed for this job: ${jobDoc.interviewScheduling.syncError}`,
+                    422
+                );
+            }
+        }
+
+        const bookingUrl = calcomService.buildCandidateBookingUrl({
+            applicationId,
+            jobId: String(job._id),
+            candidateName: application.name,
+            candidateEmail: application.email,
+            scheduling,
+        });
 
         const jobTitle =
             application.jobId && typeof application.jobId === 'object'
@@ -79,45 +294,133 @@ export class InterviewService {
             to: application.email,
             candidateName: application.name,
             jobTitle,
-            bookingUrl: url.toString(),
+            bookingUrl,
         });
 
         await Application.findByIdAndUpdate(applicationId, { status: 'interview' });
-        return url.toString();
+
+        await logApplicationActivity({
+            applicationId: application._id,
+            type: 'interview.invite_sent',
+            title: 'Interview Invite Sent',
+            description: 'Interview invite email was sent with booking link.',
+            actorType: actorId ? 'user' : 'system',
+            actorId,
+            metadata: {
+                bookingUrl,
+                jobId: String(job._id),
+                eventTypeId: scheduling?.eventTypeId,
+            },
+        });
+        return bookingUrl;
     }
 
     async handleCalcomWebhook(payload: any, headers: IncomingHttpHeaders): Promise<void> {
         const configuredSecret = env.CALCOM_WEBHOOK_SECRET?.trim();
         if (configuredSecret) {
             const headerSecret =
-                String(headers['x-cal-secret-key'] || '') ||
-                String(headers['x-calcom-secret-key'] || '') ||
-                String(headers['x-webhook-secret'] || '');
+                sanitizeHeaderValue(headers['x-cal-secret-key']) ||
+                sanitizeHeaderValue(headers['x-calcom-secret-key']) ||
+                sanitizeHeaderValue(headers['x-webhook-secret']);
 
             if (!headerSecret || headerSecret !== configuredSecret) {
                 throw new AppError('Invalid Cal.com webhook secret', 401);
             }
         }
 
-        const applicationId = String(
-            pickFirst(payload, [
-                'payload.metadata.applicationId',
-                'data.metadata.applicationId',
-                'metadata.applicationId',
-                'payload.booking.metadata.applicationId',
-                'data.booking.metadata.applicationId',
-                'booking.metadata.applicationId',
-                'applicationId',
-            ]) || ''
+        const ids = extractWebhookIdentifiers(payload);
+        const status = parseCalcomStatus(payload);
+        const rawEvent = String(
+            pickFirst(payload, ['triggerEvent', 'event', 'type', 'data.type', 'payload.type']) || ''
         ).trim();
 
+        let applicationId = ids.applicationId;
+
+        if (!applicationId && ids.bookingUid) {
+            const byBooking = await Interview.findOne({ calcomBookingUid: ids.bookingUid }).select(
+                'applicationId'
+            );
+            if (byBooking?.applicationId) {
+                applicationId = String(byBooking.applicationId);
+            }
+        }
+
+        if (!applicationId && ids.candidateEmail && ids.jobId) {
+            const latestByEmailAndJob = await Application.findOne({
+                email: String(ids.candidateEmail).toLowerCase(),
+                jobId: ids.jobId,
+            })
+                .sort({ createdAt: -1 })
+                .select('_id');
+            if (latestByEmailAndJob?._id) {
+                applicationId = String(latestByEmailAndJob._id);
+            }
+        }
+
+        if (!applicationId && ids.candidateEmail && ids.eventTypeId) {
+            const mappedJob = await Job.findOne({
+                'interviewScheduling.eventTypeId': ids.eventTypeId,
+            }).select('_id');
+
+            if (mappedJob?._id) {
+                const latestByEmailAndEventJob = await Application.findOne({
+                    email: String(ids.candidateEmail).toLowerCase(),
+                    jobId: mappedJob._id,
+                })
+                    .sort({ createdAt: -1 })
+                    .select('_id');
+
+                if (latestByEmailAndEventJob?._id) {
+                    applicationId = String(latestByEmailAndEventJob._id);
+                }
+            }
+        }
+
         if (!applicationId) {
+            console.error('Cal.com webhook ignored: unable to map payload to application', {
+                ids,
+                rawEvent,
+            });
             return;
         }
 
-        const application = await Application.findById(applicationId).select('_id');
+        const application = await Application.findById(applicationId)
+            .select('_id name email jobId')
+            .populate('jobId', 'title interviewScheduling');
         if (!application) {
+            console.error('Cal.com webhook ignored: mapped application not found', {
+                applicationId,
+            });
             return;
+        }
+
+        if (ids.jobId && String(application.jobId?._id || application.jobId) !== String(ids.jobId)) {
+            console.error('Cal.com webhook ignored: job mismatch for application', {
+                applicationId,
+                jobIdFromWebhook: ids.jobId,
+            });
+            return;
+        }
+
+        const appJobId = String((application.jobId as any)?._id || application.jobId || '');
+        if (!appJobId) {
+            console.error('Cal.com webhook ignored: application has no jobId', {
+                applicationId,
+            });
+            return;
+        }
+
+        if (ids.eventTypeId) {
+            const job = await Job.findById(appJobId).select('interviewScheduling.eventTypeId');
+            const expectedEventTypeId = job?.interviewScheduling?.eventTypeId;
+            if (expectedEventTypeId && expectedEventTypeId !== ids.eventTypeId) {
+                console.error('Cal.com webhook ignored: event type mismatch', {
+                    applicationId,
+                    expectedEventTypeId,
+                    receivedEventTypeId: ids.eventTypeId,
+                });
+                return;
+            }
         }
 
         const startRaw = pickFirst(payload, [
@@ -132,9 +435,6 @@ export class InterviewService {
         ]);
 
         const scheduledTime = startRaw ? new Date(String(startRaw)) : null;
-        if (!scheduledTime || Number.isNaN(scheduledTime.getTime())) {
-            return;
-        }
 
         const meetLink =
             String(
@@ -147,12 +447,11 @@ export class InterviewService {
                     'booking.location',
                     'meetingUrl',
                     'location',
-                ]) || env.CALCOM_BOOKING_URL || ''
+                ]) || ''
             ).trim();
 
-        if (!meetLink) {
-            throw new AppError('No meeting URL found in Cal.com webhook payload', 400);
-        }
+        const validScheduledTime =
+            scheduledTime && !Number.isNaN(scheduledTime.getTime()) ? scheduledTime : undefined;
 
         const interviewer =
             String(
@@ -161,24 +460,169 @@ export class InterviewService {
                     'data.organizer.name',
                     'booking.organizer.name',
                     'organizer.name',
-                ]) || 'HR Team'
-            ).trim() || 'HR Team';
+                ]) || env.CALCOM_DEFAULT_ORGANIZER
+            ).trim() || env.CALCOM_DEFAULT_ORGANIZER;
 
-        const status = parseCalcomStatus(payload);
+        const fingerprint = buildWebhookFingerprint({
+            bookingUid: ids.bookingUid,
+            bookingId: ids.bookingId,
+            eventTypeId: ids.eventTypeId,
+            status,
+            scheduledTimeIso: validScheduledTime?.toISOString(),
+            meetLink,
+            rawEvent,
+        });
 
-        await Interview.findOneAndUpdate(
+        const previousInterview = await Interview.findOne({ applicationId: application._id }).select(
+            'scheduledTime meetLink status interviewer lastWebhookHash'
+        );
+
+        if (previousInterview?.lastWebhookHash === fingerprint) {
+            return;
+        }
+
+        const nextScheduledTime =
+            validScheduledTime || previousInterview?.scheduledTime || new Date();
+
+        const nextMeetLink =
+            meetLink || String(previousInterview?.meetLink || env.CALCOM_BOOKING_URL || '').trim();
+
+        if (!nextMeetLink) {
+            console.error('Cal.com webhook ignored: no meeting link could be derived', {
+                applicationId,
+                ids,
+            });
+            return;
+        }
+
+        const updatedInterview = await Interview.findOneAndUpdate(
             { applicationId: application._id },
             {
                 applicationId: application._id,
-                scheduledTime,
-                meetLink,
+                scheduledTime: nextScheduledTime,
+                meetLink: nextMeetLink,
                 interviewer,
                 status,
+                calcomBookingId: ids.bookingId,
+                calcomBookingUid: ids.bookingUid,
+                calcomEventTypeId: ids.eventTypeId,
+                lastWebhookEvent: rawEvent,
+                lastWebhookHash: fingerprint,
+                lastWebhookAt: new Date(),
             },
             { upsert: true, new: true, runValidators: true }
         );
 
+        // Keep the candidate in the interview stage even if they cancel/reschedule so
+        // hiring users can manage follow-ups from a consistent pipeline stage.
         await Application.findByIdAndUpdate(application._id, { status: 'interview' });
+
+        const timelineTitleByStatus: Record<InterviewStatus, string> = {
+            scheduled: 'Interview Scheduled',
+            rescheduled: 'Interview Rescheduled',
+            cancelled: 'Interview Cancelled',
+            completed: 'Interview Completed',
+            'no-show': 'Interview Marked No-show',
+        };
+
+        const timelineDescriptionByStatus: Record<InterviewStatus, string> = {
+            scheduled: 'Interview booking was confirmed by candidate.',
+            rescheduled: 'Interview booking was rescheduled by candidate.',
+            cancelled: 'Interview booking was cancelled.',
+            completed: 'Interview booking was marked completed.',
+            'no-show': 'Interview booking was marked as no-show.',
+        };
+
+        await logApplicationActivity({
+            applicationId: application._id,
+            type: 'interview.webhook_updated',
+            title: timelineTitleByStatus[status],
+            description: timelineDescriptionByStatus[status],
+            actorType: 'candidate',
+            metadata: {
+                status,
+                scheduledTime: nextScheduledTime.toISOString(),
+                meetLink: nextMeetLink,
+                bookingUid: ids.bookingUid,
+                bookingId: ids.bookingId,
+                eventTypeId: ids.eventTypeId,
+                webhookEvent: rawEvent,
+            },
+        });
+
+        const wasSameSchedule =
+            previousInterview &&
+            previousInterview.scheduledTime?.getTime() === nextScheduledTime.getTime() &&
+            String(previousInterview.meetLink || '') === nextMeetLink &&
+            previousInterview.status === status;
+
+        const shouldNotifyBooking = !wasSameSchedule && (status === 'scheduled' || status === 'rescheduled');
+        if (!shouldNotifyBooking) {
+            return;
+        }
+
+        const jobTitle =
+            application.jobId && typeof application.jobId === 'object'
+                ? String((application.jobId as any).title || 'the role')
+                : 'the role';
+
+        try {
+            await sendInterviewScheduledForCandidateEmail({
+                to: application.email,
+                candidateName: application.name,
+                jobTitle,
+                interviewer,
+                scheduledTime: nextScheduledTime,
+                meetLink: nextMeetLink,
+            });
+        } catch (error) {
+            console.error('Failed sending interview confirmation to candidate:', error);
+        }
+
+        try {
+            const hrRoleNames = ['super-admin', 'admin', 'hr', 'hr-admin', 'hr-manager'];
+            const hrRoles = await Role.find({ name: { $in: hrRoleNames } }).select('_id');
+            const hrRoleIds = hrRoles.map((role) => role._id);
+
+            if (hrRoleIds.length === 0) {
+                return;
+            }
+
+            const recipients = await User.find({
+                isActive: true,
+                role: { $in: hrRoleIds },
+                email: { $exists: true, $ne: '' },
+            }).select('_id email');
+
+            const hrEmails = recipients.map((user) => String(user.email).trim()).filter(Boolean);
+
+            if (hrEmails.length > 0) {
+                await sendInterviewScheduledForHrEmail({
+                    to: hrEmails,
+                    candidateName: application.name,
+                    candidateEmail: application.email,
+                    jobTitle,
+                    interviewer,
+                    scheduledTime: nextScheduledTime,
+                    meetLink: nextMeetLink,
+                });
+            }
+
+            if (recipients.length > 0) {
+                await InterviewNotification.insertMany(
+                    recipients.map((user) => ({
+                        userId: user._id,
+                        applicationId: application._id,
+                        interviewId: updatedInterview?._id,
+                        title: 'Interview Scheduled',
+                        message: `${application.name} has booked an interview for ${jobTitle}.`,
+                        link: `/hiring/interviews`,
+                    }))
+                );
+            }
+        } catch (error) {
+            console.error('Failed sending HR interview notifications:', error);
+        }
     }
 
     async listInterviews(filters: ListInterviewsInput): Promise<{
@@ -233,7 +677,11 @@ export class InterviewService {
         };
     }
 
-    async updateInterviewStatus(id: string, status: InterviewStatus): Promise<IInterview> {
+    async updateInterviewStatus(
+        id: string,
+        status: InterviewStatus,
+        actorId?: string
+    ): Promise<IInterview> {
         const interview = await Interview.findByIdAndUpdate(
             id,
             { status },
@@ -249,6 +697,22 @@ export class InterviewService {
 
         if (!interview) {
             throw new AppError('Interview not found', 404);
+        }
+
+        const appId = (interview.applicationId as any)?._id;
+        if (appId) {
+            await logApplicationActivity({
+                applicationId: appId,
+                type: 'interview.status_updated',
+                title: 'Interview Status Updated',
+                description: `Interview status changed to ${status}.`,
+                actorType: actorId ? 'user' : 'system',
+                actorId,
+                metadata: {
+                    interviewId: interview._id,
+                    status,
+                },
+            });
         }
 
         return interview;
@@ -325,6 +789,21 @@ export class InterviewService {
             },
             { upsert: true, new: true, runValidators: true }
         ).populate('createdBy', 'name email');
+
+        await logApplicationActivity({
+            applicationId: interview.applicationId,
+            type: 'interview.notes_saved',
+            title: 'Interview Notes Saved',
+            description: 'Interviewer evaluation notes were saved.',
+            actorType: 'user',
+            actorId: createdBy,
+            metadata: {
+                interviewId,
+                rating: data.rating,
+                technicalScore: data.technicalScore,
+                communicationScore: data.communicationScore,
+            },
+        });
 
         return note;
     }

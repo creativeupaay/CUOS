@@ -8,6 +8,29 @@ import {
 } from '@/features/hiring/hiringApi';
 import type { EmploymentType } from '@/features/hiring/types/types';
 
+const WEEKDAY_OPTIONS = [
+    { value: 0, label: 'Sun' },
+    { value: 1, label: 'Mon' },
+    { value: 2, label: 'Tue' },
+    { value: 3, label: 'Wed' },
+    { value: 4, label: 'Thu' },
+    { value: 5, label: 'Fri' },
+    { value: 6, label: 'Sat' },
+];
+
+function toLocalDateTimeInput(value?: string) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (num: number) => String(num).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const mm = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const min = pad(date.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
 // ── Field component ───────────────────────────────────────
 function Field({
     label,
@@ -59,6 +82,20 @@ interface FormState {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    interviewSchedulingEnabled: boolean;
+    interviewSchedulingActive: boolean;
+    interviewTimezone: string;
+    interviewOrganizerName: string;
+    interviewAvailableFrom: string;
+    interviewAvailableTo: string;
+    interviewWeekdays: number[];
+    interviewSlotStart: string;
+    interviewSlotEnd: string;
+    interviewDurationMinutes: number;
+    interviewSlotIntervalMinutes: number;
+    interviewMinimumBookingNoticeMinutes: number;
+    interviewBeforeEventBufferMinutes: number;
+    interviewAfterEventBufferMinutes: number;
 }
 
 interface FormErrors {
@@ -67,6 +104,7 @@ interface FormErrors {
     location?: string;
     description?: string;
     requirements?: string;
+    interviewScheduling?: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -78,6 +116,20 @@ const EMPTY_FORM: FormState = {
     employmentType: 'full-time',
     isHiring: false,
     assignmentRequired: false,
+    interviewSchedulingEnabled: false,
+    interviewSchedulingActive: false,
+    interviewTimezone: 'Asia/Kolkata',
+    interviewOrganizerName: 'HR Team',
+    interviewAvailableFrom: '',
+    interviewAvailableTo: '',
+    interviewWeekdays: [1, 2, 3, 4, 5],
+    interviewSlotStart: '10:00',
+    interviewSlotEnd: '18:00',
+    interviewDurationMinutes: 45,
+    interviewSlotIntervalMinutes: 30,
+    interviewMinimumBookingNoticeMinutes: 60,
+    interviewBeforeEventBufferMinutes: 5,
+    interviewAfterEventBufferMinutes: 5,
 };
 
 // ── Component ─────────────────────────────────────────────
@@ -103,6 +155,7 @@ export default function HiringJobFormPage() {
     useEffect(() => {
         if (isEdit && jobData?.data.job) {
             const j = jobData.data.job;
+            const scheduling = j.interviewScheduling;
             setForm({
                 title: j.title,
                 department: j.department,
@@ -112,6 +165,25 @@ export default function HiringJobFormPage() {
                 employmentType: j.employmentType,
                 isHiring: j.isHiring,
                 assignmentRequired: j.assignmentRequired,
+                interviewSchedulingEnabled: Boolean(scheduling?.enabled),
+                interviewSchedulingActive: Boolean(scheduling?.active),
+                interviewTimezone: scheduling?.timezone || 'Asia/Kolkata',
+                interviewOrganizerName: scheduling?.organizerName || 'HR Team',
+                interviewAvailableFrom: toLocalDateTimeInput(scheduling?.availableFrom),
+                interviewAvailableTo: toLocalDateTimeInput(scheduling?.availableTo),
+                interviewWeekdays: scheduling?.weekdays?.length
+                    ? scheduling.weekdays
+                    : [1, 2, 3, 4, 5],
+                interviewSlotStart: scheduling?.dailySlots?.[0]?.startTime || '10:00',
+                interviewSlotEnd: scheduling?.dailySlots?.[0]?.endTime || '18:00',
+                interviewDurationMinutes: scheduling?.durationMinutes || 45,
+                interviewSlotIntervalMinutes: scheduling?.slotIntervalMinutes || 30,
+                interviewMinimumBookingNoticeMinutes:
+                    scheduling?.minimumBookingNoticeMinutes || 60,
+                interviewBeforeEventBufferMinutes:
+                    scheduling?.beforeEventBufferMinutes || 5,
+                interviewAfterEventBufferMinutes:
+                    scheduling?.afterEventBufferMinutes || 5,
             });
         }
     }, [isEdit, jobData]);
@@ -123,7 +195,18 @@ export default function HiringJobFormPage() {
             e.target.type === 'checkbox'
                 ? (e.target as HTMLInputElement).checked
                 : e.target.value;
-        setForm((prev) => ({ ...prev, [key]: value }));
+        setForm((prev) => {
+            if (key === 'interviewSchedulingEnabled') {
+                const enabled = Boolean(value);
+                return {
+                    ...prev,
+                    interviewSchedulingEnabled: enabled,
+                    interviewSchedulingActive: enabled,
+                };
+            }
+
+            return { ...prev, [key]: value };
+        });
         if (errors[key as keyof FormErrors]) {
             setErrors((prev) => ({ ...prev, [key]: undefined }));
         }
@@ -136,6 +219,24 @@ export default function HiringJobFormPage() {
         if (!form.location.trim()) e.location = 'Location is required';
         if (!form.description.trim()) e.description = 'Description is required';
         if (!form.requirements.trim()) e.requirements = 'Requirements are required';
+
+        if (form.interviewSchedulingEnabled) {
+            if (!form.interviewWeekdays.length) {
+                e.interviewScheduling = 'Select at least one available weekday';
+            } else if (!form.interviewSlotStart || !form.interviewSlotEnd) {
+                e.interviewScheduling = 'Set a valid daily slot range';
+            } else if (form.interviewSlotEnd <= form.interviewSlotStart) {
+                e.interviewScheduling = 'Daily slot end time must be later than start time';
+            } else if (
+                form.interviewAvailableFrom &&
+                form.interviewAvailableTo &&
+                new Date(form.interviewAvailableFrom).getTime() >
+                    new Date(form.interviewAvailableTo).getTime()
+            ) {
+                e.interviewScheduling = 'Availability end must be later than start';
+            }
+        }
+
         setErrors(e);
         return Object.keys(e).length === 0;
     };
@@ -145,11 +246,46 @@ export default function HiringJobFormPage() {
         setServerError('');
         if (!validate()) return;
 
+        const payload = {
+            title: form.title,
+            department: form.department,
+            location: form.location,
+            description: form.description,
+            requirements: form.requirements,
+            employmentType: form.employmentType,
+            isHiring: form.isHiring,
+            assignmentRequired: form.assignmentRequired,
+            interviewScheduling: {
+                enabled: form.interviewSchedulingEnabled,
+                active: form.interviewSchedulingEnabled,
+                timezone: form.interviewTimezone,
+                organizerName: form.interviewOrganizerName,
+                availableFrom: form.interviewAvailableFrom
+                    ? new Date(form.interviewAvailableFrom).toISOString()
+                    : undefined,
+                availableTo: form.interviewAvailableTo
+                    ? new Date(form.interviewAvailableTo).toISOString()
+                    : undefined,
+                weekdays: form.interviewWeekdays,
+                dailySlots: [
+                    {
+                        startTime: form.interviewSlotStart,
+                        endTime: form.interviewSlotEnd,
+                    },
+                ],
+                durationMinutes: Number(form.interviewDurationMinutes),
+                slotIntervalMinutes: Number(form.interviewSlotIntervalMinutes),
+                minimumBookingNoticeMinutes: Number(form.interviewMinimumBookingNoticeMinutes),
+                beforeEventBufferMinutes: Number(form.interviewBeforeEventBufferMinutes),
+                afterEventBufferMinutes: Number(form.interviewAfterEventBufferMinutes),
+            },
+        };
+
         try {
             if (isEdit && id) {
-                await updateJob({ id, data: form }).unwrap();
+                await updateJob({ id, data: payload }).unwrap();
             } else {
-                await createJob(form).unwrap();
+                await createJob(payload).unwrap();
             }
             navigate('/hiring/jobs');
         } catch (err: any) {
@@ -474,6 +610,288 @@ export default function HiringJobFormPage() {
                             </p>
                         </div>
                     </label>
+
+                    <div
+                        className="rounded-lg border p-4 mt-2 flex flex-col gap-4"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p
+                                    className="text-sm font-medium"
+                                    style={{ color: 'var(--color-text-primary)' }}
+                                >
+                                    Interview Scheduling (Cal.com)
+                                </p>
+                                <p
+                                    className="text-xs"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                >
+                                    Configure role-specific interview slots and sync to Cal.com.
+                                </p>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={form.interviewSchedulingEnabled}
+                                    onChange={set('interviewSchedulingEnabled')}
+                                />
+                                <span
+                                    className="text-xs"
+                                    style={{ color: 'var(--color-text-secondary)' }}
+                                >
+                                    Enabled
+                                </span>
+                            </label>
+                        </div>
+
+                        {isEdit && jobData?.data.job?.interviewScheduling && (
+                            <div
+                                className="rounded-md border px-3 py-2 text-xs"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-secondary)',
+                                    backgroundColor: 'var(--color-bg-subtle)',
+                                }}
+                            >
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <span>
+                                        Sync: <strong>{jobData.data.job.interviewScheduling.syncStatus}</strong>
+                                    </span>
+                                    <span>
+                                        Active: <strong>{jobData.data.job.interviewScheduling.active ? 'yes' : 'no'}</strong>
+                                    </span>
+                                    <span>
+                                        URL: <strong>{jobData.data.job.interviewScheduling.bookingUrl ? 'available' : 'missing'}</strong>
+                                    </span>
+                                    <span>
+                                        Last synced:{' '}
+                                        <strong>
+                                            {jobData.data.job.interviewScheduling.lastSyncedAt
+                                                ? new Date(
+                                                      jobData.data.job.interviewScheduling.lastSyncedAt
+                                                  ).toLocaleString('en-IN')
+                                                : '—'}
+                                        </strong>
+                                    </span>
+                                </div>
+                                {jobData.data.job.interviewScheduling.syncError && (
+                                    <p
+                                        className="mt-2"
+                                        style={{ color: 'var(--color-danger)' }}
+                                    >
+                                        Sync error: {jobData.data.job.interviewScheduling.syncError}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {form.interviewSchedulingEnabled && (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Field label="Timezone">
+                                        <input
+                                            type="text"
+                                            value={form.interviewTimezone}
+                                            onChange={set('interviewTimezone')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="Organizer">
+                                        <input
+                                            type="text"
+                                            value={form.interviewOrganizerName}
+                                            onChange={set('interviewOrganizerName')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Field label="Available From">
+                                        <input
+                                            type="datetime-local"
+                                            value={form.interviewAvailableFrom}
+                                            onChange={set('interviewAvailableFrom')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="Available To">
+                                        <input
+                                            type="datetime-local"
+                                            value={form.interviewAvailableTo}
+                                            onChange={set('interviewAvailableTo')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                </div>
+
+                                <div>
+                                    <p
+                                        className="text-xs font-medium mb-2"
+                                        style={{ color: 'var(--color-text-secondary)' }}
+                                    >
+                                        Available Weekdays
+                                    </p>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        {WEEKDAY_OPTIONS.map((item) => {
+                                            const checked = form.interviewWeekdays.includes(item.value);
+                                            return (
+                                                <label
+                                                    key={item.value}
+                                                    className="flex items-center gap-1.5 text-xs"
+                                                    style={{ color: 'var(--color-text-secondary)' }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => {
+                                                            setForm((prev) => {
+                                                                const next = e.target.checked
+                                                                    ? [...prev.interviewWeekdays, item.value]
+                                                                    : prev.interviewWeekdays.filter(
+                                                                          (value) => value !== item.value
+                                                                      );
+                                                                return {
+                                                                    ...prev,
+                                                                    interviewWeekdays: next.sort((a, b) => a - b),
+                                                                };
+                                                            });
+                                                        }}
+                                                    />
+                                                    {item.label}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Field label="Daily Slot Start">
+                                        <input
+                                            type="time"
+                                            value={form.interviewSlotStart}
+                                            onChange={set('interviewSlotStart')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="Daily Slot End">
+                                        <input
+                                            type="time"
+                                            value={form.interviewSlotEnd}
+                                            onChange={set('interviewSlotEnd')}
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <Field label="Duration (min)">
+                                        <input
+                                            type="number"
+                                            min={10}
+                                            max={240}
+                                            value={form.interviewDurationMinutes}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    interviewDurationMinutes: Number(e.target.value) || 0,
+                                                }))
+                                            }
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="Slot Interval (min)">
+                                        <input
+                                            type="number"
+                                            min={5}
+                                            max={180}
+                                            value={form.interviewSlotIntervalMinutes}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    interviewSlotIntervalMinutes:
+                                                        Number(e.target.value) || 0,
+                                                }))
+                                            }
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="Min Notice (min)">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={43200}
+                                            value={form.interviewMinimumBookingNoticeMinutes}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    interviewMinimumBookingNoticeMinutes:
+                                                        Number(e.target.value) || 0,
+                                                }))
+                                            }
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Field label="Before Buffer (min)">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={120}
+                                            value={form.interviewBeforeEventBufferMinutes}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    interviewBeforeEventBufferMinutes:
+                                                        Number(e.target.value) || 0,
+                                                }))
+                                            }
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                    <Field label="After Buffer (min)">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={120}
+                                            value={form.interviewAfterEventBufferMinutes}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    interviewAfterEventBufferMinutes:
+                                                        Number(e.target.value) || 0,
+                                                }))
+                                            }
+                                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                            style={inputStyle}
+                                        />
+                                    </Field>
+                                </div>
+                            </>
+                        )}
+
+                        {errors.interviewScheduling && (
+                            <p
+                                className="text-xs"
+                                style={{ color: 'var(--color-danger)' }}
+                            >
+                                {errors.interviewScheduling}
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── Submit ───────────────────────────────── */}
