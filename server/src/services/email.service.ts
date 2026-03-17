@@ -381,10 +381,16 @@ export async function sendHiringAssignmentEmail(opts: {
     jobTitle: string;
     assignmentTitle: string;
     assignmentUrl: string;
-    timeLimitHours: number;
+    timeLimitDays: number;
+    deadlineAt: Date;
 }): Promise<void> {
-    const { to, candidateName, jobTitle, assignmentTitle, assignmentUrl, timeLimitHours } = opts;
+    const { to, candidateName, jobTitle, assignmentTitle, assignmentUrl, timeLimitDays, deadlineAt } =
+        opts;
     const client = getResend();
+    const deadlineLabel = new Date(deadlineAt).toLocaleString('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    });
 
     await sendEmailOrThrow(client, {
         from: env.RESEND_FROM_EMAIL,
@@ -413,7 +419,11 @@ export async function sendHiringAssignmentEmail(opts: {
               </p>
               <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
                 Assignment: <strong>${assignmentTitle}</strong><br/>
-                Time Limit: <strong>${timeLimitHours} hours</strong>
+                Submit within: <strong>${timeLimitDays} day${timeLimitDays > 1 ? 's' : ''}</strong><br/>
+                Form expires on: <strong>${deadlineLabel}</strong>
+              </p>
+              <p style="margin:0 0 16px;font-size:13px;color:#6B7280;line-height:1.6;">
+                You can still submit after expiry, but your submission will be marked as late.
               </p>
               <table cellpadding="0" cellspacing="0">
                 <tr>

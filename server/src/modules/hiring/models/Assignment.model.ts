@@ -13,7 +13,8 @@ export interface IAssignment extends Document {
     title: string;
     description: string;
     instructions: string;
-    timeLimitHours: number;
+    timeLimitDays: number;
+    timeLimitHours?: number;
     submissionFields: IAssignmentSubmissionFields;
     createdAt: Date;
     updatedAt: Date;
@@ -25,7 +26,9 @@ const AssignmentSchema = new Schema<IAssignment>(
         title: { type: String, required: true, trim: true },
         description: { type: String, required: true, trim: true },
         instructions: { type: String, required: true, trim: true },
-        timeLimitHours: { type: Number, required: true, min: 1 },
+        timeLimitDays: { type: Number, required: true, min: 1, default: 2 },
+        // Legacy field retained for backward compatibility with existing records.
+        timeLimitHours: { type: Number, min: 1 },
         submissionFields: {
             githubLink: { type: Boolean, default: true },
             demoLink: { type: Boolean, default: true },

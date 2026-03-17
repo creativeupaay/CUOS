@@ -103,6 +103,7 @@ export class JobService {
                     scheduling: job.interviewScheduling as any,
                 });
 
+                job.interviewScheduling.scheduleId = synced.scheduleId;
                 job.interviewScheduling.eventTypeId = synced.eventTypeId;
                 job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
                 job.interviewScheduling.bookingUrl = synced.bookingUrl;
@@ -220,6 +221,7 @@ export class JobService {
                     scheduling: job.interviewScheduling as any,
                 });
 
+                job.interviewScheduling.scheduleId = synced.scheduleId;
                 job.interviewScheduling.eventTypeId = synced.eventTypeId;
                 job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
                 job.interviewScheduling.bookingUrl = synced.bookingUrl;

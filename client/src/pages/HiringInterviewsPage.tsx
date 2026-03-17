@@ -6,6 +6,7 @@ import {
     useSaveInterviewNoteMutation,
     useUpdateInterviewStatusMutation,
 } from '@/features/hiring/hiringApi';
+import HiringInterviewTabs from '@/features/hiring/components/HiringInterviewTabs';
 import type { InterviewStatus } from '@/features/hiring/types/types';
 
 const STATUS_OPTIONS: InterviewStatus[] = [
@@ -148,14 +149,10 @@ export default function HiringInterviewsPage() {
 
     return (
         <div className="px-8 py-6 max-w-[1380px] mx-auto" style={{ backgroundColor: 'var(--color-bg-app)', minHeight: '100vh' }}>
-            <div className="mb-6">
-                <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Interviews
-                </h1>
-                <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                    Track interviews and capture structured interviewer evaluation notes.
-                </p>
-            </div>
+            <HiringInterviewTabs
+                title="Interviews"
+                description="Track interviews and capture structured interviewer evaluation notes."
+            />
 
             <div className="grid grid-cols-5 gap-4 mb-4">
                 <input

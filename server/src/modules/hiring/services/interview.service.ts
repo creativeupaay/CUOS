@@ -230,7 +230,12 @@ export class InterviewService {
 
         let scheduling = job.interviewScheduling;
         const hasJobScheduling = Boolean(scheduling?.enabled);
-        if (hasJobScheduling && (!scheduling?.active || scheduling?.syncStatus !== 'synced')) {
+        if (
+            hasJobScheduling &&
+            (!scheduling?.active ||
+                scheduling?.syncStatus !== 'synced' ||
+                !scheduling?.scheduleId)
+        ) {
             const jobDoc = await Job.findById(String(job._id));
 
             if (!jobDoc?.interviewScheduling?.enabled) {
@@ -252,6 +257,7 @@ export class InterviewService {
                     scheduling: jobDoc.interviewScheduling as any,
                 });
 
+                jobDoc.interviewScheduling.scheduleId = synced.scheduleId;
                 jobDoc.interviewScheduling.eventTypeId = synced.eventTypeId;
                 jobDoc.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
                 jobDoc.interviewScheduling.bookingUrl = synced.bookingUrl;

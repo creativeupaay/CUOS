@@ -6,6 +6,7 @@ import {
     ExternalLink,
     Loader2,
     Pencil,
+    Clock3,
     XCircle,
 } from 'lucide-react';
 import {
@@ -17,9 +18,11 @@ import {
     useUpdateAssignmentMutation,
     useUpdateApplicationStatusMutation,
 } from '@/features/hiring/hiringApi';
-import type { AssignmentSubmissionFields } from '@/features/hiring/types/types';
+import type { AssignmentSubmission, AssignmentSubmissionFields } from '@/features/hiring/types/types';
 
 type AssignmentTab = 'assignments' | 'assignment-review';
+type SubmissionTimingFilter = 'all' | 'on-time' | 'late';
+type SubmissionActionState = 'rejected' | 'invited';
 
 const DEFAULT_SUBMISSION_FIELDS: AssignmentSubmissionFields = {
     githubLink: true,
@@ -36,7 +39,10 @@ export default function AssignmentReviewPage() {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [instructions, setInstructions] = useState('');
-    const [timeLimitHours, setTimeLimitHours] = useState<number>(24);
+    const [timeLimitDays, setTimeLimitDays] = useState<number>(2);
+    const [submissionTimingFilter, setSubmissionTimingFilter] =
+        useState<SubmissionTimingFilter>('all');
+    const [submissionActionById, setSubmissionActionById] = useState<Record<string, SubmissionActionState>>({});
     const [submissionFields, setSubmissionFields] = useState<AssignmentSubmissionFields>(
         DEFAULT_SUBMISSION_FIELDS
     );
@@ -60,6 +66,61 @@ export default function AssignmentReviewPage() {
         }
     );
     const submissions = submissionsData?.data.submissions || [];
+    const filteredSubmissions = useMemo(
+        () =>
+            submissions.filter((submission) => {
+                if (submissionTimingFilter === 'late') {
+                    return Boolean(submission.submittedAfterDeadline);
+                }
+                if (submissionTimingFilter === 'on-time') {
+                    return !submission.submittedAfterDeadline;
+                }
+                return true;
+            }),
+        [submissions, submissionTimingFilter]
+    );
+
+    const getSubmissionActionState = (submission: AssignmentSubmission): SubmissionActionState | null => {
+        const localState = submissionActionById[submission._id];
+        if (localState) {
+            return localState;
+        }
+
+        const candidate =
+            typeof submission.applicationId === 'object' ? submission.applicationId : undefined;
+        if (candidate?.status === 'rejected') {
+            return 'rejected';
+        }
+        if (candidate?.status === 'interview') {
+            return 'invited';
+        }
+
+        return null;
+    };
+
+    const sortedSubmissions = useMemo(
+        () =>
+            [...filteredSubmissions].sort((a, b) => {
+                const aResolved = Boolean(getSubmissionActionState(a));
+                const bResolved = Boolean(getSubmissionActionState(b));
+
+                if (aResolved === bResolved) {
+                    return 0;
+                }
+
+                return aResolved ? 1 : -1;
+            }),
+        [filteredSubmissions, submissionActionById]
+    );
+
+    const formatSubmissionTime = (value: string) =>
+        new Date(value).toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
 
     const [createAssignment, { isLoading: creatingAssignment }] = useCreateAssignmentMutation();
     const [updateAssignment, { isLoading: updatingAssignment }] = useUpdateAssignmentMutation();
@@ -79,7 +140,7 @@ export default function AssignmentReviewPage() {
             setTitle('');
             setDescription('');
             setInstructions('');
-            setTimeLimitHours(24);
+            setTimeLimitDays(2);
             setSubmissionFields(DEFAULT_SUBMISSION_FIELDS);
             return;
         }
@@ -87,7 +148,7 @@ export default function AssignmentReviewPage() {
         setTitle(selectedAssignment.title || '');
         setDescription(selectedAssignment.description || '');
         setInstructions(selectedAssignment.instructions || '');
-        setTimeLimitHours(selectedAssignment.timeLimitHours || 24);
+        setTimeLimitDays(selectedAssignment.timeLimitDays || 2);
         setSubmissionFields({
             ...DEFAULT_SUBMISSION_FIELDS,
             ...selectedAssignment.submissionFields,
@@ -103,7 +164,7 @@ export default function AssignmentReviewPage() {
             title: title.trim(),
             description: description.trim(),
             instructions: instructions.trim(),
-            timeLimitHours,
+            timeLimitDays,
             submissionFields,
         };
 
@@ -116,7 +177,7 @@ export default function AssignmentReviewPage() {
                     title: payload.title,
                     description: payload.description,
                     instructions: payload.instructions,
-                    timeLimitHours: payload.timeLimitHours,
+                    timeLimitDays: payload.timeLimitDays,
                     submissionFields: payload.submissionFields,
                 },
             }).unwrap();
@@ -128,10 +189,14 @@ export default function AssignmentReviewPage() {
         setIsEditing(false);
     }
 
-    async function moveToInterview(applicationId: string) {
+    async function moveToInterview(submissionId: string, applicationId: string) {
         setInviteError('');
         try {
             await sendInterviewInvite(applicationId).unwrap();
+            setSubmissionActionById((prev) => ({
+                ...prev,
+                [submissionId]: 'invited',
+            }));
         } catch (error: any) {
             setInviteError(
                 error?.data?.message ||
@@ -140,8 +205,12 @@ export default function AssignmentReviewPage() {
         }
     }
 
-    async function rejectCandidate(applicationId: string) {
-        await updateStatus({ id: applicationId, data: { status: 'rejected' } });
+    async function rejectCandidate(submissionId: string, applicationId: string) {
+        await updateStatus({ id: applicationId, data: { status: 'rejected' } }).unwrap();
+        setSubmissionActionById((prev) => ({
+            ...prev,
+            [submissionId]: 'rejected',
+        }));
     }
 
     return (
@@ -333,21 +402,29 @@ export default function AssignmentReviewPage() {
                             }}
                         />
 
-                        <input
-                            type="number"
-                            value={timeLimitHours}
-                            onChange={(e) =>
-                                setTimeLimitHours(Math.max(1, Number(e.target.value) || 1))
-                            }
-                            min={1}
-                            disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
-                            className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
-                            style={{
-                                borderColor: 'var(--color-border-default)',
-                                backgroundColor: 'var(--color-bg-surface)',
-                                color: 'var(--color-text-primary)',
-                            }}
-                        />
+                        <div className="relative w-full">
+                            <input
+                                type="number"
+                                value={timeLimitDays}
+                                onChange={(e) =>
+                                    setTimeLimitDays(Math.max(1, Number(e.target.value) || 1))
+                                }
+                                min={1}
+                                disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                className="w-full h-10 pl-3 pr-9 text-sm rounded-lg border outline-none"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'var(--color-bg-surface)',
+                                    color: 'var(--color-text-primary)',
+                                }}
+                            />
+                            <span
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                days
+                            </span>
+                        </div>
 
                         <div className="pt-1">
                             <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
@@ -446,10 +523,45 @@ export default function AssignmentReviewPage() {
                         backgroundColor: 'var(--color-bg-surface)',
                     }}
                 >
-                    <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    <div
+                        className="px-4 py-3 border-b flex items-center justify-between gap-3"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
                         <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                             Candidate Submissions{selectedJob?.title ? ` - ${selectedJob.title}` : ''}
                         </h2>
+
+                        <div className="flex items-center gap-2">
+                            {(
+                                [
+                                    { key: 'all', label: 'All' },
+                                    { key: 'on-time', label: 'On Time' },
+                                    { key: 'late', label: 'Late' },
+                                ] as { key: SubmissionTimingFilter; label: string }[]
+                            ).map((filterOption) => (
+                                <button
+                                    key={filterOption.key}
+                                    onClick={() => setSubmissionTimingFilter(filterOption.key)}
+                                    className="px-2.5 py-1.5 rounded-md border text-xs font-medium"
+                                    style={{
+                                        borderColor:
+                                            submissionTimingFilter === filterOption.key
+                                                ? 'var(--color-primary)'
+                                                : 'var(--color-border-default)',
+                                        backgroundColor:
+                                            submissionTimingFilter === filterOption.key
+                                                ? 'var(--color-primary-soft)'
+                                                : 'var(--color-bg-surface)',
+                                        color:
+                                            submissionTimingFilter === filterOption.key
+                                                ? 'var(--color-primary-darker)'
+                                                : 'var(--color-text-secondary)',
+                                    }}
+                                >
+                                    {filterOption.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     {!assignmentId ? (
@@ -466,11 +578,16 @@ export default function AssignmentReviewPage() {
                             <AlertCircle size={16} />
                             No submissions yet.
                         </div>
+                    ) : filteredSubmissions.length === 0 ? (
+                        <div className="p-10 flex items-center justify-center gap-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            <AlertCircle size={16} />
+                            No {submissionTimingFilter === 'all' ? '' : submissionTimingFilter === 'late' ? 'late ' : 'on-time '}submissions found.
+                        </div>
                     ) : (
                         <table className="w-full text-sm">
                             <thead>
                                 <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                    {['Candidate', 'GitHub', 'Demo', 'Video', 'Submission Time', 'Actions'].map((head) => (
+                                    {['Candidate', 'GitHub', 'Demo', 'Video', 'Submission Time', 'Status', 'Actions'].map((head) => (
                                         <th
                                             key={head}
                                             className="px-4 py-3 text-left text-xs font-semibold uppercase"
@@ -482,26 +599,39 @@ export default function AssignmentReviewPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {submissions.map((submission, idx) => {
+                                {sortedSubmissions.map((submission, idx) => {
                                     const candidate =
                                         typeof submission.applicationId === 'object'
                                             ? submission.applicationId
                                             : undefined;
+                                    const actionState = getSubmissionActionState(submission);
 
                                     return (
                                         <tr
                                             key={submission._id}
                                             style={{
                                                 borderBottom:
-                                                    idx === submissions.length - 1
+                                                    idx === sortedSubmissions.length - 1
                                                         ? 'none'
                                                         : '1px solid var(--color-border-default)',
                                             }}
                                         >
                                             <td className="px-4 py-3">
-                                                <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                                    {candidate?.name || 'Candidate'}
-                                                </p>
+                                                {candidate?._id ? (
+                                                    <a
+                                                        href={`/hiring/applications/${candidate._id}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="font-medium"
+                                                        style={{ color: 'var(--color-text-primary)', textDecoration: 'none' }}
+                                                    >
+                                                        {candidate?.name || 'Candidate'}
+                                                    </a>
+                                                ) : (
+                                                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {candidate?.name || 'Candidate'}
+                                                    </p>
+                                                )}
                                                 <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                     {candidate?.email || 'N/A'}
                                                 </p>
@@ -555,38 +685,76 @@ export default function AssignmentReviewPage() {
                                                 className="px-4 py-3 text-xs"
                                                 style={{ color: 'var(--color-text-secondary)' }}
                                             >
-                                                {new Date(submission.submittedAt).toLocaleString('en-IN')}
+                                                {formatSubmissionTime(submission.submittedAt)}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {submission.submittedAfterDeadline ? (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium"
+                                                        style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+                                                    >
+                                                        <Clock3 size={11} />
+                                                        Late Submission
+                                                    </span>
+                                                ) : (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium"
+                                                        style={{ backgroundColor: '#DCFCE7', color: '#166534' }}
+                                                    >
+                                                        On Time
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {candidate?._id ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => rejectCandidate(candidate._id)}
-                                                            disabled={updatingStatus}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-xs"
+                                                    actionState ? (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium"
                                                             style={{
-                                                                borderColor: '#FCA5A5',
-                                                                color: '#B91C1C',
-                                                                opacity: updatingStatus ? 0.6 : 1,
+                                                                backgroundColor:
+                                                                    actionState === 'rejected'
+                                                                        ? '#FEE2E2'
+                                                                        : '#DCFCE7',
+                                                                color:
+                                                                    actionState === 'rejected'
+                                                                        ? '#B91C1C'
+                                                                        : '#166534',
                                                             }}
                                                         >
-                                                            <XCircle size={11} />
-                                                            Reject
-                                                        </button>
-                                                        <button
-                                                            onClick={() => moveToInterview(candidate._id)}
-                                                            disabled={updatingStatus || sendingInvite}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-xs"
-                                                            style={{
-                                                                borderColor: '#86EFAC',
-                                                                color: '#166534',
-                                                                opacity: updatingStatus || sendingInvite ? 0.6 : 1,
-                                                            }}
-                                                        >
-                                                            <CheckCircle2 size={11} />
-                                                            Invite to Interview
-                                                        </button>
-                                                    </div>
+                                                            {actionState === 'rejected'
+                                                                ? 'Rejected'
+                                                                : 'Invited to Interview'}
+                                                        </span>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => rejectCandidate(submission._id, candidate._id)}
+                                                                disabled={updatingStatus || sendingInvite}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-xs"
+                                                                style={{
+                                                                    borderColor: '#FCA5A5',
+                                                                    color: '#B91C1C',
+                                                                    opacity: updatingStatus || sendingInvite ? 0.6 : 1,
+                                                                }}
+                                                            >
+                                                                <XCircle size={11} />
+                                                                Reject
+                                                            </button>
+                                                            <button
+                                                                onClick={() => moveToInterview(submission._id, candidate._id)}
+                                                                disabled={updatingStatus || sendingInvite}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-xs"
+                                                                style={{
+                                                                    borderColor: '#86EFAC',
+                                                                    color: '#166534',
+                                                                    opacity: updatingStatus || sendingInvite ? 0.6 : 1,
+                                                                }}
+                                                            >
+                                                                <CheckCircle2 size={11} />
+                                                                Invite to Interview
+                                                            </button>
+                                                        </div>
+                                                    )
                                                 ) : (
                                                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                                         N/A
@@ -601,6 +769,7 @@ export default function AssignmentReviewPage() {
                     )}
                 </div>
             )}
+
         </div>
     );
 }

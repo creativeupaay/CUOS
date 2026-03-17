@@ -16,7 +16,8 @@ import {
 import {
     useGetApplicationByIdQuery,
     useGetApplicationTimelineQuery,
-    useApplyFinalDecisionMutation,
+    useGetAssignmentsByJobQuery,
+    useGetAssignmentSubmissionsQuery,
     useSendInterviewInviteMutation,
     useUpdateApplicationStatusMutation,
     useAddApplicationTagMutation,
@@ -45,6 +46,36 @@ const STATUS_ORDER: ApplicationStatus[] = [
     'interview',
 ];
 
+function buildCandidateBookingUrl(baseUrl: string, params: Record<string, string>) {
+    const trimmed = String(baseUrl || '').trim();
+    if (!trimmed) return '';
+
+    try {
+        const url = new URL(trimmed);
+        [
+            'date',
+            'month',
+            'week',
+            'year',
+            'slot',
+            'startTime',
+            'endTime',
+            'rescheduleUid',
+            'rescheduleToken',
+        ].forEach((key) => url.searchParams.delete(key));
+
+        Object.entries(params).forEach(([key, value]) => {
+            if (String(value || '').trim()) {
+                url.searchParams.set(key, value);
+            }
+        });
+
+        return url.toString();
+    } catch {
+        return '';
+    }
+}
+
 export default function HiringApplicationDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -53,15 +84,36 @@ export default function HiringApplicationDetailPage() {
     const [assignmentLinkCopied, setAssignmentLinkCopied] = useState(false);
     const [inviteSent, setInviteSent] = useState(false);
     const [inviteError, setInviteError] = useState('');
-    const [salaryInput, setSalaryInput] = useState('');
-    const [positionInput, setPositionInput] = useState('');
-    const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
-    const [decisionMessage, setDecisionMessage] = useState('');
+    const [bookingUrlFromInvite, setBookingUrlFromInvite] = useState('');
+    const [bookingLinkCopied, setBookingLinkCopied] = useState(false);
     const [pipelineError, setPipelineError] = useState('');
 
     const { data, isLoading, error } = useGetApplicationByIdQuery(id!, { skip: !id });
     const application = data?.data.application;
     const { data: timelineData } = useGetApplicationTimelineQuery(id!, { skip: !id });
+    const jobId =
+        application?.jobId && typeof application.jobId === 'object'
+            ? application.jobId._id
+            : (application?.jobId as string | undefined);
+    const { data: assignmentData } = useGetAssignmentsByJobQuery(jobId || '', {
+        skip: !jobId,
+    });
+    const assignmentId = assignmentData?.data.assignments?.[0]?._id;
+    const { data: submissionData } = useGetAssignmentSubmissionsQuery(assignmentId || '', {
+        skip: !assignmentId,
+    });
+    const submissionForApplication = useMemo(() => {
+        const list = submissionData?.data.submissions || [];
+        if (!id) return null;
+        return (
+            list.find((submission) => {
+                if (typeof submission.applicationId === 'object') {
+                    return submission.applicationId._id === id;
+                }
+                return submission.applicationId === id;
+            }) || null
+        );
+    }, [submissionData?.data.submissions, id]);
     const activities = timelineData?.data.activities || [];
     const majorActivities = useMemo(
         () =>
@@ -78,9 +130,37 @@ export default function HiringApplicationDetailPage() {
             ),
         [activities]
     );
+    const latestInviteActivity = useMemo(
+        () =>
+            [...activities]
+                .filter((activity: any) => activity.type === 'interview.invite_sent')
+                .sort(
+                    (a: any, b: any) =>
+                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                )[0] || null,
+        [activities]
+    );
+    const bookingUrlFromTimeline =
+        latestInviteActivity && latestInviteActivity.metadata
+            ? String((latestInviteActivity.metadata as any).bookingUrl || '').trim()
+            : '';
+    const jobSchedulingBookingUrl =
+        application?.jobId && typeof application.jobId === 'object'
+            ? String(application.jobId.interviewScheduling?.bookingUrl || '').trim()
+            : '';
+    const candidateBookingUrl =
+        buildCandidateBookingUrl(jobSchedulingBookingUrl, {
+            applicationId: id || '',
+            jobId: jobId || '',
+            name: application?.name || '',
+            email: application?.email || '',
+            candidateEmail: application?.email || '',
+        }) ||
+        bookingUrlFromInvite ||
+        bookingUrlFromTimeline;
+    const hasInterviewInviteBeenSent = Boolean(latestInviteActivity) || inviteSent;
 
     const [updateStatus, { isLoading: updatingStatus }] = useUpdateApplicationStatusMutation();
-    const [applyFinalDecision, { isLoading: deciding }] = useApplyFinalDecisionMutation();
     const [addTag, { isLoading: addingTag }] = useAddApplicationTagMutation();
     const [removeTag] = useRemoveApplicationTagMutation();
     const [sendInterviewInvite, { isLoading: sendingInvite }] = useSendInterviewInviteMutation();
@@ -120,9 +200,12 @@ export default function HiringApplicationDetailPage() {
         if (!id) return;
         setInviteError('');
         try {
-            await sendInterviewInvite(id).unwrap();
+            const result = await sendInterviewInvite(id).unwrap();
+            const url = String((result as any)?.data?.bookingUrl || '').trim();
+            if (url) {
+                setBookingUrlFromInvite(url);
+            }
             setInviteSent(true);
-            window.setTimeout(() => setInviteSent(false), 2000);
         } catch (error: any) {
             setInviteError(
                 error?.data?.message ||
@@ -131,35 +214,11 @@ export default function HiringApplicationDetailPage() {
         }
     }
 
-    async function handleRejectDecision() {
-        if (!id) return;
-        await applyFinalDecision({
-            id,
-            data: {
-                decision: 'rejected',
-            },
-        }).unwrap();
-
-        setDecisionMessage('Candidate moved to Rejected and rejection email sent.');
-        window.setTimeout(() => setDecisionMessage(''), 2500);
-    }
-
-    async function handleAcceptDecision() {
-        if (!id || !salaryInput.trim() || !positionInput.trim() || !offerLetterFile) return;
-
-        await applyFinalDecision({
-            id,
-            data: {
-                decision: 'accepted',
-                salary: salaryInput.trim(),
-                position: positionInput.trim(),
-                offerLetter: offerLetterFile,
-            },
-        }).unwrap();
-
-        setDecisionMessage('Candidate moved to Offer and offer email sent.');
-        setOfferLetterFile(null);
-        window.setTimeout(() => setDecisionMessage(''), 2500);
+    async function handleCopyBookingLink() {
+        if (!candidateBookingUrl) return;
+        await navigator.clipboard.writeText(candidateBookingUrl);
+        setBookingLinkCopied(true);
+        window.setTimeout(() => setBookingLinkCopied(false), 2000);
     }
 
     if (isLoading) {
@@ -205,6 +264,13 @@ export default function HiringApplicationDetailPage() {
             ? application.jobId.department
             : undefined;
     const currentMeta = STATUS_META[application.status] || STATUS_META.new;
+    const pipelineSelectOptions = (() => {
+        const base: ApplicationStatus[] = [...STATUS_ORDER, 'rejected'];
+        if (!base.includes(application.status)) {
+            base.push(application.status);
+        }
+        return base;
+    })();
 
     return (
         <div
@@ -385,6 +451,115 @@ export default function HiringApplicationDetailPage() {
                         </div>
                     )}
 
+                    {/* Assignment Submission */}
+                    {submissionForApplication && (
+                        <div
+                            className="rounded-xl border p-5"
+                            style={{
+                                backgroundColor: 'var(--color-bg-surface)',
+                                borderColor: 'var(--color-border-default)',
+                            }}
+                        >
+                            <p
+                                className="text-xs font-semibold uppercase tracking-wide mb-3"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                            >
+                                Assignment Submission
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                                <div>
+                                    <p style={{ color: 'var(--color-text-muted)' }}>Submitted At</p>
+                                    <p style={{ color: 'var(--color-text-primary)' }}>
+                                        {new Date(submissionForApplication.submittedAt).toLocaleString('en-IN')}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p style={{ color: 'var(--color-text-muted)' }}>Submission Status</p>
+                                    <p
+                                        style={{
+                                            color: submissionForApplication.submittedAfterDeadline
+                                                ? '#92400E'
+                                                : '#166534',
+                                        }}
+                                    >
+                                        {submissionForApplication.submittedAfterDeadline
+                                            ? 'Late Submission'
+                                            : 'On Time'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 mb-4">
+                                {submissionForApplication.githubLink && (
+                                    <a
+                                        href={submissionForApplication.githubLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        GitHub
+                                        <ExternalLink size={11} />
+                                    </a>
+                                )}
+                                {submissionForApplication.demoLink && (
+                                    <a
+                                        href={submissionForApplication.demoLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        Demo
+                                        <ExternalLink size={11} />
+                                    </a>
+                                )}
+                                {submissionForApplication.videoLink && (
+                                    <a
+                                        href={submissionForApplication.videoLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        Video
+                                        <ExternalLink size={11} />
+                                    </a>
+                                )}
+                            </div>
+
+                            <div>
+                                <p
+                                    className="text-xs font-semibold uppercase tracking-wide mb-2"
+                                    style={{ color: 'var(--color-text-secondary)' }}
+                                >
+                                    Additional Notes
+                                </p>
+                                <div
+                                    className="rounded-lg border px-3 py-2.5 text-sm whitespace-pre-wrap"
+                                    style={{
+                                        borderColor: 'var(--color-border-default)',
+                                        backgroundColor: 'var(--color-bg-subtle)',
+                                        color: 'var(--color-text-primary)',
+                                    }}
+                                >
+                                    {submissionForApplication.notes?.trim() ||
+                                        'No additional notes submitted by candidate.'}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Activity Timeline */}
                     <div
                         className="rounded-xl border p-5"
@@ -461,72 +636,24 @@ export default function HiringApplicationDetailPage() {
                             Pipeline Stage
                         </p>
 
-                        <div className="flex flex-col gap-1">
-                            {STATUS_ORDER.map((s) => {
-                                const meta = STATUS_META[s];
-                                const isActive = application.status === s;
-                                return (
-                                    <button
-                                        key={s}
-                                        onClick={() => handleStatusChange(s)}
-                                        disabled={updatingStatus}
-                                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left"
-                                        style={{
-                                            backgroundColor: isActive ? meta.bg : 'transparent',
-                                            color: isActive ? meta.color : 'var(--color-text-secondary)',
-                                            fontWeight: isActive ? 500 : 400,
-                                            border: isActive
-                                                ? `1px solid ${meta.color}30`
-                                                : '1px solid transparent',
-                                            opacity: updatingStatus ? 0.6 : 1,
-                                            cursor: updatingStatus ? 'not-allowed' : 'pointer',
-                                        }}
-                                    >
-                                        <span
-                                            className="w-2 h-2 rounded-full shrink-0"
-                                            style={{
-                                                backgroundColor: isActive
-                                                    ? meta.color
-                                                    : 'var(--color-border-default)',
-                                            }}
-                                        />
-                                        {meta.label}
-                                    </button>
-                                );
-                            })}
-
-                            {/* Reject — separate danger action */}
-                            <button
-                                onClick={() => handleStatusChange('rejected')}
-                                disabled={updatingStatus}
-                                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-left mt-1"
-                                style={{
-                                    backgroundColor:
-                                        application.status === 'rejected' ? '#FEE2E2' : 'transparent',
-                                    color:
-                                        application.status === 'rejected'
-                                            ? '#B91C1C'
-                                            : 'var(--color-text-secondary)',
-                                    border:
-                                        application.status === 'rejected'
-                                            ? '1px solid #fca5a530'
-                                            : '1px solid transparent',
-                                    opacity: updatingStatus ? 0.6 : 1,
-                                    cursor: updatingStatus ? 'not-allowed' : 'pointer',
-                                }}
-                            >
-                                <span
-                                    className="w-2 h-2 rounded-full shrink-0"
-                                    style={{
-                                        backgroundColor:
-                                            application.status === 'rejected'
-                                                ? '#B91C1C'
-                                                : 'var(--color-border-default)',
-                                    }}
-                                />
-                                Rejected
-                            </button>
-                        </div>
+                        <select
+                            value={application.status}
+                            onChange={(e) => handleStatusChange(e.target.value as ApplicationStatus)}
+                            disabled={updatingStatus}
+                            className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                                color: 'var(--color-text-primary)',
+                                opacity: updatingStatus ? 0.6 : 1,
+                            }}
+                        >
+                            {pipelineSelectOptions.map((status) => (
+                                <option key={status} value={status}>
+                                    {STATUS_META[status]?.label || status}
+                                </option>
+                            ))}
+                        </select>
 
                         {(application.status === 'offered' || application.status === 'hired') && (
                             <div
@@ -552,7 +679,7 @@ export default function HiringApplicationDetailPage() {
                                     className="text-xs mt-1"
                                     style={{ color: 'var(--color-text-muted)' }}
                                 >
-                                    Offers should be sent from the Final Decision section. Use Hired only after the candidate accepts the offer.
+                                    Move to Hired only after the candidate accepts the offer.
                                 </p>
                             </div>
                         )}
@@ -664,19 +791,44 @@ export default function HiringApplicationDetailPage() {
                             Send the invite to share the candidate's booking link.
                         </p>
 
-                        <button
-                            onClick={handleSendInterviewInvite}
-                            disabled={sendingInvite}
-                            className="w-full h-8 rounded-lg text-xs inline-flex items-center justify-center gap-1"
-                            style={{
-                                backgroundColor: '#166534',
-                                color: 'white',
-                                opacity: sendingInvite ? 0.6 : 1,
-                            }}
-                        >
-                            <Send size={12} />
-                            Send Cal.com Interview Invite
-                        </button>
+                        {hasInterviewInviteBeenSent && (
+                            <p className="text-xs mb-3" style={{ color: '#166534' }}>
+                                Candidate has been invited to schedule the interview.
+                            </p>
+                        )}
+
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={handleSendInterviewInvite}
+                                disabled={sendingInvite}
+                                className="w-full h-8 rounded-lg text-xs inline-flex items-center justify-center gap-1"
+                                style={{
+                                    backgroundColor: '#166534',
+                                    color: 'white',
+                                    opacity: sendingInvite ? 0.6 : 1,
+                                }}
+                            >
+                                <Send size={12} />
+                                {hasInterviewInviteBeenSent
+                                    ? 'Resend Interview Schedule Email'
+                                    : 'Send Cal.com Interview Invite'}
+                            </button>
+
+                            <button
+                                onClick={handleCopyBookingLink}
+                                disabled={!candidateBookingUrl}
+                                className="w-full h-8 rounded-lg text-xs inline-flex items-center justify-center gap-1 border"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-secondary)',
+                                    backgroundColor: 'var(--color-bg-surface)',
+                                    opacity: candidateBookingUrl ? 1 : 0.6,
+                                }}
+                            >
+                                <Link size={12} />
+                                Copy Candidate Booking Link
+                            </button>
+                        </div>
 
                         {inviteSent && (
                             <p className="text-xs mt-2" style={{ color: '#166534' }}>
@@ -684,131 +836,15 @@ export default function HiringApplicationDetailPage() {
                             </p>
                         )}
 
+                        {bookingLinkCopied && (
+                            <p className="text-xs mt-2" style={{ color: '#166534' }}>
+                                Candidate booking link copied.
+                            </p>
+                        )}
+
                         {inviteError && (
                             <p className="text-xs mt-2" style={{ color: 'var(--color-danger)' }}>
                                 {inviteError}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Meta */}
-                    <div
-                        className="rounded-xl border p-5"
-                        style={{
-                            backgroundColor: 'var(--color-bg-surface)',
-                            borderColor: 'var(--color-border-default)',
-                        }}
-                    >
-                        <p
-                            className="text-xs font-semibold uppercase tracking-wide mb-3"
-                            style={{ color: 'var(--color-text-secondary)' }}
-                        >
-                            Details
-                        </p>
-                        <div className="flex flex-col gap-2">
-                            <div className="flex justify-between text-sm">
-                                <span style={{ color: 'var(--color-text-muted)' }}>Applied</span>
-                                <span style={{ color: 'var(--color-text-primary)' }}>
-                                    {new Date(application.createdAt).toLocaleDateString('en-IN', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                    })}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span style={{ color: 'var(--color-text-muted)' }}>Last updated</span>
-                                <span style={{ color: 'var(--color-text-primary)' }}>
-                                    {new Date(application.updatedAt).toLocaleDateString('en-IN', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                    })}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Final Decision */}
-                    <div
-                        className="rounded-xl border p-5"
-                        style={{
-                            backgroundColor: 'var(--color-bg-surface)',
-                            borderColor: 'var(--color-border-default)',
-                        }}
-                    >
-                        <p
-                            className="text-xs font-semibold uppercase tracking-wide mb-3"
-                            style={{ color: 'var(--color-text-secondary)' }}
-                        >
-                            Final Decision
-                        </p>
-
-                        <div className="space-y-2 mb-3">
-                            <input
-                                value={positionInput}
-                                onChange={(e) => setPositionInput(e.target.value)}
-                                placeholder="Position (for offer)"
-                                className="w-full h-8 px-2 text-xs rounded-lg border outline-none"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                            />
-                            <input
-                                value={salaryInput}
-                                onChange={(e) => setSalaryInput(e.target.value)}
-                                placeholder="Salary (for offer)"
-                                className="w-full h-8 px-2 text-xs rounded-lg border outline-none"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                            />
-                            <input
-                                type="file"
-                                accept="application/pdf"
-                                onChange={(e) => setOfferLetterFile(e.target.files?.[0] || null)}
-                                className="w-full text-xs"
-                                style={{ color: 'var(--color-text-secondary)' }}
-                            />
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleAcceptDecision}
-                                disabled={deciding || !positionInput.trim() || !salaryInput.trim() || !offerLetterFile}
-                                className="flex-1 h-8 rounded-lg text-xs"
-                                style={{
-                                    backgroundColor: '#0369A1',
-                                    color: '#fff',
-                                    opacity:
-                                        deciding || !positionInput.trim() || !salaryInput.trim() || !offerLetterFile
-                                            ? 0.6
-                                            : 1,
-                                }}
-                            >
-                                Accept & Send Offer
-                            </button>
-                            <button
-                                onClick={handleRejectDecision}
-                                disabled={deciding}
-                                className="flex-1 h-8 rounded-lg text-xs"
-                                style={{
-                                    backgroundColor: '#B91C1C',
-                                    color: '#fff',
-                                    opacity: deciding ? 0.6 : 1,
-                                }}
-                            >
-                                Reject Candidate
-                            </button>
-                        </div>
-
-                        {decisionMessage && (
-                            <p className="text-xs mt-2" style={{ color: '#166534' }}>
-                                {decisionMessage}
                             </p>
                         )}
                     </div>

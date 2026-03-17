@@ -9,6 +9,7 @@ import {
     useResetUserPasswordMutation,
     useDeleteAdminUserMutation,
     useGetAdminRolesQuery,
+    useGetOrgSettingsQuery,
 } from '@/features/overall-admin/api/adminApi';
 
 // ─── Form data ────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ interface UserFormData {
 }
 
 const initialForm: UserFormData = { name: '', email: '', password: '', role: '', department: '', customDepartment: '' };
-const PRESET_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Sales'];
+const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'];
 
 // ─── Edit Email/Password Modal ────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ export default function AdminUsersPage() {
 
     const { data, isLoading } = useGetAdminUsersQuery({ search, isActive: filterStatus, page, limit: 15 });
     const { data: rolesData } = useGetAdminRolesQuery();
+    const { data: orgSettingsData } = useGetOrgSettingsQuery();
     const [createUser] = useCreateAdminUserMutation();
     const [updateUser] = useUpdateAdminUserMutation();
     const [deactivateUser] = useDeactivateUserMutation();
@@ -101,6 +103,9 @@ export default function AdminUsersPage() {
 
     const users = data?.data?.users || [];
     const pagination = data?.data?.pagination;
+    const departmentOptions = orgSettingsData?.data?.departments?.length
+        ? orgSettingsData.data.departments
+        : DEFAULT_DEPARTMENTS;
 
     const resolvedDept = (fd: UserFormData) =>
         fd.department === '__custom__' ? fd.customDepartment.trim() : fd.department;
@@ -335,7 +340,7 @@ export default function AdminUsersPage() {
                                             onChange={e => setFormData({ ...formData, department: e.target.value, customDepartment: '' })}
                                             className={inputCls} style={inputSty}>
                                             <option value="">No Department</option>
-                                            {PRESET_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                            {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
                                             <option value="__custom__">✏️ Custom…</option>
                                         </select>
                                         {formData.department === '__custom__' && (

@@ -53,6 +53,8 @@ export default function AdminSettingsPage() {
         requireSpecialChars: false,
     });
     const [sessionExpiry, setSessionExpiry] = useState(15);
+    const [departments, setDepartments] = useState<string[]>([]);
+    const [departmentInput, setDepartmentInput] = useState('');
 
     useEffect(() => {
         if (settings) {
@@ -63,6 +65,7 @@ export default function AdminSettingsPage() {
             });
             const addr = settings.address || {};
             setAddress({ street: addr.street || '', city: addr.city || '', state: addr.state || '', country: addr.country || '', zipCode: addr.zipCode || '' });
+            setDepartments(Array.isArray(settings.departments) ? settings.departments : []);
             setWorkingHours(settings.workingHours || { startTime: '09:00', endTime: '18:00', daysPerWeek: 5, hoursPerDay: 8 });
             setTaxSettings(settings.taxSettings || { gstEnabled: true, gstRate: 18, tdsEnabled: true, tdsRate: 10 });
             setFeatureToggles(settings.featureToggles || { projectManagement: true, finance: false, crm: true, hrms: true, leads: true });
@@ -83,6 +86,28 @@ export default function AdminSettingsPage() {
         } finally {
             setSaving('');
         }
+    };
+
+    const addDepartment = () => {
+        const nextDepartment = departmentInput.trim();
+        if (!nextDepartment) return;
+
+        const exists = departments.some(
+            (department) => department.toLowerCase() === nextDepartment.toLowerCase()
+        );
+        if (exists) {
+            setDepartmentInput('');
+            return;
+        }
+
+        setDepartments((prev) => [...prev, nextDepartment]);
+        setDepartmentInput('');
+    };
+
+    const removeDepartment = (departmentToRemove: string) => {
+        setDepartments((prev) =>
+            prev.filter((department) => department !== departmentToRemove)
+        );
     };
 
     const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
@@ -161,6 +186,66 @@ export default function AdminSettingsPage() {
                         </div>
                     </div>
                     <SaveButton section="company" onClick={() => handleSaveSection('company', { ...company, address })} />
+                </div>
+
+                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                    <SectionHeader icon={<Building2 size={20} />} title="Departments" />
+                    <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                        These departments are reused across admin users, HRMS, and hiring job postings.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {departments.map((department) => (
+                            <span
+                                key={department}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border"
+                                style={{
+                                    backgroundColor: 'var(--color-bg-subtle)',
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-primary)',
+                                }}
+                            >
+                                {department}
+                                <button
+                                    type="button"
+                                    onClick={() => removeDepartment(department)}
+                                    className="text-xs"
+                                    style={{ color: 'var(--color-text-muted)' }}
+                                >
+                                    Remove
+                                </button>
+                            </span>
+                        ))}
+                        {departments.length === 0 && (
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                No departments added yet.
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex gap-3">
+                        <input
+                            type="text"
+                            value={departmentInput}
+                            onChange={(e) => setDepartmentInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addDepartment();
+                                }
+                            }}
+                            placeholder="Add department name"
+                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
+                        />
+                        <button
+                            type="button"
+                            onClick={addDepartment}
+                            className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            Add
+                        </button>
+                    </div>
+                    <SaveButton section="departments" onClick={() => handleSaveSection('departments', { departments })} />
                 </div>
 
                 {/* Working Hours */}

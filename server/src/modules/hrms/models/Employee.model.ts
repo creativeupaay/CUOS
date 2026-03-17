@@ -74,7 +74,7 @@ export interface IEmployee extends Document {
     userId: Types.ObjectId;
     employeeId: string;
     designation: string;
-    department: 'engineering' | 'design' | 'marketing' | 'finance' | 'hr' | 'admin';
+    department: string;
     employmentType: 'full-time' | 'part-time' | 'contract' | 'intern';
     joiningDate: Date;
     probationEndDate?: Date;
@@ -213,7 +213,7 @@ const EmployeeSchema = new Schema<IEmployee>(
         department: {
             type: String,
             required: true,
-            enum: ['engineering', 'design', 'marketing', 'finance', 'hr', 'admin'],
+            trim: true,
         },
         employmentType: {
             type: String,

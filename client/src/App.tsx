@@ -65,6 +65,7 @@ const PublicJobApplyPage = lazy(() => import('./pages/PublicJobApplyPage'));
 const AssignmentReviewPage = lazy(() => import('./pages/AssignmentReviewPage'));
 const PublicAssignmentSubmissionPage = lazy(() => import('./pages/PublicAssignmentSubmissionPage'));
 const HiringInterviewsPage = lazy(() => import('./pages/HiringInterviewsPage'));
+const HiringInterviewSchedulePage = lazy(() => import('./pages/HiringInterviewSchedulePage'));
 
 function RouteFallback() {
   return (
@@ -213,6 +214,7 @@ function App() {
           <Route path="/hiring/assignments" element={loadable(<AssignmentReviewPage />)} />
           <Route path="/hiring/assignments/review" element={<Navigate to="/hiring/assignments" replace />} />
           <Route path="/hiring/interviews" element={loadable(<HiringInterviewsPage />)} />
+          <Route path="/hiring/interviews/schedule" element={loadable(<HiringInterviewSchedulePage />)} />
         </Route>
 
         {/* Default redirect */}

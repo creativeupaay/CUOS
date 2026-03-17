@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateEmployeeMutation, useUpdateEmployeeMutation, useGetEmployeeQuery, useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
 import { useGetUsersQuery } from '@/features/auth/authApi';
+import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { ArrowLeft, Save, Loader2, UserPlus } from 'lucide-react';
 
-const DEPARTMENTS = ['engineering', 'design', 'marketing', 'finance', 'hr', 'admin'];
+const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'];
 const EMPLOYMENT_TYPES = ['full-time', 'part-time', 'contract', 'intern'];
 
 const DEFAULT_ONBOARDING_CHECKLIST = [
@@ -24,6 +25,7 @@ export default function HrmsEmployeeFormPage() {
     const { data: existingData } = useGetEmployeeQuery(id!, { skip: !isEdit });
     const { data: usersData } = useGetUsersQuery();
     const { data: employeesData } = useGetEmployeesQuery({ limit: 100 });
+    const { data: orgSettingsData } = useGetOrgSettingsQuery();
     const [createEmployee, { isLoading: isCreating }] = useCreateEmployeeMutation();
     const [updateEmployee, { isLoading: isUpdating }] = useUpdateEmployeeMutation();
 
@@ -33,12 +35,11 @@ export default function HrmsEmployeeFormPage() {
     const availableUsers = Array.isArray(users)
         ? users.filter((u: any) => !existingEmployees.some((e: any) => (e.userId?._id || e.userId) === u._id))
         : [];
-
     const [form, setForm] = useState({
         userId: '',
         employeeId: '',
         designation: '',
-        department: 'engineering',
+        department: '',
         employmentType: 'full-time',
         joiningDate: new Date().toISOString().split('T')[0],
         probationEndDate: '',
@@ -50,6 +51,12 @@ export default function HrmsEmployeeFormPage() {
 
 const [autoFilledDept, setAutoFilledDept] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const configuredDepartments = orgSettingsData?.data?.departments?.length
+        ? orgSettingsData.data.departments
+        : DEFAULT_DEPARTMENTS;
+    const departmentOptions = form.department && !configuredDepartments.includes(form.department)
+        ? [form.department, ...configuredDepartments]
+        : configuredDepartments;
 
     useEffect(() => {
         if (existingData?.data?.employee) {
@@ -69,6 +76,20 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
             });
         }
     }, [existingData]);
+
+    useEffect(() => {
+        if (isEdit || departmentOptions.length === 0) return;
+        setForm((prev) => {
+            if (prev.department && departmentOptions.includes(prev.department)) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                department: departmentOptions[0],
+            };
+        });
+    }, [departmentOptions, isEdit]);
 
     const cleanPayload = (data: any) => {
         const cleaned = { ...data };
@@ -149,8 +170,12 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Select User *</label>
                                 <select required value={form.userId} onChange={(e) => {
                                         const selectedUser = availableUsers.find((u: any) => u._id === e.target.value);
-                                        const deptRaw = (selectedUser?.department || '').toLowerCase();
-                                        const matchedDept = DEPARTMENTS.includes(deptRaw) ? deptRaw : '';
+                                        const userDepartment = String(selectedUser?.department || '').trim();
+                                        const matchedDept =
+                                            departmentOptions.find(
+                                                (department) =>
+                                                    department.toLowerCase() === userDepartment.toLowerCase()
+                                            ) || '';
                                         setAutoFilledDept(!!matchedDept);
                                         setForm({ ...form, userId: e.target.value, ...(matchedDept ? { department: matchedDept } : {}) });
                                     }}
@@ -182,7 +207,11 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Department *</label>
                             <select required value={form.department} onChange={(e) => { setAutoFilledDept(false); setForm({ ...form, department: e.target.value }); }}
                                 className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
-                                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+                                {departmentOptions.map((department) => (
+                                    <option key={department} value={department}>
+                                        {department}
+                                    </option>
+                                ))}
                             </select>
                             {autoFilledDept && (
                                 <p className="text-xs mt-1" style={{ color: '#16A34A' }}>✓ Auto-filled from user profile</p>
@@ -289,4 +318,3 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
         </div>
     );
 }
-

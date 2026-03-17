@@ -146,7 +146,7 @@ export interface CreateAssignmentRequest {
     title: string;
     description: string;
     instructions: string;
-    timeLimitHours: number;
+    timeLimitDays: number;
     submissionFields: AssignmentSubmissionFields;
 }
 
@@ -154,7 +154,7 @@ export interface UpdateAssignmentRequest {
     title?: string;
     description?: string;
     instructions?: string;
-    timeLimitHours?: number;
+    timeLimitDays?: number;
     submissionFields?: Partial<AssignmentSubmissionFields>;
 }
 
@@ -169,15 +169,8 @@ export interface AssignmentForApplicationResponse {
     assignment: Assignment;
     applicationId: string;
     hasSubmitted: boolean;
-    hasStarted: boolean;
-    startedAt: string | null;
     expiresAt: string | null;
     isExpired: boolean;
-}
-
-export interface StartAssignmentResponse {
-    startedAt: string;
-    expiresAt: string;
 }
 
 export interface AssignmentSubmissionsResponse {

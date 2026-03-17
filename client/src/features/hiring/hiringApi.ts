@@ -23,7 +23,6 @@ import type {
     AssignmentForApplicationResponse,
     AssignmentSubmissionsResponse,
     CreateAssignmentRequest,
-    StartAssignmentResponse,
     SubmitAssignmentRequest,
     UpdateAssignmentRequest,
     InterviewDetailsResponse,
@@ -308,19 +307,6 @@ export const hiringApi = api.injectEndpoints({
             ],
         }),
 
-        startAssignment: builder.mutation<
-            ApiResponse<StartAssignmentResponse>,
-            string
-        >({
-            query: (applicationId) => ({
-                url: `/hiring/assignment/start/${applicationId}`,
-                method: 'POST',
-            }),
-            invalidatesTags: (_result, _error, applicationId) => [
-                { type: 'Assignments', id: applicationId },
-            ],
-        }),
-
         submitAssignment: builder.mutation<
             ApiResponse<{ submission: AssignmentSubmission }>,
             { applicationId: string; data: SubmitAssignmentRequest }
@@ -413,7 +399,6 @@ export const {
     useDeleteAssignmentMutation,
     useGetAssignmentSubmissionsQuery,
     useGetAssignmentForApplicationQuery,
-    useStartAssignmentMutation,
     useSubmitAssignmentMutation,
     useSendInterviewInviteMutation,
     useGetInterviewsQuery,

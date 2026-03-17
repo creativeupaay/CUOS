@@ -135,7 +135,7 @@ export class ApplicationService {
     async getApplicationById(id: string): Promise<IApplication> {
         const application = await Application.findById(id).populate(
             'jobId',
-            'title department location employmentType isHiring'
+            'title department location employmentType isHiring interviewScheduling'
         );
         if (!application) {
             throw new AppError('Application not found', 404);
@@ -214,6 +214,15 @@ export class ApplicationService {
                 throw new AppError('Please create an assignment for this job before moving candidate to assignment stage', 400);
             }
 
+            const timeLimitDays =
+                typeof (assignment as any).timeLimitDays === 'number' && (assignment as any).timeLimitDays > 0
+                    ? (assignment as any).timeLimitDays
+                    : Math.max(1, Math.ceil(((assignment as any).timeLimitHours || 24) / 24));
+            const assignmentWindowStartedAt = new Date();
+            const assignmentWindowExpiresAt = new Date(
+                assignmentWindowStartedAt.getTime() + timeLimitDays * 24 * 60 * 60 * 1000
+            );
+
             const assignmentUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/assignment/${existing._id}`;
             const jobTitle =
                 existing.jobId && typeof existing.jobId === 'object'
@@ -227,16 +236,45 @@ export class ApplicationService {
                     jobTitle,
                     assignmentTitle: assignment.title,
                     assignmentUrl,
-                    timeLimitHours: assignment.timeLimitHours,
+                    timeLimitDays,
+                    deadlineAt: assignmentWindowExpiresAt,
                 })
             );
+
+            const updatePayload: any = {
+                status,
+                assignmentWindowStartedAt,
+                assignmentWindowExpiresAt,
+            };
+
+            const application = await Application.findByIdAndUpdate(
+                id,
+                updatePayload,
+                { new: true, runValidators: true }
+            ).populate('jobId', 'title department location employmentType');
+
+            if (!application) {
+                throw new AppError('Application not found', 404);
+            }
+
+            await logApplicationActivity({
+                applicationId: application._id,
+                type: 'application.status_changed',
+                title: 'Stage Updated',
+                description: `Application moved to ${status}.`,
+                actorType: actorId ? 'user' : 'system',
+                actorId,
+                metadata: {
+                    status,
+                    assignmentWindowStartedAt,
+                    assignmentWindowExpiresAt,
+                },
+            });
+
+            return application;
         }
 
         const updatePayload: any = { status };
-        if (enteringAssignmentRound) {
-            updatePayload.assignmentWindowStartedAt = null;
-            updatePayload.assignmentWindowExpiresAt = null;
-        }
 
         const application = await Application.findByIdAndUpdate(
             id,

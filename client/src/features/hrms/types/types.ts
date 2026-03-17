@@ -54,7 +54,7 @@ export interface Employee {
     };
     employeeId: string;
     designation: string;
-    department: 'engineering' | 'design' | 'marketing' | 'finance' | 'hr' | 'admin';
+    department: string;
     employmentType: 'full-time' | 'part-time' | 'contract' | 'intern';
     joiningDate: string;
     probationEndDate?: string;

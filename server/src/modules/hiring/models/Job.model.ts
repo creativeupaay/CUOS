@@ -10,6 +10,7 @@ export interface IInterviewDailySlot {
 export interface IInterviewSchedulingConfig {
     enabled: boolean;
     active: boolean;
+    scheduleId?: number;
     timezone: string;
     organizerName: string;
     eventTypeId?: number;
@@ -61,6 +62,7 @@ const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
     {
         enabled: { type: Boolean, default: false },
         active: { type: Boolean, default: false },
+        scheduleId: { type: Number },
         timezone: { type: String, default: 'Asia/Kolkata', trim: true },
         organizerName: { type: String, default: 'HR Team', trim: true },
         eventTypeId: { type: Number },

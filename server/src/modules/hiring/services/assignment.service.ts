@@ -30,13 +30,17 @@ export class AssignmentService {
             existing.title = data.title;
             existing.description = data.description;
             existing.instructions = data.instructions;
-            existing.timeLimitHours = data.timeLimitHours;
+            existing.timeLimitDays = data.timeLimitDays;
+            existing.timeLimitHours = data.timeLimitDays * 24;
             existing.submissionFields = data.submissionFields;
             await existing.save();
             return existing;
         }
 
-        const assignment = await Assignment.create(data);
+        const assignment = await Assignment.create({
+            ...data,
+            timeLimitHours: data.timeLimitDays * 24,
+        });
         return assignment;
     }
 
@@ -55,7 +59,10 @@ export class AssignmentService {
         if (data.title !== undefined) assignment.title = data.title;
         if (data.description !== undefined) assignment.description = data.description;
         if (data.instructions !== undefined) assignment.instructions = data.instructions;
-        if (data.timeLimitHours !== undefined) assignment.timeLimitHours = data.timeLimitHours;
+        if (data.timeLimitDays !== undefined) {
+            assignment.timeLimitDays = data.timeLimitDays;
+            assignment.timeLimitHours = data.timeLimitDays * 24;
+        }
         if (data.submissionFields) {
             assignment.submissionFields = {
                 ...assignment.submissionFields,
@@ -86,8 +93,6 @@ export class AssignmentService {
         assignment: IAssignment;
         applicationId: string;
         hasSubmitted: boolean;
-        hasStarted: boolean;
-        startedAt: Date | null;
         expiresAt: Date | null;
         isExpired: boolean;
     }> {
@@ -108,80 +113,29 @@ export class AssignmentService {
             applicationId: application._id,
         }).select('_id');
 
-        const startedAt = (application as any).assignmentWindowStartedAt || null;
-        const expiresAt = (application as any).assignmentWindowExpiresAt || null;
+        let expiresAt = (application as any).assignmentWindowExpiresAt || null;
+        if (!expiresAt && (application as any).status === 'assignment-round') {
+            const days =
+                typeof assignment.timeLimitDays === 'number' && assignment.timeLimitDays > 0
+                    ? assignment.timeLimitDays
+                    : Math.max(1, Math.ceil((assignment.timeLimitHours || 24) / 24));
+            const startedAt =
+                (application as any).assignmentWindowStartedAt || (application as any).updatedAt || new Date();
+            expiresAt = new Date(new Date(startedAt).getTime() + days * 24 * 60 * 60 * 1000);
+
+            await Application.findByIdAndUpdate(application._id, {
+                assignmentWindowStartedAt: startedAt,
+                assignmentWindowExpiresAt: expiresAt,
+            });
+        }
         const isExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now());
 
         return {
             assignment,
             applicationId,
             hasSubmitted: Boolean(submission),
-            hasStarted: Boolean(startedAt),
-            startedAt,
             expiresAt,
             isExpired,
-        };
-    }
-
-    async startAssignment(applicationId: string): Promise<{
-        startedAt: Date;
-        expiresAt: Date;
-    }> {
-        const application = await Application.findById(applicationId).select(
-            'jobId status assignmentWindowStartedAt assignmentWindowExpiresAt'
-        );
-        if (!application) {
-            throw new AppError('Application not found', 404);
-        }
-
-        if ((application as any).status !== 'assignment-round') {
-            throw new AppError('Assignment can be started only in assignment stage', 400);
-        }
-
-        const assignment = await Assignment.findOne({ jobId: (application as any).jobId }).sort({
-            createdAt: -1,
-        });
-        if (!assignment) {
-            throw new AppError('Assignment not found for this application', 404);
-        }
-
-        const currentStart = (application as any).assignmentWindowStartedAt as Date | undefined;
-        const currentExpiry = (application as any).assignmentWindowExpiresAt as Date | undefined;
-
-        if (currentStart && currentExpiry) {
-            if (currentExpiry.getTime() < Date.now()) {
-                throw new AppError('Assignment link has expired', 410);
-            }
-
-            return {
-                startedAt: currentStart,
-                expiresAt: currentExpiry,
-            };
-        }
-
-        const startedAt = new Date();
-        const expiresAt = new Date(startedAt.getTime() + assignment.timeLimitHours * 60 * 60 * 1000);
-
-        await Application.findByIdAndUpdate(application._id, {
-            assignmentWindowStartedAt: startedAt,
-            assignmentWindowExpiresAt: expiresAt,
-        });
-
-        await logApplicationActivity({
-            applicationId: application._id,
-            type: 'assignment.started',
-            title: 'Assignment Started',
-            description: 'Candidate started the assignment timer.',
-            actorType: 'candidate',
-            metadata: {
-                startedAt,
-                expiresAt,
-            },
-        });
-
-        return {
-            startedAt,
-            expiresAt,
         };
     }
 
@@ -201,14 +155,23 @@ export class AssignmentService {
             throw new AppError('Assignment not found for this application', 404);
         }
 
-        const startedAt = (application as any).assignmentWindowStartedAt as Date | undefined;
-        const expiresAt = (application as any).assignmentWindowExpiresAt as Date | undefined;
-        if (!startedAt || !expiresAt) {
-            throw new AppError('Please start the assignment before submitting', 400);
-        }
+        let startedAt = (application as any).assignmentWindowStartedAt as Date | undefined;
+        let expiresAt = (application as any).assignmentWindowExpiresAt as Date | undefined;
+        if (!expiresAt) {
+            const days =
+                typeof assignment.timeLimitDays === 'number' && assignment.timeLimitDays > 0
+                    ? assignment.timeLimitDays
+                    : Math.max(1, Math.ceil((assignment.timeLimitHours || 24) / 24));
+            const resolvedStartedAt = startedAt || (application as any).updatedAt || new Date();
+            startedAt = resolvedStartedAt;
+            expiresAt = new Date(
+                new Date(resolvedStartedAt).getTime() + days * 24 * 60 * 60 * 1000
+            );
 
-        if (expiresAt.getTime() < Date.now()) {
-            throw new AppError('Assignment submission window has expired', 410);
+            await Application.findByIdAndUpdate(application._id, {
+                assignmentWindowStartedAt: startedAt,
+                assignmentWindowExpiresAt: expiresAt,
+            });
         }
 
         const normalizedData = {
@@ -237,6 +200,9 @@ export class AssignmentService {
             throw new AppError('Assignment already submitted', 409);
         }
 
+        const submittedAt = new Date();
+        const submittedAfterDeadline = submittedAt.getTime() > expiresAt.getTime();
+
         const submission = await AssignmentSubmission.create({
             assignmentId: assignment._id,
             applicationId: application._id,
@@ -250,7 +216,9 @@ export class AssignmentService {
                 ? normalizedData.videoLink || undefined
                 : undefined,
             notes: assignment.submissionFields.notes ? normalizedData.notes || undefined : undefined,
-            submittedAt: new Date(),
+            submittedAt,
+            deadlineAt: expiresAt,
+            submittedAfterDeadline,
         });
 
         await Application.findByIdAndUpdate(application._id, {
@@ -266,6 +234,10 @@ export class AssignmentService {
             metadata: {
                 assignmentId: assignment._id,
                 submissionId: submission._id,
+                submittedAfterDeadline,
+                submittedAt,
+                expiresAt,
+                startedAt,
             },
         });
 
@@ -281,6 +253,6 @@ export class AssignmentService {
         return AssignmentSubmission.find({ assignmentId })
             .sort({ submittedAt: -1 })
             .populate('applicationId', 'name email phone status jobId')
-            .populate('assignmentId', 'title jobId timeLimitHours');
+            .populate('assignmentId', 'title jobId timeLimitDays timeLimitHours');
     }
 }

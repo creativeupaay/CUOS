@@ -71,6 +71,7 @@ export interface JobSummary {
     location?: string;
     employmentType?: EmploymentType;
     isHiring?: boolean;
+    interviewScheduling?: Partial<InterviewSchedulingConfig>;
 }
 
 export interface Application {
@@ -122,7 +123,7 @@ export interface Assignment {
     title: string;
     description: string;
     instructions: string;
-    timeLimitHours: number;
+    timeLimitDays: number;
     submissionFields: AssignmentSubmissionFields;
     createdAt: string;
     updatedAt: string;
@@ -145,6 +146,8 @@ export interface AssignmentSubmission {
     videoLink?: string;
     notes?: string;
     submittedAt: string;
+    deadlineAt?: string;
+    submittedAfterDeadline: boolean;
     createdAt: string;
     updatedAt: string;
 }

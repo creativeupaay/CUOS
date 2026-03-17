@@ -28,7 +28,6 @@ import {
     createAssignmentSchema,
     getAssignmentForApplicationSchema,
     getAssignmentsByJobSchema,
-    startAssignmentSchema,
     submitAssignmentSchema,
     updateAssignmentSchema,
 } from '../validators/assignment.validator';
@@ -76,12 +75,6 @@ router.get(
     '/assignment/:applicationId',
     validateRequest(getAssignmentForApplicationSchema),
     assignmentController.getAssignmentForApplication
-);
-
-router.post(
-    '/assignment/start/:applicationId',
-    validateRequest(startAssignmentSchema),
-    assignmentController.startAssignment
 );
 
 router.post(

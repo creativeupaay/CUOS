@@ -6,12 +6,10 @@ import {
     CheckCircle2,
     Clock3,
     Loader2,
-    PlayCircle,
     ShieldCheck,
 } from 'lucide-react';
 import {
     useGetAssignmentForApplicationQuery,
-    useStartAssignmentMutation,
     useSubmitAssignmentMutation,
 } from '@/features/hiring/hiringApi';
 
@@ -22,7 +20,6 @@ export default function PublicAssignmentSubmissionPage() {
         skip: !applicationId,
     });
     const [submitAssignment, { isLoading: submitting }] = useSubmitAssignmentMutation();
-    const [startAssignment, { isLoading: startingAssignment }] = useStartAssignmentMutation();
 
     const [githubLink, setGithubLink] = useState('');
     const [demoLink, setDemoLink] = useState('');
@@ -30,8 +27,6 @@ export default function PublicAssignmentSubmissionPage() {
     const [notes, setNotes] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
-    const [startError, setStartError] = useState('');
-    const [isStarted, setIsStarted] = useState(false);
     const [expiresAtIso, setExpiresAtIso] = useState<string | null>(null);
     const [now, setNow] = useState(Date.now());
 
@@ -39,9 +34,8 @@ export default function PublicAssignmentSubmissionPage() {
     const hasSubmitted = data?.data.hasSubmitted || submitted;
 
     useEffect(() => {
-        setIsStarted(Boolean(data?.data.hasStarted));
         setExpiresAtIso(data?.data.expiresAt || null);
-    }, [data?.data.hasStarted, data?.data.expiresAt]);
+    }, [data?.data.expiresAt]);
 
     const deadlineTime = useMemo(() => {
         if (!expiresAtIso) {
@@ -64,7 +58,7 @@ export default function PublicAssignmentSubmissionPage() {
     }, []);
 
     const remainingMs = deadlineTime ? Math.max(0, deadlineTime - now) : null;
-    const isTimeExpired = Boolean(isStarted && remainingMs !== null && remainingMs <= 0);
+    const isTimeExpired = Boolean(remainingMs !== null && remainingMs <= 0);
 
     const remainingLabel = useMemo(() => {
         if (remainingMs === null) {
@@ -84,16 +78,6 @@ export default function PublicAssignmentSubmissionPage() {
 
         setSubmitError('');
 
-        if (!isStarted) {
-            setSubmitError('Please start the assignment timer before submitting.');
-            return;
-        }
-
-        if (isTimeExpired) {
-            setSubmitError('Assignment submission window has expired. Please contact the hiring team.');
-            return;
-        }
-
         try {
             await submitAssignment({
                 applicationId,
@@ -109,26 +93,6 @@ export default function PublicAssignmentSubmissionPage() {
             await refetch();
         } catch (error: any) {
             setSubmitError(error?.data?.message || 'Failed to submit assignment. Please try again.');
-        }
-    }
-
-    async function handleStartAssignment() {
-        if (!applicationId) return;
-
-        setStartError('');
-        setSubmitError('');
-
-        try {
-            const response = await startAssignment(applicationId).unwrap();
-            setIsStarted(true);
-            setExpiresAtIso(response.data.expiresAt);
-            setNow(Date.now());
-            await refetch();
-        } catch (error: any) {
-            setStartError(
-                error?.data?.message ||
-                    'Could not start assignment right now. Please contact the hiring team.'
-            );
         }
     }
 
@@ -173,7 +137,7 @@ export default function PublicAssignmentSubmissionPage() {
                     <h1 className="text-3xl font-semibold" style={{ color: '#0F172A' }}>
                         {assignment.title}
                     </h1>
-                    <p className="text-sm mt-2" style={{ color: '#475569' }}>
+                    <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: '#475569' }}>
                         {assignment.description}
                     </p>
 
@@ -191,38 +155,13 @@ export default function PublicAssignmentSubmissionPage() {
                             Submission Form
                         </p>
 
-                        {!hasSubmitted && !isStarted && (
-                            <div className="mt-3 rounded-lg border p-3" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                <p className="text-sm" style={{ color: '#1E40AF' }}>
-                                    Click Start Assignment to begin your timer. After starting, this link expires when the timer ends.
-                                </p>
-                                <button
-                                    onClick={handleStartAssignment}
-                                    disabled={startingAssignment}
-                                    className="mt-3 h-10 px-4 rounded-lg text-sm font-medium inline-flex items-center gap-2"
-                                    style={{
-                                        backgroundColor: '#2563EB',
-                                        color: '#FFFFFF',
-                                        opacity: startingAssignment ? 0.7 : 1,
-                                    }}
-                                >
-                                    {startingAssignment ? (
-                                        <Loader2 size={16} className="animate-spin" />
-                                    ) : (
-                                        <PlayCircle size={16} />
-                                    )}
-                                    Start Assignment
-                                </button>
-                            </div>
-                        )}
-
-                        {startError && (
+                        {isTimeExpired && !hasSubmitted && (
                             <div
                                 className="mt-3 p-3 rounded-lg flex items-center gap-2 text-sm"
-                                style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}
+                                style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
                             >
                                 <AlertCircle size={16} />
-                                {startError}
+                                Deadline has passed. You can still submit, but it will be marked as late.
                             </div>
                         )}
 
@@ -289,12 +228,12 @@ export default function PublicAssignmentSubmissionPage() {
 
                                 <button
                                     type="submit"
-                                    disabled={submitting || !isStarted || isTimeExpired}
+                                    disabled={submitting}
                                     className="h-10 px-4 rounded-lg text-sm font-medium"
                                     style={{
                                         backgroundColor: '#0F766E',
                                         color: '#FFFFFF',
-                                        opacity: submitting || !isStarted || isTimeExpired ? 0.6 : 1,
+                                        opacity: submitting ? 0.6 : 1,
                                     }}
                                 >
                                     {submitting ? 'Submitting...' : 'Submit Assignment'}
@@ -316,28 +255,28 @@ export default function PublicAssignmentSubmissionPage() {
                         <div className="flex items-center gap-2" style={{ color: '#334155' }}>
                             <Clock3 size={15} />
                             <span className="text-sm">
-                                Time Limit: <strong>{assignment.timeLimitHours} hours</strong>
+                                Time Limit: <strong>{assignment.timeLimitDays} day{assignment.timeLimitDays > 1 ? 's' : ''}</strong>
                             </span>
                         </div>
 
-                        {isStarted && remainingLabel && (
+                        {expiresAtIso && (
+                            <p className="text-sm mt-2" style={{ color: '#475569' }}>
+                                Expires on: <strong>{new Date(expiresAtIso).toLocaleString('en-IN')}</strong>
+                            </p>
+                        )}
+
+                        {remainingLabel && (
                             <p
                                 className="text-sm font-semibold mt-2"
                                 style={{ color: isTimeExpired ? '#B91C1C' : '#0F172A' }}
                             >
-                                Remaining: {remainingLabel}
-                            </p>
-                        )}
-
-                        {!isStarted && !hasSubmitted && (
-                            <p className="text-sm mt-2" style={{ color: '#64748B' }}>
-                                Timer has not started yet.
+                                {isTimeExpired ? 'Deadline passed' : `Remaining: ${remainingLabel}`}
                             </p>
                         )}
 
                         {isTimeExpired && !hasSubmitted && (
-                            <p className="text-sm mt-2" style={{ color: '#B91C1C' }}>
-                                Time expired. Submission is locked.
+                            <p className="text-sm mt-2" style={{ color: '#92400E' }}>
+                                Late submissions are accepted and flagged for the hiring team.
                             </p>
                         )}
                     </div>

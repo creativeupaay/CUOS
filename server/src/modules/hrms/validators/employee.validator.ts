@@ -48,7 +48,7 @@ export const createEmployeeSchema = z.object({
         userId: z.string().min(1, 'User ID is required'),
         employeeId: z.string().min(1, 'Employee ID is required'),
         designation: z.string().min(1, 'Designation is required'),
-        department: z.enum(['engineering', 'design', 'marketing', 'finance', 'hr', 'admin']),
+        department: z.string().min(1, 'Department is required').trim(),
         employmentType: z.enum(['full-time', 'part-time', 'contract', 'intern']).default('full-time'),
         joiningDate: z.string().min(1, 'Joining date is required'),
         probationEndDate: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
@@ -68,7 +68,7 @@ export const createEmployeeSchema = z.object({
 export const updateEmployeeSchema = z.object({
     body: z.object({
         designation: z.string().optional(),
-        department: z.enum(['engineering', 'design', 'marketing', 'finance', 'hr', 'admin']).optional(),
+        department: z.string().min(1).trim().optional(),
         employmentType: z.enum(['full-time', 'part-time', 'contract', 'intern']).optional(),
         probationEndDate: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
         status: z.enum(['active', 'on-notice', 'relieved', 'terminated']).optional(),

@@ -15,7 +15,7 @@ export const createAssignmentSchema = z.object({
         title: z.string().min(1, 'Title is required').trim(),
         description: z.string().min(1, 'Description is required').trim(),
         instructions: z.string().min(1, 'Instructions are required').trim(),
-        timeLimitHours: z.number().int().positive('Time limit should be greater than 0'),
+        timeLimitDays: z.number().int().positive('Time limit should be greater than 0'),
         submissionFields: submissionFieldsSchema,
     }),
 });
@@ -28,7 +28,7 @@ export const updateAssignmentSchema = z.object({
         title: z.string().min(1).trim().optional(),
         description: z.string().min(1).trim().optional(),
         instructions: z.string().min(1).trim().optional(),
-        timeLimitHours: z.number().int().positive().optional(),
+        timeLimitDays: z.number().int().positive().optional(),
         submissionFields: submissionFieldsSchema.partial().optional(),
     }),
 });
@@ -46,12 +46,6 @@ export const assignmentIdParamSchema = z.object({
 });
 
 export const getAssignmentForApplicationSchema = z.object({
-    params: z.object({
-        applicationId: z.string().regex(objectIdRegex, 'Invalid application ID'),
-    }),
-});
-
-export const startAssignmentSchema = z.object({
     params: z.object({
         applicationId: z.string().regex(objectIdRegex, 'Invalid application ID'),
     }),
