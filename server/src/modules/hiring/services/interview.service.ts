@@ -17,11 +17,13 @@ import type {
 } from '../validators/interview.validator';
 import {
     sendInterviewInviteEmail,
+    sendInterviewReminderForCandidateEmail,
     sendInterviewScheduledForCandidateEmail,
     sendInterviewScheduledForHrEmail,
 } from '../../../services/email.service';
 import { logApplicationActivity } from './activity.service';
 import { calcomService } from './calcom.service';
+import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
 
 function getNested(obj: any, path: string): any {
     return path.split('.').reduce((acc, part) => (acc == null ? undefined : acc[part]), obj);
@@ -209,6 +211,101 @@ function buildWebhookFingerprint(input: {
     return createHash('sha256').update(source).digest('hex');
 }
 
+const interviewReminderTimers = new Map<string, NodeJS.Timeout>();
+
+function clearInterviewReminderTimer(interviewId: string): void {
+    const existingTimer = interviewReminderTimers.get(interviewId);
+    if (!existingTimer) return;
+    clearTimeout(existingTimer);
+    interviewReminderTimers.delete(interviewId);
+}
+
+async function sendInterviewReminderEmailIfValid(input: {
+    interviewId: string;
+    candidateEmail: string;
+    candidateName: string;
+    jobTitle: string;
+    interviewer: string;
+    scheduledTime: Date;
+    meetLink: string;
+}): Promise<void> {
+    const interview = await Interview.findById(input.interviewId).select(
+        'status scheduledTime reminderSentAt'
+    );
+    if (!interview) {
+        return;
+    }
+
+    if (interview.status === 'cancelled' || interview.status === 'completed' || interview.status === 'no-show') {
+        return;
+    }
+
+    if (interview.reminderSentAt) {
+        return;
+    }
+
+    const expectedTime = input.scheduledTime.getTime();
+    if (interview.scheduledTime.getTime() !== expectedTime) {
+        return;
+    }
+
+    if (input.scheduledTime.getTime() <= Date.now()) {
+        return;
+    }
+
+    await sendInterviewReminderForCandidateEmail({
+        to: input.candidateEmail,
+        candidateName: input.candidateName,
+        jobTitle: input.jobTitle,
+        interviewer: input.interviewer,
+        scheduledTime: input.scheduledTime,
+        meetLink: input.meetLink,
+    });
+
+    await Interview.findByIdAndUpdate(input.interviewId, {
+        reminderSentAt: new Date(),
+    });
+}
+
+function scheduleInterviewReminder(input: {
+    interviewId: string;
+    candidateEmail: string;
+    candidateName: string;
+    jobTitle: string;
+    interviewer: string;
+    scheduledTime: Date;
+    meetLink: string;
+    reminderMinutesBefore: number;
+}): void {
+    clearInterviewReminderTimer(input.interviewId);
+
+    if (input.reminderMinutesBefore <= 0) {
+        return;
+    }
+
+    const reminderAt = input.scheduledTime.getTime() - input.reminderMinutesBefore * 60 * 1000;
+    const delay = reminderAt - Date.now();
+
+    if (delay <= 0) {
+        sendInterviewReminderEmailIfValid(input).catch((error) => {
+            console.error('Failed sending immediate interview reminder:', error);
+        });
+        return;
+    }
+
+    const timer = setTimeout(() => {
+        sendInterviewReminderEmailIfValid(input)
+            .catch((error) => {
+                console.error('Failed sending scheduled interview reminder:', error);
+            })
+            .finally(() => {
+                interviewReminderTimers.delete(input.interviewId);
+            });
+    }, delay);
+
+    interviewReminderTimers.set(input.interviewId, timer);
+}
+
 export class InterviewService {
     async sendInterviewInvite(applicationId: string, actorId?: string): Promise<string> {
         const application = await Application.findById(applicationId).populate(
@@ -230,11 +327,19 @@ export class InterviewService {
 
         let scheduling = job.interviewScheduling;
         const hasJobScheduling = Boolean(scheduling?.enabled);
+        const schedulingHash = hasJobScheduling
+            ? buildInterviewSchedulingSyncHash(scheduling as any)
+            : '';
+        const syncedHash = String((scheduling as any)?.syncConfigHash || '').trim();
+        const hasSchedulingDrift = Boolean(schedulingHash && syncedHash && schedulingHash !== syncedHash);
         if (
             hasJobScheduling &&
             (!scheduling?.active ||
                 scheduling?.syncStatus !== 'synced' ||
-                !scheduling?.scheduleId)
+                !scheduling?.scheduleId ||
+                !scheduling?.eventTypeId ||
+                !scheduling?.bookingUrl ||
+                hasSchedulingDrift)
         ) {
             const jobDoc = await Job.findById(String(job._id));
 
@@ -264,6 +369,9 @@ export class InterviewService {
                 jobDoc.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
                 jobDoc.interviewScheduling.lastSyncedAt = new Date();
                 jobDoc.interviewScheduling.syncStatus = 'synced';
+                jobDoc.interviewScheduling.syncConfigHash = buildInterviewSchedulingSyncHash(
+                    jobDoc.interviewScheduling as any
+                );
                 jobDoc.interviewScheduling.syncError = undefined;
                 jobDoc.interviewScheduling.active = true;
                 await jobDoc.save();
@@ -296,11 +404,13 @@ export class InterviewService {
                 ? String((application.jobId as any).title || 'the role')
                 : 'the role';
 
-        await sendInterviewInviteEmail({
+        sendInterviewInviteEmail({
             to: application.email,
             candidateName: application.name,
             jobTitle,
             bookingUrl,
+        }).catch((err) => {
+            console.error('Failed to send interview invite email asynchronously:', err);
         });
 
         await Application.findByIdAndUpdate(applicationId, { status: 'interview' });
@@ -501,23 +611,44 @@ export class InterviewService {
             return;
         }
 
+        const reminderMinutesBefore = Number(
+            (application.jobId as any)?.interviewScheduling?.reminderMinutesBefore || 0
+        );
+        const shouldKeepReminder =
+            (status === 'scheduled' || status === 'rescheduled') && reminderMinutesBefore > 0;
+
         const updatedInterview = await Interview.findOneAndUpdate(
             { applicationId: application._id },
-            {
-                applicationId: application._id,
-                scheduledTime: nextScheduledTime,
-                meetLink: nextMeetLink,
-                interviewer,
-                status,
-                calcomBookingId: ids.bookingId,
-                calcomBookingUid: ids.bookingUid,
-                calcomEventTypeId: ids.eventTypeId,
-                lastWebhookEvent: rawEvent,
-                lastWebhookHash: fingerprint,
-                lastWebhookAt: new Date(),
-            },
+            (() => {
+                const reminderScheduledFor =
+                    shouldKeepReminder
+                        ? new Date(nextScheduledTime.getTime() - reminderMinutesBefore * 60 * 1000)
+                        : undefined;
+
+                return {
+                    applicationId: application._id,
+                    scheduledTime: nextScheduledTime,
+                    meetLink: nextMeetLink,
+                    interviewer,
+                    status,
+                    calcomBookingId: ids.bookingId,
+                    calcomBookingUid: ids.bookingUid,
+                    calcomEventTypeId: ids.eventTypeId,
+                    lastWebhookEvent: rawEvent,
+                    lastWebhookHash: fingerprint,
+                    lastWebhookAt: new Date(),
+                    reminderScheduledFor,
+                    reminderTargetScheduledTime:
+                        status === 'scheduled' || status === 'rescheduled' ? nextScheduledTime : undefined,
+                    reminderSentAt: undefined,
+                };
+            })(),
             { upsert: true, new: true, runValidators: true }
         );
+
+        if (status !== 'scheduled' && status !== 'rescheduled') {
+            clearInterviewReminderTimer(String(updatedInterview?._id || ''));
+        }
 
         // Keep the candidate in the interview stage even if they cancel/reschedule so
         // hiring users can manage follow-ups from a consistent pipeline stage.
@@ -583,6 +714,21 @@ export class InterviewService {
             });
         } catch (error) {
             console.error('Failed sending interview confirmation to candidate:', error);
+        }
+
+        if (updatedInterview?._id && reminderMinutesBefore > 0) {
+            scheduleInterviewReminder({
+                interviewId: String(updatedInterview._id),
+                candidateEmail: application.email,
+                candidateName: application.name,
+                jobTitle,
+                interviewer,
+                scheduledTime: nextScheduledTime,
+                meetLink: nextMeetLink,
+                reminderMinutesBefore,
+            });
+        } else if (updatedInterview?._id) {
+            clearInterviewReminderTimer(String(updatedInterview._id));
         }
 
         try {

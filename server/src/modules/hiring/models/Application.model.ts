@@ -21,8 +21,11 @@ export interface IApplication extends Document {
     resumeCloudinaryId?: string;
     portfolio?: string;
     linkedin?: string;
+    github?: string;
     experience?: string;
     coverLetter?: string;
+    location?: string;
+    yearsOfExperience?: number;
     status: ApplicationStatus;
     tags: string[];
     assignmentWindowStartedAt?: Date;
@@ -41,8 +44,11 @@ const ApplicationSchema = new Schema<IApplication>(
         resumeCloudinaryId: { type: String, trim: true },
         portfolio: { type: String, trim: true },
         linkedin: { type: String, trim: true },
+        github: { type: String, trim: true },
         experience: { type: String, trim: true },
         coverLetter: { type: String, trim: true },
+        location: { type: String, trim: true },
+        yearsOfExperience: { type: Number },
         status: {
             type: String,
             enum: [

@@ -31,6 +31,7 @@ export interface InterviewSchedulingConfig {
     minimumBookingNoticeMinutes: number;
     beforeEventBufferMinutes: number;
     afterEventBufferMinutes: number;
+    reminderMinutesBefore: number;
     syncStatus: InterviewScheduleSyncStatus;
     syncError?: string;
     lastSyncedAt?: string;
@@ -41,6 +42,7 @@ export interface Job {
     _id: string;
     title: string;
     department: string;
+    locationType?: 'Remote' | 'In-Office';
     location: string;
     description: string;
     requirements: string;
@@ -48,6 +50,21 @@ export interface Job {
     isHiring: boolean;
     assignmentRequired: boolean;
     interviewScheduling: InterviewSchedulingConfig;
+    createdBy: string | { _id: string; name: string; email: string };
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface JobTemplate {
+    _id: string;
+    templateName: string;
+    title: string;
+    department: string;
+    locationType: 'Remote' | 'In-Office';
+    location: string;
+    description: string;
+    requirements: string;
+    employmentType: EmploymentType;
     createdBy: string | { _id: string; name: string; email: string };
     createdAt: string;
     updatedAt: string;
@@ -83,8 +100,11 @@ export interface Application {
     resumeUrl: string;
     portfolio?: string;
     linkedin?: string;
+    github?: string;
     experience?: string;
     coverLetter?: string;
+    location?: string;
+    yearsOfExperience?: number;
     status: ApplicationStatus;
     tags: string[];
     createdAt: string;

@@ -36,6 +36,7 @@ const interviewSchedulingSchema = z
         minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).default(60),
         beforeEventBufferMinutes: z.number().int().min(0).max(120).default(5),
         afterEventBufferMinutes: z.number().int().min(0).max(120).default(5),
+        reminderMinutesBefore: z.number().int().min(0).max(10080).default(30),
     })
     .refine(
         (value) => !value.availableFrom || !value.availableTo || value.availableFrom <= value.availableTo,
@@ -60,6 +61,7 @@ const interviewSchedulingUpdateSchema = z
         minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).optional(),
         beforeEventBufferMinutes: z.number().int().min(0).max(120).optional(),
         afterEventBufferMinutes: z.number().int().min(0).max(120).optional(),
+        reminderMinutesBefore: z.number().int().min(0).max(10080).optional(),
     })
     .refine(
         (value) => {
@@ -81,7 +83,8 @@ export const createJobSchema = z.object({
     body: z.object({
         title: z.string().min(1, 'Job title is required').trim(),
         department: z.string().min(1, 'Department is required').trim(),
-        location: z.string().min(1, 'Location is required').trim(),
+        locationType: z.enum(['Remote', 'In-Office']).default('In-Office'),
+        location: z.string().trim().optional(),
         description: z.string().min(1, 'Description is required').trim(),
         requirements: z.string().min(1, 'Requirements are required').trim(),
         employmentType: z
@@ -97,7 +100,8 @@ export const updateJobSchema = z.object({
     body: z.object({
         title: z.string().min(1).trim().optional(),
         department: z.string().min(1).trim().optional(),
-        location: z.string().min(1).trim().optional(),
+        locationType: z.enum(['Remote', 'In-Office']).optional(),
+        location: z.string().trim().optional(),
         description: z.string().min(1).trim().optional(),
         requirements: z.string().min(1).trim().optional(),
         employmentType: z
@@ -146,3 +150,45 @@ export type GetJobInput = z.infer<typeof getJobSchema>['params'];
 export type ListJobsInput = z.infer<typeof listJobsSchema>['query'];
 export type InterviewSchedulingInput = NonNullable<CreateJobInput['interviewScheduling']>;
 export type InterviewSchedulingUpdateInput = NonNullable<UpdateJobInput['interviewScheduling']>;
+
+// ============================================
+// JOB TEMPLATE VALIDATORS
+// ============================================
+export const createJobTemplateSchema = z.object({
+    body: z.object({
+        templateName: z.string().min(1, 'Template name is required').trim(),
+        title: z.string().trim().optional(),
+        department: z.string().trim().optional(),
+        locationType: z.enum(['Remote', 'In-Office']).default('In-Office'),
+        location: z.string().trim().optional(),
+        description: z.string().trim().optional(),
+        requirements: z.string().trim().optional(),
+        employmentType: z
+            .enum(['full-time', 'part-time', 'contract', 'internship'])
+            .default('full-time'),
+    }),
+});
+
+export const updateJobTemplateSchema = z.object({
+    body: z.object({
+        templateName: z.string().min(1).trim().optional(),
+        title: z.string().min(1).trim().optional(),
+        department: z.string().min(1).trim().optional(),
+        locationType: z.enum(['Remote', 'In-Office']).optional(),
+        location: z.string().trim().optional(),
+        description: z.string().min(1).trim().optional(),
+        requirements: z.string().min(1).trim().optional(),
+        employmentType: z
+            .enum(['full-time', 'part-time', 'contract', 'internship'])
+            .optional(),
+    }),
+});
+
+export const getJobTemplateSchema = z.object({
+    params: z.object({
+        id: z.string().regex(objectIdRegex, 'Invalid template ID'),
+    }),
+});
+
+export type CreateJobTemplateInput = z.infer<typeof createJobTemplateSchema>['body'];
+export type UpdateJobTemplateInput = z.infer<typeof updateJobTemplateSchema>['body'];

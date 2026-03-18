@@ -24,8 +24,11 @@ export const createPublicApplicationSchema = z.object({
         phone: z.string().min(1, 'Phone is required').trim(),
         portfolio: z.string().trim().optional().or(z.literal('')),
         linkedin: z.string().trim().optional().or(z.literal('')),
+        github: z.string().trim().optional().or(z.literal('')),
         experience: z.string().trim().optional().or(z.literal('')),
         coverLetter: z.string().trim().optional().or(z.literal('')),
+        location: z.string().trim().min(1, 'Location is required').optional().or(z.literal('')),
+        yearsOfExperience: z.union([z.number(), z.string().regex(/^\d+$/, 'Must be a number').transform(Number)]).optional(),
     }),
 });
 
@@ -35,6 +38,8 @@ export const listApplicationsSchema = z.object({
         status: applicationStatusSchema.optional(),
         tags: z.string().optional(),
         search: z.string().optional(),
+        location: z.string().optional(),
+        minExperience: z.union([z.number(), z.string().regex(/^\d+$/).transform(Number)]).optional(),
         page: z
             .string()
             .regex(/^\d+$/)

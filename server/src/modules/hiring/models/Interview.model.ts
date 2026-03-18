@@ -20,6 +20,9 @@ export interface IInterview extends Document {
     lastWebhookEvent?: string;
     lastWebhookHash?: string;
     lastWebhookAt?: Date;
+    reminderScheduledFor?: Date;
+    reminderTargetScheduledTime?: Date;
+    reminderSentAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -48,6 +51,9 @@ const InterviewSchema = new Schema<IInterview>(
         lastWebhookEvent: { type: String, trim: true },
         lastWebhookHash: { type: String, trim: true },
         lastWebhookAt: { type: Date },
+        reminderScheduledFor: { type: Date },
+        reminderTargetScheduledTime: { type: Date },
+        reminderSentAt: { type: Date },
     },
     {
         timestamps: true,

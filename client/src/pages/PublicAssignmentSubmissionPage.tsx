@@ -5,8 +5,13 @@ import {
     AlertCircle,
     CheckCircle2,
     Clock3,
+    ExternalLink,
+    Github,
     Loader2,
+    PlayCircle,
+    Sparkles,
     ShieldCheck,
+    StickyNote,
 } from 'lucide-react';
 import {
     useGetAssignmentForApplicationQuery,
@@ -118,28 +123,75 @@ export default function PublicAssignmentSubmissionPage() {
         );
     }
 
+    const isSubmitDisabled = submitting || hasSubmitted;
+
+    const statusPillStyle: React.CSSProperties = hasSubmitted
+        ? {
+              backgroundColor: '#DCFCE7',
+              color: '#166534',
+              border: '1px solid #BBF7D0',
+          }
+        : isTimeExpired
+        ? {
+              backgroundColor: '#FEF2F2',
+              color: '#B91C1C',
+              border: '1px solid #FECACA',
+          }
+        : {
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
+              border: '1px solid #A7F3D0',
+          };
+
     return (
         <div
-            className="min-h-screen px-4 py-10"
+            className="min-h-screen relative overflow-hidden"
             style={{
-                background:
-                    'radial-gradient(circle at top left, #F0F9FF 0%, #F8FAFC 45%, #F1F5F9 100%)',
+                backgroundColor: 'var(--color-bg-app)',
             }}
         >
-            <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <section
-                    className="lg:col-span-2 rounded-2xl border p-6 shadow-sm"
-                    style={{
-                        backgroundColor: '#FFFFFF',
-                        borderColor: '#E2E8F0',
-                    }}
-                >
-                    <h1 className="text-3xl font-semibold" style={{ color: '#0F172A' }}>
+            <div className="absolute top-0 inset-x-0 h-80" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.14) 0%, rgba(249,250,251,0) 100%)' }} />
+            <div className="absolute -top-20 -right-16 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0) 70%)' }} />
+
+            <div className="relative z-10 px-4 py-10 md:py-14">
+                <div className="max-w-6xl mx-auto mb-6 md:mb-8">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold"
+                        style={{
+                            borderColor: 'var(--color-border-default)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            color: 'var(--color-text-secondary)',
+                        }}
+                    >
+                        <Sparkles size={13} />
+                        Candidate Assignment Portal
+                    </div>
+                    <h1
+                        className="text-3xl md:text-4xl font-bold mt-3"
+                        style={{ color: 'var(--color-text-primary)' }}
+                    >
                         {assignment.title}
                     </h1>
-                    <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: '#475569' }}>
-                        {assignment.description}
+                    <p className="text-sm md:text-base mt-2 max-w-3xl" style={{ color: 'var(--color-text-secondary)' }}>
+                        Submit your work before the deadline. Your links and notes are sent directly to the hiring team for review.
                     </p>
+                </div>
+
+                <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <section
+                    className="lg:col-span-2 rounded-2xl border p-5 md:p-7 shadow-sm"
+                    style={{
+                        backgroundColor: 'var(--color-bg-surface)',
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <div className="rounded-xl border p-4 md:p-5" style={{ borderColor: '#DBEAFE', backgroundColor: '#F8FBFF' }}>
+                        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>
+                            Assignment Brief
+                        </p>
+                        <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: '#1E3A8A' }}>
+                            {assignment.description}
+                        </p>
+                    </div>
 
                     <div className="mt-5 rounded-xl border p-4" style={{ borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
                         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
@@ -150,14 +202,23 @@ export default function PublicAssignmentSubmissionPage() {
                         </p>
                     </div>
 
-                    <div className="mt-5 rounded-xl border p-4" style={{ borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}>
-                        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
-                            Submission Form
-                        </p>
+                    <div className="mt-5 rounded-xl border p-4 md:p-5" style={{ borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                Submission Form
+                            </p>
+                            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={statusPillStyle}>
+                                {hasSubmitted
+                                    ? 'Submitted'
+                                    : isTimeExpired
+                                    ? 'Late window'
+                                    : 'Open'}
+                            </span>
+                        </div>
 
                         {isTimeExpired && !hasSubmitted && (
                             <div
-                                className="mt-3 p-3 rounded-lg flex items-center gap-2 text-sm"
+                                className="mt-3 p-3 rounded-lg flex items-center gap-2 text-sm border"
                                 style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
                             >
                                 <AlertCircle size={16} />
@@ -177,7 +238,7 @@ export default function PublicAssignmentSubmissionPage() {
 
                         {hasSubmitted ? (
                             <div
-                                className="mt-4 p-3 rounded-lg flex items-center gap-2 text-sm"
+                                className="mt-4 p-3 rounded-lg flex items-center gap-2 text-sm border"
                                 style={{ backgroundColor: '#DCFCE7', color: '#166534' }}
                             >
                                 <CheckCircle2 size={16} />
@@ -186,56 +247,89 @@ export default function PublicAssignmentSubmissionPage() {
                         ) : (
                             <form onSubmit={handleSubmit} className="mt-4 space-y-3">
                                 {assignment.submissionFields.githubLink && (
-                                    <input
-                                        type="url"
-                                        value={githubLink}
-                                        onChange={(e) => setGithubLink(e.target.value)}
-                                        placeholder="GitHub repository link"
-                                        className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
-                                        style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
-                                    />
+                                    <div>
+                                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                            GitHub Repository
+                                        </label>
+                                        <div className="relative mt-1.5">
+                                            <Github size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
+                                            <input
+                                                type="url"
+                                                value={githubLink}
+                                                onChange={(e) => setGithubLink(e.target.value)}
+                                                placeholder="https://github.com/username/repository"
+                                                className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                                 {assignment.submissionFields.demoLink && (
-                                    <input
-                                        type="url"
-                                        value={demoLink}
-                                        onChange={(e) => setDemoLink(e.target.value)}
-                                        placeholder="Live demo link"
-                                        className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
-                                        style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
-                                    />
+                                    <div>
+                                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                            Live Demo
+                                        </label>
+                                        <div className="relative mt-1.5">
+                                            <ExternalLink size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
+                                            <input
+                                                type="url"
+                                                value={demoLink}
+                                                onChange={(e) => setDemoLink(e.target.value)}
+                                                placeholder="https://your-demo-url"
+                                                className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                                 {assignment.submissionFields.videoLink && (
-                                    <input
-                                        type="url"
-                                        value={videoLink}
-                                        onChange={(e) => setVideoLink(e.target.value)}
-                                        placeholder="Video walkthrough link"
-                                        className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
-                                        style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
-                                    />
+                                    <div>
+                                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                            Video Walkthrough
+                                        </label>
+                                        <div className="relative mt-1.5">
+                                            <PlayCircle size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
+                                            <input
+                                                type="url"
+                                                value={videoLink}
+                                                onChange={(e) => setVideoLink(e.target.value)}
+                                                placeholder="https://loom.com / youtube.com / drive link"
+                                                className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                                 {assignment.submissionFields.notes && (
-                                    <textarea
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Additional notes"
-                                        rows={4}
-                                        className="w-full px-3 py-2 text-sm rounded-lg border outline-none resize-y"
-                                        style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
-                                    />
+                                    <div>
+                                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                            Additional Notes
+                                        </label>
+                                        <div className="relative mt-1.5">
+                                            <StickyNote size={15} className="absolute left-3 top-3.5" style={{ color: '#64748B' }} />
+                                            <textarea
+                                                value={notes}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                placeholder="Mention assumptions, setup steps, credentials for reviewer, or anything important."
+                                                rows={5}
+                                                className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl border outline-none resize-y"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
 
                                 <button
                                     type="submit"
-                                    disabled={submitting}
-                                    className="h-10 px-4 rounded-lg text-sm font-medium"
+                                    disabled={isSubmitDisabled}
+                                    className="h-11 px-5 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-2 transition-all"
                                     style={{
-                                        backgroundColor: '#0F766E',
+                                        backgroundColor: '#0B7A52',
                                         color: '#FFFFFF',
-                                        opacity: submitting ? 0.6 : 1,
+                                        opacity: isSubmitDisabled ? 0.6 : 1,
                                     }}
                                 >
+                                    {submitting && <Loader2 size={15} className="animate-spin" />}
                                     {submitting ? 'Submitting...' : 'Submit Assignment'}
                                 </button>
                             </form>
@@ -244,7 +338,7 @@ export default function PublicAssignmentSubmissionPage() {
                 </section>
 
                 <aside
-                    className="rounded-2xl border p-5 h-fit shadow-sm"
+                    className="rounded-2xl border p-5 h-fit shadow-sm sticky top-6"
                     style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
                 >
                     <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
@@ -265,12 +359,18 @@ export default function PublicAssignmentSubmissionPage() {
                             </p>
                         )}
 
-                        {remainingLabel && (
+                        {remainingLabel && !hasSubmitted && (
                             <p
                                 className="text-sm font-semibold mt-2"
                                 style={{ color: isTimeExpired ? '#B91C1C' : '#0F172A' }}
                             >
                                 {isTimeExpired ? 'Deadline passed' : `Remaining: ${remainingLabel}`}
+                            </p>
+                        )}
+
+                        {hasSubmitted && (
+                            <p className="text-sm font-semibold mt-2" style={{ color: '#166534' }}>
+                                Submission received
                             </p>
                         )}
 
@@ -291,6 +391,7 @@ export default function PublicAssignmentSubmissionPage() {
                         </p>
                     </div>
                 </aside>
+            </div>
             </div>
         </div>
     );

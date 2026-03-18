@@ -542,6 +542,55 @@ export async function sendInterviewScheduledForCandidateEmail(opts: {
 }
 
 // ============================================================
+// Send interview reminder to candidate
+// ============================================================
+export async function sendInterviewReminderForCandidateEmail(opts: {
+    to: string;
+    candidateName: string;
+    jobTitle: string;
+    interviewer: string;
+    scheduledTime: Date;
+    meetLink: string;
+}): Promise<void> {
+    const { to, candidateName, jobTitle, interviewer, scheduledTime, meetLink } = opts;
+    const client = getResend();
+
+    const timeText = scheduledTime.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: `Reminder: Upcoming interview for ${jobTitle}`,
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+      <tr><td style="background:#111827;padding:24px 32px;"><p style="margin:0;color:#fff;font-size:18px;font-weight:600;">Creative Upaay</p></td></tr>
+      <tr><td style="padding:32px;">
+        <p style="margin:0 0 14px;font-size:15px;color:#111827;font-weight:500;">Hello ${candidateName},</p>
+        <p style="margin:0 0 12px;font-size:14px;color:#374151;line-height:1.6;">This is a reminder for your upcoming interview.</p>
+        <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Role:</strong> ${jobTitle}</p>
+        <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Interviewer:</strong> ${interviewer}</p>
+        <p style="margin:0 0 16px;font-size:14px;color:#111827;"><strong>Time:</strong> ${timeText}</p>
+        <table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${meetLink}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-size:14px;font-weight:500;">Join Interview</a></td></tr></table>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body>
+</html>`,
+    });
+}
+
+// ============================================================
 // Send interview booking notification to HR
 // ============================================================
 export async function sendInterviewScheduledForHrEmail(opts: {

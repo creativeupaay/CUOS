@@ -44,6 +44,22 @@ export interface ListJobsParams {
 }
 
 // ============================================
+// TEMPLATE
+// ============================================
+export interface CreateJobTemplateRequest {
+    templateName: string;
+    title: string;
+    department: string;
+    locationType: 'Remote' | 'In-Office';
+    location?: string;
+    description: string;
+    requirements: string;
+    employmentType: EmploymentType;
+}
+
+export interface UpdateJobTemplateRequest extends Partial<CreateJobTemplateRequest> {}
+
+// ============================================
 // CREATE / UPDATE
 // ============================================
 export interface CreateJobRequest {
@@ -69,6 +85,7 @@ export interface CreateJobRequest {
         minimumBookingNoticeMinutes: number;
         beforeEventBufferMinutes: number;
         afterEventBufferMinutes: number;
+        reminderMinutesBefore: number;
     };
 }
 
@@ -95,6 +112,7 @@ export interface UpdateJobRequest {
         minimumBookingNoticeMinutes?: number;
         beforeEventBufferMinutes?: number;
         afterEventBufferMinutes?: number;
+        reminderMinutesBefore?: number;
     };
 }
 
@@ -113,6 +131,8 @@ export interface ListApplicationsParams {
     status?: ApplicationStatus;
     tags?: string;
     search?: string;
+    location?: string;
+    minExperience?: number;
     page?: number;
     limit?: number;
 }
@@ -134,8 +154,11 @@ export interface PublicApplyRequest {
     name: string;
     email: string;
     phone: string;
+    location: string;
+    yearsOfExperience: number;
     portfolio?: string;
     linkedin?: string;
+    github?: string;
     experience?: string;
     coverLetter?: string;
     resume: File;

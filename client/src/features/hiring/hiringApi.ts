@@ -1,6 +1,7 @@
 import { api } from '@/services/api';
 import type {
     Job,
+    JobTemplate,
     Application,
     Assignment,
     AssignmentSubmission,
@@ -10,6 +11,8 @@ import type {
     ApiResponse,
     CreateJobRequest,
     UpdateJobRequest,
+    CreateJobTemplateRequest,
+    UpdateJobTemplateRequest,
     ListJobsParams,
     ListJobsResponse,
     ListApplicationsParams,
@@ -97,6 +100,47 @@ export const hiringApi = api.injectEndpoints({
         deleteJob: builder.mutation<ApiResponse, string>({
             query: (id) => ({
                 url: `/hiring/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Jobs'],
+        }),
+
+        // ============================================
+        // JOB TEMPLATE ENDPOINTS
+        // ============================================
+        getJobTemplates: builder.query<ApiResponse<{ templates: JobTemplate[] }>, void>({
+            query: () => '/hiring/templates',
+            // Use Jobs tag for simplicity so it invalidates together or just templates if needed
+            providesTags: ['Jobs'],
+        }),
+
+        createJobTemplate: builder.mutation<
+            ApiResponse<{ template: JobTemplate }>,
+            CreateJobTemplateRequest
+        >({
+            query: (data) => ({
+                url: '/hiring/templates',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Jobs'],
+        }),
+
+        updateJobTemplate: builder.mutation<
+            ApiResponse<{ template: JobTemplate }>,
+            { id: string; data: UpdateJobTemplateRequest }
+        >({
+            query: ({ id, data }) => ({
+                url: `/hiring/templates/${id}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: ['Jobs'],
+        }),
+
+        deleteJobTemplate: builder.mutation<ApiResponse, string>({
+            query: (id) => ({
+                url: `/hiring/templates/${id}`,
                 method: 'DELETE',
             }),
             invalidatesTags: ['Jobs'],
@@ -231,7 +275,10 @@ export const hiringApi = api.injectEndpoints({
                 formData.append('phone', data.phone);
                 if (data.portfolio) formData.append('portfolio', data.portfolio);
                 if (data.linkedin) formData.append('linkedin', data.linkedin);
+                if (data.github) formData.append('github', data.github);
                 if (data.experience) formData.append('experience', data.experience);
+                formData.append('location', data.location);
+                formData.append('yearsOfExperience', String(data.yearsOfExperience));
                 if (data.coverLetter) formData.append('coverLetter', data.coverLetter);
                 formData.append('resume', data.resume);
 
@@ -318,6 +365,7 @@ export const hiringApi = api.injectEndpoints({
             }),
             invalidatesTags: (_result, _error, { applicationId }) => [
                 { type: 'Assignments', id: applicationId },
+                'Applications',
                 'AssignmentSubmissions',
             ],
         }),
@@ -383,6 +431,10 @@ export const {
     useUpdateJobMutation,
     useToggleJobMutation,
     useDeleteJobMutation,
+    useGetJobTemplatesQuery,
+    useCreateJobTemplateMutation,
+    useUpdateJobTemplateMutation,
+    useDeleteJobTemplateMutation,
     useGetApplicationsQuery,
     useGetApplicationByIdQuery,
     useGetApplicationTimelineQuery,

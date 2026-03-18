@@ -7,7 +7,7 @@ import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, ChevronRight, Settings, Briefcase
+    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase
 } from 'lucide-react';
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -377,32 +377,6 @@ export default function SuperAdminDashboard() {
                         </div>
                     </div>
 
-                    {/* Quick nav pills */}
-                    <div className="flex flex-wrap gap-2 mt-7">
-                        {departments.slice(0, 4).map(d => (
-                            <button
-                                key={d.key}
-                                onClick={() => navigate(d.path)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-                                style={{
-                                    background: 'rgba(255,255,255,0.08)',
-                                    color: 'rgba(255,255,255,0.75)',
-                                    border: '1px solid rgba(255,255,255,0.12)',
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
-                                    e.currentTarget.style.color = 'white';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-                                    e.currentTarget.style.color = 'rgba(255,255,255,0.75)';
-                                }}
-                            >
-                                {d.title}
-                                <ChevronRight size={11} />
-                            </button>
-                        ))}
-                    </div>
                 </div>
             </div>
 

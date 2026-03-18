@@ -689,6 +689,12 @@ export default function HiringApplicationDetailPage() {
                                 {pipelineError}
                             </p>
                         )}
+
+                        {application.status === 'interview' && (
+                            <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+                                Moving a candidate to Interview automatically sends the Cal.com invite.
+                            </p>
+                        )}
                     </div>
 
                     {/* Tags */}
@@ -788,7 +794,7 @@ export default function HiringApplicationDetailPage() {
 
                         <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
                             Interview scheduling and meeting link generation are handled via Cal.com.
-                            Send the invite to share the candidate's booking link.
+                            Invite is auto-sent when status changes to Interview, and you can resend it here.
                         </p>
 
                         {hasInterviewInviteBeenSent && (

@@ -5,6 +5,7 @@ import { env } from '../../../config/env.config';
 import { calcomService } from './calcom.service';
 import { Application } from '../models/Application.model';
 import { Assignment } from '../models/Assignment.model';
+import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
 import type {
     CreateJobInput,
     UpdateJobInput,
@@ -37,6 +38,7 @@ function normalizeCreateScheduling(input?: InterviewSchedulingInput) {
         minimumBookingNoticeMinutes: input?.minimumBookingNoticeMinutes ?? 60,
         beforeEventBufferMinutes: input?.beforeEventBufferMinutes ?? 5,
         afterEventBufferMinutes: input?.afterEventBufferMinutes ?? 5,
+        reminderMinutesBefore: input?.reminderMinutesBefore ?? 30,
         syncStatus: 'not_configured' as const,
         syncError: undefined,
     };
@@ -110,6 +112,9 @@ export class JobService {
                 job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
                 job.interviewScheduling.lastSyncedAt = new Date();
                 job.interviewScheduling.syncStatus = 'synced';
+                job.interviewScheduling.syncConfigHash = buildInterviewSchedulingSyncHash(
+                    job.interviewScheduling as any
+                );
                 job.interviewScheduling.syncError = undefined;
                 job.interviewScheduling.active = true;
                 await job.save();
@@ -228,6 +233,9 @@ export class JobService {
                 job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
                 job.interviewScheduling.lastSyncedAt = new Date();
                 job.interviewScheduling.syncStatus = 'synced';
+                job.interviewScheduling.syncConfigHash = buildInterviewSchedulingSyncHash(
+                    job.interviewScheduling as any
+                );
                 job.interviewScheduling.syncError = undefined;
                 job.interviewScheduling.active = true;
                 await job.save();

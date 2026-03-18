@@ -25,7 +25,9 @@ export interface IInterviewSchedulingConfig {
     minimumBookingNoticeMinutes: number;
     beforeEventBufferMinutes: number;
     afterEventBufferMinutes: number;
+    reminderMinutesBefore: number;
     syncStatus: InterviewScheduleSyncStatus;
+    syncConfigHash?: string;
     syncError?: string;
     lastSyncedAt?: Date;
     externalUpdatedAt?: Date;
@@ -38,6 +40,7 @@ export interface IJob extends Document {
     _id: Types.ObjectId;
     title: string;
     department: string;
+    locationType: 'Remote' | 'In-Office';
     location: string;
     description: string;
     requirements: string;
@@ -83,11 +86,13 @@ const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
         minimumBookingNoticeMinutes: { type: Number, default: 60 },
         beforeEventBufferMinutes: { type: Number, default: 5 },
         afterEventBufferMinutes: { type: Number, default: 5 },
+        reminderMinutesBefore: { type: Number, default: 30 },
         syncStatus: {
             type: String,
             enum: ['not_configured', 'pending', 'synced', 'failed'],
             default: 'not_configured',
         },
+        syncConfigHash: { type: String, trim: true },
         syncError: { type: String, trim: true },
         lastSyncedAt: { type: Date },
         externalUpdatedAt: { type: Date },
@@ -99,7 +104,12 @@ const JobSchema = new Schema<IJob>(
     {
         title: { type: String, required: true, trim: true },
         department: { type: String, required: true, trim: true },
-        location: { type: String, required: true, trim: true },
+        locationType: {
+            type: String,
+            enum: ['Remote', 'In-Office'],
+            default: 'In-Office',
+        },
+        location: { type: String, trim: true, default: '' },
         description: { type: String, required: true, trim: true },
         requirements: { type: String, required: true, trim: true },
         employmentType: {
@@ -123,6 +133,7 @@ const JobSchema = new Schema<IJob>(
                 minimumBookingNoticeMinutes: 60,
                 beforeEventBufferMinutes: 5,
                 afterEventBufferMinutes: 5,
+                reminderMinutesBefore: 30,
                 syncStatus: 'not_configured',
             }),
         },

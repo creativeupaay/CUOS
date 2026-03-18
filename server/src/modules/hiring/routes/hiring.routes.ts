@@ -5,6 +5,7 @@ import * as applicationController from '../controllers/application.controller';
 import * as assignmentController from '../controllers/assignment.controller';
 import * as interviewController from '../controllers/interview.controller';
 import * as reportController from '../controllers/report.controller';
+import * as jobTemplateController from '../controllers/jobTemplate.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { authorize } from '../../auth/middlewares/authorize.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
@@ -13,6 +14,9 @@ import {
     updateJobSchema,
     getJobSchema,
     listJobsSchema,
+    createJobTemplateSchema,
+    updateJobTemplateSchema,
+    getJobTemplateSchema,
 } from '../validators/job.validator';
 import {
     applicationDecisionSchema,
@@ -155,6 +159,44 @@ router.post(
     validateRequest(interviewIdParamSchema),
     validateRequest(saveInterviewNoteSchema),
     interviewController.saveInterviewNote
+);
+
+// ============================================
+// JOB TEMPLATE ROUTES
+// ============================================
+router.post(
+    '/templates',
+    authorize(manageRoles),
+    validateRequest(createJobTemplateSchema),
+    jobTemplateController.createTemplate
+);
+
+router.get(
+    '/templates',
+    authorize(viewRoles),
+    jobTemplateController.getTemplates
+);
+
+router.get(
+    '/templates/:id',
+    authorize(viewRoles),
+    validateRequest(getJobTemplateSchema),
+    jobTemplateController.getTemplate
+);
+
+router.patch(
+    '/templates/:id',
+    authorize(manageRoles),
+    validateRequest(getJobTemplateSchema),
+    validateRequest(updateJobTemplateSchema),
+    jobTemplateController.updateTemplate
+);
+
+router.delete(
+    '/templates/:id',
+    authorize(manageRoles),
+    validateRequest(getJobTemplateSchema),
+    jobTemplateController.deleteTemplate
 );
 
 // ============================================

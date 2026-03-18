@@ -23,6 +23,7 @@ import {
     getApplicationActivityTimeline,
     logApplicationActivity,
 } from './activity.service';
+import { InterviewService } from './interview.service';
 
 async function runEmailSafely(label: string, fn: () => Promise<void>) {
     try {
@@ -31,6 +32,8 @@ async function runEmailSafely(label: string, fn: () => Promise<void>) {
         console.error(`[Hiring Email] ${label} failed:`, error);
     }
 }
+
+const interviewService = new InterviewService();
 
 export class ApplicationService {
     async createPublicApplication(
@@ -93,7 +96,7 @@ export class ApplicationService {
         page: number;
         totalPages: number;
     }> {
-        const { jobId, status, tags, search, page = 1, limit = 50 } = filters;
+        const { jobId, status, tags, search, location, minExperience, page = 1, limit = 50 } = filters as any;
 
         const query: any = {};
         if (jobId) query.jobId = jobId;
@@ -101,7 +104,7 @@ export class ApplicationService {
         if (tags) {
             const tagList = tags
                 .split(',')
-                .map((t) => t.trim().toLowerCase())
+                .map((t: string) => t.trim().toLowerCase())
                 .filter(Boolean);
             if (tagList.length > 0) query.tags = { $in: tagList };
         }
@@ -112,17 +115,33 @@ export class ApplicationService {
                 { phone: { $regex: search, $options: 'i' } },
             ];
         }
+        if (location) {
+            query.location = { $regex: location, $options: 'i' };
+        }
+        if (typeof minExperience === 'number') {
+            query.yearsOfExperience = { $gte: minExperience };
+        }
 
         const skip = (page - 1) * limit;
 
-        const [applications, total] = await Promise.all([
-            Application.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .populate('jobId', 'title department location employmentType'),
-            Application.countDocuments(query),
+        const applications = await Application.aggregate([
+            { $match: query },
+            {
+                $addFields: {
+                    isRejected: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] },
+                },
+            },
+            { $sort: { isRejected: 1, createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
         ]);
+
+        await Application.populate(applications, {
+            path: 'jobId',
+            select: 'title department location employmentType',
+        });
+
+        const total = await Application.countDocuments(query);
 
         return {
             applications,
@@ -202,6 +221,22 @@ export class ApplicationService {
         const wasRejected = existing.status === 'rejected';
         const enteringAssignmentRound =
             status === 'assignment-round' && existing.status !== 'assignment-round';
+        const enteringInterview = status === 'interview' && existing.status !== 'interview';
+
+        if (enteringInterview) {
+            await interviewService.sendInterviewInvite(id, actorId);
+
+            const application = await Application.findById(id).populate(
+                'jobId',
+                'title department location employmentType interviewScheduling'
+            );
+
+            if (!application) {
+                throw new AppError('Application not found', 404);
+            }
+
+            return application;
+        }
 
         if (enteringAssignmentRound) {
             const jobId =

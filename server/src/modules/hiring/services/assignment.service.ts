@@ -113,6 +113,12 @@ export class AssignmentService {
             applicationId: application._id,
         }).select('_id');
 
+        if (submission && (application as any).status !== 'assignment-submitted') {
+            await Application.findByIdAndUpdate(application._id, {
+                status: 'assignment-submitted',
+            });
+        }
+
         let expiresAt = (application as any).assignmentWindowExpiresAt || null;
         if (!expiresAt && (application as any).status === 'assignment-round') {
             const days =
@@ -197,6 +203,11 @@ export class AssignmentService {
         }).select('_id');
 
         if (existingSubmission) {
+            if ((application as any).status !== 'assignment-submitted') {
+                await Application.findByIdAndUpdate(application._id, {
+                    status: 'assignment-submitted',
+                });
+            }
             throw new AppError('Assignment already submitted', 409);
         }
 
