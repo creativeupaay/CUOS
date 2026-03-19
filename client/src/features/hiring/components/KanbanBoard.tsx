@@ -21,6 +21,13 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
     { status: 'assignment-submitted', label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF', headerBg: '#FAF5FF' },
     { status: 'interview', label: 'Interview', color: '#0F766E', bg: '#CCFBF1', headerBg: '#F0FDFA' },
     {
+        status: 'interview-scheduled',
+        label: 'Interview Scheduled',
+        color: '#0E7490',
+        bg: '#CFFAFE',
+        headerBg: '#ECFEFF',
+    },
+    {
         status: 'offered',
         label: 'Offered',
         color: '#0369A1',

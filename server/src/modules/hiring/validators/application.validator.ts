@@ -9,6 +9,7 @@ const applicationStatusSchema = z.enum([
     'assignment-round',
     'assignment-submitted',
     'interview',
+    'interview-scheduled',
     'rejected',
     'offered',
     'hired',

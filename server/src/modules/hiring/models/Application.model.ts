@@ -7,6 +7,7 @@ export type ApplicationStatus =
     | 'assignment-round'
     | 'assignment-submitted'
     | 'interview'
+    | 'interview-scheduled'
     | 'rejected'
     | 'offered'
     | 'hired';
@@ -58,6 +59,7 @@ const ApplicationSchema = new Schema<IApplication>(
                 'assignment-round',
                 'assignment-submitted',
                 'interview',
+                'interview-scheduled',
                 'rejected',
                 'offered',
                 'hired',

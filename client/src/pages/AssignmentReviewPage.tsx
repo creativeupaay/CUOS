@@ -91,7 +91,7 @@ export default function AssignmentReviewPage() {
         if (candidate?.status === 'rejected') {
             return 'rejected';
         }
-        if (candidate?.status === 'interview') {
+        if (candidate?.status === 'interview' || candidate?.status === 'interview-scheduled') {
             return 'invited';
         }
 

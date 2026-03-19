@@ -36,6 +36,7 @@ const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg:
     'assignment-round': { label: 'Assignment', color: '#6D28D9', bg: '#EDE9FE' },
     'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
+    'interview-scheduled': { label: 'Interview Scheduled', color: '#0E7490', bg: '#CFFAFE' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
     hired: { label: 'Hired', color: '#15803D', bg: '#DCFCE7' },
@@ -48,6 +49,7 @@ const STATUS_ORDER: ApplicationStatus[] = [
     'assignment-round',
     'assignment-submitted',
     'interview',
+    'interview-scheduled',
 ];
 
 function buildCandidateBookingUrl(baseUrl: string, params: Record<string, string>) {
@@ -702,7 +704,7 @@ export default function HiringApplicationDetailPage() {
                             </p>
                         )}
 
-                        {application.status === 'interview' && (
+                        {(application.status === 'interview' || application.status === 'interview-scheduled') && (
                             <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
                                 Moving a candidate to Interview automatically sends the Cal.com invite.
                             </p>

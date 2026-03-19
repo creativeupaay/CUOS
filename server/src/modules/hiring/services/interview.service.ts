@@ -587,11 +587,20 @@ export class InterviewService {
             String(
                 pickFirst(payload, [
                     'payload.meetingUrl',
+                    'payload.location.url',
+                    'payload.location.value',
                     'payload.location',
                     'data.meetingUrl',
+                    'data.location.url',
+                    'data.location.value',
                     'data.location',
                     'booking.meetingUrl',
+                    'booking.location.url',
+                    'booking.location.value',
                     'booking.location',
+                    'payload.metadata.bookingUrl',
+                    'data.metadata.bookingUrl',
+                    'booking.metadata.bookingUrl',
                     'meetingUrl',
                     'location',
                 ]) || ''
@@ -631,8 +640,18 @@ export class InterviewService {
         const nextScheduledTime =
             validScheduledTime || previousInterview?.scheduledTime || new Date();
 
+        const fallbackBookingUrl = calcomService.buildCandidateBookingUrl({
+            applicationId: String(application._id),
+            jobId: appJobId,
+            candidateName: application.name,
+            candidateEmail: application.email,
+            scheduling: (application.jobId as any)?.interviewScheduling,
+        });
+
         const nextMeetLink =
-            meetLink || String(previousInterview?.meetLink || env.CALCOM_BOOKING_URL || '').trim();
+            meetLink ||
+            String(previousInterview?.meetLink || '').trim() ||
+            String(fallbackBookingUrl || env.CALCOM_BOOKING_URL || '').trim();
 
         if (!nextMeetLink) {
             console.error('Cal.com webhook ignored: no meeting link could be derived', {
@@ -685,9 +704,12 @@ export class InterviewService {
             clearInterviewReminderTimer(String(updatedInterview?._id || ''));
         }
 
-        // Keep the candidate in the interview stage even if they cancel/reschedule so
-        // hiring users can manage follow-ups from a consistent pipeline stage.
-        await Application.findByIdAndUpdate(application._id, { status: 'interview' });
+        // Move application to interview-scheduled once a booking is confirmed/rescheduled.
+        if (status === 'scheduled' || status === 'rescheduled') {
+            await Application.findByIdAndUpdate(application._id, {
+                status: 'interview-scheduled',
+            });
+        }
 
         const timelineTitleByStatus: Record<InterviewStatus, string> = {
             scheduled: 'Interview Scheduled',

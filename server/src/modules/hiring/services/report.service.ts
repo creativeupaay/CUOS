@@ -10,6 +10,7 @@ const PIPELINE_ORDER = [
     'assignment-round',
     'assignment-submitted',
     'interview',
+    'interview-scheduled',
     'offered',
     'hired',
     'rejected',
