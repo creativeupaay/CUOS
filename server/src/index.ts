@@ -52,6 +52,16 @@ app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Backward-compatible aliases for Cal.com webhook URL configuration.
+app.use((req, _res, next) => {
+  if (req.path === '/hiring/interview/calcom/webhook') {
+    req.url = `/api/v1${req.url}`;
+  } else if (req.path === '/api/hiring/interview/calcom/webhook') {
+    req.url = req.url.replace(/^\/api\//, '/api/v1/');
+  }
+  next();
+});
+
 app.use("/api/v1", v1Routes);
 
 // Serve local fallback uploads directory publicly
