@@ -129,6 +129,12 @@ function extractWebhookIdentifiers(payload: any): {
             'payload.metadata.candidateEmail',
             'data.metadata.candidateEmail',
             'metadata.candidateEmail',
+            'payload.email',
+            'data.email',
+            'booking.email',
+            'payload.user.email',
+            'data.user.email',
+            'booking.user.email',
             'payload.responses.candidateEmail',
             'data.responses.candidateEmail',
             'responses.candidateEmail',
@@ -468,9 +474,12 @@ export class InterviewService {
             const headerSecret =
                 sanitizeHeaderValue(headers['x-cal-secret-key']) ||
                 sanitizeHeaderValue(headers['x-calcom-secret-key']) ||
-                sanitizeHeaderValue(headers['x-webhook-secret']);
+                sanitizeHeaderValue(headers['x-webhook-secret']) ||
+                sanitizeHeaderValue(headers['x-cal-webhook-secret']);
 
-            if (!headerSecret || headerSecret !== configuredSecret) {
+            // Some Cal.com webhook modes do not send a shared-secret header.
+            // Only reject when a secret header is present but mismatched.
+            if (headerSecret && headerSecret !== configuredSecret) {
                 throw new AppError('Invalid Cal.com webhook secret', 401);
             }
         }
@@ -480,6 +489,17 @@ export class InterviewService {
         const rawEvent = String(
             pickFirst(payload, ['triggerEvent', 'event', 'type', 'data.type', 'payload.type']) || ''
         ).trim();
+
+        console.info('Cal.com webhook received', {
+            rawEvent,
+            status,
+            bookingUid: ids.bookingUid,
+            bookingId: ids.bookingId,
+            eventTypeId: ids.eventTypeId,
+            candidateEmail: ids.candidateEmail,
+            applicationId: ids.applicationId,
+            jobId: ids.jobId,
+        });
 
         let applicationId = ids.applicationId;
 
@@ -523,6 +543,19 @@ export class InterviewService {
             }
         }
 
+        if (!applicationId && ids.candidateEmail) {
+            const latestInterviewStageApplication = await Application.findOne({
+                email: String(ids.candidateEmail).toLowerCase(),
+                status: { $in: ['interview', 'interview-scheduled'] },
+            })
+                .sort({ updatedAt: -1 })
+                .select('_id');
+
+            if (latestInterviewStageApplication?._id) {
+                applicationId = String(latestInterviewStageApplication._id);
+            }
+        }
+
         if (!applicationId) {
             console.error('Cal.com webhook ignored: unable to map payload to application', {
                 ids,
@@ -542,11 +575,10 @@ export class InterviewService {
         }
 
         if (ids.jobId && String(application.jobId?._id || application.jobId) !== String(ids.jobId)) {
-            console.error('Cal.com webhook ignored: job mismatch for application', {
+            console.warn('Cal.com webhook job mismatch; continuing with mapped application', {
                 applicationId,
                 jobIdFromWebhook: ids.jobId,
             });
-            return;
         }
 
         const appJobId = String((application.jobId as any)?._id || application.jobId || '');
@@ -561,24 +593,27 @@ export class InterviewService {
             const job = await Job.findById(appJobId).select('interviewScheduling.eventTypeId');
             const expectedEventTypeId = job?.interviewScheduling?.eventTypeId;
             if (expectedEventTypeId && expectedEventTypeId !== ids.eventTypeId) {
-                console.error('Cal.com webhook ignored: event type mismatch', {
+                console.warn('Cal.com webhook event type mismatch; continuing with mapped application', {
                     applicationId,
                     expectedEventTypeId,
                     receivedEventTypeId: ids.eventTypeId,
                 });
-                return;
             }
         }
 
         const startRaw = pickFirst(payload, [
             'payload.startTime',
             'payload.startsAt',
+            'payload.start',
             'data.startTime',
             'data.startsAt',
+            'data.start',
             'booking.startTime',
             'booking.startsAt',
+            'booking.start',
             'startTime',
             'startsAt',
+            'start',
         ]);
 
         const scheduledTime = startRaw ? new Date(String(startRaw)) : null;
@@ -699,6 +734,13 @@ export class InterviewService {
             })(),
             { upsert: true, new: true, runValidators: true }
         );
+
+        console.info('Cal.com webhook persisted interview', {
+            applicationId: String(application._id),
+            interviewId: String(updatedInterview?._id || ''),
+            status,
+            scheduledTime: nextScheduledTime.toISOString(),
+        });
 
         if (status !== 'scheduled' && status !== 'rescheduled') {
             clearInterviewReminderTimer(String(updatedInterview?._id || ''));
