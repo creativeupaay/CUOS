@@ -213,11 +213,29 @@ function buildWebhookFingerprint(input: {
 
 const interviewReminderTimers = new Map<string, NodeJS.Timeout>();
 
+function reminderTimerKey(interviewId: string, reminderMinutesBefore: number): string {
+    return `${interviewId}:${reminderMinutesBefore}`;
+}
+
 function clearInterviewReminderTimer(interviewId: string): void {
-    const existingTimer = interviewReminderTimers.get(interviewId);
-    if (!existingTimer) return;
-    clearTimeout(existingTimer);
-    interviewReminderTimers.delete(interviewId);
+    for (const [key, timer] of interviewReminderTimers.entries()) {
+        if (!key.startsWith(`${interviewId}:`)) {
+            continue;
+        }
+        clearTimeout(timer);
+        interviewReminderTimers.delete(key);
+    }
+}
+
+function normalizeReminderMinutes(value: unknown): number[] {
+    const raw = Array.isArray(value) ? value : value !== undefined && value !== null ? [value] : [];
+    const normalized = raw
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item) && item >= 0)
+        .map((item) => Math.floor(item));
+
+    const uniqueSorted = Array.from(new Set(normalized)).sort((a, b) => a - b);
+    return uniqueSorted.length ? uniqueSorted : [];
 }
 
 async function sendInterviewReminderEmailIfValid(input: {
@@ -228,9 +246,10 @@ async function sendInterviewReminderEmailIfValid(input: {
     interviewer: string;
     scheduledTime: Date;
     meetLink: string;
+    reminderMinutesBefore: number;
 }): Promise<void> {
     const interview = await Interview.findById(input.interviewId).select(
-        'status scheduledTime reminderSentAt'
+        'status scheduledTime reminderSentAt reminderOffsetsSent'
     );
     if (!interview) {
         return;
@@ -240,7 +259,11 @@ async function sendInterviewReminderEmailIfValid(input: {
         return;
     }
 
-    if (interview.reminderSentAt) {
+    const sentOffsets = Array.isArray((interview as any).reminderOffsetsSent)
+        ? ((interview as any).reminderOffsetsSent as number[])
+        : [];
+
+    if (sentOffsets.includes(input.reminderMinutesBefore)) {
         return;
     }
 
@@ -264,6 +287,9 @@ async function sendInterviewReminderEmailIfValid(input: {
 
     await Interview.findByIdAndUpdate(input.interviewId, {
         reminderSentAt: new Date(),
+        $addToSet: {
+            reminderOffsetsSent: input.reminderMinutesBefore,
+        },
     });
 }
 
@@ -277,8 +303,6 @@ function scheduleInterviewReminder(input: {
     meetLink: string;
     reminderMinutesBefore: number;
 }): void {
-    clearInterviewReminderTimer(input.interviewId);
-
     if (input.reminderMinutesBefore <= 0) {
         return;
     }
@@ -293,17 +317,24 @@ function scheduleInterviewReminder(input: {
         return;
     }
 
+    const timerKey = reminderTimerKey(input.interviewId, input.reminderMinutesBefore);
+    const existingTimer = interviewReminderTimers.get(timerKey);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+        interviewReminderTimers.delete(timerKey);
+    }
+
     const timer = setTimeout(() => {
         sendInterviewReminderEmailIfValid(input)
             .catch((error) => {
                 console.error('Failed sending scheduled interview reminder:', error);
             })
             .finally(() => {
-                interviewReminderTimers.delete(input.interviewId);
+                interviewReminderTimers.delete(timerKey);
             });
     }, delay);
 
-    interviewReminderTimers.set(input.interviewId, timer);
+    interviewReminderTimers.set(timerKey, timer);
 }
 
 export class InterviewService {
@@ -611,18 +642,21 @@ export class InterviewService {
             return;
         }
 
-        const reminderMinutesBefore = Number(
-            (application.jobId as any)?.interviewScheduling?.reminderMinutesBefore || 0
+        const reminderMinutesBefore = normalizeReminderMinutes(
+            (application.jobId as any)?.interviewScheduling?.reminderMinutesBefore
         );
         const shouldKeepReminder =
-            (status === 'scheduled' || status === 'rescheduled') && reminderMinutesBefore > 0;
+            (status === 'scheduled' || status === 'rescheduled') && reminderMinutesBefore.length > 0;
 
         const updatedInterview = await Interview.findOneAndUpdate(
             { applicationId: application._id },
             (() => {
                 const reminderScheduledFor =
                     shouldKeepReminder
-                        ? new Date(nextScheduledTime.getTime() - reminderMinutesBefore * 60 * 1000)
+                        ? new Date(
+                              nextScheduledTime.getTime() -
+                                  Math.max(...reminderMinutesBefore) * 60 * 1000
+                          )
                         : undefined;
 
                 return {
@@ -641,6 +675,7 @@ export class InterviewService {
                     reminderTargetScheduledTime:
                         status === 'scheduled' || status === 'rescheduled' ? nextScheduledTime : undefined,
                     reminderSentAt: undefined,
+                    reminderOffsetsSent: [],
                 };
             })(),
             { upsert: true, new: true, runValidators: true }
@@ -716,16 +751,18 @@ export class InterviewService {
             console.error('Failed sending interview confirmation to candidate:', error);
         }
 
-        if (updatedInterview?._id && reminderMinutesBefore > 0) {
-            scheduleInterviewReminder({
-                interviewId: String(updatedInterview._id),
-                candidateEmail: application.email,
-                candidateName: application.name,
-                jobTitle,
-                interviewer,
-                scheduledTime: nextScheduledTime,
-                meetLink: nextMeetLink,
-                reminderMinutesBefore,
+        if (updatedInterview?._id && reminderMinutesBefore.length > 0) {
+            reminderMinutesBefore.forEach((offset) => {
+                scheduleInterviewReminder({
+                    interviewId: String(updatedInterview._id),
+                    candidateEmail: application.email,
+                    candidateName: application.name,
+                    jobTitle,
+                    interviewer,
+                    scheduledTime: nextScheduledTime,
+                    meetLink: nextMeetLink,
+                    reminderMinutesBefore: offset,
+                });
             });
         } else if (updatedInterview?._id) {
             clearInterviewReminderTimer(String(updatedInterview._id));

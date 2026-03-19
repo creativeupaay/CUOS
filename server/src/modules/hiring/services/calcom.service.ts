@@ -39,6 +39,7 @@ const CALCOM_EVENT_TYPES_API_VERSION = '2024-06-14';
 const CALCOM_SCHEDULES_API_VERSION = '2024-06-11';
 const MIN_CALENDAR_DAYS_WINDOW = 90;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const MAX_RANGE_OVERRIDE_DAYS = 400;
 
 function slugify(value: string): string {
     return value
@@ -94,6 +95,84 @@ function buildBookingFields() {
             disableOnPrefill: false,
         },
     ];
+}
+
+function normalizeAvailabilityRanges(scheduling: IInterviewSchedulingConfig): Array<{ startDate: Date; endDate: Date }> {
+    const rawRanges = Array.isArray((scheduling as any).availableRanges)
+        ? (scheduling as any).availableRanges
+        : [];
+
+    const normalized = rawRanges
+        .map((range: any) => ({
+            startDate: new Date(range.startDate),
+            endDate: new Date(range.endDate),
+        }))
+        .filter(
+            (range: { startDate: Date; endDate: Date }) =>
+                !Number.isNaN(range.startDate.getTime()) &&
+                !Number.isNaN(range.endDate.getTime()) &&
+                range.startDate.getTime() <= range.endDate.getTime()
+        )
+        .sort(
+            (a: { startDate: Date; endDate: Date }, b: { startDate: Date; endDate: Date }) =>
+                a.startDate.getTime() - b.startDate.getTime()
+        );
+
+    if (normalized.length > 0) {
+        return normalized;
+    }
+
+    // Legacy fallback for older records that still have availableFrom/availableTo.
+    const legacyFrom = (scheduling as any).availableFrom ? new Date((scheduling as any).availableFrom) : undefined;
+    const legacyTo = (scheduling as any).availableTo ? new Date((scheduling as any).availableTo) : undefined;
+
+    if (
+        legacyFrom &&
+        legacyTo &&
+        !Number.isNaN(legacyFrom.getTime()) &&
+        !Number.isNaN(legacyTo.getTime()) &&
+        legacyFrom.getTime() <= legacyTo.getTime()
+    ) {
+        return [{ startDate: legacyFrom, endDate: legacyTo }];
+    }
+
+    return [];
+}
+
+function normalizeDateOverrides(
+    scheduling: IInterviewSchedulingConfig
+): Array<{ date: Date; slots: Array<{ startTime: string; endTime: string }> }> {
+    const rawOverrides = Array.isArray((scheduling as any).dateOverrides)
+        ? (scheduling as any).dateOverrides
+        : [];
+
+    return rawOverrides
+        .map((item: any) => ({
+            date: new Date(item?.date),
+            slots: Array.isArray(item?.slots)
+                ? item.slots
+                      .filter(
+                          (slot: any) =>
+                              typeof slot?.startTime === 'string' &&
+                              typeof slot?.endTime === 'string' &&
+                              slot.endTime > slot.startTime
+                      )
+                      .map((slot: any) => ({
+                          startTime: String(slot.startTime),
+                          endTime: String(slot.endTime),
+                      }))
+                : [],
+        }))
+        .filter(
+            (item: { date: Date; slots: Array<{ startTime: string; endTime: string }> }) =>
+                !Number.isNaN(item.date.getTime()) && item.slots.length > 0
+        )
+        .sort(
+            (
+                a: { date: Date; slots: Array<{ startTime: string; endTime: string }> },
+                b: { date: Date; slots: Array<{ startTime: string; endTime: string }> }
+            ) => a.date.getTime() - b.date.getTime()
+        );
 }
 
 export class CalcomService {
@@ -227,6 +306,22 @@ export class CalcomService {
     ): Promise<number> {
         const payload = this.buildSchedulePayload(input);
 
+        const existingScheduleId = Number(input.scheduling.scheduleId || 0);
+        if (existingScheduleId > 0) {
+            try {
+                await this.client.patch(`/v2/schedules/${existingScheduleId}`, payload, {
+                    headers: { 'cal-api-version': CALCOM_SCHEDULES_API_VERSION },
+                });
+                return existingScheduleId;
+            } catch (error: any) {
+                const status = Number(error?.response?.status || 0);
+                if (status !== 404) {
+                    throw error;
+                }
+                // If the old schedule id is gone, fall back to creating a fresh one.
+            }
+        }
+
         const response = await this.client.post('/v2/schedules', payload, {
             headers: { 'cal-api-version': CALCOM_SCHEDULES_API_VERSION },
         });
@@ -244,8 +339,10 @@ export class CalcomService {
     ): Record<string, unknown> {
         const scheduling = input.scheduling;
         const today = new Date();
-        const availableFrom = scheduling.availableFrom ? new Date(scheduling.availableFrom) : undefined;
-        const availableTo = scheduling.availableTo ? new Date(scheduling.availableTo) : undefined;
+        const availabilityRanges = normalizeAvailabilityRanges(scheduling);
+        const dateOverrides = normalizeDateOverrides(scheduling);
+        const availableFrom = availabilityRanges[0]?.startDate;
+        const availableTo = availabilityRanges[availabilityRanges.length - 1]?.endDate;
 
         // Booking window strategy:
         // When BOTH boundaries are set → use Cal.com's 'range' type with explicit start/end dates.
@@ -307,8 +404,8 @@ export class CalcomService {
                 : `Interview scheduling for ${input.jobTitle}`,
             timeZone: scheduling.timezone,
             lengthInMinutes: scheduling.durationMinutes,
-            slotInterval: scheduling.slotIntervalMinutes,
-            minimumBookingNotice: scheduling.minimumBookingNoticeMinutes,
+            slotInterval: scheduling.durationMinutes,
+            minimumBookingNotice: 0,
             beforeEventBuffer: scheduling.beforeEventBufferMinutes,
             afterEventBuffer: scheduling.afterEventBufferMinutes,
             scheduleId,
@@ -327,8 +424,14 @@ export class CalcomService {
                 timezone: scheduling.timezone,
                 weekdays: scheduling.weekdays,
                 dailySlots: scheduling.dailySlots,
-                availableFrom: scheduling.availableFrom ? new Date(scheduling.availableFrom).toISOString() : null,
-                availableTo: scheduling.availableTo ? new Date(scheduling.availableTo).toISOString() : null,
+                availableRanges: availabilityRanges.map((range) => ({
+                    startDate: range.startDate.toISOString(),
+                    endDate: range.endDate.toISOString(),
+                })),
+                dateOverrides: dateOverrides.map((item) => ({
+                    date: item.date.toISOString(),
+                    slots: item.slots,
+                })),
             },
         };
     }
@@ -338,63 +441,116 @@ export class CalcomService {
         const dayLabels = scheduling.weekdays
             .map((day) => WEEKDAY_LABELS[day])
             .filter(Boolean);
+        const availabilityRanges = normalizeAvailabilityRanges(scheduling);
+        const dateOverrides = normalizeDateOverrides(scheduling);
 
         if (dayLabels.length === 0) {
             throw new AppError('At least one interview weekday is required to sync Cal.com schedule', 400);
         }
 
-        const availability = scheduling.dailySlots.map((slot) => ({
-            days: dayLabels,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-        }));
+        const availability = availabilityRanges.length
+            ? []
+            : scheduling.dailySlots.map((slot) => ({
+                  days: dayLabels,
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+              }));
+
+        const baseOverrides = availabilityRanges.length
+            ? this.buildRangeOverrides({
+                  ranges: availabilityRanges,
+                  weekdays: scheduling.weekdays,
+                  slots: scheduling.dailySlots,
+                  timeZone: scheduling.timezone,
+              })
+            : [];
+
+        const overrides = this.applyDateOverrides({
+            baseOverrides,
+            dateOverrides,
+            timeZone: scheduling.timezone,
+        });
 
         return {
             name: `${input.jobTitle} Interview Schedule`,
             timeZone: scheduling.timezone,
             isDefault: false,
             availability,
-            overrides: this.buildBoundaryOverrides(scheduling),
+            overrides,
         };
     }
 
-    private buildBoundaryOverrides(
-        scheduling: IInterviewSchedulingConfig
-    ): CalcomSchedulePayload['overrides'] {
-        const availableFrom = scheduling.availableFrom ? new Date(scheduling.availableFrom) : undefined;
-        const availableTo = scheduling.availableTo ? new Date(scheduling.availableTo) : undefined;
+    private buildRangeOverrides(input: {
+        ranges: Array<{ startDate: Date; endDate: Date }>;
+        weekdays: number[];
+        slots: Array<{ startTime: string; endTime: string }>;
+        timeZone: string;
+    }): Array<{ date: string; startTime: string; endTime: string }> {
+        const weekdaySet = new Set(input.weekdays);
+        const overrides: Array<{ date: string; startTime: string; endTime: string }> = [];
 
-        if (!availableFrom && !availableTo) {
-            return [];
+        for (const range of input.ranges) {
+            const current = new Date(range.startDate);
+            let daysAdded = 0;
+
+            while (current.getTime() <= range.endDate.getTime()) {
+                if (daysAdded > MAX_RANGE_OVERRIDE_DAYS) {
+                    break;
+                }
+
+                const dayOfWeek = current.getUTCDay();
+                if (weekdaySet.has(dayOfWeek)) {
+                    const dateLabel = this.formatDateInTimeZone(current, input.timeZone);
+                    input.slots.forEach((slot) => {
+                        overrides.push({
+                            date: dateLabel,
+                            startTime: slot.startTime,
+                            endTime: slot.endTime,
+                        });
+                    });
+                }
+
+                current.setUTCDate(current.getUTCDate() + 1);
+                daysAdded += 1;
+            }
         }
 
-        const byDate = new Map<string, { startTime: string; endTime: string }>();
-        const defaultStart = scheduling.dailySlots[0]?.startTime || '00:00';
-        const defaultEnd =
-            scheduling.dailySlots[scheduling.dailySlots.length - 1]?.endTime || '23:59';
+        return overrides;
+    }
 
-        if (availableFrom) {
-            const date = this.formatDateInTimeZone(availableFrom, scheduling.timezone);
-            byDate.set(date, {
-                startTime: this.formatTimeInTimeZone(availableFrom, scheduling.timezone),
-                endTime: defaultEnd,
+    private applyDateOverrides(input: {
+        baseOverrides: Array<{ date: string; startTime: string; endTime: string }>;
+        dateOverrides: Array<{ date: Date; slots: Array<{ startTime: string; endTime: string }> }>;
+        timeZone: string;
+    }): Array<{ date: string; startTime: string; endTime: string }> {
+        const grouped = new Map<string, Array<{ date: string; startTime: string; endTime: string }>>();
+
+        input.baseOverrides.forEach((item) => {
+            const existing = grouped.get(item.date) || [];
+            existing.push(item);
+            grouped.set(item.date, existing);
+        });
+
+        input.dateOverrides.forEach((override) => {
+            const dateLabel = this.formatDateInTimeZone(override.date, input.timeZone);
+            grouped.set(
+                dateLabel,
+                override.slots.map((slot) => ({
+                    date: dateLabel,
+                    startTime: slot.startTime,
+                    endTime: slot.endTime,
+                }))
+            );
+        });
+
+        return Array.from(grouped.values())
+            .flat()
+            .sort((a, b) => {
+                if (a.date === b.date) {
+                    return a.startTime.localeCompare(b.startTime);
+                }
+                return a.date.localeCompare(b.date);
             });
-        }
-
-        if (availableTo) {
-            const date = this.formatDateInTimeZone(availableTo, scheduling.timezone);
-            const existing = byDate.get(date);
-            byDate.set(date, {
-                startTime: existing?.startTime || defaultStart,
-                endTime: this.formatTimeInTimeZone(availableTo, scheduling.timezone),
-            });
-        }
-
-        return Array.from(byDate.entries()).map(([date, range]) => ({
-            date,
-            startTime: range.startTime,
-            endTime: range.endTime,
-        }));
     }
 
     private formatDateInTimeZone(date: Date, timeZone: string): string {
@@ -408,16 +564,6 @@ export class CalcomService {
         return formatter.format(date);
     }
 
-    private formatTimeInTimeZone(date: Date, timeZone: string): string {
-        const formatter = new Intl.DateTimeFormat('en-GB', {
-            timeZone,
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-        });
-
-        return formatter.format(date);
-    }
 }
 
 export const calcomService = new CalcomService();

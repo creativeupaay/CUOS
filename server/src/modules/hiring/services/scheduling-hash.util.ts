@@ -14,6 +14,36 @@ function sortSlots(slots: Array<{ startTime: string; endTime: string }>) {
     });
 }
 
+function sortRanges(
+    ranges: Array<{ startDate: string | Date; endDate: string | Date }>
+): Array<{ startDate: string; endDate: string }> {
+    return [...ranges]
+        .map((range) => ({
+            startDate: new Date(range.startDate).toISOString(),
+            endDate: new Date(range.endDate).toISOString(),
+        }))
+        .sort((a, b) => {
+            if (a.startDate === b.startDate) {
+                return a.endDate.localeCompare(b.endDate);
+            }
+            return a.startDate.localeCompare(b.startDate);
+        });
+}
+
+function sortDateOverrides(
+    overrides: Array<{
+        date: string | Date;
+        slots: Array<{ startTime: string; endTime: string }>;
+    }>
+) {
+    return [...overrides]
+        .map((override) => ({
+            date: new Date(override.date).toISOString().slice(0, 10),
+            slots: sortSlots(Array.isArray(override.slots) ? override.slots : []),
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function buildInterviewSchedulingSyncHash(
     scheduling: IInterviewSchedulingConfig | null | undefined
 ): string {
@@ -26,19 +56,22 @@ export function buildInterviewSchedulingSyncHash(
         active: Boolean(scheduling.active),
         timezone: String(scheduling.timezone || ''),
         organizerName: String(scheduling.organizerName || ''),
-        availableFrom: scheduling.availableFrom
-            ? new Date(scheduling.availableFrom).toISOString()
-            : null,
-        availableTo: scheduling.availableTo
-            ? new Date(scheduling.availableTo).toISOString()
-            : null,
+        availableRanges: sortRanges(
+            Array.isArray((scheduling as any).availableRanges) ? (scheduling as any).availableRanges : []
+        ),
+        dateOverrides: sortDateOverrides(
+            Array.isArray((scheduling as any).dateOverrides) ? (scheduling as any).dateOverrides : []
+        ),
         weekdays: sortNumbers(Array.isArray(scheduling.weekdays) ? scheduling.weekdays : []),
         dailySlots: sortSlots(Array.isArray(scheduling.dailySlots) ? scheduling.dailySlots : []),
         durationMinutes: Number(scheduling.durationMinutes || 0),
-        slotIntervalMinutes: Number(scheduling.slotIntervalMinutes || 0),
-        minimumBookingNoticeMinutes: Number(scheduling.minimumBookingNoticeMinutes || 0),
         beforeEventBufferMinutes: Number(scheduling.beforeEventBufferMinutes || 0),
         afterEventBufferMinutes: Number(scheduling.afterEventBufferMinutes || 0),
+        reminderMinutesBefore: sortNumbers(
+            Array.isArray((scheduling as any).reminderMinutesBefore)
+                ? (scheduling as any).reminderMinutesBefore
+                : []
+        ),
     };
 
     return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');

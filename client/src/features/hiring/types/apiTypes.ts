@@ -14,6 +14,8 @@ import type {
     ApplicationActivity,
     HiringReportSummary,
     InterviewDailySlot,
+    InterviewAvailabilityRange,
+    InterviewDateOverride,
 } from './types';
 
 // ============================================
@@ -76,16 +78,14 @@ export interface CreateJobRequest {
         active: boolean;
         timezone: string;
         organizerName: string;
-        availableFrom?: string;
-        availableTo?: string;
+        availableRanges: InterviewAvailabilityRange[];
+        dateOverrides?: InterviewDateOverride[];
         weekdays: number[];
         dailySlots: InterviewDailySlot[];
         durationMinutes: number;
-        slotIntervalMinutes: number;
-        minimumBookingNoticeMinutes: number;
         beforeEventBufferMinutes: number;
         afterEventBufferMinutes: number;
-        reminderMinutesBefore: number;
+        reminderMinutesBefore: number[];
     };
 }
 
@@ -103,16 +103,14 @@ export interface UpdateJobRequest {
         active?: boolean;
         timezone?: string;
         organizerName?: string;
-        availableFrom?: string | null;
-        availableTo?: string | null;
+        availableRanges?: InterviewAvailabilityRange[];
+        dateOverrides?: InterviewDateOverride[];
         weekdays?: number[];
         dailySlots?: InterviewDailySlot[];
         durationMinutes?: number;
-        slotIntervalMinutes?: number;
-        minimumBookingNoticeMinutes?: number;
         beforeEventBufferMinutes?: number;
         afterEventBufferMinutes?: number;
-        reminderMinutesBefore?: number;
+        reminderMinutesBefore?: number[];
     };
 }
 

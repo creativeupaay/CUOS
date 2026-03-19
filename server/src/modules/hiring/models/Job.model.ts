@@ -7,6 +7,16 @@ export interface IInterviewDailySlot {
     endTime: string;
 }
 
+export interface IInterviewAvailabilityRange {
+    startDate: Date;
+    endDate: Date;
+}
+
+export interface IInterviewDateOverride {
+    date: Date;
+    slots: IInterviewDailySlot[];
+}
+
 export interface IInterviewSchedulingConfig {
     enabled: boolean;
     active: boolean;
@@ -16,16 +26,14 @@ export interface IInterviewSchedulingConfig {
     eventTypeId?: number;
     eventTypeSlug?: string;
     bookingUrl?: string;
-    availableFrom?: Date;
-    availableTo?: Date;
+    availableRanges: IInterviewAvailabilityRange[];
+    dateOverrides: IInterviewDateOverride[];
     weekdays: number[];
     dailySlots: IInterviewDailySlot[];
     durationMinutes: number;
-    slotIntervalMinutes: number;
-    minimumBookingNoticeMinutes: number;
     beforeEventBufferMinutes: number;
     afterEventBufferMinutes: number;
-    reminderMinutesBefore: number;
+    reminderMinutesBefore: number[];
     syncStatus: InterviewScheduleSyncStatus;
     syncConfigHash?: string;
     syncError?: string;
@@ -61,6 +69,25 @@ const InterviewDailySlotSchema = new Schema<IInterviewDailySlot>(
     { _id: false }
 );
 
+const InterviewAvailabilityRangeSchema = new Schema<IInterviewAvailabilityRange>(
+    {
+        startDate: { type: Date, required: true },
+        endDate: { type: Date, required: true },
+    },
+    { _id: false }
+);
+
+const InterviewDateOverrideSchema = new Schema<IInterviewDateOverride>(
+    {
+        date: { type: Date, required: true },
+        slots: {
+            type: [InterviewDailySlotSchema],
+            default: [{ startTime: '10:00', endTime: '18:00' }],
+        },
+    },
+    { _id: false }
+);
+
 const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
     {
         enabled: { type: Boolean, default: false },
@@ -71,8 +98,14 @@ const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
         eventTypeId: { type: Number },
         eventTypeSlug: { type: String, trim: true },
         bookingUrl: { type: String, trim: true },
-        availableFrom: { type: Date },
-        availableTo: { type: Date },
+        availableRanges: {
+            type: [InterviewAvailabilityRangeSchema],
+            default: [],
+        },
+        dateOverrides: {
+            type: [InterviewDateOverrideSchema],
+            default: [],
+        },
         weekdays: {
             type: [Number],
             default: [1, 2, 3, 4, 5],
@@ -82,11 +115,9 @@ const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
             default: [{ startTime: '10:00', endTime: '18:00' }],
         },
         durationMinutes: { type: Number, default: 45 },
-        slotIntervalMinutes: { type: Number, default: 30 },
-        minimumBookingNoticeMinutes: { type: Number, default: 60 },
         beforeEventBufferMinutes: { type: Number, default: 5 },
         afterEventBufferMinutes: { type: Number, default: 5 },
-        reminderMinutesBefore: { type: Number, default: 30 },
+        reminderMinutesBefore: { type: [Number], default: [30] },
         syncStatus: {
             type: String,
             enum: ['not_configured', 'pending', 'synced', 'failed'],
@@ -126,14 +157,14 @@ const JobSchema = new Schema<IJob>(
                 active: false,
                 timezone: 'Asia/Kolkata',
                 organizerName: 'HR Team',
+                availableRanges: [],
+                dateOverrides: [],
                 weekdays: [1, 2, 3, 4, 5],
                 dailySlots: [{ startTime: '10:00', endTime: '18:00' }],
                 durationMinutes: 45,
-                slotIntervalMinutes: 30,
-                minimumBookingNoticeMinutes: 60,
                 beforeEventBufferMinutes: 5,
                 afterEventBufferMinutes: 5,
-                reminderMinutesBefore: 30,
+                reminderMinutesBefore: [30],
                 syncStatus: 'not_configured',
             }),
         },

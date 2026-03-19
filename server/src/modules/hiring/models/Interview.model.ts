@@ -23,6 +23,7 @@ export interface IInterview extends Document {
     reminderScheduledFor?: Date;
     reminderTargetScheduledTime?: Date;
     reminderSentAt?: Date;
+    reminderOffsetsSent?: number[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -54,6 +55,7 @@ const InterviewSchema = new Schema<IInterview>(
         reminderScheduledFor: { type: Date },
         reminderTargetScheduledTime: { type: Date },
         reminderSentAt: { type: Date },
+        reminderOffsetsSent: { type: [Number], default: [] },
     },
     {
         timestamps: true,

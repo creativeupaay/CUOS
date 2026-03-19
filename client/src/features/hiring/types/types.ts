@@ -14,24 +14,33 @@ export interface InterviewDailySlot {
     endTime: string;
 }
 
+export interface InterviewAvailabilityRange {
+    startDate: string;
+    endDate: string;
+}
+
+export interface InterviewDateOverride {
+    date: string;
+    slots: InterviewDailySlot[];
+}
+
 export interface InterviewSchedulingConfig {
     enabled: boolean;
     active: boolean;
+    scheduleId?: number;
     timezone: string;
     organizerName: string;
     eventTypeId?: number;
     eventTypeSlug?: string;
     bookingUrl?: string;
-    availableFrom?: string;
-    availableTo?: string;
+    availableRanges: InterviewAvailabilityRange[];
+    dateOverrides?: InterviewDateOverride[];
     weekdays: number[];
     dailySlots: InterviewDailySlot[];
     durationMinutes: number;
-    slotIntervalMinutes: number;
-    minimumBookingNoticeMinutes: number;
     beforeEventBufferMinutes: number;
     afterEventBufferMinutes: number;
-    reminderMinutesBefore: number;
+    reminderMinutesBefore: number[];
     syncStatus: InterviewScheduleSyncStatus;
     syncError?: string;
     lastSyncedAt?: string;

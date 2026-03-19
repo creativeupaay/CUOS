@@ -13,14 +13,42 @@ const interviewDailySlotSchema = z
         path: ['endTime'],
     });
 
+const interviewAvailabilityRangeSchema = z
+    .object({
+        startDate: z.string().datetime(),
+        endDate: z.string().datetime(),
+    })
+    .refine((value) => value.startDate <= value.endDate, {
+        message: 'endDate must be later than or equal to startDate',
+        path: ['endDate'],
+    });
+
+const interviewDateOverrideSchema = z.object({
+    date: z.string().datetime(),
+    slots: z.array(interviewDailySlotSchema).min(1),
+});
+
+const reminderMinutesSchema = z.preprocess(
+    (value) => {
+        if (value === undefined || value === null) {
+            return undefined;
+        }
+        if (Array.isArray(value)) {
+            return value;
+        }
+        return [value];
+    },
+    z.array(z.number().int().min(0).max(10080)).min(1)
+);
+
 const interviewSchedulingSchema = z
     .object({
         enabled: z.boolean().default(false),
         active: z.boolean().default(false),
         timezone: z.string().min(1).default('Asia/Kolkata'),
         organizerName: z.string().min(1).default('HR Team'),
-        availableFrom: z.string().datetime().optional(),
-        availableTo: z.string().datetime().optional(),
+        availableRanges: z.array(interviewAvailabilityRangeSchema).default([]),
+        dateOverrides: z.array(interviewDateOverrideSchema).default([]),
         weekdays: z
             .array(z.number().int().min(0).max(6))
             .min(1, 'Select at least one weekday')
@@ -32,19 +60,10 @@ const interviewSchedulingSchema = z
             },
         ]),
         durationMinutes: z.number().int().min(10).max(240).default(45),
-        slotIntervalMinutes: z.number().int().min(5).max(180).default(30),
-        minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).default(60),
         beforeEventBufferMinutes: z.number().int().min(0).max(120).default(5),
         afterEventBufferMinutes: z.number().int().min(0).max(120).default(5),
-        reminderMinutesBefore: z.number().int().min(0).max(10080).default(30),
-    })
-    .refine(
-        (value) => !value.availableFrom || !value.availableTo || value.availableFrom <= value.availableTo,
-        {
-            message: 'availableTo must be later than or equal to availableFrom',
-            path: ['availableTo'],
-        }
-    );
+        reminderMinutesBefore: reminderMinutesSchema.default([30]),
+    });
 
 const interviewSchedulingUpdateSchema = z
     .object({
@@ -52,29 +71,15 @@ const interviewSchedulingUpdateSchema = z
         active: z.boolean().optional(),
         timezone: z.string().min(1).optional(),
         organizerName: z.string().min(1).optional(),
-        availableFrom: z.string().datetime().nullable().optional(),
-        availableTo: z.string().datetime().nullable().optional(),
+        availableRanges: z.array(interviewAvailabilityRangeSchema).optional(),
+        dateOverrides: z.array(interviewDateOverrideSchema).optional(),
         weekdays: z.array(z.number().int().min(0).max(6)).min(1).optional(),
         dailySlots: z.array(interviewDailySlotSchema).min(1).optional(),
         durationMinutes: z.number().int().min(10).max(240).optional(),
-        slotIntervalMinutes: z.number().int().min(5).max(180).optional(),
-        minimumBookingNoticeMinutes: z.number().int().min(0).max(43200).optional(),
         beforeEventBufferMinutes: z.number().int().min(0).max(120).optional(),
         afterEventBufferMinutes: z.number().int().min(0).max(120).optional(),
-        reminderMinutesBefore: z.number().int().min(0).max(10080).optional(),
-    })
-    .refine(
-        (value) => {
-            if (!value.availableFrom || !value.availableTo) {
-                return true;
-            }
-            return value.availableFrom <= value.availableTo;
-        },
-        {
-            message: 'availableTo must be later than or equal to availableFrom',
-            path: ['availableTo'],
-        }
-    );
+        reminderMinutesBefore: reminderMinutesSchema.optional(),
+    });
 
 // ============================================
 // JOB VALIDATORS
