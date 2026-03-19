@@ -820,9 +820,10 @@ export class InterviewService {
         page: number;
         totalPages: number;
     }> {
-        const { status, search, from, to, page = 1, limit = 50 } = filters;
+        const { applicationId, status, search, from, to, page = 1, limit = 50 } = filters;
 
         const query: any = {};
+        if (applicationId) query.applicationId = applicationId;
         if (status) query.status = status;
         if (from || to) {
             query.scheduledTime = {};

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import {
     AlertCircle,
     CheckCircle2,
@@ -188,18 +189,72 @@ export default function PublicAssignmentSubmissionPage() {
                         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>
                             Assignment Brief
                         </p>
-                        <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: '#1E3A8A' }}>
-                            {assignment.description}
-                        </p>
+                        <div className="text-sm mt-2 prose prose-sm max-w-none" style={{ color: '#1E3A8A' }}>
+                            <ReactMarkdown
+                                components={{
+                                    a: ({ href, children }) => (
+                                        <a
+                                            href={href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="font-semibold underline hover:opacity-75 transition-opacity"
+                                            style={{ color: '#1D4ED8' }}
+                                        >
+                                            {children}
+                                        </a>
+                                    ),
+                                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                                    li: ({ children }) => <li className="ml-2 mb-1">{children}</li>,
+                                    code: ({ children }) => (
+                                        <code className="bg-gray-200 px-1.5 py-0.5 rounded text-xs font-mono">
+                                            {children}
+                                        </code>
+                                    ),
+                                    strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                    em: ({ children }) => <em className="italic">{children}</em>,
+                                }}
+                            >
+                                {assignment.description}
+                            </ReactMarkdown>
+                        </div>
                     </div>
 
                     <div className="mt-5 rounded-xl border p-4" style={{ borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
                         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
                             Instructions
                         </p>
-                        <p className="text-sm whitespace-pre-wrap mt-2" style={{ color: '#1E293B' }}>
-                            {assignment.instructions}
-                        </p>
+                        <div className="text-sm mt-2 prose prose-sm max-w-none" style={{ color: '#1E293B' }}>
+                            <ReactMarkdown
+                                components={{
+                                    a: ({ href, children }) => (
+                                        <a
+                                            href={href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="font-semibold underline hover:opacity-75 transition-opacity"
+                                            style={{ color: '#1D4ED8' }}
+                                        >
+                                            {children}
+                                        </a>
+                                    ),
+                                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                                    li: ({ children }) => <li className="ml-2 mb-1">{children}</li>,
+                                    code: ({ children }) => (
+                                        <code className="bg-gray-200 px-1.5 py-0.5 rounded text-xs font-mono">
+                                            {children}
+                                        </code>
+                                    ),
+                                    strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                    em: ({ children }) => <em className="italic">{children}</em>,
+                                }}
+                            >
+                                {assignment.instructions}
+                            </ReactMarkdown>
+                        </div>
                     </div>
 
                     <div className="mt-5 rounded-xl border p-4 md:p-5" style={{ borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}>

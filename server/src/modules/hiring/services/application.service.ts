@@ -1,4 +1,5 @@
 import path from 'path';
+import { Types } from 'mongoose';
 import AppError from '../../../utils/appError';
 import { uploadDocument } from '../../../utils/cloudinary.util';
 import {
@@ -99,7 +100,14 @@ export class ApplicationService {
         const { jobId, status, tags, search, location, minExperience, page = 1, limit = 50 } = filters as any;
 
         const query: any = {};
-        if (jobId) query.jobId = jobId;
+        if (jobId) {
+            try {
+                query.jobId = new Types.ObjectId(jobId);
+            } catch {
+                // If jobId is not a valid ObjectId, just use it as is (shouldn't happen but safe guard)
+                query.jobId = jobId;
+            }
+        }
         if (status) query.status = status;
         if (tags) {
             const tagList = tags

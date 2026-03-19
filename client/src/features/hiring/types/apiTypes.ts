@@ -199,6 +199,7 @@ export interface AssignmentSubmissionsResponse {
 }
 
 export interface ListInterviewsParams {
+    applicationId?: string;
     status?: InterviewStatus;
     search?: string;
     from?: string;

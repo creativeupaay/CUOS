@@ -20,6 +20,7 @@ export const calcomWebhookSchema = z.object({
 
 export const listInterviewsSchema = z.object({
     query: z.object({
+        applicationId: z.string().regex(objectIdRegex, 'Invalid application ID').optional(),
         status: z.enum(['scheduled', 'completed', 'cancelled', 'rescheduled', 'no-show']).optional(),
         search: z.string().trim().optional(),
         from: z.string().datetime().optional(),

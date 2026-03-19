@@ -3,7 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     AlertCircle,
     ArrowLeft,
+    Calendar,
     CheckCircle2,
+    Clock,
     ExternalLink,
     Link,
     Loader2,
@@ -11,6 +13,7 @@ import {
     Phone,
     Send,
     Tag,
+    Video,
     X,
 } from 'lucide-react';
 import {
@@ -22,6 +25,7 @@ import {
     useUpdateApplicationStatusMutation,
     useAddApplicationTagMutation,
     useRemoveApplicationTagMutation,
+    useGetInterviewsQuery,
 } from '@/features/hiring/hiringApi';
 import type { ApplicationStatus } from '@/features/hiring/types/types';
 
@@ -102,6 +106,14 @@ export default function HiringApplicationDetailPage() {
     const { data: submissionData } = useGetAssignmentSubmissionsQuery(assignmentId || '', {
         skip: !assignmentId,
     });
+    const { data: interviewsData } = useGetInterviewsQuery(
+        { applicationId: id },
+        { skip: !id }
+    );
+    const scheduledInterview = useMemo(() => {
+        const interviews = interviewsData?.data.interviews || [];
+        return interviews.length > 0 ? interviews[0] : null;
+    }, [interviewsData?.data.interviews]);
     const submissionForApplication = useMemo(() => {
         const list = submissionData?.data.submissions || [];
         if (!id) return null;
@@ -854,6 +866,86 @@ export default function HiringApplicationDetailPage() {
                             </p>
                         )}
                     </div>
+
+                    {/* Scheduled Interview Details */}
+                    {scheduledInterview && (
+                        <div
+                            className="rounded-xl border p-5"
+                            style={{
+                                backgroundColor: 'var(--color-bg-surface)',
+                                borderColor: 'var(--color-border-default)',
+                            }}
+                        >
+                            <p
+                                className="text-xs font-semibold uppercase tracking-wide mb-4"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                            >
+                                Scheduled Interview
+                            </p>
+
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-2">
+                                    <Calendar size={14} style={{ color: 'var(--color-text-secondary)', marginTop: '2px', flexShrink: 0 }} />
+                                    <div>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Date & Time
+                                        </p>
+                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                            {new Date(scheduledInterview.scheduledTime).toLocaleString('en-IN', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                            })}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-2">
+                                    <Video size={14} style={{ color: 'var(--color-text-secondary)', marginTop: '2px', flexShrink: 0 }} />
+                                    <div>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Meeting Link
+                                        </p>
+                                        <a
+                                            href={scheduledInterview.meetLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm font-medium inline-flex items-center gap-1 hover:opacity-75 transition-opacity"
+                                            style={{ color: 'var(--color-primary)' }}
+                                        >
+                                            Join Meeting <ExternalLink size={12} />
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-2">
+                                    <Clock size={14} style={{ color: 'var(--color-text-secondary)', marginTop: '2px', flexShrink: 0 }} />
+                                    <div>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Interviewer
+                                        </p>
+                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                            {scheduledInterview.interviewer}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-2">
+                                    <CheckCircle2 size={14} style={{ color: 'var(--color-text-secondary)', marginTop: '2px', flexShrink: 0 }} />
+                                    <div>
+                                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                            Status
+                                        </p>
+                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)', textTransform: 'capitalize' }}>
+                                            {scheduledInterview.status.replace('-', ' ')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
