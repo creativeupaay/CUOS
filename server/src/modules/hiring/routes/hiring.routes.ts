@@ -42,6 +42,8 @@ import {
     listInterviewsSchema,
     saveInterviewNoteSchema,
     updateInterviewStatusSchema,
+    webhookDebugQuerySchema,
+    webhookDebugPublicQuerySchema,
 } from '../validators/interview.validator';
 import { hiringReportSummarySchema } from '../validators/report.validator';
 
@@ -93,6 +95,12 @@ router.post(
     interviewController.handleCalcomWebhook
 );
 
+router.get(
+    '/interview/calcom/webhook-debug-public',
+    validateRequest(webhookDebugPublicQuerySchema),
+    interviewController.getWebhookDebugPublic
+);
+
 // ============================================
 // PROTECTED ROUTES — require authentication
 // ============================================
@@ -129,6 +137,13 @@ router.get(
     authorize(viewRoles),
     validateRequest(listInterviewsSchema),
     interviewController.getInterviews
+);
+
+router.get(
+    '/interview/calcom/webhook-debug',
+    authorize(viewRoles),
+    validateRequest(webhookDebugQuerySchema),
+    interviewController.getWebhookDebug
 );
 
 router.get(

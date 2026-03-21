@@ -66,6 +66,31 @@ function sanitizeHeaderValue(headerValue: string | string[] | undefined): string
     return String(headerValue || '').trim();
 }
 
+/**
+ * Safely extracts a string value from a potentially nested object.
+ * If the value is an object, tries to extract common string fields.
+ */
+function extractStringValue(value: any): string {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return String(value);
+
+    // If it's an object, try to extract value from common fields
+    if (typeof value === 'object') {
+        // Try common value fields
+        for (const field of ['value', 'label', 'text', 'name', 'id', 'email']) {
+            if (value[field] && typeof value[field] === 'string') {
+                return String(value[field]).trim();
+            }
+        }
+        // If no common field found, return empty string to avoid [object Object]
+        return '';
+    }
+
+    return String(value).trim();
+}
+
 function extractWebhookIdentifiers(payload: any): {
     applicationId?: string;
     jobId?: string;
@@ -74,106 +99,131 @@ function extractWebhookIdentifiers(payload: any): {
     bookingId?: string;
     eventTypeId?: number;
 } {
-    const applicationId = String(
-        pickFirst(payload, [
-            'payload.metadata.applicationId',
-            'data.metadata.applicationId',
-            'metadata.applicationId',
-            'payload.booking.metadata.applicationId',
-            'data.booking.metadata.applicationId',
-            'booking.metadata.applicationId',
-            'payload.responses.applicationId',
-            'data.responses.applicationId',
-            'responses.applicationId',
-            'payload.booking.responses.applicationId',
-            'data.booking.responses.applicationId',
-            'booking.responses.applicationId',
-            'payload.customInputs.applicationId',
-            'data.customInputs.applicationId',
-            'customInputs.applicationId',
-            'payload.booking.customInputs.applicationId',
-            'data.booking.customInputs.applicationId',
-            'booking.customInputs.applicationId',
-            'payload.applicationId',
-            'applicationId',
-        ]) || ''
-    ).trim();
+    const applicationIdRaw = pickFirst(payload, [
+        'payload.metadata.applicationId',
+        'data.metadata.applicationId',
+        'metadata.applicationId',
+        'payload.booking.metadata.applicationId',
+        'data.booking.metadata.applicationId',
+        'booking.metadata.applicationId',
+        'payload.responses.applicationId.value',
+        'data.responses.applicationId.value',
+        'responses.applicationId.value',
+        'payload.responses.applicationId',
+        'data.responses.applicationId',
+        'responses.applicationId',
+        'payload.booking.responses.applicationId.value',
+        'data.booking.responses.applicationId.value',
+        'booking.responses.applicationId.value',
+        'payload.booking.responses.applicationId',
+        'data.booking.responses.applicationId',
+        'booking.responses.applicationId',
+        'payload.customInputs.applicationId',
+        'data.customInputs.applicationId',
+        'customInputs.applicationId',
+        'payload.booking.customInputs.applicationId',
+        'data.booking.customInputs.applicationId',
+        'booking.customInputs.applicationId',
+        'payload.applicationId',
+        'applicationId',
+    ]);
+    const applicationId = extractStringValue(applicationIdRaw);
 
-    const jobId = String(
-        pickFirst(payload, [
-            'payload.metadata.jobId',
-            'data.metadata.jobId',
-            'metadata.jobId',
-            'payload.booking.metadata.jobId',
-            'data.booking.metadata.jobId',
-            'booking.metadata.jobId',
-            'payload.responses.jobId',
-            'data.responses.jobId',
-            'responses.jobId',
-            'payload.booking.responses.jobId',
-            'data.booking.responses.jobId',
-            'booking.responses.jobId',
-            'payload.customInputs.jobId',
-            'data.customInputs.jobId',
-            'customInputs.jobId',
-            'payload.booking.customInputs.jobId',
-            'data.booking.customInputs.jobId',
-            'booking.customInputs.jobId',
-            'payload.jobId',
-            'jobId',
-        ]) || ''
-    ).trim();
+    const jobIdRaw = pickFirst(payload, [
+        'payload.metadata.jobId',
+        'data.metadata.jobId',
+        'metadata.jobId',
+        'payload.booking.metadata.jobId',
+        'data.booking.metadata.jobId',
+        'booking.metadata.jobId',
+        'payload.responses.jobId.value',
+        'data.responses.jobId.value',
+        'responses.jobId.value',
+        'payload.responses.jobId',
+        'data.responses.jobId',
+        'responses.jobId',
+        'payload.booking.responses.jobId.value',
+        'data.booking.responses.jobId.value',
+        'booking.responses.jobId.value',
+        'payload.booking.responses.jobId',
+        'data.booking.responses.jobId',
+        'booking.responses.jobId',
+        'payload.customInputs.jobId',
+        'data.customInputs.jobId',
+        'customInputs.jobId',
+        'payload.booking.customInputs.jobId',
+        'data.booking.customInputs.jobId',
+        'booking.customInputs.jobId',
+        'payload.jobId',
+        'jobId',
+    ]);
+    const jobId = extractStringValue(jobIdRaw);
 
-    const candidateEmail = String(
-        pickFirst(payload, [
-            'payload.metadata.candidateEmail',
-            'data.metadata.candidateEmail',
-            'metadata.candidateEmail',
-            'payload.email',
-            'data.email',
-            'booking.email',
-            'payload.user.email',
-            'data.user.email',
-            'booking.user.email',
-            'payload.responses.candidateEmail',
-            'data.responses.candidateEmail',
-            'responses.candidateEmail',
-            'payload.booking.responses.candidateEmail',
-            'data.booking.responses.candidateEmail',
-            'booking.responses.candidateEmail',
-            'payload.customInputs.candidateEmail',
-            'data.customInputs.candidateEmail',
-            'customInputs.candidateEmail',
-            'payload.booking.customInputs.candidateEmail',
-            'data.booking.customInputs.candidateEmail',
-            'booking.customInputs.candidateEmail',
-            'payload.attendees.0.email',
-            'data.attendees.0.email',
-            'booking.attendees.0.email',
-            'attendees.0.email',
-        ]) || ''
-    ).trim();
+    const candidateEmailRaw = pickFirst(payload, [
+        'payload.metadata.candidateEmail',
+        'data.metadata.candidateEmail',
+        'metadata.candidateEmail',
+        'payload.responses.email.value',
+        'data.responses.email.value',
+        'responses.email.value',
+        'payload.responses.email',
+        'data.responses.email',
+        'responses.email',
+        'payload.responses.candidateEmail.value',
+        'data.responses.candidateEmail.value',
+        'responses.candidateEmail.value',
+        'payload.responses.candidateEmail',
+        'data.responses.candidateEmail',
+        'responses.candidateEmail',
+        'payload.booking.responses.email.value',
+        'data.booking.responses.email.value',
+        'booking.responses.email.value',
+        'payload.booking.responses.email',
+        'data.booking.responses.email',
+        'booking.responses.email',
+        'payload.booking.responses.candidateEmail.value',
+        'data.booking.responses.candidateEmail.value',
+        'booking.responses.candidateEmail.value',
+        'payload.booking.responses.candidateEmail',
+        'data.booking.responses.candidateEmail',
+        'booking.responses.candidateEmail',
+        'payload.email',
+        'data.email',
+        'booking.email',
+        'payload.user.email',
+        'data.user.email',
+        'booking.user.email',
+        'payload.customInputs.candidateEmail',
+        'data.customInputs.candidateEmail',
+        'customInputs.candidateEmail',
+        'payload.booking.customInputs.candidateEmail',
+        'data.booking.customInputs.candidateEmail',
+        'booking.customInputs.candidateEmail',
+        'payload.attendees.0.email',
+        'data.attendees.0.email',
+        'booking.attendees.0.email',
+        'attendees.0.email',
+    ]);
+    const candidateEmail = extractStringValue(candidateEmailRaw);
 
-    const bookingUid = String(
-        pickFirst(payload, [
-            'payload.uid',
-            'data.uid',
-            'booking.uid',
-            'uid',
-            'payload.booking.uid',
-            'data.booking.uid',
-        ]) || ''
-    ).trim();
+    const bookingUidRaw = pickFirst(payload, [
+        'payload.uid',
+        'data.uid',
+        'booking.uid',
+        'uid',
+        'payload.booking.uid',
+        'data.booking.uid',
+    ]);
+    const bookingUid = extractStringValue(bookingUidRaw);
 
-    const bookingId = String(
-        pickFirst(payload, [
-            'payload.id',
-            'data.id',
-            'booking.id',
-            'payload.booking.id',
-            'data.booking.id',
-        ]) || ''
-    ).trim();
+    const bookingIdRaw = pickFirst(payload, [
+        'payload.id',
+        'data.id',
+        'booking.id',
+        'payload.booking.id',
+        'data.booking.id',
+    ]);
+    const bookingId = extractStringValue(bookingIdRaw);
 
     const eventTypeIdRaw = pickFirst(payload, [
         'payload.eventTypeId',
@@ -215,6 +265,42 @@ function buildWebhookFingerprint(input: {
         input.rawEvent || '',
     ].join('|');
     return createHash('sha256').update(source).digest('hex');
+}
+
+type WebhookDebugStage =
+    | 'received'
+    | 'rejected'
+    | 'ignored'
+    | 'mapped'
+    | 'persisted';
+
+interface WebhookDebugEvent {
+    at: string;
+    stage: WebhookDebugStage;
+    reason?: string;
+    rawEvent?: string;
+    status?: InterviewStatus;
+    ids: {
+        applicationId?: string;
+        jobId?: string;
+        candidateEmail?: string;
+        bookingUid?: string;
+        bookingId?: string;
+        eventTypeId?: number;
+    };
+    mappedApplicationId?: string;
+    mappedJobId?: string;
+    interviewId?: string;
+    scheduledTime?: string;
+}
+
+const webhookDebugEvents: WebhookDebugEvent[] = [];
+
+function pushWebhookDebugEvent(event: WebhookDebugEvent): void {
+    webhookDebugEvents.unshift(event);
+    if (webhookDebugEvents.length > 20) {
+        webhookDebugEvents.length = 20;
+    }
 }
 
 const interviewReminderTimers = new Map<string, NodeJS.Timeout>();
@@ -344,6 +430,11 @@ function scheduleInterviewReminder(input: {
 }
 
 export class InterviewService {
+    getWebhookDebug(limit = 20): WebhookDebugEvent[] {
+        const safeLimit = Math.max(1, Math.min(50, Number(limit) || 20));
+        return webhookDebugEvents.slice(0, safeLimit);
+    }
+
     async sendInterviewInvite(applicationId: string, actorId?: string): Promise<string> {
         const application = await Application.findById(applicationId).populate(
             'jobId',
@@ -469,6 +560,11 @@ export class InterviewService {
     }
 
     async handleCalcomWebhook(payload: any, headers: IncomingHttpHeaders): Promise<void> {
+        // Comprehensive webhook payload logging for debugging
+        console.log('=== CAL.COM WEBHOOK FULL PAYLOAD START ===');
+        console.log(JSON.stringify(payload, null, 2));
+        console.log('=== CAL.COM WEBHOOK FULL PAYLOAD END ===');
+
         const configuredSecret = env.CALCOM_WEBHOOK_SECRET?.trim();
         if (configuredSecret) {
             const headerSecret =
@@ -480,6 +576,12 @@ export class InterviewService {
             // Some Cal.com webhook modes do not send a shared-secret header.
             // Only reject when a secret header is present but mismatched.
             if (headerSecret && headerSecret !== configuredSecret) {
+                pushWebhookDebugEvent({
+                    at: new Date().toISOString(),
+                    stage: 'rejected',
+                    reason: 'Invalid webhook secret header',
+                    ids: {},
+                });
                 throw new AppError('Invalid Cal.com webhook secret', 401);
             }
         }
@@ -490,7 +592,7 @@ export class InterviewService {
             pickFirst(payload, ['triggerEvent', 'event', 'type', 'data.type', 'payload.type']) || ''
         ).trim();
 
-        console.info('Cal.com webhook received', {
+        console.info('Cal.com webhook extracted identifiers', {
             rawEvent,
             status,
             bookingUid: ids.bookingUid,
@@ -499,6 +601,19 @@ export class InterviewService {
             candidateEmail: ids.candidateEmail,
             applicationId: ids.applicationId,
             jobId: ids.jobId,
+            // Show types to verify proper extraction
+            types: {
+                candidateEmail: typeof ids.candidateEmail,
+                applicationId: typeof ids.applicationId,
+                jobId: typeof ids.jobId,
+            },
+        });
+        pushWebhookDebugEvent({
+            at: new Date().toISOString(),
+            stage: 'received',
+            rawEvent,
+            status,
+            ids,
         });
 
         let applicationId = ids.applicationId;
@@ -561,6 +676,14 @@ export class InterviewService {
                 ids,
                 rawEvent,
             });
+            pushWebhookDebugEvent({
+                at: new Date().toISOString(),
+                stage: 'ignored',
+                reason: 'Unable to map payload to application',
+                rawEvent,
+                status,
+                ids,
+            });
             return;
         }
 
@@ -570,6 +693,15 @@ export class InterviewService {
         if (!application) {
             console.error('Cal.com webhook ignored: mapped application not found', {
                 applicationId,
+            });
+            pushWebhookDebugEvent({
+                at: new Date().toISOString(),
+                stage: 'ignored',
+                reason: 'Mapped application not found',
+                rawEvent,
+                status,
+                ids,
+                mappedApplicationId: applicationId,
             });
             return;
         }
@@ -586,8 +718,27 @@ export class InterviewService {
             console.error('Cal.com webhook ignored: application has no jobId', {
                 applicationId,
             });
+            pushWebhookDebugEvent({
+                at: new Date().toISOString(),
+                stage: 'ignored',
+                reason: 'Mapped application has no jobId',
+                rawEvent,
+                status,
+                ids,
+                mappedApplicationId: applicationId,
+            });
             return;
         }
+
+        pushWebhookDebugEvent({
+            at: new Date().toISOString(),
+            stage: 'mapped',
+            rawEvent,
+            status,
+            ids,
+            mappedApplicationId: String(application._id),
+            mappedJobId: appJobId,
+        });
 
         if (ids.eventTypeId) {
             const job = await Job.findById(appJobId).select('interviewScheduling.eventTypeId');
@@ -693,6 +844,16 @@ export class InterviewService {
                 applicationId,
                 ids,
             });
+            pushWebhookDebugEvent({
+                at: new Date().toISOString(),
+                stage: 'ignored',
+                reason: 'No meeting link could be derived',
+                rawEvent,
+                status,
+                ids,
+                mappedApplicationId: String(application._id),
+                mappedJobId: appJobId,
+            });
             return;
         }
 
@@ -739,6 +900,17 @@ export class InterviewService {
             applicationId: String(application._id),
             interviewId: String(updatedInterview?._id || ''),
             status,
+            scheduledTime: nextScheduledTime.toISOString(),
+        });
+        pushWebhookDebugEvent({
+            at: new Date().toISOString(),
+            stage: 'persisted',
+            rawEvent,
+            status,
+            ids,
+            mappedApplicationId: String(application._id),
+            mappedJobId: appJobId,
+            interviewId: String(updatedInterview?._id || ''),
             scheduledTime: nextScheduledTime.toISOString(),
         });
 

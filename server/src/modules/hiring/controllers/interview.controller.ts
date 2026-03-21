@@ -1,10 +1,14 @@
 import { Request, Response } from 'express';
 import asyncHandler from '../../../utils/asyncHandler';
+import { env } from '../../../config/env.config';
+import AppError from '../../../utils/appError';
 import { InterviewService } from '../services/interview.service';
 import type {
     ListInterviewsInput,
     SaveInterviewNoteInput,
     UpdateInterviewStatusInput,
+    WebhookDebugQueryInput,
+    WebhookDebugPublicQueryInput,
 } from '../validators/interview.validator';
 
 const interviewService = new InterviewService();
@@ -68,5 +72,36 @@ export const saveInterviewNote = asyncHandler(async (req: Request, res: Response
         status: 'success',
         message: 'Interview note saved successfully',
         data: { note },
+    });
+});
+
+export const getWebhookDebug = asyncHandler(async (req: Request, res: Response) => {
+    const { limit } = req.query as WebhookDebugQueryInput;
+    const events = interviewService.getWebhookDebug(limit || 20);
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            count: events.length,
+            events,
+        },
+    });
+});
+
+export const getWebhookDebugPublic = asyncHandler(async (req: Request, res: Response) => {
+    const { key, limit } = req.query as unknown as WebhookDebugPublicQueryInput;
+
+    if (!env.CALCOM_WEBHOOK_SECRET || String(key) !== String(env.CALCOM_WEBHOOK_SECRET)) {
+        throw new AppError('Invalid debug key', 401);
+    }
+
+    const events = interviewService.getWebhookDebug(limit || 20);
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            count: events.length,
+            events,
+        },
     });
 });

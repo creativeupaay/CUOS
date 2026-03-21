@@ -18,6 +18,27 @@ export const calcomWebhookSchema = z.object({
     body: z.record(z.string(), z.any()),
 });
 
+export const webhookDebugQuerySchema = z.object({
+    query: z.object({
+        limit: z
+            .string()
+            .regex(/^\d+$/)
+            .transform(Number)
+            .optional(),
+    }),
+});
+
+export const webhookDebugPublicQuerySchema = z.object({
+    query: z.object({
+        key: z.string().trim().min(1, 'Debug key is required'),
+        limit: z
+            .string()
+            .regex(/^\d+$/)
+            .transform(Number)
+            .optional(),
+    }),
+});
+
 export const listInterviewsSchema = z.object({
     query: z.object({
         applicationId: z.string().regex(objectIdRegex, 'Invalid application ID').optional(),
@@ -60,5 +81,7 @@ export const saveInterviewNoteSchema = z.object({
 });
 
 export type ListInterviewsInput = z.infer<typeof listInterviewsSchema>['query'];
+export type WebhookDebugQueryInput = z.infer<typeof webhookDebugQuerySchema>['query'];
+export type WebhookDebugPublicQueryInput = z.infer<typeof webhookDebugPublicQuerySchema>['query'];
 export type UpdateInterviewStatusInput = z.infer<typeof updateInterviewStatusSchema>['body'];
 export type SaveInterviewNoteInput = z.infer<typeof saveInterviewNoteSchema>['body'];
