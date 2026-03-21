@@ -661,7 +661,7 @@ export class InterviewService {
         if (!applicationId && ids.candidateEmail) {
             const latestInterviewStageApplication = await Application.findOne({
                 email: String(ids.candidateEmail).toLowerCase(),
-                status: { $in: ['interview', 'interview-scheduled'] },
+                status: { $in: ['interview', 'interview-scheduled', 'interview-cancelled'] },
             })
                 .sort({ updatedAt: -1 })
                 .select('_id');
@@ -922,6 +922,13 @@ export class InterviewService {
         if (status === 'scheduled' || status === 'rescheduled') {
             await Application.findByIdAndUpdate(application._id, {
                 status: 'interview-scheduled',
+            });
+        }
+
+        // Move application to interview-cancelled when interview is cancelled
+        if (status === 'cancelled') {
+            await Application.findByIdAndUpdate(application._id, {
+                status: 'interview-cancelled',
             });
         }
 

@@ -28,6 +28,13 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
         headerBg: '#ECFEFF',
     },
     {
+        status: 'interview-cancelled',
+        label: 'Interview Cancelled',
+        color: '#DC2626',
+        bg: '#FEE2E2',
+        headerBg: '#FEF2F2',
+    },
+    {
         status: 'offered',
         label: 'Offered',
         color: '#0369A1',

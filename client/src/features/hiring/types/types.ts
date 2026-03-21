@@ -87,6 +87,7 @@ export type ApplicationStatus =
     | 'assignment-submitted'
     | 'interview'
     | 'interview-scheduled'
+    | 'interview-cancelled'
     | 'rejected'
     | 'offered'
     | 'hired';

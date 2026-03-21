@@ -17,6 +17,7 @@ const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg:
     'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
     'interview-scheduled': { label: 'Interview Scheduled', color: '#0E7490', bg: '#CFFAFE' },
+    'interview-cancelled': { label: 'Interview Cancelled', color: '#DC2626', bg: '#FEE2E2' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
     hired: { label: 'Hired', color: '#15803D', bg: '#DCFCE7' },
