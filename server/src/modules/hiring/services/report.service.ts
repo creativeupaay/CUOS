@@ -11,6 +11,7 @@ const PIPELINE_ORDER = [
     'assignment-submitted',
     'interview',
     'interview-scheduled',
+    'interview-rescheduled',
     'offered',
     'hired',
     'rejected',

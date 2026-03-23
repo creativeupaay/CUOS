@@ -37,6 +37,7 @@ interface CalcomSchedulePayload {
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const CALCOM_EVENT_TYPES_API_VERSION = '2024-06-14';
 const CALCOM_SCHEDULES_API_VERSION = '2024-06-11';
+const CALCOM_BOOKINGS_API_VERSION = '2024-08-13';
 const MIN_CALENDAR_DAYS_WINDOW = 90;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const MAX_RANGE_OVERRIDE_DAYS = 400;
@@ -97,7 +98,14 @@ function buildBookingFields() {
     ];
 }
 
-function normalizeAvailabilityRanges(scheduling: IInterviewSchedulingConfig): Array<{ startDate: Date; endDate: Date }> {
+function normalizeAvailabilityRanges(
+    scheduling: IInterviewSchedulingConfig
+): Array<{
+    startDate: Date;
+    endDate: Date;
+    weekdays?: number[];
+    dailySlots?: Array<{ startTime: string; endTime: string }>;
+}> {
     const rawRanges = Array.isArray((scheduling as any).availableRanges)
         ? (scheduling as any).availableRanges
         : [];
@@ -106,6 +114,24 @@ function normalizeAvailabilityRanges(scheduling: IInterviewSchedulingConfig): Ar
         .map((range: any) => ({
             startDate: new Date(range.startDate),
             endDate: new Date(range.endDate),
+            weekdays: Array.isArray(range.weekdays)
+                ? range.weekdays
+                      .map((day: any) => Number(day))
+                      .filter((day: number) => Number.isInteger(day) && day >= 0 && day <= 6)
+                : undefined,
+            dailySlots: Array.isArray(range.dailySlots)
+                ? range.dailySlots
+                      .filter(
+                          (slot: any) =>
+                              typeof slot?.startTime === 'string' &&
+                              typeof slot?.endTime === 'string' &&
+                              slot.endTime > slot.startTime
+                      )
+                      .map((slot: any) => ({
+                          startTime: String(slot.startTime),
+                          endTime: String(slot.endTime),
+                      }))
+                : undefined,
         }))
         .filter(
             (range: { startDate: Date; endDate: Date }) =>
@@ -294,6 +320,42 @@ export class CalcomService {
         return url.toString();
     }
 
+    async cancelBooking(bookingUid: string, cancellationReason: string): Promise<void> {
+        const uid = String(bookingUid || '').trim();
+        if (!uid) {
+            throw new AppError('Booking uid is required to cancel the interview booking', 400);
+        }
+
+        if (!env.CALCOM_API_TOKEN) {
+            throw new AppError('CALCOM_API_TOKEN is required to cancel interview bookings', 500);
+        }
+
+        await this.client.post(
+            `/v2/bookings/${uid}/cancel`,
+            { cancellationReason },
+            {
+                headers: { 'cal-api-version': CALCOM_BOOKINGS_API_VERSION },
+            }
+        );
+    }
+
+    async getBooking(bookingUid: string): Promise<any> {
+        const uid = String(bookingUid || '').trim();
+        if (!uid) {
+            throw new AppError('Booking uid is required to fetch booking details', 400);
+        }
+
+        if (!env.CALCOM_API_TOKEN) {
+            throw new AppError('CALCOM_API_TOKEN is required to fetch interview bookings', 500);
+        }
+
+        const response = await this.client.get(`/v2/bookings/${uid}`, {
+            headers: { 'cal-api-version': CALCOM_BOOKINGS_API_VERSION },
+        });
+
+        return normalizeApiData(response.data);
+    }
+
     private async getEventType(eventTypeId: number): Promise<any> {
         const response = await this.client.get(`/v2/event-types/${eventTypeId}`, {
             headers: { 'cal-api-version': CALCOM_EVENT_TYPES_API_VERSION },
@@ -427,6 +489,8 @@ export class CalcomService {
                 availableRanges: availabilityRanges.map((range) => ({
                     startDate: range.startDate.toISOString(),
                     endDate: range.endDate.toISOString(),
+                    weekdays: range.weekdays || scheduling.weekdays,
+                    dailySlots: range.dailySlots || scheduling.dailySlots,
                 })),
                 dateOverrides: dateOverrides.map((item) => ({
                     date: item.date.toISOString(),
@@ -459,8 +523,8 @@ export class CalcomService {
         const baseOverrides = availabilityRanges.length
             ? this.buildRangeOverrides({
                   ranges: availabilityRanges,
-                  weekdays: scheduling.weekdays,
-                  slots: scheduling.dailySlots,
+                  defaultWeekdays: scheduling.weekdays,
+                  defaultSlots: scheduling.dailySlots,
                   timeZone: scheduling.timezone,
               })
             : [];
@@ -481,15 +545,28 @@ export class CalcomService {
     }
 
     private buildRangeOverrides(input: {
-        ranges: Array<{ startDate: Date; endDate: Date }>;
-        weekdays: number[];
-        slots: Array<{ startTime: string; endTime: string }>;
+        ranges: Array<{
+            startDate: Date;
+            endDate: Date;
+            weekdays?: number[];
+            dailySlots?: Array<{ startTime: string; endTime: string }>;
+        }>;
+        defaultWeekdays: number[];
+        defaultSlots: Array<{ startTime: string; endTime: string }>;
         timeZone: string;
     }): Array<{ date: string; startTime: string; endTime: string }> {
-        const weekdaySet = new Set(input.weekdays);
         const overrides: Array<{ date: string; startTime: string; endTime: string }> = [];
 
         for (const range of input.ranges) {
+            const weekdaySet = new Set(
+                Array.isArray(range.weekdays) && range.weekdays.length
+                    ? range.weekdays
+                    : input.defaultWeekdays
+            );
+            const slots =
+                Array.isArray(range.dailySlots) && range.dailySlots.length
+                    ? range.dailySlots
+                    : input.defaultSlots;
             const current = new Date(range.startDate);
             let daysAdded = 0;
 
@@ -501,7 +578,7 @@ export class CalcomService {
                 const dayOfWeek = current.getUTCDay();
                 if (weekdaySet.has(dayOfWeek)) {
                     const dateLabel = this.formatDateInTimeZone(current, input.timeZone);
-                    input.slots.forEach((slot) => {
+                    slots.forEach((slot) => {
                         overrides.push({
                             date: dateLabel,
                             startTime: slot.startTime,

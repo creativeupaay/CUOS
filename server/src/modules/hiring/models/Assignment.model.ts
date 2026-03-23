@@ -4,6 +4,8 @@ export interface IAssignmentSubmissionFields {
     githubLink: boolean;
     demoLink: boolean;
     videoLink: boolean;
+    figmaLink: boolean;
+    attachments: boolean;
     notes: boolean;
 }
 
@@ -33,6 +35,8 @@ const AssignmentSchema = new Schema<IAssignment>(
             githubLink: { type: Boolean, default: true },
             demoLink: { type: Boolean, default: true },
             videoLink: { type: Boolean, default: true },
+            figmaLink: { type: Boolean, default: false },
+            attachments: { type: Boolean, default: false },
             notes: { type: Boolean, default: true },
         },
     },

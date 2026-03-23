@@ -17,6 +17,8 @@ const interviewAvailabilityRangeSchema = z
     .object({
         startDate: z.string().datetime(),
         endDate: z.string().datetime(),
+        weekdays: z.array(z.number().int().min(0).max(6)).min(1).optional(),
+        dailySlots: z.array(interviewDailySlotSchema).min(1).optional(),
     })
     .refine((value) => value.startDate <= value.endDate, {
         message: 'endDate must be later than or equal to startDate',
@@ -127,6 +129,7 @@ export const getJobSchema = z.object({
 export const listJobsSchema = z.object({
     query: z.object({
         department: z.string().optional(),
+        locationType: z.enum(['Remote', 'In-Office']).optional(),
         employmentType: z
             .enum(['full-time', 'part-time', 'contract', 'internship'])
             .optional(),

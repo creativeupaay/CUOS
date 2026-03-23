@@ -58,7 +58,11 @@ export const getAssignmentForApplication = asyncHandler(async (req: Request, res
 
 export const submitAssignment = asyncHandler(async (req: Request, res: Response) => {
     const data: SubmitAssignmentInput = req.body;
-    const submission = await assignmentService.submitAssignment(req.params.applicationId, data);
+    const files = Array.isArray(req.files)
+        ? (req.files as Express.Multer.File[])
+        : ((req.files as { [fieldname: string]: Express.Multer.File[] } | undefined)?.attachments ??
+          []);
+    const submission = await assignmentService.submitAssignment(req.params.applicationId, data, files);
 
     res.status(201).json({
         status: 'success',

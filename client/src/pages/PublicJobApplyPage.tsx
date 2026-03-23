@@ -13,10 +13,43 @@ const ALLOWED_RESUME_TYPES = [
 function isValidUrl(value: string): boolean {
     if (!value.trim()) return true;
     try {
-        const url = new URL(value.trim());
+        const normalizedValue = /^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`;
+        const url = new URL(normalizedValue);
         return url.protocol === 'http:' || url.protocol === 'https:';
     } catch {
         return false;
+    }
+}
+
+function normalizeOptionalUrl(value: string): string {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return '';
+    return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
+}
+
+function getJobLocationLabel(job?: { locationType?: string; location?: string }) {
+    if (job?.locationType === 'Remote') {
+        return 'Remote';
+    }
+
+    if (job?.location?.trim()) {
+        return job.location.trim();
+    }
+
+    return 'Location not specified';
+}
+
+function getEmploymentTypeLabel(employmentType?: string) {
+    switch (employmentType) {
+        case 'part-time':
+            return 'Part-time';
+        case 'contract':
+            return 'Contract';
+        case 'internship':
+            return 'Internship';
+        case 'full-time':
+        default:
+            return 'Full-time';
     }
 }
 
@@ -27,6 +60,8 @@ export default function PublicJobApplyPage() {
 
     const jobs = data?.data.jobs || [];
     const job = useMemo(() => jobs.find((j: any) => j._id === jobId), [jobs, jobId]);
+    const jobLocationLabel = useMemo(() => getJobLocationLabel(job), [job]);
+    const employmentTypeLabel = useMemo(() => getEmploymentTypeLabel(job?.employmentType), [job?.employmentType]);
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -73,15 +108,15 @@ export default function PublicJobApplyPage() {
         }
 
         if (!isValidUrl(portfolio)) {
-            errors.portfolio = 'Portfolio URL must start with http:// or https://';
+            errors.portfolio = 'Please enter a valid portfolio link.';
         }
 
         if (linkedin && !isValidUrl(linkedin)) {
-            errors.linkedin = 'LinkedIn URL must start with http:// or https://';
+            errors.linkedin = 'Please enter a valid LinkedIn link.';
         }
 
         if (github && !isValidUrl(github)) {
-            errors.github = 'GitHub URL must start with http:// or https://';
+            errors.github = 'Please enter a valid GitHub link.';
         }
 
         if (!resume) {
@@ -121,9 +156,9 @@ export default function PublicJobApplyPage() {
                     name: name.trim(),
                     email: email.trim(),
                     phone: phone.trim(),
-                    portfolio: portfolio.trim(),
-                    linkedin: linkedin.trim(),
-                    github: github.trim(),
+                    portfolio: normalizeOptionalUrl(portfolio),
+                    linkedin: normalizeOptionalUrl(linkedin),
+                    github: normalizeOptionalUrl(github),
                     experience: experience.trim(),
                     location: location.trim(),
                     yearsOfExperience: Number(yearsOfExperience),
@@ -198,15 +233,15 @@ export default function PublicJobApplyPage() {
                             {job?.title}
                         </h1>
 
-                        <div className="flex flex-wrap items-center gap-3 mb-10 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                        <div className="mt-8 flex flex-wrap items-center gap-3 mb-10 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                             <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border" style={{ borderColor: 'var(--color-border-subtle)', backgroundColor: 'var(--color-bg-subtle)' }}>
                                 <Building2 size={16} className="opacity-70" /> {job?.department || 'Department not specified'}
                             </div>
                             <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border" style={{ borderColor: 'var(--color-border-subtle)', backgroundColor: 'var(--color-bg-subtle)' }}>
-                                <MapPin size={16} className="opacity-70" /> {job?.locationType === 'Remote' ? 'Remote' : (job?.location || 'Location not specified')}
+                                <MapPin size={16} className="opacity-70" /> {jobLocationLabel}
                             </div>
                             <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border capitalize" style={{ borderColor: 'var(--color-border-subtle)', backgroundColor: 'var(--color-bg-subtle)' }}>
-                                <Briefcase size={16} className="opacity-70" /> {job?.employmentType || 'Full-time'}
+                                <Briefcase size={16} className="opacity-70" /> {employmentTypeLabel}
                             </div>
                         </div>
 
@@ -406,10 +441,11 @@ export default function PublicJobApplyPage() {
                                     <Briefcase size={24} />
                                 </div>
                                 <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: 'var(--color-text-muted)' }}>Applying For</p>
-                                <h2 className="text-xl font-extrabold leading-tight mb-3" style={{ color: 'var(--color-text-primary)' }}>{job?.title}</h2>
-                                <div className="flex flex-col gap-2">
+                                <h2 className="text-xl font-extrabold leading-tight mb-4" style={{ color: 'var(--color-text-primary)' }}>{job?.title}</h2>
+                                <div className="flex flex-col gap-3">
                                     <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}><Building2 size={16} className="opacity-70" /> {job?.department || 'Department not specified'}</div>
-                                    <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}><MapPin size={16} className="opacity-70" /> {job?.locationType === 'Remote' ? 'Remote' : (job?.location || 'Location not specified')}</div>
+                                    <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}><MapPin size={16} className="opacity-70" /> {jobLocationLabel}</div>
+                                    <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}><Briefcase size={16} className="opacity-70" /> {employmentTypeLabel}</div>
                                 </div>
                             </div>
                             

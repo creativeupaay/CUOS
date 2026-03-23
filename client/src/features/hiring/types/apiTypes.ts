@@ -38,6 +38,7 @@ export interface ListJobsResponse {
 
 export interface ListJobsParams {
     department?: string;
+    locationType?: 'Remote' | 'In-Office';
     employmentType?: EmploymentType;
     isHiring?: boolean;
     search?: string;
@@ -183,6 +184,8 @@ export interface SubmitAssignmentRequest {
     githubLink?: string;
     demoLink?: string;
     videoLink?: string;
+    figmaLink?: string;
+    attachments?: File[];
     notes?: string;
 }
 
@@ -220,6 +223,10 @@ export interface SaveInterviewNoteRequest {
     technicalScore: number;
     communicationScore: number;
     notes: string;
+}
+
+export interface RequestInterviewRescheduleRequest {
+    preferredTime: string;
 }
 
 export interface InterviewDetailsResponse extends InterviewDetails {}

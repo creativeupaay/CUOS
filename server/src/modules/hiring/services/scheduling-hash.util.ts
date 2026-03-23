@@ -15,12 +15,24 @@ function sortSlots(slots: Array<{ startTime: string; endTime: string }>) {
 }
 
 function sortRanges(
-    ranges: Array<{ startDate: string | Date; endDate: string | Date }>
-): Array<{ startDate: string; endDate: string }> {
+    ranges: Array<{
+        startDate: string | Date;
+        endDate: string | Date;
+        weekdays?: number[];
+        dailySlots?: Array<{ startTime: string; endTime: string }>;
+    }>
+): Array<{
+    startDate: string;
+    endDate: string;
+    weekdays: number[];
+    dailySlots: Array<{ startTime: string; endTime: string }>;
+}> {
     return [...ranges]
         .map((range) => ({
             startDate: new Date(range.startDate).toISOString(),
             endDate: new Date(range.endDate).toISOString(),
+            weekdays: sortNumbers(Array.isArray(range.weekdays) ? range.weekdays : []),
+            dailySlots: sortSlots(Array.isArray(range.dailySlots) ? range.dailySlots : []),
         }))
         .sort((a, b) => {
             if (a.startDate === b.startDate) {

@@ -17,6 +17,7 @@ const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg:
     'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
     'interview-scheduled': { label: 'Interview Scheduled', color: '#0E7490', bg: '#CFFAFE' },
+    'interview-rescheduled': { label: 'Interview Rescheduled', color: '#7C3AED', bg: '#F3E8FF' },
     'interview-cancelled': { label: 'Interview Cancelled', color: '#DC2626', bg: '#FEE2E2' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
@@ -31,6 +32,7 @@ const STATUS_FILTER_OPTIONS: ApplicationStatus[] = [
     'assignment-submitted',
     'interview',
     'interview-scheduled',
+    'interview-rescheduled',
     'offered',
     'rejected',
     'hired',
@@ -45,6 +47,7 @@ function getStatusUpdateOptions(currentStatus: ApplicationStatus): ApplicationSt
         'assignment-submitted',
         'interview',
         'interview-scheduled',
+        'interview-rescheduled',
         'rejected',
     ];
 
@@ -57,6 +60,10 @@ function getStatusUpdateOptions(currentStatus: ApplicationStatus): ApplicationSt
     }
 
     return pipelineOptions;
+}
+
+function getJobIdValue(jobId: Application['jobId']): string {
+    return typeof jobId === 'object' ? jobId?._id || '' : '';
 }
 
 type ViewMode = 'list' | 'kanban';
@@ -395,11 +402,19 @@ export default function HiringApplicationsPage() {
                     {displayedApplications.map((app: any) => {
                         const meta = STATUS_META[app.status as ApplicationStatus] || STATUS_META.new;
                         const isRowUpdating = updatingIds.includes(app._id);
+                        const selectedJobId = getJobIdValue(app.jobId);
+                        const canReviewAssignment = app.status === 'assignment-submitted' && Boolean(selectedJobId);
+                        const canViewInterview =
+                            (
+                                app.status === 'interview' ||
+                                app.status === 'interview-scheduled' ||
+                                app.status === 'interview-rescheduled'
+                            ) && Boolean(app._id);
 
                         return (
                             <div
                                 key={app._id}
-                                className="group relative rounded-xl border p-4 md:p-5 min-h-[136px] transition-all hover:shadow-md hover:-translate-y-[1px] cursor-pointer overflow-hidden"
+                                className="group relative rounded-xl border p-3 md:p-4 min-h-[100px] flex flex-col justify-center transition-all hover:shadow-md hover:-translate-y-[1px] cursor-pointer overflow-hidden"
                                 style={{ borderColor: meta.bg, backgroundColor: 'var(--color-bg-surface)' }}
                                 onClick={() => navigate(`/hiring/applications/${app._id}`)}
                             >
@@ -407,7 +422,7 @@ export default function HiringApplicationsPage() {
                                     className="absolute left-0 top-0 bottom-0 w-1.5"
                                     style={{ backgroundColor: meta.color }}
                                 />
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between w-full">
                                     <div className="w-full lg:w-[32%] pl-1">
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
@@ -418,9 +433,6 @@ export default function HiringApplicationsPage() {
                                                     {app.jobId?.title || 'Job role not available'}
                                                 </p>
                                             </div>
-                                            <span className="lg:hidden px-2.5 py-1 rounded-md text-[11px] font-medium" style={{ backgroundColor: meta.bg, color: meta.color }}>
-                                                {meta.label}
-                                            </span>
                                         </div>
 
                                         <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
@@ -493,13 +505,11 @@ export default function HiringApplicationsPage() {
                                         onClick={(e) => e.stopPropagation()}
                                         style={{ opacity: isRowUpdating ? 0.65 : 1 }}
                                     >
-                                        <span
-                                            className="hidden lg:inline-flex px-2.5 py-1 rounded-full text-[11px] font-semibold border"
-                                            style={{ backgroundColor: '#FFFFFF', color: meta.color, borderColor: meta.bg }}
-                                        >
-                                            {meta.label}
-                                        </span>
-                                        <div className="relative inline-flex items-center w-full lg:justify-end">
+                                        {(canReviewAssignment || canViewInterview) && (
+                                            <div className="hidden lg:block h-[32px] w-full shrink-0" />
+                                        )}
+
+                                        <div className="relative inline-flex items-center w-full lg:justify-end shrink-0">
                                             <select
                                                 value={app.status}
                                                 onChange={(e) => handleStatusChange(app._id, e.target.value as ApplicationStatus)}
@@ -523,6 +533,44 @@ export default function HiringApplicationsPage() {
                                                 <ChevronDown size={14} strokeWidth={2.5} />
                                             </span>
                                         </div>
+                                        {(canReviewAssignment || canViewInterview) && (
+                                            <div className="flex w-full flex-wrap gap-2 lg:justify-end shrink-0">
+                                                {canReviewAssignment && (
+                                                    <button
+                                                        onClick={() =>
+                                                            navigate(
+                                                                `/hiring/assignments?tab=assignment-review&jobId=${selectedJobId}&applicationId=${app._id}`
+                                                            )
+                                                        }
+                                                        className="h-8 rounded-lg border px-3 text-[11px] font-semibold"
+                                                        style={{
+                                                            borderColor: '#C4B5FD',
+                                                            backgroundColor: '#FAF5FF',
+                                                            color: '#6D28D9',
+                                                        }}
+                                                    >
+                                                        Review Assignment
+                                                    </button>
+                                                )}
+                                                {canViewInterview && (
+                                                    <button
+                                                        onClick={() =>
+                                                            navigate(
+                                                                `/hiring/interviews?applicationId=${app._id}&open=1`
+                                                            )
+                                                        }
+                                                        className="h-8 rounded-lg border px-3 text-[11px] font-semibold"
+                                                        style={{
+                                                            borderColor: '#99F6E4',
+                                                            backgroundColor: '#F0FDFA',
+                                                            color: '#0F766E',
+                                                        }}
+                                                    >
+                                                        View Interview
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

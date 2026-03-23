@@ -17,6 +17,8 @@ export interface InterviewDailySlot {
 export interface InterviewAvailabilityRange {
     startDate: string;
     endDate: string;
+    weekdays?: number[];
+    dailySlots?: InterviewDailySlot[];
 }
 
 export interface InterviewDateOverride {
@@ -87,6 +89,7 @@ export type ApplicationStatus =
     | 'assignment-submitted'
     | 'interview'
     | 'interview-scheduled'
+    | 'interview-rescheduled'
     | 'interview-cancelled'
     | 'rejected'
     | 'offered'
@@ -145,7 +148,17 @@ export interface AssignmentSubmissionFields {
     githubLink: boolean;
     demoLink: boolean;
     videoLink: boolean;
+    figmaLink: boolean;
+    attachments: boolean;
     notes: boolean;
+}
+
+export interface AssignmentSubmissionAttachment {
+    name: string;
+    url: string;
+    mimeType: string;
+    size: number;
+    cloudinaryId?: string;
 }
 
 export interface Assignment {
@@ -175,6 +188,8 @@ export interface AssignmentSubmission {
     githubLink?: string;
     demoLink?: string;
     videoLink?: string;
+    figmaLink?: string;
+    attachments?: AssignmentSubmissionAttachment[];
     notes?: string;
     submittedAt: string;
     deadlineAt?: string;

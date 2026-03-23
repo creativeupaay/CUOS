@@ -68,6 +68,15 @@ export const updateInterviewStatusSchema = z.object({
     }),
 });
 
+export const requestInterviewRescheduleSchema = z.object({
+    params: z.object({
+        id: z.string().regex(objectIdRegex, 'Invalid interview ID'),
+    }),
+    body: z.object({
+        preferredTime: z.string().datetime('Preferred time must be a valid ISO datetime'),
+    }),
+});
+
 export const saveInterviewNoteSchema = z.object({
     params: z.object({
         id: z.string().regex(objectIdRegex, 'Invalid interview ID'),
@@ -84,4 +93,5 @@ export type ListInterviewsInput = z.infer<typeof listInterviewsSchema>['query'];
 export type WebhookDebugQueryInput = z.infer<typeof webhookDebugQuerySchema>['query'];
 export type WebhookDebugPublicQueryInput = z.infer<typeof webhookDebugPublicQuerySchema>['query'];
 export type UpdateInterviewStatusInput = z.infer<typeof updateInterviewStatusSchema>['body'];
+export type RequestInterviewRescheduleInput = z.infer<typeof requestInterviewRescheduleSchema>['body'];
 export type SaveInterviewNoteInput = z.infer<typeof saveInterviewNoteSchema>['body'];

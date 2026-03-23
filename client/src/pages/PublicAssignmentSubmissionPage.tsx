@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import {
@@ -7,17 +7,27 @@ import {
     CheckCircle2,
     Clock3,
     ExternalLink,
+    Figma,
     Github,
     Loader2,
+    Paperclip,
     PlayCircle,
     Sparkles,
     ShieldCheck,
     StickyNote,
+    Upload,
+    X,
 } from 'lucide-react';
 import {
     useGetAssignmentForApplicationQuery,
     useSubmitAssignmentMutation,
 } from '@/features/hiring/hiringApi';
+
+function normalizeOptionalUrl(value: string): string | undefined {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return undefined;
+    return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
+}
 
 export default function PublicAssignmentSubmissionPage() {
     const { applicationId } = useParams<{ applicationId: string }>();
@@ -30,6 +40,9 @@ export default function PublicAssignmentSubmissionPage() {
     const [githubLink, setGithubLink] = useState('');
     const [demoLink, setDemoLink] = useState('');
     const [videoLink, setVideoLink] = useState('');
+    const [figmaLink, setFigmaLink] = useState('');
+    const [attachments, setAttachments] = useState<File[]>([]);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [notes, setNotes] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
@@ -88,9 +101,11 @@ export default function PublicAssignmentSubmissionPage() {
             await submitAssignment({
                 applicationId,
                 data: {
-                    githubLink: githubLink || undefined,
-                    demoLink: demoLink || undefined,
-                    videoLink: videoLink || undefined,
+                    githubLink: normalizeOptionalUrl(githubLink),
+                    demoLink: normalizeOptionalUrl(demoLink),
+                    videoLink: normalizeOptionalUrl(videoLink),
+                    figmaLink: normalizeOptionalUrl(figmaLink),
+                    attachments,
                     notes: notes || undefined,
                 },
             }).unwrap();
@@ -125,6 +140,27 @@ export default function PublicAssignmentSubmissionPage() {
     }
 
     const isSubmitDisabled = submitting || hasSubmitted;
+    const attachmentSummary = attachments.map((file) => `${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)`);
+
+    function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
+        const files = Array.from(event.target.files || []);
+        if (files.length === 0) return;
+
+        setAttachments((prev) => {
+            const merged = [...prev];
+            files.forEach((file) => {
+                if (!merged.some((existing) => existing.name === file.name && existing.size === file.size)) {
+                    merged.push(file);
+                }
+            });
+            return merged.slice(0, 8);
+        });
+        event.target.value = '';
+    }
+
+    function removeAttachment(index: number) {
+        setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    }
 
     const statusPillStyle: React.CSSProperties = hasSubmitted
         ? {
@@ -189,7 +225,7 @@ export default function PublicAssignmentSubmissionPage() {
                         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>
                             Assignment Brief
                         </p>
-                        <div className="text-sm mt-2 prose prose-sm max-w-none" style={{ color: '#1E3A8A' }}>
+                        <div className="text-sm mt-2 prose prose-sm max-w-none whitespace-pre-wrap" style={{ color: '#1E3A8A' }}>
                             <ReactMarkdown
                                 components={{
                                     a: ({ href, children }) => (
@@ -225,7 +261,7 @@ export default function PublicAssignmentSubmissionPage() {
                         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
                             Instructions
                         </p>
-                        <div className="text-sm mt-2 prose prose-sm max-w-none" style={{ color: '#1E293B' }}>
+                        <div className="text-sm mt-2 prose prose-sm max-w-none whitespace-pre-wrap" style={{ color: '#1E293B' }}>
                             <ReactMarkdown
                                 components={{
                                     a: ({ href, children }) => (
@@ -309,10 +345,10 @@ export default function PublicAssignmentSubmissionPage() {
                                         <div className="relative mt-1.5">
                                             <Github size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
                                             <input
-                                                type="url"
+                                                type="text"
                                                 value={githubLink}
                                                 onChange={(e) => setGithubLink(e.target.value)}
-                                                placeholder="https://github.com/username/repository"
+                                                placeholder="github.com/username/repository"
                                                 className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
                                                 style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
                                             />
@@ -327,10 +363,10 @@ export default function PublicAssignmentSubmissionPage() {
                                         <div className="relative mt-1.5">
                                             <ExternalLink size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
                                             <input
-                                                type="url"
+                                                type="text"
                                                 value={demoLink}
                                                 onChange={(e) => setDemoLink(e.target.value)}
-                                                placeholder="https://your-demo-url"
+                                                placeholder="your-demo-url.com"
                                                 className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
                                                 style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
                                             />
@@ -345,14 +381,79 @@ export default function PublicAssignmentSubmissionPage() {
                                         <div className="relative mt-1.5">
                                             <PlayCircle size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
                                             <input
-                                                type="url"
+                                                type="text"
                                                 value={videoLink}
                                                 onChange={(e) => setVideoLink(e.target.value)}
-                                                placeholder="https://loom.com / youtube.com / drive link"
+                                                placeholder="loom.com / youtube.com / drive link"
                                                 className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
                                                 style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
                                             />
                                         </div>
+                                    </div>
+                                )}
+                                {assignment.submissionFields.figmaLink && (
+                                    <div>
+                                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                            Figma Link
+                                        </label>
+                                        <div className="relative mt-1.5">
+                                            <Figma size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
+                                            <input
+                                                type="text"
+                                                value={figmaLink}
+                                                onChange={(e) => setFigmaLink(e.target.value)}
+                                                placeholder="figma.com/file/..."
+                                                className="w-full h-11 pl-9 pr-3 text-sm rounded-xl border outline-none"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                {assignment.submissionFields.attachments && (
+                                    <div>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                                Attachments
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsUploadModalOpen(true)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border"
+                                                style={{ borderColor: '#CBD5E1', color: '#1E40AF', backgroundColor: '#EFF6FF' }}
+                                            >
+                                                <Upload size={13} />
+                                                Upload Files
+                                            </button>
+                                        </div>
+                                        <p className="text-xs mt-1.5" style={{ color: '#64748B' }}>
+                                            Add images, videos, PDFs, or supporting documents for your submission.
+                                        </p>
+                                        {attachmentSummary.length > 0 ? (
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                {attachmentSummary.map((label, index) => (
+                                                    <span
+                                                        key={`${label}-${index}`}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border"
+                                                        style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF', color: '#1D4ED8' }}
+                                                    >
+                                                        <Paperclip size={12} />
+                                                        {label}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeAttachment(index)}
+                                                            className="inline-flex items-center"
+                                                            style={{ color: '#1D4ED8' }}
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="mt-3 rounded-xl border border-dashed px-4 py-4 text-sm" style={{ borderColor: '#CBD5E1', color: '#64748B', backgroundColor: '#F8FAFC' }}>
+                                                No files selected yet.
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {assignment.submissionFields.notes && (
@@ -446,8 +547,87 @@ export default function PublicAssignmentSubmissionPage() {
                         </p>
                     </div>
                 </aside>
+                </div>
             </div>
-            </div>
+
+            {isUploadModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(15, 23, 42, 0.45)' }}>
+                    <div className="w-full max-w-lg rounded-2xl border p-5 shadow-xl" style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>
+                                    Upload Submission Attachments
+                                </p>
+                                <p className="text-xs mt-1" style={{ color: '#64748B' }}>
+                                    You can add up to 8 files. Supported formats include images, videos, PDFs, docs, sheets, and zip files.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsUploadModalOpen(false)}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full"
+                                style={{ color: '#64748B', backgroundColor: '#F8FAFC' }}
+                            >
+                                <X size={15} />
+                            </button>
+                        </div>
+
+                        <label className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-dashed px-5 py-10 text-center cursor-pointer" style={{ borderColor: '#93C5FD', backgroundColor: '#EFF6FF' }}>
+                            <Upload size={22} style={{ color: '#1D4ED8' }} />
+                            <span className="text-sm font-semibold mt-3" style={{ color: '#1E40AF' }}>
+                                Choose files to upload
+                            </span>
+                            <span className="text-xs mt-1" style={{ color: '#64748B' }}>
+                                Click here to browse from your device
+                            </span>
+                            <input
+                                type="file"
+                                multiple
+                                onChange={handleAttachmentChange}
+                                className="hidden"
+                                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.txt"
+                            />
+                        </label>
+
+                        <div className="mt-4 space-y-2 max-h-48 overflow-y-auto">
+                            {attachmentSummary.length > 0 ? (
+                                attachmentSummary.map((label, index) => (
+                                    <div key={`${label}-modal-${index}`} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2" style={{ borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                                        <span className="inline-flex items-center gap-2 text-sm" style={{ color: '#334155' }}>
+                                            <Paperclip size={14} />
+                                            {label}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeAttachment(index)}
+                                            className="inline-flex items-center gap-1 text-xs font-semibold"
+                                            style={{ color: '#B91C1C' }}
+                                        >
+                                            <X size={12} />
+                                            Remove
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="rounded-xl border px-3 py-3 text-sm" style={{ borderColor: '#E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B' }}>
+                                    No attachments selected yet.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-5 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsUploadModalOpen(false)}
+                                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                                style={{ backgroundColor: '#2563EB', color: '#FFFFFF' }}
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

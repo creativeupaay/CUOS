@@ -7,6 +7,33 @@ import { env } from '../config/env.config';
 // ============================================================
 
 let resend: Resend | null = null;
+const DISPLAY_TIME_ZONE = 'Asia/Kolkata';
+
+function normalizeMeetingUrl(url?: string | null): string {
+    if (!url) return '';
+
+    const trimmedUrl = String(url).trim();
+    if (!trimmedUrl || trimmedUrl.startsWith('/')) {
+        return '';
+    }
+
+    const explicitMeetingUrlMatch = trimmedUrl.match(
+        /https?:\/\/(?:[\w-]+\.)?(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.jit\.si|whereby\.com)\/[^\s"'<>]+/i
+    );
+    if (explicitMeetingUrlMatch) {
+        return explicitMeetingUrlMatch[0].replace(/[),.;]+$/, '');
+    }
+
+    const providerOnlyMatch = trimmedUrl.match(
+        /(?:[\w-]+\.)?(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.jit\.si|whereby\.com)\/[^\s"'<>]+/i
+    );
+    if (providerOnlyMatch) {
+        const extracted = providerOnlyMatch[0].replace(/[),.;]+$/, '');
+        return `https://${extracted}`;
+    }
+
+    return '';
+}
 
 function getResend(): Resend {
     if (!env.RESEND_API_KEY) {
@@ -317,6 +344,62 @@ export async function sendHiringRejectionEmail(opts: {
 }
 
 // ============================================================
+// Send interview qualified email
+// ============================================================
+export async function sendHiringInterviewQualifiedEmail(opts: {
+    to: string;
+    candidateName: string;
+    jobTitle: string;
+}): Promise<void> {
+    const { to, candidateName, jobTitle } = opts;
+    const client = getResend();
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: `Interview update — ${jobTitle}`,
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background:#111827;padding:24px 32px;">
+              <p style="margin:0;color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.3px;">Creative Upaay</p>
+              <p style="margin:4px 0 0;color:#9CA3AF;font-size:13px;">Hiring Team</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:15px;color:#111827;font-weight:500;">Hello ${candidateName},</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
+                You have qualified the interview round for the role of <strong>${jobTitle}</strong>.
+              </p>
+              <p style="margin:0 0 24px;font-size:14px;color:#374151;line-height:1.6;">
+                Our team will contact you soon with the next update. Thank you for your time and participation in the interview process.
+              </p>
+              <p style="margin:0;font-size:13px;color:#6B7280;">We appreciate your interest in Creative Upaay.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">&copy; Creative Upaay. This is an automated email, please do not reply.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}
+
+// ============================================================
 // Send candidate application confirmation email
 // ============================================================
 export async function sendHiringApplicationReceivedEmail(opts: {
@@ -388,8 +471,13 @@ export async function sendHiringAssignmentEmail(opts: {
         opts;
     const client = getResend();
     const deadlineLabel = new Date(deadlineAt).toLocaleString('en-IN', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: DISPLAY_TIME_ZONE,
     });
 
     await sendEmailOrThrow(client, {
@@ -420,7 +508,7 @@ export async function sendHiringAssignmentEmail(opts: {
               <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
                 Assignment: <strong>${assignmentTitle}</strong><br/>
                 Submit within: <strong>${timeLimitDays} day${timeLimitDays > 1 ? 's' : ''}</strong><br/>
-                Form expires on: <strong>${deadlineLabel}</strong>
+                Form expires on: <strong>${deadlineLabel} IST</strong>
               </p>
               <p style="margin:0 0 16px;font-size:13px;color:#6B7280;line-height:1.6;">
                 You can still submit after expiry, but your submission will be marked as late.
@@ -492,6 +580,62 @@ export async function sendInterviewInviteEmail(opts: {
     });
 }
 
+export async function sendInterviewRescheduleEmail(opts: {
+    to: string;
+    candidateName: string;
+    jobTitle: string;
+    bookingUrl: string;
+    preferredTime: Date;
+}): Promise<void> {
+    const { to, candidateName, jobTitle, bookingUrl, preferredTime } = opts;
+    const client = getResend();
+    const preferredTimeLabel = preferredTime.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: DISPLAY_TIME_ZONE,
+    });
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: `Please reschedule your interview — ${jobTitle}`,
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <tr><td style="background:#111827;padding:24px 32px;"><p style="margin:0;color:#FFFFFF;font-size:18px;font-weight:600;">Creative Upaay</p><p style="margin:4px 0 0;color:#9CA3AF;font-size:13px;">Hiring Team</p></td></tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:15px;color:#111827;font-weight:500;">Hello ${candidateName},</p>
+              <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.6;">Your interview for <strong>${jobTitle}</strong> needs to be rescheduled. Please choose a new time using the link below.</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">Preferred time from our team: <strong>${preferredTimeLabel} IST</strong></p>
+              <table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${bookingUrl}" style="display:inline-block;padding:12px 24px;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:500;">Choose New Interview Time</a></td></tr></table>
+              <p style="margin:20px 0 0;font-size:13px;color:#6B7280;">If the button does not work, use this link:<br/><a href="${bookingUrl}" style="color:#2563EB;word-break:break-all;">${bookingUrl}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">&copy; Creative Upaay. This is an automated email, please do not reply.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}
+
 // ============================================================
 // Send interview booking confirmation to candidate
 // ============================================================
@@ -505,6 +649,7 @@ export async function sendInterviewScheduledForCandidateEmail(opts: {
 }): Promise<void> {
     const { to, candidateName, jobTitle, interviewer, scheduledTime, meetLink } = opts;
     const client = getResend();
+    const normalizedMeetLink = normalizeMeetingUrl(meetLink);
 
     const timeText = scheduledTime.toLocaleString('en-IN', {
         day: '2-digit',
@@ -532,7 +677,11 @@ export async function sendInterviewScheduledForCandidateEmail(opts: {
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Role:</strong> ${jobTitle}</p>
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Interviewer:</strong> ${interviewer}</p>
         <p style="margin:0 0 16px;font-size:14px;color:#111827;"><strong>Time:</strong> ${timeText}</p>
-        <table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${meetLink}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-size:14px;font-weight:500;">Join Interview</a></td></tr></table>
+        ${
+            normalizedMeetLink
+                ? `<table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${normalizedMeetLink}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-size:14px;font-weight:500;">Join Interview</a></td></tr></table>`
+                : `<p style="margin:0 0 16px;font-size:13px;color:#6B7280;">The meeting link will be shared in a follow-up update if it is not available yet.</p>`
+        }
       </td></tr>
     </table>
   </td></tr></table>
@@ -554,6 +703,7 @@ export async function sendInterviewReminderForCandidateEmail(opts: {
 }): Promise<void> {
     const { to, candidateName, jobTitle, interviewer, scheduledTime, meetLink } = opts;
     const client = getResend();
+    const normalizedMeetLink = normalizeMeetingUrl(meetLink);
 
     const timeText = scheduledTime.toLocaleString('en-IN', {
         day: '2-digit',
@@ -581,7 +731,11 @@ export async function sendInterviewReminderForCandidateEmail(opts: {
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Role:</strong> ${jobTitle}</p>
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Interviewer:</strong> ${interviewer}</p>
         <p style="margin:0 0 16px;font-size:14px;color:#111827;"><strong>Time:</strong> ${timeText}</p>
-        <table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${meetLink}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-size:14px;font-weight:500;">Join Interview</a></td></tr></table>
+        ${
+            normalizedMeetLink
+                ? `<table cellpadding="0" cellspacing="0"><tr><td style="background:#2563EB;border-radius:6px;"><a href="${normalizedMeetLink}" style="display:inline-block;padding:12px 24px;color:#fff;text-decoration:none;font-size:14px;font-weight:500;">Join Interview</a></td></tr></table>`
+                : `<p style="margin:0 0 16px;font-size:13px;color:#6B7280;">The meeting link will be shared in a follow-up update if it is not available yet.</p>`
+        }
       </td></tr>
     </table>
   </td></tr></table>
@@ -604,6 +758,7 @@ export async function sendInterviewScheduledForHrEmail(opts: {
 }): Promise<void> {
     const { to, candidateName, candidateEmail, jobTitle, interviewer, scheduledTime, meetLink } = opts;
     const client = getResend();
+    const normalizedMeetLink = normalizeMeetingUrl(meetLink);
 
     const timeText = scheduledTime.toLocaleString('en-IN', {
         day: '2-digit',
@@ -630,7 +785,11 @@ export async function sendInterviewScheduledForHrEmail(opts: {
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Role:</strong> ${jobTitle}</p>
         <p style="margin:0 0 10px;font-size:14px;color:#111827;"><strong>Interviewer:</strong> ${interviewer}</p>
         <p style="margin:0 0 16px;font-size:14px;color:#111827;"><strong>Time:</strong> ${timeText}</p>
-        <a href="${meetLink}" style="color:#2563EB;font-size:14px;">${meetLink}</a>
+        ${
+            normalizedMeetLink
+                ? `<a href="${normalizedMeetLink}" style="color:#2563EB;font-size:14px;">${normalizedMeetLink}</a>`
+                : `<p style="margin:0;font-size:13px;color:#6B7280;">Meeting link unavailable in the webhook payload.</p>`
+        }
       </td></tr>
     </table>
   </td></tr></table>

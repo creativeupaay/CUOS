@@ -40,6 +40,7 @@ import {
     interviewApplicationParamSchema,
     interviewIdParamSchema,
     listInterviewsSchema,
+    requestInterviewRescheduleSchema,
     saveInterviewNoteSchema,
     updateInterviewStatusSchema,
     webhookDebugQuerySchema,
@@ -65,6 +66,39 @@ const upload = multer({
     },
 });
 
+const assignmentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 25 * 1024 * 1024,
+        files: 8,
+    },
+    fileFilter: (_req, file, cb) => {
+        const allowed = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'text/plain',
+        ];
+
+        if (
+            file.mimetype.startsWith('image/') ||
+            file.mimetype.startsWith('video/') ||
+            allowed.includes(file.mimetype)
+        ) {
+            cb(null, true);
+            return;
+        }
+
+        cb(new Error('Only images, videos, PDF, office documents, zip files, and text files are allowed'));
+    },
+});
+
 // ============================================
 // PUBLIC ROUTES — no auth required
 // Used by the company website (creativeupaay.com)
@@ -85,6 +119,7 @@ router.get(
 
 router.post(
     '/assignment/submit/:applicationId',
+    assignmentUpload.fields([{ name: 'attachments', maxCount: 8 }]),
     validateRequest(submitAssignmentSchema),
     assignmentController.submitAssignment
 );
@@ -159,6 +194,14 @@ router.patch(
     validateRequest(interviewIdParamSchema),
     validateRequest(updateInterviewStatusSchema),
     interviewController.updateInterviewStatus
+);
+
+router.post(
+    '/interviews/:id/reschedule',
+    authorize(manageRoles),
+    validateRequest(interviewIdParamSchema),
+    validateRequest(requestInterviewRescheduleSchema),
+    interviewController.requestInterviewReschedule
 );
 
 router.get(

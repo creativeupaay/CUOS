@@ -10,6 +10,8 @@ export interface IInterviewDailySlot {
 export interface IInterviewAvailabilityRange {
     startDate: Date;
     endDate: Date;
+    weekdays?: number[];
+    dailySlots?: IInterviewDailySlot[];
 }
 
 export interface IInterviewDateOverride {
@@ -73,6 +75,14 @@ const InterviewAvailabilityRangeSchema = new Schema<IInterviewAvailabilityRange>
     {
         startDate: { type: Date, required: true },
         endDate: { type: Date, required: true },
+        weekdays: {
+            type: [Number],
+            default: undefined,
+        },
+        dailySlots: {
+            type: [InterviewDailySlotSchema],
+            default: undefined,
+        },
     },
     { _id: false }
 );

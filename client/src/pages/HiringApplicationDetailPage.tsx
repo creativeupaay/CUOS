@@ -37,6 +37,7 @@ const STATUS_META: Record<ApplicationStatus, { label: string; color: string; bg:
     'assignment-submitted': { label: 'Assignment Submitted', color: '#7C3AED', bg: '#F3E8FF' },
     interview: { label: 'Interview', color: '#0F766E', bg: '#CCFBF1' },
     'interview-scheduled': { label: 'Interview Scheduled', color: '#0E7490', bg: '#CFFAFE' },
+    'interview-rescheduled': { label: 'Interview Rescheduled', color: '#7C3AED', bg: '#F3E8FF' },
     'interview-cancelled': { label: 'Interview Cancelled', color: '#DC2626', bg: '#FEE2E2' },
     offered: { label: 'Offered', color: '#0369A1', bg: '#E0F2FE' },
     rejected: { label: 'Rejected', color: '#B91C1C', bg: '#FEE2E2' },
@@ -51,7 +52,60 @@ const STATUS_ORDER: ApplicationStatus[] = [
     'assignment-submitted',
     'interview',
     'interview-scheduled',
+    'interview-rescheduled',
 ];
+
+function normalizeExternalUrl(url?: string | null) {
+    if (!url) return '';
+
+    const trimmedUrl = String(url).trim();
+    if (!trimmedUrl) return '';
+
+    const explicitUrlMatch = trimmedUrl.match(/https?:\/\/[^\s"'<>]+/i);
+    if (explicitUrlMatch) {
+        return explicitUrlMatch[0];
+    }
+
+    const domainLikeMatch = trimmedUrl.match(
+        /(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|cal\.com|[a-z0-9-]+\.[a-z]{2,})(?:\/[^\s"'<>]*)?/i
+    );
+    if (domainLikeMatch) {
+        const extracted = domainLikeMatch[0].replace(/[),.;]+$/, '');
+        return /^https?:\/\//i.test(extracted) ? extracted : `https://${extracted}`;
+    }
+
+    if (/^https?:\/\//i.test(trimmedUrl)) {
+        return trimmedUrl;
+    }
+
+    return '';
+}
+
+function normalizeMeetingUrl(url?: string | null) {
+    if (!url) return '';
+
+    const trimmedUrl = String(url).trim();
+    if (!trimmedUrl || trimmedUrl.startsWith('/')) {
+        return '';
+    }
+
+    const explicitMeetingUrlMatch = trimmedUrl.match(
+        /https?:\/\/(?:[\w-]+\.)?(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.jit\.si|whereby\.com)\/[^\s"'<>]+/i
+    );
+    if (explicitMeetingUrlMatch) {
+        return explicitMeetingUrlMatch[0].replace(/[),.;]+$/, '');
+    }
+
+    const providerOnlyMatch = trimmedUrl.match(
+        /(?:[\w-]+\.)?(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|meet\.jit\.si|whereby\.com)\/[^\s"'<>]+/i
+    );
+    if (providerOnlyMatch) {
+        const extracted = providerOnlyMatch[0].replace(/[),.;]+$/, '');
+        return `https://${extracted}`;
+    }
+
+    return '';
+}
 
 function buildCandidateBookingUrl(baseUrl: string, params: Record<string, string>) {
     const trimmed = String(baseUrl || '').trim();
@@ -551,6 +605,37 @@ export default function HiringApplicationDetailPage() {
                                         <ExternalLink size={11} />
                                     </a>
                                 )}
+                                {submissionForApplication.figmaLink && (
+                                    <a
+                                        href={normalizeExternalUrl(submissionForApplication.figmaLink)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        Figma
+                                        <ExternalLink size={11} />
+                                    </a>
+                                )}
+                                {submissionForApplication.attachments?.map((attachment, index) => (
+                                    <a
+                                        key={`${submissionForApplication._id}-attachment-${index}`}
+                                        href={attachment.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        {attachment.name}
+                                        <ExternalLink size={11} />
+                                    </a>
+                                ))}
                             </div>
 
                             <div>
@@ -705,7 +790,11 @@ export default function HiringApplicationDetailPage() {
                             </p>
                         )}
 
-                        {(application.status === 'interview' || application.status === 'interview-scheduled') && (
+                        {(
+                            application.status === 'interview' ||
+                            application.status === 'interview-scheduled' ||
+                            application.status === 'interview-rescheduled'
+                        ) && (
                             <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
                                 Moving a candidate to Interview automatically sends the Cal.com invite.
                             </p>
@@ -911,15 +1000,34 @@ export default function HiringApplicationDetailPage() {
                                         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                             Meeting Link
                                         </p>
-                                        <a
-                                            href={scheduledInterview.meetLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-sm font-medium inline-flex items-center gap-1 hover:opacity-75 transition-opacity"
-                                            style={{ color: 'var(--color-primary)' }}
-                                        >
-                                            Join Meeting <ExternalLink size={12} />
-                                        </a>
+                                        {(() => {
+                                            const meetingHref = normalizeMeetingUrl(
+                                                scheduledInterview.meetLink
+                                            );
+
+                                            if (!meetingHref) {
+                                                return (
+                                                    <p
+                                                        className="text-sm"
+                                                        style={{ color: 'var(--color-text-muted)' }}
+                                                    >
+                                                        Meeting link unavailable
+                                                    </p>
+                                                );
+                                            }
+
+                                            return (
+                                                <a
+                                                    href={meetingHref}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm font-medium inline-flex items-center gap-1 hover:opacity-75 transition-opacity"
+                                                    style={{ color: 'var(--color-primary)' }}
+                                                >
+                                                    Join Meeting <ExternalLink size={12} />
+                                                </a>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 

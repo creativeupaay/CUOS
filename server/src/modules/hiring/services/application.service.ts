@@ -5,6 +5,7 @@ import { uploadDocument } from '../../../utils/cloudinary.util';
 import {
     sendHiringApplicationReceivedEmail,
     sendHiringAssignmentEmail,
+    sendHiringInterviewQualifiedEmail,
     sendHiringOfferEmail,
     sendHiringRejectionEmail,
 } from '../../../services/email.service';
@@ -36,6 +37,12 @@ async function runEmailSafely(label: string, fn: () => Promise<void>) {
 
 const interviewService = new InterviewService();
 
+function normalizeOptionalUrl(value?: string) {
+    const trimmedValue = String(value || '').trim();
+    if (!trimmedValue) return '';
+    return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
+}
+
 export class ApplicationService {
     async createPublicApplication(
         jobId: string,
@@ -62,6 +69,9 @@ export class ApplicationService {
         const application = await Application.create({
             jobId,
             ...data,
+            portfolio: normalizeOptionalUrl(data.portfolio),
+            linkedin: normalizeOptionalUrl(data.linkedin),
+            github: normalizeOptionalUrl(data.github),
             resumeUrl: uploadResult.url,
             resumeCloudinaryId: uploadResult.cloudinaryId,
             status: 'new',
@@ -219,17 +229,38 @@ export class ApplicationService {
             );
         }
 
-        if (status === 'hired' && existing.status !== 'offered' && existing.status !== 'hired') {
+        if (
+            status === 'hired' &&
+            !['offered', 'hired', 'interview', 'interview-scheduled'].includes(existing.status)
+        ) {
             throw new AppError(
-                'Candidate can be marked as Hired only after an offer has been sent',
+                'Candidate can be marked as Hired only after an offer is sent or after an interview stage',
                 400
             );
         }
 
         const wasRejected = existing.status === 'rejected';
+        const wasHired = existing.status === 'hired';
         const enteringAssignmentRound =
             status === 'assignment-round' && existing.status !== 'assignment-round';
+        const enteringAssignmentSubmitted =
+            status === 'assignment-submitted' && existing.status !== 'assignment-submitted';
         const enteringInterview = status === 'interview' && existing.status !== 'interview';
+
+        if (enteringAssignmentRound || enteringAssignmentSubmitted) {
+            const jobId =
+                existing.jobId && typeof existing.jobId === 'object'
+                    ? (existing.jobId as any)._id
+                    : existing.jobId;
+
+            const assignment = await Assignment.findOne({ jobId }).sort({ updatedAt: -1, createdAt: -1 });
+            if (!assignment) {
+                throw new AppError(
+                    'Please create an assignment for this job before moving candidate to an assignment stage',
+                    400
+                );
+            }
+        }
 
         if (enteringInterview) {
             await interviewService.sendInterviewInvite(id, actorId);
@@ -254,7 +285,10 @@ export class ApplicationService {
 
             const assignment = await Assignment.findOne({ jobId }).sort({ updatedAt: -1, createdAt: -1 });
             if (!assignment) {
-                throw new AppError('Please create an assignment for this job before moving candidate to assignment stage', 400);
+                throw new AppError(
+                    'Please create an assignment for this job before moving candidate to an assignment stage',
+                    400
+                );
             }
 
             const timeLimitDays =
@@ -347,6 +381,32 @@ export class ApplicationService {
                 type: 'application.rejected',
                 title: 'Candidate Rejected',
                 description: 'Application moved to Rejected and rejection email sent.',
+                actorType: actorId ? 'user' : 'system',
+                actorId,
+                metadata: {
+                    status,
+                },
+            });
+        } else if (status === 'hired' && !wasHired) {
+            const jobTitle =
+                application.jobId && typeof application.jobId === 'object'
+                    ? (application.jobId as any).title
+                    : 'the role';
+
+            await runEmailSafely('interview qualified email', () =>
+                sendHiringInterviewQualifiedEmail({
+                    to: application.email,
+                    candidateName: application.name,
+                    jobTitle: String(jobTitle),
+                })
+            );
+
+            await logApplicationActivity({
+                applicationId: application._id,
+                type: 'application.hired',
+                title: 'Candidate Marked as Hired',
+                description:
+                    'Application moved to Hired and interview qualification email sent to candidate.',
                 actorType: actorId ? 'user' : 'system',
                 actorId,
                 metadata: {

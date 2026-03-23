@@ -33,6 +33,7 @@ import type {
     ListInterviewsResponse,
     SaveInterviewNoteRequest,
     SaveInterviewNoteResponse,
+    RequestInterviewRescheduleRequest,
     ApplicationTimelineResponse,
     HiringReportSummaryResponse,
 } from './types/apiTypes';
@@ -208,6 +209,7 @@ export const hiringApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, { id }) => [
                 { type: 'Applications', id },
                 'Applications',
+                'Interviews',
             ],
         }),
 
@@ -358,11 +360,21 @@ export const hiringApi = api.injectEndpoints({
             ApiResponse<{ submission: AssignmentSubmission }>,
             { applicationId: string; data: SubmitAssignmentRequest }
         >({
-            query: ({ applicationId, data }) => ({
-                url: `/hiring/assignment/submit/${applicationId}`,
-                method: 'POST',
-                body: data,
-            }),
+            query: ({ applicationId, data }) => {
+                const formData = new FormData();
+                if (data.githubLink) formData.append('githubLink', data.githubLink);
+                if (data.demoLink) formData.append('demoLink', data.demoLink);
+                if (data.videoLink) formData.append('videoLink', data.videoLink);
+                if (data.figmaLink) formData.append('figmaLink', data.figmaLink);
+                if (data.notes) formData.append('notes', data.notes);
+                data.attachments?.forEach((file) => formData.append('attachments', file));
+
+                return {
+                    url: `/hiring/assignment/submit/${applicationId}`,
+                    method: 'POST',
+                    body: formData,
+                };
+            },
             invalidatesTags: (_result, _error, { applicationId }) => [
                 { type: 'Assignments', id: applicationId },
                 'Applications',
@@ -396,6 +408,18 @@ export const hiringApi = api.injectEndpoints({
                 body: { status },
             }),
             invalidatesTags: ['Interviews'],
+        }),
+
+        requestInterviewReschedule: builder.mutation<
+            ApiResponse<{ interview: Interview; bookingUrl: string }>,
+            { id: string; data: RequestInterviewRescheduleRequest }
+        >({
+            query: ({ id, data }) => ({
+                url: `/hiring/interviews/${id}/reschedule`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Interviews', 'Applications'],
         }),
 
         getInterviewDetails: builder.query<ApiResponse<InterviewDetailsResponse>, string>({
@@ -455,6 +479,7 @@ export const {
     useSendInterviewInviteMutation,
     useGetInterviewsQuery,
     useUpdateInterviewStatusMutation,
+    useRequestInterviewRescheduleMutation,
     useGetInterviewDetailsQuery,
     useSaveInterviewNoteMutation,
 } = hiringApi;

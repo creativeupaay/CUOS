@@ -1,8 +1,10 @@
 import AppError from '../../../utils/appError';
+import { uploadDocument } from '../../../utils/cloudinary.util';
 import { Application } from '../models/Application.model';
 import { Assignment, IAssignment } from '../models/Assignment.model';
 import {
     AssignmentSubmission,
+    IAssignmentSubmissionAttachment,
     IAssignmentSubmission,
 } from '../models/AssignmentSubmission.model';
 import { Job } from '../models/Job.model';
@@ -12,6 +14,12 @@ import {
     UpdateAssignmentInput,
 } from '../validators/assignment.validator';
 import { logApplicationActivity } from './activity.service';
+
+function normalizeOptionalUrl(value?: string) {
+    const trimmedValue = String(value || '').trim();
+    if (!trimmedValue) return '';
+    return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
+}
 
 export class AssignmentService {
     async createAssignment(data: CreateAssignmentInput): Promise<IAssignment> {
@@ -147,7 +155,8 @@ export class AssignmentService {
 
     async submitAssignment(
         applicationId: string,
-        data: SubmitAssignmentInput
+        data: SubmitAssignmentInput,
+        files: Express.Multer.File[] = []
     ): Promise<IAssignmentSubmission> {
         const application = await Application.findById(applicationId).select(
             'jobId assignmentWindowStartedAt assignmentWindowExpiresAt status'
@@ -181,16 +190,40 @@ export class AssignmentService {
         }
 
         const normalizedData = {
-            githubLink: String(data.githubLink || '').trim(),
-            demoLink: String(data.demoLink || '').trim(),
-            videoLink: String(data.videoLink || '').trim(),
+            githubLink: normalizeOptionalUrl(data.githubLink),
+            demoLink: normalizeOptionalUrl(data.demoLink),
+            videoLink: normalizeOptionalUrl(data.videoLink),
+            figmaLink: normalizeOptionalUrl(data.figmaLink),
             notes: String(data.notes || '').trim(),
         };
+
+        const uploadedAttachments: IAssignmentSubmissionAttachment[] = assignment.submissionFields.attachments
+            ? await Promise.all(
+                  files.map(async (file) => {
+                      const uploadResult = await uploadDocument(
+                          file.buffer,
+                          `hiring/assignments/${application._id}`,
+                          `${Date.now()}-${file.originalname}`,
+                          false
+                      );
+
+                      return {
+                          name: file.originalname,
+                          url: uploadResult.url,
+                          mimeType: file.mimetype,
+                          size: file.size,
+                          cloudinaryId: uploadResult.cloudinaryId,
+                      };
+                  })
+              )
+            : [];
 
         const hasAllowedSubmissionContent =
             (assignment.submissionFields.githubLink && Boolean(normalizedData.githubLink)) ||
             (assignment.submissionFields.demoLink && Boolean(normalizedData.demoLink)) ||
             (assignment.submissionFields.videoLink && Boolean(normalizedData.videoLink)) ||
+            (assignment.submissionFields.figmaLink && Boolean(normalizedData.figmaLink)) ||
+            (assignment.submissionFields.attachments && uploadedAttachments.length > 0) ||
             (assignment.submissionFields.notes && Boolean(normalizedData.notes));
 
         if (!hasAllowedSubmissionContent) {
@@ -226,6 +259,10 @@ export class AssignmentService {
             videoLink: assignment.submissionFields.videoLink
                 ? normalizedData.videoLink || undefined
                 : undefined,
+            figmaLink: assignment.submissionFields.figmaLink
+                ? normalizedData.figmaLink || undefined
+                : undefined,
+            attachments: assignment.submissionFields.attachments ? uploadedAttachments : [],
             notes: assignment.submissionFields.notes ? normalizedData.notes || undefined : undefined,
             submittedAt,
             deadlineAt: expiresAt,

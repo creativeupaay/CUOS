@@ -6,6 +6,8 @@ const submissionFieldsSchema = z.object({
     githubLink: z.boolean().default(true),
     demoLink: z.boolean().default(true),
     videoLink: z.boolean().default(true),
+    figmaLink: z.boolean().default(false),
+    attachments: z.boolean().default(false),
     notes: z.boolean().default(true),
 });
 
@@ -51,7 +53,7 @@ export const getAssignmentForApplicationSchema = z.object({
     }),
 });
 
-const optionalUrl = z.string().trim().url().optional().or(z.literal(''));
+const optionalUrl = z.string().trim().optional().or(z.literal(''));
 
 export const submitAssignmentSchema = z.object({
     params: z.object({
@@ -61,6 +63,7 @@ export const submitAssignmentSchema = z.object({
         githubLink: optionalUrl,
         demoLink: optionalUrl,
         videoLink: optionalUrl,
+        figmaLink: optionalUrl,
         notes: z.string().trim().optional().or(z.literal('')),
     }),
 });

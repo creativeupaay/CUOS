@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     AlertCircle,
     CalendarDays,
+    Clipboard,
     Copy,
     ExternalLink,
     Loader2,
+    PanelTopOpen,
     Plus,
     RefreshCw,
     Save,
     Trash2,
+    X,
 } from 'lucide-react';
 import {
     useGetJobByIdQuery,
@@ -16,6 +20,7 @@ import {
     useUpdateJobMutation,
 } from '@/features/hiring/hiringApi';
 import HiringInterviewTabs from '@/features/hiring/components/HiringInterviewTabs';
+import type { Job } from '@/features/hiring/types/types';
 
 const WEEKDAY_OPTIONS = [
     { value: 0, label: 'Sun' },
@@ -47,6 +52,12 @@ function toLocalDateInput(value?: string) {
     if (Number.isNaN(date.getTime())) return '';
     const pad = (num: number) => String(num).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function getTodayLocalDateInput() {
+    const today = new Date();
+    const pad = (num: number) => String(num).padStart(2, '0');
+    return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 }
 
 function formatDateForSummary(value?: string | Date) {
@@ -165,21 +176,12 @@ interface ScheduleFormState {
     enabled: boolean;
     timezone: string;
     organizerName: string;
-    availableRanges: Array<{
-        startDate: string;
-        endDate: string;
-    }>;
+    availableRanges: ScheduleRangeFormState[];
     dateOverrides: Array<{
         date: string;
         slots: Array<{ startTime: string; endTime: string }>;
     }>;
-    daySchedules: Record<
-        number,
-        {
-            enabled: boolean;
-            slots: Array<{ startTime: string; endTime: string }>;
-        }
-    >;
+    daySchedules: DayScheduleMap;
     durationMinutes: number;
     beforeEventBufferMinutes: number;
     afterEventBufferMinutes: number;
@@ -192,11 +194,172 @@ interface ScheduleErrors {
     schedule?: string;
 }
 
+type DayScheduleMap = Record<
+    number,
+    {
+        enabled: boolean;
+        slots: Array<{ startTime: string; endTime: string }>;
+    }
+>;
+
+interface ScheduleRangeFormState {
+    startDate: string;
+    endDate: string;
+    daySchedules: DayScheduleMap;
+}
+
+function createDaySchedulesFromWeekdaysAndSlots(
+    weekdays?: number[],
+    slots?: Array<{ startTime: string; endTime: string }>
+): DayScheduleMap {
+    const defaultSlots =
+        slots?.length
+            ? slots.map((slot) => ({
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+              }))
+            : [{ startTime: '10:00', endTime: '18:00' }];
+    const enabledWeekdays = weekdays?.length ? weekdays : [1, 2, 3, 4, 5];
+
+    const nextDaySchedules: DayScheduleMap = {
+        0: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        1: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        2: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        3: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        4: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        5: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+        6: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
+    };
+
+    enabledWeekdays.forEach((day) => {
+        nextDaySchedules[day] = {
+            enabled: true,
+            slots: defaultSlots.map((slot) => ({ ...slot })),
+        };
+    });
+
+    return nextDaySchedules;
+}
+
+function cloneDaySchedules(daySchedules: DayScheduleMap): DayScheduleMap {
+    return Object.fromEntries(
+        Object.entries(daySchedules).map(([day, config]) => [
+            Number(day),
+            {
+                enabled: config.enabled,
+                slots: config.slots.map((slot) => ({ ...slot })),
+            },
+        ])
+    ) as DayScheduleMap;
+}
+
+function getEnabledDaysFromDaySchedules(daySchedules: DayScheduleMap): number[] {
+    return WEEKDAY_OPTIONS.filter((day) => daySchedules[day.value]?.enabled).map((day) => day.value);
+}
+
+function getSortedSlotsFromDaySchedules(daySchedules: DayScheduleMap): Array<{ startTime: string; endTime: string }> {
+    const enabledDays = getEnabledDaysFromDaySchedules(daySchedules);
+    const sourceDay = enabledDays[0];
+
+    return sourceDay !== undefined
+        ? [...daySchedules[sourceDay].slots].sort((a, b) => a.startTime.localeCompare(b.startTime))
+        : [{ startTime: '10:00', endTime: '18:00' }];
+}
+
+function summarizeDaySchedules(daySchedules: DayScheduleMap): string {
+    const activeDays = WEEKDAY_OPTIONS.filter((day) => daySchedules[day.value]?.enabled);
+    if (!activeDays.length) {
+        return 'No active working days';
+    }
+
+    const first = activeDays[0].label;
+    const last = activeDays[activeDays.length - 1].label;
+    const firstSchedule = daySchedules[activeDays[0].value];
+    const slotLabel = firstSchedule.slots
+        .map((slot) => `${slot.startTime} - ${slot.endTime}`)
+        .join(', ');
+    return `${first}${activeDays.length > 1 ? ` - ${last}` : ''}, ${slotLabel}`;
+}
+
+function buildDaySchedulesFromScheduling(
+    scheduling?: Job['interviewScheduling']
+): ScheduleFormState['daySchedules'] {
+    return createDaySchedulesFromWeekdaysAndSlots(scheduling?.weekdays, scheduling?.dailySlots);
+}
+
+function buildFormStateFromScheduling(
+    scheduling?: Job['interviewScheduling']
+): ScheduleFormState {
+    const availableRanges = Array.isArray(scheduling?.availableRanges)
+        ? scheduling.availableRanges
+              .map((range) => ({
+                  startDate: toLocalDateInput(range.startDate),
+                  endDate: toLocalDateInput(range.endDate),
+                  daySchedules: createDaySchedulesFromWeekdaysAndSlots(
+                      range.weekdays?.length ? range.weekdays : scheduling?.weekdays,
+                      range.dailySlots?.length ? range.dailySlots : scheduling?.dailySlots
+                  ),
+              }))
+              .filter((range) => range.startDate || range.endDate)
+        : [];
+
+    const reminderMinutesBefore = Array.isArray(scheduling?.reminderMinutesBefore)
+        ? scheduling.reminderMinutesBefore
+        : typeof scheduling?.reminderMinutesBefore === 'number'
+        ? [scheduling.reminderMinutesBefore]
+        : [30];
+
+    const dateOverrides = Array.isArray(scheduling?.dateOverrides)
+        ? scheduling.dateOverrides
+              .map((override) => ({
+                  date: toLocalDateInput(override.date),
+                  slots: Array.isArray(override.slots) && override.slots.length
+                      ? override.slots.map((slot) => ({
+                            startTime: slot.startTime,
+                            endTime: slot.endTime,
+                        }))
+                      : [{ startTime: '10:00', endTime: '18:00' }],
+              }))
+              .filter((override) => override.date)
+        : [];
+
+    return {
+        enabled: Boolean(scheduling?.enabled),
+        timezone: scheduling?.timezone || 'Asia/Kolkata',
+        organizerName: scheduling?.organizerName || 'HR Team',
+        availableRanges: availableRanges.length
+            ? availableRanges
+            : [
+                  {
+                      startDate: '',
+                      endDate: '',
+                      daySchedules: buildDaySchedulesFromScheduling(scheduling),
+                  },
+              ],
+        dateOverrides,
+        daySchedules: buildDaySchedulesFromScheduling(scheduling),
+        durationMinutes: scheduling?.durationMinutes || 45,
+        beforeEventBufferMinutes: scheduling?.beforeEventBufferMinutes || 5,
+        afterEventBufferMinutes: scheduling?.afterEventBufferMinutes || 5,
+        reminderMinutesBefore,
+        customReminderValue: '',
+        customReminderUnit: 'minutes',
+    };
+}
+
 const EMPTY_FORM: ScheduleFormState = {
     enabled: false,
     timezone: 'Asia/Kolkata',
     organizerName: 'HR Team',
-    availableRanges: [{ startDate: '', endDate: '' }],
+    availableRanges: [
+        {
+            startDate: '',
+            endDate: '',
+            daySchedules: createDaySchedulesFromWeekdaysAndSlots([1, 2, 3, 4, 5], [
+                { startTime: '09:00', endTime: '17:00' },
+            ]),
+        },
+    ],
     dateOverrides: [],
     daySchedules: {
         0: { enabled: false, slots: [{ startTime: '09:00', endTime: '17:00' }] },
@@ -216,14 +379,20 @@ const EMPTY_FORM: ScheduleFormState = {
 };
 
 export default function HiringInterviewSchedulePage() {
+    const todayDateInput = useMemo(() => getTodayLocalDateInput(), []);
     const [selectedJobId, setSelectedJobId] = useState('');
     const [form, setForm] = useState<ScheduleFormState>(EMPTY_FORM);
+    const [activeRangeIndex, setActiveRangeIndex] = useState(0);
+    const [copiedRangeDaySchedules, setCopiedRangeDaySchedules] = useState<DayScheduleMap | null>(null);
+    const [copiedRangeLabel, setCopiedRangeLabel] = useState('');
     const [errors, setErrors] = useState<ScheduleErrors>({});
     const [serverError, setServerError] = useState('');
     const [savedMessage, setSavedMessage] = useState('');
     const [isForceSyncing, setIsForceSyncing] = useState(false);
     const [copyPanelDay, setCopyPanelDay] = useState<number | null>(null);
     const [copyTargets, setCopyTargets] = useState<number[]>([]);
+    const [isJobCopyModalOpen, setIsJobCopyModalOpen] = useState(false);
+    const [copySourceJobId, setCopySourceJobId] = useState('');
     const copyPanelRef = useRef<HTMLDivElement | null>(null);
 
     const { data: jobsData, isLoading: isLoadingJobs } = useGetJobsQuery({ limit: 200 });
@@ -237,14 +406,15 @@ export default function HiringInterviewSchedulePage() {
         skip: !selectedJobId,
     });
     const [updateJob, { isLoading: isSaving }] = useUpdateJobMutation();
-
-    const enabledDays = useMemo(
-        () =>
-            WEEKDAY_OPTIONS.filter((day) => form.daySchedules[day.value]?.enabled).map(
-                (day) => day.value
-            ),
-        [form.daySchedules]
+    const { data: copySourceJobData, isFetching: isLoadingCopySourceJob } = useGetJobByIdQuery(
+        copySourceJobId,
+        {
+            skip: !copySourceJobId,
+        }
     );
+
+    const activeRange = form.availableRanges[activeRangeIndex];
+    const activeRangeDaySchedules = activeRange?.daySchedules || form.daySchedules;
 
     const availableRangeDates = useMemo(() => {
         const dates: string[] = [];
@@ -275,19 +445,10 @@ export default function HiringInterviewSchedulePage() {
         return dates.sort();
     }, [form.availableRanges]);
 
-    const workingHoursSummary = useMemo(() => {
-        const activeDays = WEEKDAY_OPTIONS.filter((day) => form.daySchedules[day.value]?.enabled);
-        if (!activeDays.length) {
-            return 'No active working days';
-        }
-        const first = activeDays[0].label;
-        const last = activeDays[activeDays.length - 1].label;
-        const firstSchedule = form.daySchedules[activeDays[0].value];
-        const slotLabel = firstSchedule.slots
-            .map((slot) => `${slot.startTime} - ${slot.endTime}`)
-            .join(', ');
-        return `${first}${activeDays.length > 1 ? ` - ${last}` : ''}, ${slotLabel}`;
-    }, [form.daySchedules]);
+    const workingHoursSummary = useMemo(
+        () => summarizeDaySchedules(activeRangeDaySchedules),
+        [activeRangeDaySchedules]
+    );
 
     useEffect(() => {
         if (!selectedJobId && jobs.length > 0) {
@@ -298,81 +459,26 @@ export default function HiringInterviewSchedulePage() {
     useEffect(() => {
         if (!jobData?.data.job) return;
 
-        const scheduling = jobData.data.job.interviewScheduling;
-        const defaultSlots =
-            scheduling?.dailySlots?.length
-                ? scheduling.dailySlots.map((slot) => ({
-                      startTime: slot.startTime,
-                      endTime: slot.endTime,
-                  }))
-                : [{ startTime: '10:00', endTime: '18:00' }];
-        const weekdays = scheduling?.weekdays?.length ? scheduling.weekdays : [1, 2, 3, 4, 5];
-        const nextDaySchedules: ScheduleFormState['daySchedules'] = {
-            0: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            1: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            2: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            3: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            4: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            5: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-            6: { enabled: false, slots: defaultSlots.map((slot) => ({ ...slot })) },
-        };
-
-        weekdays.forEach((day) => {
-            nextDaySchedules[day] = {
-                enabled: true,
-                slots: defaultSlots.map((slot) => ({ ...slot })),
-            };
-        });
-
-        const availableRanges = Array.isArray(scheduling?.availableRanges)
-            ? scheduling.availableRanges
-                  .map((range) => ({
-                      startDate: toLocalDateInput(range.startDate),
-                      endDate: toLocalDateInput(range.endDate),
-                  }))
-                  .filter((range) => range.startDate || range.endDate)
-            : [];
-
-        const reminderMinutesBefore = Array.isArray(scheduling?.reminderMinutesBefore)
-            ? scheduling.reminderMinutesBefore
-            : typeof scheduling?.reminderMinutesBefore === 'number'
-            ? [scheduling.reminderMinutesBefore]
-            : [30];
-
-        const dateOverrides = Array.isArray(scheduling?.dateOverrides)
-            ? scheduling.dateOverrides
-                  .map((override) => ({
-                      date: toLocalDateInput(override.date),
-                      slots: Array.isArray(override.slots) && override.slots.length
-                          ? override.slots.map((slot) => ({
-                                startTime: slot.startTime,
-                                endTime: slot.endTime,
-                            }))
-                          : [{ startTime: '10:00', endTime: '18:00' }],
-                  }))
-                  .filter((override) => override.date)
-            : [];
-
-        setForm({
-            enabled: Boolean(scheduling?.enabled),
-            timezone: scheduling?.timezone || 'Asia/Kolkata',
-            organizerName: scheduling?.organizerName || 'HR Team',
-            availableRanges: availableRanges.length ? availableRanges : [{ startDate: '', endDate: '' }],
-            dateOverrides,
-            daySchedules: nextDaySchedules,
-            durationMinutes: scheduling?.durationMinutes || 45,
-            beforeEventBufferMinutes: scheduling?.beforeEventBufferMinutes || 5,
-            afterEventBufferMinutes: scheduling?.afterEventBufferMinutes || 5,
-            reminderMinutesBefore,
-            customReminderValue: '',
-            customReminderUnit: 'minutes',
-        });
+        setForm(buildFormStateFromScheduling(jobData.data.job.interviewScheduling));
+        setActiveRangeIndex(0);
         setErrors({});
         setServerError('');
     }, [jobData]);
 
+    useEffect(() => {
+        if (activeRangeIndex <= form.availableRanges.length - 1) {
+            return;
+        }
+
+        setActiveRangeIndex(Math.max(0, form.availableRanges.length - 1));
+    }, [form.availableRanges.length, activeRangeIndex]);
+
     const selectedJob = jobData?.data.job;
     const isWorking = isSaving || isForceSyncing;
+    const sourceJobs = useMemo(
+        () => jobs.filter((job) => job._id !== selectedJobId),
+        [jobs, selectedJobId]
+    );
     const syncedSummary = useMemo(() => {
         const scheduling = selectedJob?.interviewScheduling;
         if (!scheduling) return null;
@@ -400,13 +506,41 @@ export default function HiringInterviewSchedulePage() {
             scheduleId: scheduling.scheduleId || '-',
         };
     }, [selectedJob]);
+    const copySourceJob = copySourceJobData?.data.job;
+    const copySourceSummary = useMemo(() => {
+        const scheduling = copySourceJob?.interviewScheduling;
+        if (!scheduling) return null;
+
+        return {
+            weekdays: formatWeekdaysForSummary(scheduling.weekdays),
+            hours:
+                Array.isArray(scheduling.dailySlots) && scheduling.dailySlots.length
+                    ? scheduling.dailySlots
+                          .map((slot) => `${slot.startTime} - ${slot.endTime}`)
+                          .join(', ')
+                    : '-',
+            availableRanges: formatRangesForSummary(scheduling.availableRanges),
+        };
+    }, [copySourceJob]);
+
+    useEffect(() => {
+        if (!isJobCopyModalOpen) {
+            return;
+        }
+
+        const hasValidSelection = sourceJobs.some((job) => job._id === copySourceJobId);
+        if (hasValidSelection) {
+            return;
+        }
+
+        setCopySourceJobId(sourceJobs[0]?._id || '');
+    }, [isJobCopyModalOpen, sourceJobs, copySourceJobId]);
 
     const buildSchedulingPayload = () => {
-        const sortedSlots = enabledDays.length
-            ? [...form.daySchedules[enabledDays[0]].slots].sort((a, b) =>
-                  a.startTime.localeCompare(b.startTime)
-              )
-            : [{ startTime: '10:00', endTime: '18:00' }];
+        const primaryRange = form.availableRanges[0];
+        const primaryDaySchedules = primaryRange?.daySchedules || form.daySchedules;
+        const primaryEnabledDays = getEnabledDaysFromDaySchedules(primaryDaySchedules);
+        const sortedSlots = getSortedSlotsFromDaySchedules(primaryDaySchedules);
 
         return {
             interviewScheduling: {
@@ -419,6 +553,8 @@ export default function HiringInterviewSchedulePage() {
                     .map((range) => ({
                         startDate: toLocalDayBoundaryIso(range.startDate, 'start'),
                         endDate: toLocalDayBoundaryIso(range.endDate, 'end'),
+                        weekdays: getEnabledDaysFromDaySchedules(range.daySchedules),
+                        dailySlots: getSortedSlotsFromDaySchedules(range.daySchedules),
                     })),
                 dateOverrides: form.dateOverrides
                     .filter((override) => override.date && validateDaySlots(override.slots))
@@ -426,7 +562,7 @@ export default function HiringInterviewSchedulePage() {
                         date: toLocalDayBoundaryIso(override.date, 'start'),
                         slots: [...override.slots].sort((a, b) => a.startTime.localeCompare(b.startTime)),
                     })),
-                weekdays: enabledDays,
+                weekdays: primaryEnabledDays,
                 dailySlots: sortedSlots.map((slot) => ({
                     startTime: slot.startTime,
                     endTime: slot.endTime,
@@ -463,13 +599,20 @@ export default function HiringInterviewSchedulePage() {
     const toggleWeekday = (day: number) => {
         setForm((prev) => ({
             ...prev,
-            daySchedules: {
-                ...prev.daySchedules,
-                [day]: {
-                    ...prev.daySchedules[day],
-                    enabled: !prev.daySchedules[day].enabled,
-                },
-            },
+            availableRanges: prev.availableRanges.map((range, index) =>
+                index === activeRangeIndex
+                    ? {
+                          ...range,
+                          daySchedules: {
+                              ...range.daySchedules,
+                              [day]: {
+                                  ...range.daySchedules[day],
+                                  enabled: !range.daySchedules[day].enabled,
+                              },
+                          },
+                      }
+                    : range
+            ),
         }));
 
         if (errors.schedule) {
@@ -501,10 +644,20 @@ export default function HiringInterviewSchedulePage() {
     };
 
     const addRange = () => {
+        const sourceDaySchedules =
+            form.availableRanges[activeRangeIndex]?.daySchedules || form.daySchedules;
         setForm((prev) => ({
             ...prev,
-            availableRanges: [...prev.availableRanges, { startDate: '', endDate: '' }],
+            availableRanges: [
+                ...prev.availableRanges,
+                {
+                    startDate: '',
+                    endDate: '',
+                    daySchedules: cloneDaySchedules(sourceDaySchedules),
+                },
+            ],
         }));
+        setActiveRangeIndex(form.availableRanges.length);
 
         if (errors.schedule) {
             setErrors({});
@@ -519,9 +672,18 @@ export default function HiringInterviewSchedulePage() {
             const next = prev.availableRanges.filter((_, idx) => idx !== index);
             return {
                 ...prev,
-                availableRanges: next.length ? next : [{ startDate: '', endDate: '' }],
+                availableRanges: next.length
+                    ? next
+                    : [
+                          {
+                              startDate: '',
+                              endDate: '',
+                              daySchedules: cloneDaySchedules(prev.daySchedules),
+                          },
+                      ],
             };
         });
+        setActiveRangeIndex((prev) => (prev > 0 && prev >= index ? prev - 1 : 0));
 
         if (errors.schedule) {
             setErrors({});
@@ -735,15 +897,22 @@ export default function HiringInterviewSchedulePage() {
     ) => {
         setForm((prev) => ({
             ...prev,
-            daySchedules: {
-                ...prev.daySchedules,
-                [day]: {
-                    ...prev.daySchedules[day],
-                    slots: prev.daySchedules[day].slots.map((slot, index) =>
-                        index === slotIndex ? { ...slot, [field]: value } : slot
-                    ),
-                },
-            },
+            availableRanges: prev.availableRanges.map((range, index) =>
+                index === activeRangeIndex
+                    ? {
+                          ...range,
+                          daySchedules: {
+                              ...range.daySchedules,
+                              [day]: {
+                                  ...range.daySchedules[day],
+                                  slots: range.daySchedules[day].slots.map((slot, currentIndex) =>
+                                      currentIndex === slotIndex ? { ...slot, [field]: value } : slot
+                                  ),
+                              },
+                          },
+                      }
+                    : range
+            ),
         }));
 
         if (errors.schedule) {
@@ -756,18 +925,30 @@ export default function HiringInterviewSchedulePage() {
 
     const addDaySlot = (day: number) => {
         setForm((prev) => {
-            const daySlots = prev.daySchedules[day].slots;
+            const currentRange = prev.availableRanges[activeRangeIndex];
+            if (!currentRange) {
+                return prev;
+            }
+
+            const daySlots = currentRange.daySchedules[day].slots;
             const lastSlot = daySlots[daySlots.length - 1] || { startTime: '10:00', endTime: '18:00' };
 
             return {
                 ...prev,
-                daySchedules: {
-                    ...prev.daySchedules,
-                    [day]: {
-                        ...prev.daySchedules[day],
-                        slots: [...daySlots, { ...lastSlot }],
-                    },
-                },
+                availableRanges: prev.availableRanges.map((range, index) =>
+                    index === activeRangeIndex
+                        ? {
+                              ...range,
+                              daySchedules: {
+                                  ...range.daySchedules,
+                                  [day]: {
+                                      ...range.daySchedules[day],
+                                      slots: [...daySlots, { ...lastSlot }],
+                                  },
+                              },
+                          }
+                        : range
+                ),
             };
         });
 
@@ -781,20 +962,32 @@ export default function HiringInterviewSchedulePage() {
 
     const removeDaySlot = (day: number, slotIndex: number) => {
         setForm((prev) => {
-            const daySlots = prev.daySchedules[day].slots;
+            const currentRange = prev.availableRanges[activeRangeIndex];
+            if (!currentRange) {
+                return prev;
+            }
+
+            const daySlots = currentRange.daySchedules[day].slots;
             if (daySlots.length <= 1) {
                 return prev;
             }
 
             return {
                 ...prev,
-                daySchedules: {
-                    ...prev.daySchedules,
-                    [day]: {
-                        ...prev.daySchedules[day],
-                        slots: daySlots.filter((_, index) => index !== slotIndex),
-                    },
-                },
+                availableRanges: prev.availableRanges.map((range, index) =>
+                    index === activeRangeIndex
+                        ? {
+                              ...range,
+                              daySchedules: {
+                                  ...range.daySchedules,
+                                  [day]: {
+                                      ...range.daySchedules[day],
+                                      slots: daySlots.filter((_, currentIndex) => currentIndex !== slotIndex),
+                                  },
+                              },
+                          }
+                        : range
+                ),
             };
         });
 
@@ -803,6 +996,54 @@ export default function HiringInterviewSchedulePage() {
         }
         if (savedMessage) {
             setSavedMessage('');
+        }
+    };
+
+    const copyCurrentRangeSchedule = () => {
+        if (!activeRange) {
+            return;
+        }
+
+        const rangeLabel =
+            activeRange.startDate && activeRange.endDate
+                ? `${activeRange.startDate} to ${activeRange.endDate}`
+                : `Range ${activeRangeIndex + 1}`;
+
+        setCopiedRangeDaySchedules(cloneDaySchedules(activeRange.daySchedules));
+        setCopiedRangeLabel(rangeLabel);
+        setSavedMessage(`Working hours copied from ${rangeLabel}. Switch to another range tab and use paste.`);
+        setServerError('');
+        if (errors.schedule) {
+            setErrors({});
+        }
+    };
+
+    const pasteToCurrentRangeSchedule = () => {
+        if (!copiedRangeDaySchedules) {
+            return;
+        }
+
+        setForm((prev) => ({
+            ...prev,
+            availableRanges: prev.availableRanges.map((range, index) =>
+                index === activeRangeIndex
+                    ? {
+                          ...range,
+                          daySchedules: cloneDaySchedules(copiedRangeDaySchedules),
+                      }
+                    : range
+            ),
+        }));
+
+        const targetLabel =
+            activeRange?.startDate && activeRange?.endDate
+                ? `${activeRange.startDate} to ${activeRange.endDate}`
+                : `Range ${activeRangeIndex + 1}`;
+
+        setSavedMessage(`Working hours pasted from ${copiedRangeLabel || 'copied range'} into ${targetLabel}. Save to apply it.`);
+        setServerError('');
+        if (errors.schedule) {
+            setErrors({});
         }
     };
 
@@ -831,24 +1072,33 @@ export default function HiringInterviewSchedulePage() {
             return;
         }
 
-        const source = form.daySchedules[copyPanelDay];
+        const source = activeRangeDaySchedules[copyPanelDay];
         if (!source) {
             setCopyPanelDay(null);
             return;
         }
 
         setForm((prev) => {
-            const next = { ...prev.daySchedules };
-            copyTargets.forEach((day) => {
-                next[day] = {
-                    ...next[day],
-                    slots: source.slots.map((slot) => ({ ...slot })),
-                };
-            });
-
             return {
                 ...prev,
-                daySchedules: next,
+                availableRanges: prev.availableRanges.map((range, index) => {
+                    if (index !== activeRangeIndex) {
+                        return range;
+                    }
+
+                    const next = { ...range.daySchedules };
+                    copyTargets.forEach((day) => {
+                        next[day] = {
+                            ...next[day],
+                            slots: source.slots.map((slot) => ({ ...slot })),
+                        };
+                    });
+
+                    return {
+                        ...range,
+                        daySchedules: next,
+                    };
+                }),
             };
         });
 
@@ -888,6 +1138,19 @@ export default function HiringInterviewSchedulePage() {
         };
     }, [copyPanelDay]);
 
+    useEffect(() => {
+        if (!isJobCopyModalOpen) {
+            return;
+        }
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [isJobCopyModalOpen]);
+
     const normalizeSlots = (slots: Array<{ startTime: string; endTime: string }>) =>
         slots
             .map((slot) => `${slot.startTime}-${slot.endTime}`)
@@ -921,27 +1184,29 @@ export default function HiringInterviewSchedulePage() {
         const nextErrors: ScheduleErrors = {};
 
         if (form.enabled) {
-            if (!enabledDays.length) {
-                nextErrors.schedule = 'Select at least one available weekday.';
-            } else {
-                const firstDaySchedule = form.daySchedules[enabledDays[0]];
+            const hasInvalidRangeHours = form.availableRanges.some((range) => {
+                const rangeEnabledDays = getEnabledDaysFromDaySchedules(range.daySchedules);
+                if (!rangeEnabledDays.length) {
+                    return true;
+                }
+
+                const firstDaySchedule = range.daySchedules[rangeEnabledDays[0]];
                 const firstDaySlots = firstDaySchedule?.slots || [];
 
                 if (!validateDaySlots(firstDaySlots)) {
-                    nextErrors.schedule =
-                        'Set valid non-overlapping time intervals (end must be later than start).';
+                    return true;
                 }
 
                 const baseline = normalizeSlots(firstDaySlots);
-                const hasMixedHours = enabledDays.some((day) => {
-                    const currentSlots = form.daySchedules[day]?.slots || [];
+                return rangeEnabledDays.some((day) => {
+                    const currentSlots = range.daySchedules[day]?.slots || [];
                     return !validateDaySlots(currentSlots) || normalizeSlots(currentSlots) !== baseline;
                 });
+            });
 
-                if (!nextErrors.schedule && hasMixedHours) {
-                    nextErrors.schedule =
-                        'Current sync uses a common set of intervals for all enabled days. Use copy/apply so enabled days have matching intervals.';
-                }
+            if (hasInvalidRangeHours) {
+                nextErrors.schedule =
+                    'Each range must have at least one weekday with valid non-overlapping intervals. Use copy/apply inside a range so enabled days match.';
             }
 
             const filledRanges = form.availableRanges.filter(
@@ -952,12 +1217,14 @@ export default function HiringInterviewSchedulePage() {
                 (range) =>
                     !range.startDate ||
                     !range.endDate ||
+                    range.startDate < todayDateInput ||
+                    range.endDate < todayDateInput ||
                     new Date(range.startDate).getTime() > new Date(range.endDate).getTime()
             );
 
             if (!nextErrors.schedule && hasInvalidRange) {
                 nextErrors.schedule =
-                    'Each date range must have start and end dates, and end date must be on or after start date.';
+                    'Each date range must be from today onward, and end date must be on or after start date.';
             }
 
             if (!nextErrors.schedule && form.reminderMinutesBefore.length === 0) {
@@ -1040,6 +1307,27 @@ export default function HiringInterviewSchedulePage() {
         }
     };
 
+    const openJobCopyModal = () => {
+        setIsJobCopyModalOpen(true);
+    };
+
+    const closeJobCopyModal = () => {
+        setIsJobCopyModalOpen(false);
+    };
+
+    const applyCopiedJobSchedule = () => {
+        if (!copySourceJob?.interviewScheduling) {
+            return;
+        }
+
+        setForm(buildFormStateFromScheduling(copySourceJob.interviewScheduling));
+        setActiveRangeIndex(0);
+        setErrors({});
+        setServerError('');
+        setSavedMessage(`Schedule copied from ${copySourceJob.title}. Review and click Save to apply it to this job.`);
+        closeJobCopyModal();
+    };
+
     if (isLoadingJobs) {
         return (
             <div
@@ -1103,18 +1391,35 @@ export default function HiringInterviewSchedulePage() {
                         }}
                     >
                         <Field label="Job Posting">
-                            <select
-                                value={selectedJobId}
-                                onChange={(e) => setSelectedJobId(e.target.value)}
-                                className="px-3 py-2.5 text-sm rounded-lg border w-full max-w-[360px]"
-                                style={inputStyle}
-                            >
-                                {jobs.map((job) => (
-                                    <option key={job._id} value={job._id}>
-                                        {job.title} - {job.department}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <select
+                                    value={selectedJobId}
+                                    onChange={(e) => setSelectedJobId(e.target.value)}
+                                    className="px-3 py-2.5 text-sm rounded-lg border w-full max-w-[360px]"
+                                    style={inputStyle}
+                                >
+                                    {jobs.map((job) => (
+                                        <option key={job._id} value={job._id}>
+                                            {job.title} - {job.department}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={openJobCopyModal}
+                                    disabled={sourceJobs.length === 0}
+                                    className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium"
+                                    style={{
+                                        borderColor: 'var(--color-border-default)',
+                                        color: 'var(--color-text-primary)',
+                                        backgroundColor: 'var(--color-bg-surface)',
+                                        opacity: sourceJobs.length === 0 ? 0.6 : 1,
+                                    }}
+                                >
+                                    <PanelTopOpen size={15} />
+                                    Copy Schedule
+                                </button>
+                            </div>
                         </Field>
                     </div>
 
@@ -1379,6 +1684,7 @@ export default function HiringInterviewSchedulePage() {
                                                         <input
                                                             type="date"
                                                             value={range.startDate}
+                                                            min={todayDateInput}
                                                             onChange={(e) =>
                                                                 setRangeValue(index, 'startDate', e.target.value)
                                                             }
@@ -1388,6 +1694,7 @@ export default function HiringInterviewSchedulePage() {
                                                         <input
                                                             type="date"
                                                             value={range.endDate}
+                                                            min={range.startDate || todayDateInput}
                                                             onChange={(e) =>
                                                                 setRangeValue(index, 'endDate', e.target.value)
                                                             }
@@ -1410,6 +1717,9 @@ export default function HiringInterviewSchedulePage() {
                                                     </div>
                                                 ))}
                                             </div>
+                                            <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+                                                Each range has its own timing tab below, so you can configure different weekday hours for different date windows.
+                                            </p>
                                         </div>
 
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1558,11 +1868,47 @@ export default function HiringInterviewSchedulePage() {
                                                 backgroundColor: '#FAFAFA',
                                             }}
                                         >
+                                            <div className="flex flex-wrap items-center gap-2 mb-4">
+                                                {form.availableRanges.map((range, index) => {
+                                                    const label =
+                                                        range.startDate && range.endDate
+                                                            ? `${range.startDate} to ${range.endDate}`
+                                                            : `Range ${index + 1}`;
+
+                                                    return (
+                                                        <button
+                                                            key={`range-tab-${index}`}
+                                                            type="button"
+                                                            onClick={() => setActiveRangeIndex(index)}
+                                                            className="px-3 py-2 rounded-lg border text-xs font-medium"
+                                                            style={{
+                                                                borderColor:
+                                                                    activeRangeIndex === index
+                                                                        ? 'var(--color-primary)'
+                                                                        : 'var(--color-border-default)',
+                                                                backgroundColor:
+                                                                    activeRangeIndex === index
+                                                                        ? 'var(--color-primary-soft)'
+                                                                        : 'var(--color-bg-surface)',
+                                                                color:
+                                                                    activeRangeIndex === index
+                                                                        ? 'var(--color-primary-darker)'
+                                                                        : 'var(--color-text-secondary)',
+                                                            }}
+                                                        >
+                                                            {label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
                                             <p
                                                 className="text-sm font-semibold"
                                                 style={{ color: 'var(--color-text-primary)' }}
                                             >
-                                                Working hours
+                                                Working hours for {activeRange?.startDate && activeRange?.endDate
+                                                    ? `${activeRange.startDate} to ${activeRange.endDate}`
+                                                    : `Range ${activeRangeIndex + 1}`}
                                             </p>
                                             <p
                                                 className="text-xs mt-1 mb-4"
@@ -1573,7 +1919,7 @@ export default function HiringInterviewSchedulePage() {
 
                                             <div className="space-y-3">
                                                 {WEEKDAY_OPTIONS.map((day) => {
-                                                    const dayState = form.daySchedules[day.value];
+                                                    const dayState = activeRangeDaySchedules[day.value];
                                                     return (
                                                         <div
                                                             key={day.value}
@@ -1789,6 +2135,42 @@ export default function HiringInterviewSchedulePage() {
                                                         </div>
                                                     );
                                                 })}
+                                            </div>
+
+                                            <div className="mt-4 flex items-center justify-end gap-2">
+                                                {copiedRangeLabel && (
+                                                    <span className="text-xs mr-1" style={{ color: 'var(--color-text-muted)' }}>
+                                                        Copied: {copiedRangeLabel}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={copyCurrentRangeSchedule}
+                                                    className="w-9 h-9 rounded-lg border inline-flex items-center justify-center"
+                                                    style={{
+                                                        borderColor: 'var(--color-border-default)',
+                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                        color: 'var(--color-text-primary)',
+                                                    }}
+                                                    title="Copy working hours from this range"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={pasteToCurrentRangeSchedule}
+                                                    disabled={!copiedRangeDaySchedules}
+                                                    className="w-9 h-9 rounded-lg border inline-flex items-center justify-center"
+                                                    style={{
+                                                        borderColor: 'var(--color-border-default)',
+                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                        color: 'var(--color-text-primary)',
+                                                        opacity: copiedRangeDaySchedules ? 1 : 0.55,
+                                                    }}
+                                                    title="Paste copied working hours into this range"
+                                                >
+                                                    <Clipboard size={14} />
+                                                </button>
                                             </div>
                                         </div>
 
@@ -2038,6 +2420,121 @@ export default function HiringInterviewSchedulePage() {
                         </>
                     )}
                 </div>
+            )}
+
+            {isJobCopyModalOpen &&
+                createPortal(
+                <div
+                    className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-8 md:pt-12"
+                    style={{ backgroundColor: 'rgba(15, 23, 42, 0.4)' }}
+                >
+                    <div
+                        className="w-full max-w-lg rounded-2xl border p-5 shadow-xl"
+                        style={{
+                            borderColor: 'var(--color-border-default)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                        }}
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                    Copy Interview Schedule
+                                </p>
+                                <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Choose another job and copy its interview availability setup into the current job.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeJobCopyModal}
+                                className="w-8 h-8 rounded-full inline-flex items-center justify-center"
+                                style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}
+                            >
+                                <X size={15} />
+                            </button>
+                        </div>
+
+                        <div className="mt-4">
+                            <Field label="Copy From Job">
+                                <select
+                                    value={copySourceJobId}
+                                    onChange={(e) => setCopySourceJobId(e.target.value)}
+                                    className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                    style={inputStyle}
+                                >
+                                    {sourceJobs.map((job) => (
+                                        <option key={job._id} value={job._id}>
+                                            {job.title} - {job.department}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </div>
+
+                        <div
+                            className="mt-4 rounded-xl border p-4 text-sm"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-subtle)',
+                            }}
+                        >
+                            {isLoadingCopySourceJob ? (
+                                <div className="inline-flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
+                                    <Loader2 size={15} className="animate-spin" />
+                                    Loading source schedule...
+                                </div>
+                            ) : copySourceJob ? (
+                                <div className="space-y-2">
+                                    <p style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>
+                                        {copySourceJob.title}
+                                    </p>
+                                    <p style={{ color: 'var(--color-text-secondary)' }}>
+                                        Weekdays: <strong style={{ color: 'var(--color-text-primary)' }}>{copySourceSummary?.weekdays || '-'}</strong>
+                                    </p>
+                                    <p style={{ color: 'var(--color-text-secondary)' }}>
+                                        Hours: <strong style={{ color: 'var(--color-text-primary)' }}>{copySourceSummary?.hours || '-'}</strong>
+                                    </p>
+                                    <p style={{ color: 'var(--color-text-secondary)' }}>
+                                        Date ranges: <strong style={{ color: 'var(--color-text-primary)' }}>{copySourceSummary?.availableRanges || '-'}</strong>
+                                    </p>
+                                </div>
+                            ) : (
+                                <p style={{ color: 'var(--color-text-secondary)' }}>
+                                    Select a job to preview its schedule.
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeJobCopyModal}
+                                className="px-3 py-2 rounded-lg text-sm border"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-secondary)',
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={applyCopiedJobSchedule}
+                                disabled={!copySourceJobId || isLoadingCopySourceJob}
+                                className="px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-2"
+                                style={{
+                                    backgroundColor: 'var(--color-primary)',
+                                    color: '#fff',
+                                    opacity: !copySourceJobId || isLoadingCopySourceJob ? 0.6 : 1,
+                                }}
+                            >
+                                <Copy size={14} />
+                                Copy Into Current Job
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     );

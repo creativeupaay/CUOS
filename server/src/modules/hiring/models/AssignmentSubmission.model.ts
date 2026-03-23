@@ -1,5 +1,13 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
+export interface IAssignmentSubmissionAttachment {
+    name: string;
+    url: string;
+    mimeType: string;
+    size: number;
+    cloudinaryId?: string;
+}
+
 export interface IAssignmentSubmission extends Document {
     _id: Types.ObjectId;
     assignmentId: Types.ObjectId;
@@ -7,6 +15,8 @@ export interface IAssignmentSubmission extends Document {
     githubLink?: string;
     demoLink?: string;
     videoLink?: string;
+    figmaLink?: string;
+    attachments?: IAssignmentSubmissionAttachment[];
     notes?: string;
     submittedAt: Date;
     deadlineAt?: Date;
@@ -32,6 +42,16 @@ const AssignmentSubmissionSchema = new Schema<IAssignmentSubmission>(
         githubLink: { type: String, trim: true },
         demoLink: { type: String, trim: true },
         videoLink: { type: String, trim: true },
+        figmaLink: { type: String, trim: true },
+        attachments: [
+            {
+                name: { type: String, trim: true, required: true },
+                url: { type: String, trim: true, required: true },
+                mimeType: { type: String, trim: true, required: true },
+                size: { type: Number, required: true },
+                cloudinaryId: { type: String, trim: true },
+            },
+        ],
         notes: { type: String, trim: true },
         submittedAt: { type: Date, required: true, default: Date.now },
         deadlineAt: { type: Date },

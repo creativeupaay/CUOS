@@ -5,6 +5,7 @@ import AppError from '../../../utils/appError';
 import { InterviewService } from '../services/interview.service';
 import type {
     ListInterviewsInput,
+    RequestInterviewRescheduleInput,
     SaveInterviewNoteInput,
     UpdateInterviewStatusInput,
     WebhookDebugQueryInput,
@@ -51,6 +52,18 @@ export const updateInterviewStatus = asyncHandler(async (req: Request, res: Resp
     res.status(200).json({
         status: 'success',
         data: { interview },
+    });
+});
+
+export const requestInterviewReschedule = asyncHandler(async (req: Request, res: Response) => {
+    const actorId = (req.user as any)?.id;
+    const data = req.body as RequestInterviewRescheduleInput;
+    const result = await interviewService.requestInterviewReschedule(req.params.id, data, actorId);
+
+    res.status(200).json({
+        status: 'success',
+        message: 'Interview reschedule email sent successfully',
+        data: result,
     });
 });
 

@@ -12,6 +12,7 @@ const STATUS_LABELS: Record<ApplicationStatus, string> = {
     'assignment-submitted': 'Assignment Submitted',
     interview: 'Interview',
     'interview-scheduled': 'Interview Scheduled',
+    'interview-rescheduled': 'Interview Rescheduled',
     'interview-cancelled': 'Interview Cancelled',
     offered: 'Offered',
     hired: 'Hired',

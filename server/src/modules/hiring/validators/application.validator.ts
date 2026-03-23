@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+const numericStringRegex = /^\d+(\.\d+)?$/;
 
 const applicationStatusSchema = z.enum([
     'new',
@@ -10,6 +11,7 @@ const applicationStatusSchema = z.enum([
     'assignment-submitted',
     'interview',
     'interview-scheduled',
+    'interview-rescheduled',
     'rejected',
     'offered',
     'hired',
@@ -29,7 +31,9 @@ export const createPublicApplicationSchema = z.object({
         experience: z.string().trim().optional().or(z.literal('')),
         coverLetter: z.string().trim().optional().or(z.literal('')),
         location: z.string().trim().min(1, 'Location is required').optional().or(z.literal('')),
-        yearsOfExperience: z.union([z.number(), z.string().regex(/^\d+$/, 'Must be a number').transform(Number)]).optional(),
+        yearsOfExperience: z
+            .union([z.number(), z.string().trim().regex(numericStringRegex, 'Must be a valid number').transform(Number)])
+            .optional(),
     }),
 });
 
@@ -40,7 +44,9 @@ export const listApplicationsSchema = z.object({
         tags: z.string().optional(),
         search: z.string().optional(),
         location: z.string().optional(),
-        minExperience: z.union([z.number(), z.string().regex(/^\d+$/).transform(Number)]).optional(),
+        minExperience: z
+            .union([z.number(), z.string().trim().regex(numericStringRegex, 'Must be a valid number').transform(Number)])
+            .optional(),
         page: z
             .string()
             .regex(/^\d+$/)

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     AlertCircle,
     CheckCircle2,
     ExternalLink,
+    Figma,
     Loader2,
+    Paperclip,
     Pencil,
     Clock3,
     XCircle,
@@ -28,10 +31,26 @@ const DEFAULT_SUBMISSION_FIELDS: AssignmentSubmissionFields = {
     githubLink: true,
     demoLink: true,
     videoLink: true,
+    figmaLink: false,
+    attachments: false,
     notes: true,
 };
 
+const SUBMISSION_FIELD_OPTIONS: {
+    key: keyof AssignmentSubmissionFields;
+    label: string;
+    description: string;
+}[] = [
+    { key: 'githubLink', label: 'GitHub Link', description: 'Repository or code link' },
+    { key: 'demoLink', label: 'Demo Link', description: 'Live demo or preview URL' },
+    { key: 'videoLink', label: 'Video Link', description: 'Walkthrough or presentation video' },
+    { key: 'figmaLink', label: 'Figma Link', description: 'Design file or prototype URL' },
+    { key: 'attachments', label: 'Attachments', description: 'Files like images, videos, PDFs, or docs' },
+    { key: 'notes', label: 'Notes', description: 'Extra written explanation from candidate' },
+];
+
 export default function AssignmentReviewPage() {
+    const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<AssignmentTab>('assignments');
     const [jobId, setJobId] = useState('');
     const [isEditing, setIsEditing] = useState(false);
@@ -46,6 +65,21 @@ export default function AssignmentReviewPage() {
     const [submissionFields, setSubmissionFields] = useState<AssignmentSubmissionFields>(
         DEFAULT_SUBMISSION_FIELDS
     );
+    const focusedApplicationId = searchParams.get('applicationId') || '';
+    const requestedJobId = searchParams.get('jobId') || '';
+    const requestedTab = searchParams.get('tab');
+
+    useEffect(() => {
+        if (requestedJobId) {
+            setJobId(requestedJobId);
+        }
+    }, [requestedJobId]);
+
+    useEffect(() => {
+        if (requestedTab === 'assignment-review' || requestedTab === 'assignments') {
+            setActiveTab(requestedTab);
+        }
+    }, [requestedTab]);
 
     const { data: jobsData, isLoading: loadingJobs } = useGetJobsQuery({ limit: 200 });
     const jobs = jobsData?.data.jobs || [];
@@ -69,6 +103,12 @@ export default function AssignmentReviewPage() {
     const filteredSubmissions = useMemo(
         () =>
             submissions.filter((submission) => {
+                const candidate =
+                    typeof submission.applicationId === 'object' ? submission.applicationId : undefined;
+
+                if (focusedApplicationId && candidate?._id !== focusedApplicationId) {
+                    return false;
+                }
                 if (submissionTimingFilter === 'late') {
                     return Boolean(submission.submittedAfterDeadline);
                 }
@@ -77,7 +117,7 @@ export default function AssignmentReviewPage() {
                 }
                 return true;
             }),
-        [submissions, submissionTimingFilter]
+        [submissions, submissionTimingFilter, focusedApplicationId]
     );
 
     const getSubmissionActionState = (submission: AssignmentSubmission): SubmissionActionState | null => {
@@ -91,7 +131,11 @@ export default function AssignmentReviewPage() {
         if (candidate?.status === 'rejected') {
             return 'rejected';
         }
-        if (candidate?.status === 'interview' || candidate?.status === 'interview-scheduled') {
+        if (
+            candidate?.status === 'interview' ||
+            candidate?.status === 'interview-scheduled' ||
+            candidate?.status === 'interview-rescheduled'
+        ) {
             return 'invited';
         }
 
@@ -430,32 +474,37 @@ export default function AssignmentReviewPage() {
                             <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
                                 Submission Fields
                             </p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {(Object.keys(submissionFields) as (keyof AssignmentSubmissionFields)[]).map(
-                                    (key) => (
-                                        <label
-                                            key={key}
-                                            className="flex items-center gap-2 text-xs px-2 py-1.5 rounded border"
-                                            style={{
-                                                borderColor: 'var(--color-border-default)',
-                                                color: 'var(--color-text-secondary)',
-                                            }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={submissionFields[key]}
-                                                disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
-                                                onChange={(e) =>
-                                                    setSubmissionFields((prev) => ({
-                                                        ...prev,
-                                                        [key]: e.target.checked,
-                                                    }))
-                                                }
-                                            />
-                                            {key}
-                                        </label>
-                                    )
-                                )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {SUBMISSION_FIELD_OPTIONS.map((field) => (
+                                    <label
+                                        key={field.key}
+                                        className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg border"
+                                        style={{
+                                            borderColor: 'var(--color-border-default)',
+                                            color: 'var(--color-text-secondary)',
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={submissionFields[field.key]}
+                                            disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                            onChange={(e) =>
+                                                setSubmissionFields((prev) => ({
+                                                    ...prev,
+                                                    [field.key]: e.target.checked,
+                                                }))
+                                            }
+                                        />
+                                        <span>
+                                            <span className="block font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                {field.label}
+                                            </span>
+                                            <span className="block mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                                {field.description}
+                                            </span>
+                                        </span>
+                                    </label>
+                                ))}
                             </div>
                             {!hasAtLeastOneSubmissionField && (
                                 <p className="text-xs mt-2" style={{ color: '#B91C1C' }}>
@@ -587,7 +636,7 @@ export default function AssignmentReviewPage() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                    {['Candidate', 'GitHub', 'Demo', 'Video', 'Submission Time', 'Status', 'Actions'].map((head) => (
+                                    {['Candidate', 'Links', 'Files', 'Submission Time', 'Status', 'Actions'].map((head) => (
                                         <th
                                             key={head}
                                             className="px-4 py-3 text-left text-xs font-semibold uppercase"
@@ -637,49 +686,80 @@ export default function AssignmentReviewPage() {
                                                 </p>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {submission.githubLink ? (
-                                                    <a
-                                                        href={submission.githubLink}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-1 text-xs"
-                                                        style={{ color: 'var(--color-primary)' }}
-                                                    >
-                                                        Open <ExternalLink size={11} />
-                                                    </a>
-                                                ) : (
-                                                    <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                                                )}
+                                                <div className="flex flex-col items-start gap-1.5">
+                                                    {submission.githubLink && (
+                                                        <a
+                                                            href={submission.githubLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            GitHub <ExternalLink size={11} />
+                                                        </a>
+                                                    )}
+                                                    {submission.demoLink && (
+                                                        <a
+                                                            href={submission.demoLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            Demo <ExternalLink size={11} />
+                                                        </a>
+                                                    )}
+                                                    {submission.videoLink && (
+                                                        <a
+                                                            href={submission.videoLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            Video <ExternalLink size={11} />
+                                                        </a>
+                                                    )}
+                                                    {submission.figmaLink && (
+                                                        <a
+                                                            href={submission.figmaLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            <Figma size={11} />
+                                                            Figma <ExternalLink size={11} />
+                                                        </a>
+                                                    )}
+                                                    {!submission.githubLink &&
+                                                        !submission.demoLink &&
+                                                        !submission.videoLink &&
+                                                        !submission.figmaLink && (
+                                                            <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                                                        )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {submission.demoLink ? (
-                                                    <a
-                                                        href={submission.demoLink}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-1 text-xs"
-                                                        style={{ color: 'var(--color-primary)' }}
-                                                    >
-                                                        Open <ExternalLink size={11} />
-                                                    </a>
-                                                ) : (
-                                                    <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {submission.videoLink ? (
-                                                    <a
-                                                        href={submission.videoLink}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-1 text-xs"
-                                                        style={{ color: 'var(--color-primary)' }}
-                                                    >
-                                                        Open <ExternalLink size={11} />
-                                                    </a>
-                                                ) : (
-                                                    <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                                                )}
+                                                <div className="flex flex-col items-start gap-1.5">
+                                                    {submission.attachments?.length ? (
+                                                        submission.attachments.map((attachment, attachmentIndex) => (
+                                                            <a
+                                                                key={`${submission._id}-attachment-${attachmentIndex}`}
+                                                                href={attachment.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1 text-xs"
+                                                                style={{ color: 'var(--color-primary)' }}
+                                                            >
+                                                                <Paperclip size={11} />
+                                                                {attachment.name}
+                                                            </a>
+                                                        ))
+                                                    ) : (
+                                                        <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td
                                                 className="px-4 py-3 text-xs"

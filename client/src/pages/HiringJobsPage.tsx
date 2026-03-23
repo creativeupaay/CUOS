@@ -23,6 +23,8 @@ import {
 import { useAppSelector } from '@/app/hooks';
 import type { Job, EmploymentType } from '@/features/hiring/types/types';
 
+type JobLocationType = 'Remote' | 'In-Office';
+
 // ── Config maps ───────────────────────────────────────────
 const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
     'full-time': 'Full-time',
@@ -47,6 +49,18 @@ function formatDate(iso: string) {
     });
 }
 
+function getJobLocationLabel(job: Pick<Job, 'locationType' | 'location'>) {
+    if (job.locationType === 'Remote') {
+        return 'Remote';
+    }
+
+    if (job.location?.trim()) {
+        return job.location.trim();
+    }
+
+    return 'Location not specified';
+}
+
 // ── Component ─────────────────────────────────────────────
 export default function HiringJobsPage() {
     const navigate = useNavigate();
@@ -61,6 +75,7 @@ export default function HiringJobsPage() {
 
     const [search, setSearch] = useState('');
     const [filterDept, setFilterDept] = useState('');
+    const [filterLocationType, setFilterLocationType] = useState<JobLocationType | ''>('');
     const [filterType, setFilterType] = useState<EmploymentType | ''>('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
@@ -86,6 +101,7 @@ export default function HiringJobsPage() {
     const queryParams: any = {};
     if (search) queryParams.search = search;
     if (filterDept) queryParams.department = filterDept;
+    if (filterLocationType) queryParams.locationType = filterLocationType;
     if (filterType) queryParams.employmentType = filterType;
 
     const { data, isLoading, error } = useGetJobsQuery(queryParams);
@@ -270,6 +286,23 @@ export default function HiringJobsPage() {
                                 {d}
                             </option>
                         ))}
+                    </select>
+
+                    <select
+                        value={filterLocationType}
+                        onChange={(e) => setFilterLocationType(e.target.value as JobLocationType | '')}
+                        className="px-3 py-2 text-sm rounded-lg border"
+                        style={{
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderColor: 'var(--color-border-default)',
+                            color: filterLocationType
+                                ? 'var(--color-text-primary)'
+                                : 'var(--color-text-muted)',
+                        }}
+                    >
+                        <option value="">All Locations</option>
+                        <option value="Remote">Remote</option>
+                        <option value="In-Office">In Office</option>
                     </select>
 
                     {/* Employment type filter */}
@@ -478,7 +511,7 @@ export default function HiringJobsPage() {
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <MapPin size={11} />
-                                                    {job.location}
+                                                    {getJobLocationLabel(job)}
                                                 </div>
                                             </td>
 

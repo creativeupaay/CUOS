@@ -34,16 +34,44 @@ function normalizeReminderMinutes(value: unknown): number[] {
     return uniqueSorted.length ? uniqueSorted : [30];
 }
 
-function normalizeAvailableRanges(input?: Array<{ startDate?: string; endDate?: string }> | null) {
+function normalizeAvailableRanges(
+    input?: Array<{
+        startDate?: string;
+        endDate?: string;
+        weekdays?: number[];
+        dailySlots?: Array<{ startTime?: string; endTime?: string }>;
+    }> | null
+) {
     const ranges = (input || [])
         .map((range) => ({
             startDate: toDate(range?.startDate),
             endDate: toDate(range?.endDate),
+            weekdays: Array.isArray(range?.weekdays)
+                ? range.weekdays
+                      .map((day) => Number(day))
+                      .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+                : undefined,
+            dailySlots: Array.isArray(range?.dailySlots)
+                ? range.dailySlots
+                      .filter(
+                          (slot) =>
+                              typeof slot?.startTime === 'string' &&
+                              typeof slot?.endTime === 'string' &&
+                              slot.endTime > slot.startTime
+                      )
+                      .map((slot) => ({
+                          startTime: String(slot.startTime),
+                          endTime: String(slot.endTime),
+                      }))
+                      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                : undefined,
         }))
         .filter((range) => range.startDate && range.endDate)
         .map((range) => ({
             startDate: range.startDate as Date,
             endDate: range.endDate as Date,
+            weekdays: range.weekdays?.length ? Array.from(new Set(range.weekdays)).sort((a, b) => a - b) : undefined,
+            dailySlots: range.dailySlots?.length ? range.dailySlots : undefined,
         }))
         .filter((range) => range.startDate.getTime() <= range.endDate.getTime());
 
@@ -236,11 +264,12 @@ export class JobService {
         page: number;
         totalPages: number;
     }> {
-        const { department, employmentType, isHiring, search, page = 1, limit = 50 } = filters;
+        const { department, locationType, employmentType, isHiring, search, page = 1, limit = 50 } = filters;
 
         const query: any = {};
 
         if (department) query.department = { $regex: department, $options: 'i' };
+        if (locationType) query.locationType = locationType;
         if (employmentType) query.employmentType = employmentType;
         if (isHiring !== undefined) query.isHiring = isHiring;
 
@@ -396,7 +425,7 @@ export class JobService {
      */
     async getActiveJobs(): Promise<IJob[]> {
         return Job.find({ isHiring: true }).sort({ createdAt: -1 }).select(
-            'title department location description requirements employmentType assignmentRequired createdAt'
+            'title department locationType location description requirements employmentType assignmentRequired createdAt'
         );
     }
 }
