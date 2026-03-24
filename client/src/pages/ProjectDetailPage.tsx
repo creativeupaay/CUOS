@@ -16,7 +16,6 @@ import {
     Pencil,
     Handshake,
 } from 'lucide-react';
-import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
@@ -49,7 +48,6 @@ export default function ProjectDetailPage() {
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
     const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
     const isPartner = roleName === 'partner';
-    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdmin });
 
     if (isLoading) {
         return (
@@ -76,9 +74,7 @@ export default function ProjectDetailPage() {
     const sColors = statusColors[project.status] || statusColors.planning;
     const pColors = priorityColors[project.priority] || priorityColors.low;
     const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
-    const projectPartner = projectPartnerId
-        ? partnersData?.data?.partners?.find((p: any) => p._id === projectPartnerId)
-        : undefined;
+    const projectPartner = typeof project.partnerId === 'object' ? (project.partnerId as any) : undefined;
     const projectPartnerName = projectPartner?.userId?.name || projectPartner?.contactPerson || projectPartner?.companyName;
 
     const pmPerms = currentUser?.modulePermissions?.projectManagement;

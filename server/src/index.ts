@@ -34,15 +34,37 @@ app.use(
   })
 );
 
+const parseOrigins = (raw?: string): string[] =>
+  (raw || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 // CORS configuration
 const allowedOrigins: string[] = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  process.env.FRONTEND_URL,
-].filter((origin): origin is string => Boolean(origin));
+  ...parseOrigins(process.env.FRONTEND_URL),
+  ...parseOrigins(process.env.FRONTEND_URLS),
+];
+
+const isAllowedOrigin = (origin?: string): boolean => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Allow all subdomains of creativeupaay.in for deployed environments.
+  return /^https?:\/\/([a-z0-9-]+\.)*creativeupaay\.in$/i.test(origin);
+};
 
 const corsOptions: CorsOptions = {
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"],

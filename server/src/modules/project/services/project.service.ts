@@ -219,6 +219,11 @@ export const getProjectById = async (
     const project = await Project.findById(projectId)
         .populate('clientId', 'name email phone')
         .populate({
+            path: 'partnerId',
+            select: 'companyName contactPerson userId',
+            populate: { path: 'userId', select: 'name email' }
+        })
+        .populate({
             path: 'assignees.employeeId',
             select: 'designation department',
             populate: { path: 'userId', select: 'name email role' }
