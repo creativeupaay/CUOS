@@ -16,13 +16,8 @@ async function seedRolesAndPermissions() {
         await mongoose.connect(MONGODB_URI);
         console.log('Connected to MongoDB');
 
-        // Clear existing data
-        await Permission.deleteMany({});
-        await Role.deleteMany({});
-        console.log('Cleared existing roles and permissions');
-
-        // Create permissions
-        const permissions = await Permission.insertMany([
+        // Define all permissions
+        const permissionsData = [
             // Project permissions
             { resource: 'projects', action: 'create', description: 'Create projects' },
             { resource: 'projects', action: 'read', description: 'View projects' },
@@ -57,20 +52,31 @@ async function seedRolesAndPermissions() {
             { resource: 'hrms', action: 'update', description: 'Update HRMS records' },
             { resource: 'hrms', action: 'delete', description: 'Delete HRMS records' },
             { resource: 'hrms', action: 'manage', description: 'Full HRMS management' },
-        ]);
+        ];
 
-        console.log(`Created ${permissions.length} permissions`);
+        // Upsert permissions (create if not exists, skip if exists)
+        const upsertedPermissions = [];
+        for (const permData of permissionsData) {
+            const permission = await Permission.findOneAndUpdate(
+                { resource: permData.resource, action: permData.action },
+                { $set: permData },
+                { upsert: true, new: true }
+            );
+            upsertedPermissions.push(permission);
+        }
 
-        // Get permission IDs
-        const allPermissions = permissions.map((p) => p._id);
-        const projectPerms = permissions.filter((p) => p.resource === 'projects').map((p) => p._id);
-        const userPerms = permissions.filter((p) => p.resource === 'users').map((p) => p._id);
-        const financePerms = permissions.filter((p) => p.resource === 'finance').map((p) => p._id);
-        const crmPerms = permissions.filter((p) => p.resource === 'crm').map((p) => p._id);
-        const hrmsPerms = permissions.filter((p) => p.resource === 'hrms').map((p) => p._id);
+        console.log(`Upserted ${upsertedPermissions.length} permissions`);
 
-        // Create roles
-        const roles = await Role.insertMany([
+        // Get permission IDs for role creation
+        const allPermissions = upsertedPermissions.map((p) => p._id);
+        const projectPerms = upsertedPermissions.filter((p) => p.resource === 'projects').map((p) => p._id);
+        const userPerms = upsertedPermissions.filter((p) => p.resource === 'users').map((p) => p._id);
+        const financePerms = upsertedPermissions.filter((p) => p.resource === 'finance').map((p) => p._id);
+        const crmPerms = upsertedPermissions.filter((p) => p.resource === 'crm').map((p) => p._id);
+        const hrmsPerms = upsertedPermissions.filter((p) => p.resource === 'hrms').map((p) => p._id);
+
+        // Define roles
+        const rolesData = [
             {
                 name: 'super-admin',
                 description: 'Full system access',
@@ -105,13 +111,37 @@ async function seedRolesAndPermissions() {
                 name: 'employee',
                 description: 'Limited access',
                 permissions: [
-                    permissions.find((p) => p.resource === 'projects' && p.action === 'read')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'projects' && p.action === 'read')?._id,
                 ].filter(Boolean),
                 level: 5,
             },
-        ]);
+            {
+                name: 'partner',
+                description: 'External partner with limited CRM and Project access',
+                permissions: [
+                    upsertedPermissions.find((p) => p.resource === 'crm' && p.action === 'create')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'crm' && p.action === 'read')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'crm' && p.action === 'update')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'projects' && p.action === 'create')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'projects' && p.action === 'read')?._id,
+                    upsertedPermissions.find((p) => p.resource === 'projects' && p.action === 'update')?._id,
+                ].filter(Boolean),
+                level: 6,
+            },
+        ];
 
-        console.log(`Created ${roles.length} roles`);
+        // Upsert roles (create if not exists, update permissions if exists)
+        const upsertedRoles = [];
+        for (const roleData of rolesData) {
+            const role = await Role.findOneAndUpdate(
+                { name: roleData.name },
+                { $set: roleData },
+                { upsert: true, new: true }
+            );
+            upsertedRoles.push(role);
+        }
+
+        console.log(`Upserted ${upsertedRoles.length} roles`);
 
         // Create super admin user if not exists
         const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@creativeupaay.com';
@@ -120,7 +150,7 @@ async function seedRolesAndPermissions() {
         const existingSuperAdmin = await User.findOne({ email: superAdminEmail });
 
         if (!existingSuperAdmin) {
-            const superAdminRole = roles.find((r) => r.name === 'super-admin');
+            const superAdminRole = upsertedRoles.find((r) => r.name === 'super-admin');
 
             await User.create({
                 name: 'Super Admin',
@@ -130,18 +160,17 @@ async function seedRolesAndPermissions() {
                 isActive: true,
             });
 
-            console.log(`Created super admin user: ${superAdminEmail}`);
+            console.log(`\nCreated super admin user: ${superAdminEmail}`);
         } else {
-            console.log('Super admin user already exists. Updating role...');
-            const superAdminRole = roles.find((r) => r.name === 'super-admin');
-            existingSuperAdmin.role = superAdminRole!._id as any;
-            await existingSuperAdmin.save();
-            console.log('Updated super admin role.');
+            console.log(`\nSuper admin user already exists: ${superAdminEmail}`);
+            console.log('Existing users\' roles have been preserved.');
         }
 
         console.log('\n✅ Seeding completed successfully!');
-        console.log('\nRoles created:');
-        roles.forEach((role) => {
+        console.log('\n⚠️  NOTE: All existing user role assignments have been preserved.');
+        console.log('This script only creates/updates role and permission definitions.');
+        console.log('\nRoles upserted:');
+        upsertedRoles.forEach((role) => {
             console.log(`  - ${role.name} (Level ${role.level})`);
         });
 

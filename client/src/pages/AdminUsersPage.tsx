@@ -26,49 +26,87 @@ interface UserFormData {
 const initialForm: UserFormData = { name: '', email: '', password: '', role: '', department: '', customDepartment: '' };
 const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'];
 
-// ─── Edit Email/Password Modal ────────────────────────────────────────────────
+// ─── Edit User Details Modal ──────────────────────────────────────────────────
 
-function EditCredentialsModal({ user, onClose, onSave }: { user: any; onClose: () => void; onSave: (email: string, password: string) => void }) {
-    const [email, setEmail] = useState(user.email);
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
+function EditCredentialsModal({ user, roles, departmentOptions, onClose, onSave, isSaving }: {
+    user: any;
+    roles: any[];
+    departmentOptions: string[];
+    onClose: () => void;
+    onSave: (data: { name: string; email: string; role: string; department: string }) => void;
+    isSaving?: boolean;
+}) {
+    const [name, setName] = useState(user.name || '');
+    const [email, setEmail] = useState(user.email || '');
+    const [role, setRole] = useState(typeof user.role === 'object' ? user.role?._id || '' : '');
+    const [department, setDepartment] = useState(user.department || '');
+    const [customDepartment, setCustomDepartment] = useState('');
     const inputSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' };
     const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none';
 
+    const resolvedDepartment = department === '__custom__' ? customDepartment.trim() : department;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-sm rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+            <div className="w-full max-w-lg rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                    <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Credentials</h3>
+                    <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit User Details</h3>
                     <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
                 </div>
                 <div className="px-5 py-4 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Email</label>
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                            autoComplete="off"
-                            className={inputCls} style={inputSty} />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>New Password <span className="text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(leave blank to keep current)</span></label>
-                        <div className="relative">
-                            <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 8 characters"
-                                autoComplete="new-password"
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Full Name</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)}
                                 className={inputCls} style={inputSty} />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
-                            >
-                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Email</label>
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                                autoComplete="off"
+                                className={inputCls} style={inputSty} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Role / Designation</label>
+                            <select value={role} onChange={e => setRole(e.target.value)}
+                                className={inputCls} style={inputSty}>
+                                <option value="" disabled>Select a role</option>
+                                {roles.map((r: any) => (
+                                    <option key={r._id} value={r._id}>{r.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Department</label>
+                            <select value={department} onChange={e => { setDepartment(e.target.value); if (e.target.value !== '__custom__') setCustomDepartment(''); }}
+                                className={inputCls} style={inputSty}>
+                                <option value="">No Department</option>
+                                {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+                                <option value="__custom__">✏️ Custom…</option>
+                            </select>
+                        </div>
+                    </div>
+                    {department === '__custom__' && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Custom Department</label>
+                            <input type="text" value={customDepartment} onChange={e => setCustomDepartment(e.target.value)}
+                                placeholder="Type department name"
+                                className={inputCls} style={inputSty} />
+                        </div>
+                    )}
+                    <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        Use the Reset Password action to change this user&apos;s password.
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                    <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
-                    <button onClick={() => onSave(email, password)} className="px-4 py-2 text-sm font-semibold rounded-lg text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
-                        Save Changes
+                    <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
+                    <button
+                        onClick={() => onSave({ name: name.trim(), email: email.trim(), role, department: resolvedDepartment })}
+                        disabled={isSaving || !name.trim() || !email.trim() || !role || (department === '__custom__' && !customDepartment.trim())}
+                        className="px-4 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                        {isSaving ? 'Saving...' : 'Save Changes'}
                     </button>
                 </div>
             </div>
@@ -94,12 +132,12 @@ export default function AdminUsersPage() {
     const { data, isLoading } = useGetAdminUsersQuery({ search, isActive: filterStatus, page, limit: 15 });
     const { data: rolesData } = useGetAdminRolesQuery();
     const { data: orgSettingsData } = useGetOrgSettingsQuery();
-    const [createUser] = useCreateAdminUserMutation();
-    const [updateUser] = useUpdateAdminUserMutation();
+    const [createUser, { isLoading: isCreating }] = useCreateAdminUserMutation();
+    const [updateUser, { isLoading: isUpdating }] = useUpdateAdminUserMutation();
     const [deactivateUser] = useDeactivateUserMutation();
     const [activateUser] = useActivateUserMutation();
-    const [resetPassword] = useResetUserPasswordMutation();
-    const [deleteUser] = useDeleteAdminUserMutation();
+    const [resetPassword, { isLoading: isResetting }] = useResetUserPasswordMutation();
+    const [deleteUser, { isLoading: isDeleting }] = useDeleteAdminUserMutation();
 
     const users = data?.data?.users || [];
     const pagination = data?.data?.pagination;
@@ -122,17 +160,12 @@ export default function AdminUsersPage() {
         } catch (err: any) { setError(err?.data?.message || 'Failed to create user'); }
     };
 
-    const handleSaveCreds = async (email: string, password: string) => {
+    const handleSaveCreds = async (payload: { name: string; email: string; role: string; department: string }) => {
         if (!editCreds) return;
         try {
-            // Update email
-            await updateUser({ id: editCreds._id, data: { email } }).unwrap();
-            // Reset password if provided
-            if (password && password.length >= 8) {
-                await resetPassword({ id: editCreds._id, newPassword: password }).unwrap();
-            }
+            await updateUser({ id: editCreds._id, data: payload }).unwrap();
             setEditCreds(null);
-        } catch (err: any) { alert(err?.data?.message || 'Failed to update credentials'); }
+        } catch (err: any) { alert(err?.data?.message || 'Failed to update user details'); }
     };
 
     const handleToggle = async (userId: string, isActive: boolean) => {
@@ -245,7 +278,7 @@ export default function AdminUsersPage() {
                                             </td>
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    <button onClick={() => setEditCreds(user)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Edit email / password">
+                                                    <button onClick={() => setEditCreds(user)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Edit user details">
                                                         <Pencil size={15} style={{ color: 'var(--color-text-muted)' }} />
                                                     </button>
                                                     {!isSuperAdmin && (
@@ -355,16 +388,25 @@ export default function AdminUsersPage() {
                                 </p>
                             </div>
                             <div className="flex justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
-                                <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
-                                <button type="submit" className="px-5 py-2 text-sm font-semibold rounded-lg text-white" style={{ backgroundColor: 'var(--color-primary)' }}>Create User</button>
+                                <button type="button" onClick={() => setShowCreate(false)} disabled={isCreating} className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
+                                <button type="submit" disabled={isCreating} className="px-5 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50" style={{ backgroundColor: 'var(--color-primary)' }}>{isCreating ? 'Creating...' : 'Create User'}</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* Edit Credentials Modal */}
-            {editCreds && <EditCredentialsModal user={editCreds} onClose={() => setEditCreds(null)} onSave={handleSaveCreds} />}
+            {/* Edit User Details Modal */}
+            {editCreds && (
+                <EditCredentialsModal
+                    user={editCreds}
+                    roles={rolesData?.data || []}
+                    departmentOptions={departmentOptions}
+                    onClose={() => setEditCreds(null)}
+                    onSave={handleSaveCreds}
+                    isSaving={isUpdating}
+                />
+            )}
 
             {/* Delete Confirmation */}
             {deleteConfirm && (
@@ -384,8 +426,8 @@ export default function AdminUsersPage() {
                             Are you sure you want to permanently delete <strong>{deleteConfirm.name}</strong>?
                         </p>
                         <div className="flex justify-end gap-3">
-                            <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
-                            <button onClick={handleDelete} className="px-4 py-2 text-sm font-semibold rounded-lg text-white" style={{ backgroundColor: '#EF4444' }}>Delete User</button>
+                            <button onClick={() => setDeleteConfirm(null)} disabled={isDeleting} className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
+                            <button onClick={handleDelete} disabled={isDeleting} className="px-4 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50" style={{ backgroundColor: '#EF4444' }}>{isDeleting ? 'Deleting...' : 'Delete User'}</button>
                         </div>
                     </div>
                 </div>
@@ -414,10 +456,10 @@ export default function AdminUsersPage() {
                                 </button>
                             </div>
                             <div className="flex justify-end gap-3">
-                                <button onClick={() => setResetPwdUser(null)} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
-                                <button onClick={handleResetPwd} disabled={newPassword.length < 8}
+                                <button onClick={() => setResetPwdUser(null)} disabled={isResetting} className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
+                                <button onClick={handleResetPwd} disabled={newPassword.length < 8 || isResetting}
                                     className="px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-50" style={{ backgroundColor: '#EF4444' }}>
-                                    Reset Password
+                                    {isResetting ? 'Resetting...' : 'Reset Password'}
                                 </button>
                             </div>
                         </div>

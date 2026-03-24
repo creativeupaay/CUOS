@@ -3,6 +3,7 @@ import { api } from '@/services/api';
 import authReducer from '@/features/auth/slices/authSlice';
 import { clientPortalApi } from '@/features/client-portal/clientPortalApi';
 import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
+import collaborationReducer from '@/features/collaboration/collaborationSlice';
 
 /**
  * Redux store configuration
@@ -12,6 +13,7 @@ import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
  * - Auth slice for admin authentication state
  * - Client Portal API reducer and middleware (separate JWT-based auth)
  * - Client Portal slice for portal auth state
+ * - Collaboration slice for real-time note editing
  */
 
 export const store = configureStore({
@@ -20,6 +22,7 @@ export const store = configureStore({
     auth: authReducer,
     [clientPortalApi.reducerPath]: clientPortalApi.reducer,
     clientPortal: clientPortalReducer,
+    collaboration: collaborationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

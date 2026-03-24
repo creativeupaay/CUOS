@@ -39,6 +39,9 @@ export interface Project {
     /** User IDs with full edit access to all documents in this project */
     docAdmins?: (string | User)[];
 
+    /** Partner relationship */
+    partnerId?: string;
+
     createdBy: string | User;
     createdAt: string;
     updatedAt: string;

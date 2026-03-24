@@ -7,7 +7,7 @@ import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase
+    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake
 } from 'lucide-react';
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -29,6 +29,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     hrms: { from: '#0369A1', to: '#06B6D4' },
     overallAdmin: { from: '#374151', to: '#6B7280' },
     hiring: { from: '#0F766E', to: '#0EA5E9' },
+    partners: { from: '#0E7490', to: '#06B6D4' },
 };
 
 /* ── Department Card ─────────────────────────────────────── */
@@ -141,6 +142,7 @@ export default function SuperAdminDashboard() {
             : String(user.role).toLowerCase()
         : '';
     const isAdminUser = ['super-admin', 'admin', 'super_admin'].includes(roleName);
+    const isPartner = roleName === 'partner';
     const displayRole = user?.role
         ? typeof user.role === 'object'
             ? (user.role as any).name
@@ -202,6 +204,13 @@ export default function SuperAdminDashboard() {
             path: '/admin',
         },
         {
+            key: 'partners',
+            title: 'Partners',
+            description: 'Manage partner onboarding, attribution and performance',
+            icon: <Handshake size={22} />,
+            path: '/admin/partners',
+        },
+        {
             key: 'hiring',
             title: 'Hiring',
             description: 'Manage job postings, candidates, assignments, and interviews',
@@ -210,6 +219,36 @@ export default function SuperAdminDashboard() {
         },
     ];
 
+    const partnerDepartments = allDepartments
+        .filter(d => d.key === 'projectManagement' || d.key === 'crm')
+        .filter(d => {
+            const perm = mp?.[d.key as keyof typeof mp] as any;
+            return !!perm?.enabled;
+        })
+        .map(d => ({
+            ...d,
+            isActive: true,
+            accentFrom: MODULE_ACCENTS[d.key].from,
+            accentTo: MODULE_ACCENTS[d.key].to,
+        }));
+
+    const nonAdminDepartments = allDepartments
+        .filter(d => {
+            if (d.key === 'partners') return false;
+            const perm = mp?.[d.key as keyof typeof mp] as any;
+            if (!perm?.enabled) return false;
+            if (d.key === 'projectManagement') {
+                return Array.isArray(perm.projectPermissions) && perm.projectPermissions.length > 0;
+            }
+            return true;
+        })
+        .map(d => ({
+            ...d,
+            isActive: true,
+            accentFrom: MODULE_ACCENTS[d.key].from,
+            accentTo: MODULE_ACCENTS[d.key].to,
+        }));
+
     const departments: Department[] = isAdminUser
         ? allDepartments.map(d => ({
             ...d,
@@ -217,21 +256,9 @@ export default function SuperAdminDashboard() {
             accentFrom: MODULE_ACCENTS[d.key].from,
             accentTo: MODULE_ACCENTS[d.key].to,
         }))
-        : allDepartments
-            .filter(d => {
-                const perm = mp?.[d.key as keyof typeof mp] as any;
-                if (!perm?.enabled) return false;
-                if (d.key === 'projectManagement') {
-                    return Array.isArray(perm.projectPermissions) && perm.projectPermissions.length > 0;
-                }
-                return true;
-            })
-            .map(d => ({
-                ...d,
-                isActive: true,
-                accentFrom: MODULE_ACCENTS[d.key].from,
-                accentTo: MODULE_ACCENTS[d.key].to,
-            }));
+        : isPartner
+            ? partnerDepartments
+            : nonAdminDepartments;
 
     const firstName = user?.name?.split(' ')[0] || 'there';
 

@@ -3,19 +3,26 @@ import { Link } from 'react-router-dom';
 import { useGetClientsQuery, useDeleteClientMutation, useUpdateClientMutation } from '@/features/client/clientApi';
 import { Plus, Search, Building2, Mail, Phone, Trash2, Edit, Eye, Loader2, ChevronDown } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'archived' | ''>('');
+    const [partnerFilter, setPartnerFilter] = useState('');
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
     const user = useAppSelector((state) => state.auth.user);
     const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
     const isAdminUser = ['super-admin', 'admin', 'super_admin'].includes((roleName as string).toLowerCase());
+    const isPartnerUser = (roleName as string).toLowerCase() === 'partner';
+
+    const { data: partnersData } = useGetPartnersQuery(undefined, { skip: !isAdminUser });
+    const partners = partnersData?.data?.partners || [];
 
     const { data, isLoading, error } = useGetClientsQuery({
         search: search || undefined,
         status: statusFilter || undefined,
+        partnerId: isAdminUser && partnerFilter ? partnerFilter : undefined,
     });
 
     const [deleteClient, { isLoading: isDeleting }] = useDeleteClientMutation();
@@ -90,6 +97,21 @@ export default function ClientsPage() {
                         <option value="inactive">Inactive</option>
                         <option value="archived">Archived</option>
                     </select>
+
+                    {isAdminUser && (
+                        <select
+                            value={partnerFilter}
+                            onChange={(e) => setPartnerFilter(e.target.value)}
+                            className="px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        >
+                            <option value="">All Partners</option>
+                            {partners.map((partner: any) => (
+                                <option key={partner._id} value={partner._id}>
+                                    {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
+                                </option>
+                            ))}
+                        </select>
+                    )}
                 </div>
             </div>
 
@@ -166,6 +188,17 @@ export default function ClientsPage() {
                                         </p>
                                     </div>
                                 )}
+
+                                {isAdminUser && client.partnerId && (
+                                    <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                        <p className="text-xs text-blue-700 mb-1">Referred By</p>
+                                        <p className="text-sm font-medium text-blue-900">
+                                            {typeof client.partnerId === 'object'
+                                                ? client.partnerId.contactPerson || client.partnerId.companyName || client.partnerId.email || 'Partner'
+                                                : 'Partner'}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Actions — always at bottom */}
@@ -184,7 +217,7 @@ export default function ClientsPage() {
                                     <Edit size={16} />
                                     Edit
                                 </Link>
-                                {isAdminUser && (
+                                {isAdminUser && !isPartnerUser && (
                                     <>
                                         <div className="relative">
                                             <select

@@ -11,6 +11,8 @@ import { Link } from 'react-router-dom';
 import type { ProjectPhase } from '@/features/project/types/types';
 import CurrencyInput from 'react-currency-input-field';
 import SelectCurrency from '@/components/ui/CurrencySelect';
+import { useAppSelector } from '@/app/hooks';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function ProjectFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -18,11 +20,26 @@ export default function ProjectFormPage() {
     const [searchParams] = useSearchParams();
     const mode = searchParams.get('mode'); // 'details' | 'phases' | null
     const isEditing = Boolean(id);
+    const user = useAppSelector((state) => state.auth.user);
+    const roleName = user?.role
+        ? typeof user.role === 'object'
+            ? String((user.role as any).name || '')
+            : String(user.role)
+        : '';
+    const isPartnerUser = roleName.toLowerCase() === 'partner';
+    const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName.toLowerCase());
+    const userPartnerId = typeof user?.partnerId === 'object' ? (user.partnerId as any)?._id : user?.partnerId;
 
     const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id });
     const project = projectData?.data;
 
-    const { data: clientsData } = useGetClientsQuery();
+    const [selectedPartnerId, setSelectedPartnerId] = useState<string>('');
+    const { data: clientsData } = useGetClientsQuery({
+        partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
+        limit: 200,
+    });
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
+    const partners = partnersData?.data?.partners || [];
     const clients = (clientsData as any)?.data?.clients || clientsData?.data || [];
 
     const [createProject, { isLoading: isCreating }] = useCreateProjectMutation();
@@ -70,8 +87,19 @@ export default function ProjectFormPage() {
                     endDate: p.endDate ? new Date(p.endDate).toISOString().split('T')[0] : undefined,
                 })) : [],
             });
+            const existingPartnerId =
+                typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
+            if (existingPartnerId) {
+                setSelectedPartnerId(String(existingPartnerId));
+            }
         }
     }, [project, isEditing]);
+
+    useEffect(() => {
+        if (isPartnerUser && userPartnerId) {
+            setSelectedPartnerId(String(userPartnerId));
+        }
+    }, [isPartnerUser, userPartnerId]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value });
@@ -124,6 +152,7 @@ export default function ProjectFormPage() {
                 status: form.status,
                 priority: form.priority,
                 clientId: form.clientId,
+                partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
                 startDate: form.startDate,
                 endDate: form.endDate || undefined,
                 deadline: form.deadline || undefined,
@@ -263,6 +292,27 @@ export default function ProjectFormPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
+                                {isAdminUser && (
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Partner</label>
+                                        <select
+                                            value={selectedPartnerId}
+                                            onChange={(e) => {
+                                                setSelectedPartnerId(e.target.value);
+                                                setForm((prev) => ({ ...prev, clientId: '' }));
+                                            }}
+                                            className="w-full px-3 rounded-lg border text-sm outline-none"
+                                            style={inputStyle}
+                                        >
+                                            <option value="">No Partner</option>
+                                            {partners.map((partner: any) => (
+                                                <option key={partner._id} value={partner._id}>
+                                                    {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Client *</label>
                                     <select

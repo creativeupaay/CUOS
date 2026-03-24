@@ -9,17 +9,29 @@ import {
     Activity,
     ArrowRight,
     BarChart3,
+    Handshake,
+    Briefcase,
 } from 'lucide-react';
 import { useGetAdminDashboardStatsQuery } from '@/features/overall-admin/api/adminApi';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function AdminDashboardPage() {
     const navigate = useNavigate();
     const { data } = useGetAdminDashboardStatsQuery();
+    const { data: partnersData } = useGetPartnersQuery({ page: 1, limit: 500 });
 
     const stats = data?.data?.stats;
     const recentUsers = data?.data?.recentUsers || [];
     const recentLogs = data?.data?.recentAuditLogs || [];
     const roleDist = data?.data?.roleDistribution || [];
+    const allPartners = partnersData?.data?.partners || [];
+    const partnerStats = {
+        totalPartners: allPartners.length,
+        activePartners: allPartners.filter((p: any) => p.isActive).length,
+        inactivePartners: allPartners.filter((p: any) => !p.isActive).length,
+        partnerClients: allPartners.reduce((sum: number, p: any) => sum + (p.stats?.clientsCount || 0), 0),
+        partnerProjects: allPartners.reduce((sum: number, p: any) => sum + (p.stats?.projectsCount || 0), 0),
+    };
 
     const statCards = [
         {
@@ -50,6 +62,20 @@ export default function AdminDashboardPage() {
             color: '#8B5CF6',
             bg: '#F5F3FF',
         },
+        {
+            label: 'Total Partners',
+            value: partnerStats.totalPartners,
+            icon: <Handshake size={22} />,
+            color: '#06B6D4',
+            bg: '#ECFEFF',
+        },
+        {
+            label: 'Partner Projects',
+            value: partnerStats.partnerProjects,
+            icon: <Briefcase size={22} />,
+            color: '#0EA5E9',
+            bg: '#F0F9FF',
+        },
     ];
 
     const quickActions = [
@@ -76,6 +102,12 @@ export default function AdminDashboardPage() {
             description: 'View system activity and changes',
             icon: <ScrollText size={22} />,
             path: '/admin/audit-logs',
+        },
+        {
+            label: 'Manage Partners',
+            description: 'Track partner performance and ownership',
+            icon: <Handshake size={22} />,
+            path: '/admin/partners',
         },
     ];
 
@@ -118,7 +150,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5 mb-8">
                 {statCards.map((card) => (
                     <div
                         key={card.label}
@@ -145,6 +177,47 @@ export default function AdminDashboardPage() {
                         </div>
                     </div>
                 ))}
+            </div>
+
+            {/* Partner Insights */}
+            <div
+                className="rounded-2xl border p-6 mb-8"
+                style={{
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border-default)',
+                    boxShadow: 'var(--shadow-xs)',
+                }}
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        Partner Insights
+                    </h2>
+                    <button
+                        onClick={() => navigate('/admin/partners')}
+                        className="text-sm font-medium flex items-center gap-1"
+                        style={{ color: 'var(--color-primary)' }}
+                    >
+                        Open Partners <ArrowRight size={14} />
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="rounded-xl p-4" style={{ backgroundColor: '#ECFEFF' }}>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: '#0E7490' }}>Active Partners</p>
+                        <p className="text-2xl font-bold mt-1" style={{ color: '#155E75' }}>{partnerStats.activePartners}</p>
+                    </div>
+                    <div className="rounded-xl p-4" style={{ backgroundColor: '#FEF2F2' }}>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: '#B91C1C' }}>Inactive Partners</p>
+                        <p className="text-2xl font-bold mt-1" style={{ color: '#991B1B' }}>{partnerStats.inactivePartners}</p>
+                    </div>
+                    <div className="rounded-xl p-4" style={{ backgroundColor: '#EFF6FF' }}>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: '#1D4ED8' }}>Partner Clients</p>
+                        <p className="text-2xl font-bold mt-1" style={{ color: '#1E40AF' }}>{partnerStats.partnerClients}</p>
+                    </div>
+                    <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F9FF' }}>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: '#0369A1' }}>Partner Projects</p>
+                        <p className="text-2xl font-bold mt-1" style={{ color: '#075985' }}>{partnerStats.partnerProjects}</p>
+                    </div>
+                </div>
             </div>
 
             {/* Quick Actions + Role Distribution */}

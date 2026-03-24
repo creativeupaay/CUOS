@@ -5,6 +5,8 @@ import type { ClientContact, ClientPhone, ClientCustomDetail } from '@/features/
 import { ArrowLeft, Plus, X, Trash2, Info } from 'lucide-react';
 import SelectCurrency from '@/components/ui/CurrencySelect';
 import { useGetLeadByIdQuery } from '@/features/crm';
+import { useAppSelector } from '@/app/hooks';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -12,9 +14,20 @@ export default function ClientFormPage() {
     const [searchParams] = useSearchParams();
     const fromLeadId = searchParams.get('fromLead') || undefined;
     const isEdit = !!id;
+    const user = useAppSelector((state) => state.auth.user);
+    const roleName = user?.role
+        ? typeof user.role === 'object'
+            ? String((user.role as any).name || '')
+            : String(user.role)
+        : '';
+    const isPartnerUser = roleName.toLowerCase() === 'partner';
+    const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName.toLowerCase());
+    const userPartnerId = typeof user?.partnerId === 'object' ? (user.partnerId as any)?._id : user?.partnerId;
 
     const { data: clientData } = useGetClientQuery(id!, { skip: !id });
     const { data: leadData } = useGetLeadByIdQuery(fromLeadId!, { skip: !fromLeadId });
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
+    const partners = partnersData?.data?.partners || [];
     const [createClient, { isLoading: isCreating }] = useCreateClientMutation();
     const [updateClient, { isLoading: isUpdating }] = useUpdateClientMutation();
 
@@ -46,6 +59,7 @@ export default function ClientFormPage() {
             currency: 'USD',
         },
         contacts: [] as ClientContact[],
+        partnerId: (isPartnerUser && userPartnerId ? String(userPartnerId) : '') as string,
     });
 
     const [hasGst, setHasGst] = useState(false);
@@ -79,10 +93,19 @@ export default function ClientFormPage() {
                     currency: client.billingDetails?.currency || 'USD',
                 },
                 contacts: client.contacts || [],
+                partnerId:
+                    (typeof client.partnerId === 'object' ? (client.partnerId as any)?._id : client.partnerId) ||
+                    (isPartnerUser && userPartnerId ? String(userPartnerId) : ''),
             });
             setHasGst(!!client.gstNumber);
         }
-    }, [clientData]);
+    }, [clientData, isPartnerUser, userPartnerId]);
+
+    useEffect(() => {
+        if (!isEdit && isPartnerUser && userPartnerId) {
+            setFormData((prev) => ({ ...prev, partnerId: String(userPartnerId) }));
+        }
+    }, [isEdit, isPartnerUser, userPartnerId]);
 
     // Pre-fill from lead when converting a closed lead to a client
     useEffect(() => {
@@ -122,11 +145,18 @@ export default function ClientFormPage() {
 
         try {
             if (isEdit) {
-                await updateClient({ id: id!, data: formData }).unwrap();
+                await updateClient({
+                    id: id!,
+                    data: {
+                        ...formData,
+                        partnerId: isPartnerUser ? String(userPartnerId || '') : formData.partnerId || undefined,
+                    },
+                }).unwrap();
                 navigate(`/crm/clients/${id}`);
             } else {
                 const result = await createClient({
                     ...formData,
+                    partnerId: isPartnerUser ? String(userPartnerId || '') : formData.partnerId || undefined,
                     ...(fromLeadId ? { leadId: fromLeadId } : {}),
                     sendOnboardingForm,
                 }).unwrap();
@@ -320,6 +350,23 @@ export default function ClientFormPage() {
                                     <option value="archived">Archived</option>
                                 </select>
                             </div>
+                            {isAdminUser && (
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Referred By Partner</label>
+                                    <select
+                                        value={formData.partnerId || ''}
+                                        onChange={(e) => setFormData({ ...formData, partnerId: e.target.value })}
+                                        className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    >
+                                        <option value="">No Partner</option>
+                                        {partners.map((partner: any) => (
+                                            <option key={partner._id} value={partner._id}>
+                                                {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
 
                         {/* Additional Phones */}

@@ -9,6 +9,7 @@ export const createProjectSchema = z.object({
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
 
         clientId: z.string().min(1, 'Client ID is required'),
+        partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
 
         startDate: z.string().or(z.date()),
         endDate: z.string().or(z.date()).optional(),
@@ -59,6 +60,7 @@ export const updateProjectSchema = z.object({
         description: z.string().optional(),
         status: z.enum(['planning', 'active', 'on-hold', 'completed', 'cancelled']).optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+        partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
 
         startDate: z.string().or(z.date()).optional(),
         endDate: z.string().or(z.date()).optional(),

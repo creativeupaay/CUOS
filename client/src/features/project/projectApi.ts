@@ -36,7 +36,7 @@ export const projectApi = api.injectEndpoints({
         // ============================================
         // PROJECT ENDPOINTS
         // ============================================
-        getProjects: builder.query<ApiResponse<Project[]>, { status?: string; clientId?: string; priority?: string }>({
+        getProjects: builder.query<ApiResponse<Project[]>, { status?: string; clientId?: string; priority?: string; partnerId?: string }>({
             query: (params) => ({
                 url: '/projects',
                 params,

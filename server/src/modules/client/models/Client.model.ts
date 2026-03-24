@@ -89,6 +89,9 @@ export interface IClient extends Document {
     portalEnabled: boolean;
     portalToken?: string;
 
+    // Partner reference - tracks which partner added this client
+    partnerId?: Types.ObjectId;
+
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -183,6 +186,9 @@ const ClientSchema = new Schema<IClient>(
         // Client Portal
         portalEnabled: { type: Boolean, default: false },
         portalToken: { type: String, sparse: true, index: true },
+
+        // Partner reference - tracks which partner added this client
+        partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
     },
     {
         timestamps: true,
@@ -193,6 +199,7 @@ const ClientSchema = new Schema<IClient>(
 ClientSchema.index({ name: 1 });
 ClientSchema.index({ email: 1 });
 ClientSchema.index({ status: 1 });
+ClientSchema.index({ partnerId: 1 });
 ClientSchema.index({ createdAt: -1 });
 
 // Ensure only one primary contact

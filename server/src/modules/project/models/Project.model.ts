@@ -72,6 +72,9 @@ export interface IProject extends Document {
      */
     docAdmins: Types.ObjectId[];
 
+    // Partner reference - tracks which partner created this project
+    partnerId?: Types.ObjectId;
+
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -178,6 +181,9 @@ const ProjectSchema = new Schema<IProject>(
 
         docAdmins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
+        // Partner reference - tracks which partner created this project
+        partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
+
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         isArchived: { type: Boolean, default: false },
     },
@@ -190,6 +196,7 @@ const ProjectSchema = new Schema<IProject>(
 ProjectSchema.index({ clientId: 1 });
 ProjectSchema.index({ status: 1 });
 ProjectSchema.index({ 'assignees.employeeId': 1 });
+ProjectSchema.index({ partnerId: 1 });
 ProjectSchema.index({ createdAt: -1 });
 ProjectSchema.index({ isArchived: 1 });
 

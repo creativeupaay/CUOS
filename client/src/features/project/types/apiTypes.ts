@@ -22,6 +22,7 @@ export interface CreateProjectRequest {
     status?: 'planning' | 'active' | 'on-hold' | 'completed' | 'cancelled';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     clientId: string;
+    partnerId?: string;
     startDate: string;
     endDate?: string;
     deadline?: string;
@@ -42,6 +43,7 @@ export interface UpdateProjectRequest {
     description?: string;
     status?: 'planning' | 'active' | 'on-hold' | 'completed' | 'cancelled';
     priority?: 'low' | 'medium' | 'high' | 'critical';
+    partnerId?: string;
     startDate?: string;
     endDate?: string;
     deadline?: string;

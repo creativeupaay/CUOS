@@ -10,6 +10,8 @@ import employeeFormRoutes from '../../modules/hrms/routes/employeeForm.routes';
 import adminRoutes from '../../modules/overall-admin/routes/admin.routes';
 import financeRoutes from '../../modules/finance/routes/finance.routes';
 import hiringRoutes from '../../modules/hiring/routes/hiring.routes';
+import partnerRoutes from '../../modules/partners/routes/partner.routes';
+import partnerAuthRoutes from '../../modules/partners/routes/partnerAuth.routes';
 
 const router = Router();
 
@@ -36,5 +38,9 @@ router.use('/admin', adminRoutes);
 router.use('/finance', financeRoutes);
 // Hiring Management — also registers /public/jobs (no auth)
 router.use('/hiring', hiringRoutes);
+// Partner Management (Admin routes)
+router.use('/partners', partnerRoutes);
+// Public partner registration form (no auth required)
+router.use('/partner-form', partnerAuthRoutes);
 
 export default router;

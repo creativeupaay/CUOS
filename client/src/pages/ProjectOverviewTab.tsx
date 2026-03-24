@@ -7,6 +7,7 @@ import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
 import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function ProjectOverviewTab() {
     const { project } = useOutletContext<{ project: Project }>();
@@ -19,6 +20,15 @@ export default function ProjectOverviewTab() {
             : String(currentUser.role).toLowerCase()
         : '';
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+    const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName);
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
+    const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
+    const partnerName = projectPartnerId
+        ? (() => {
+            const partner = partnersData?.data?.partners?.find((p: any) => p._id === projectPartnerId);
+            return partner?.userId?.name || partner?.contactPerson || partner?.companyName;
+        })()
+        : undefined;
 
     const [isAddingMember, setIsAddingMember] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState('');
@@ -122,8 +132,8 @@ export default function ProjectOverviewTab() {
             {/* Project Progress */}
             <ProjectProgress project={project} isSuperAdmin={isSuperAdmin} />
 
-            {/* Project Info - Super Admin Only */}
-            {isSuperAdmin && (
+            {/* Project Info - Admin */}
+            {isAdminUser && (
                 <div
                     className="p-5 rounded-[1rem] shadow-premium border-0"
                     style={{
@@ -154,6 +164,7 @@ export default function ProjectOverviewTab() {
                         {project.hourlyRate && (
                             <InfoItem label="Hourly Rate" value={`${project.currency} ${project.hourlyRate}`} />
                         )}
+                        {partnerName && <InfoItem label="Partner" value={partnerName} />}
                     </div>
                 </div>
             )}

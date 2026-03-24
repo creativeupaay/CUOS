@@ -1,0 +1,70 @@
+import { z } from 'zod';
+
+const partnerAddressSchema = z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    country: z.string().optional(),
+    postalCode: z.string().optional(),
+});
+
+export const createPartnerSchema = z.object({
+    body: z.object({
+        name: z.string().min(1, 'Partner name is required').trim(),
+        email: z.string().email('Invalid email').trim().toLowerCase(),
+        password: z.string().min(8, 'Password must be at least 8 characters'),
+        companyName: z.string().optional(),
+        contactPerson: z.string().optional(),
+        phone: z.string().optional(),
+        address: partnerAddressSchema.optional(),
+    }),
+});
+
+export const updatePartnerSchema = z.object({
+    body: z.object({
+        companyName: z.string().optional(),
+        contactPerson: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().email('Invalid email').trim().toLowerCase().optional(),
+        address: partnerAddressSchema.optional(),
+    }),
+});
+
+export const getPartnerSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid partner ID'),
+    }),
+});
+
+export const listPartnersSchema = z.object({
+    query: z.object({
+        search: z.string().optional(),
+        isActive: z.enum(['true', 'false']).optional(),
+        page: z.string().regex(/^\d+$/).transform(Number).default(() => 1),
+        limit: z.string().regex(/^\d+$/).transform(Number).default(() => 20),
+    }),
+});
+
+export const submitPartnerRegistrationSchema = z.object({
+    params: z.object({
+        token: z.string().min(1, 'Registration token is required'),
+    }),
+    body: z.object({
+        companyName: z.string().optional(),
+        contactPerson: z.string().optional(),
+        phone: z.string().optional(),
+        address: partnerAddressSchema.optional(),
+    }),
+});
+
+export const getPartnerByTokenSchema = z.object({
+    params: z.object({
+        token: z.string().min(1, 'Registration token is required'),
+    }),
+});
+
+export type CreatePartnerInput = z.infer<typeof createPartnerSchema>['body'];
+export type UpdatePartnerInput = z.infer<typeof updatePartnerSchema>['body'];
+export type GetPartnerInput = z.infer<typeof getPartnerSchema>['params'];
+export type ListPartnersInput = z.infer<typeof listPartnersSchema>['query'];
+export type SubmitPartnerRegistrationInput = z.infer<typeof submitPartnerRegistrationSchema>['body'];

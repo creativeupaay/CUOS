@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import helmet from "helmet";
@@ -10,6 +11,8 @@ import v1Routes from "./routes/v1/index";
 import errorHandlerMiddleware from "./middlewares/errorHandler";
 import notFoundMiddleware from "./middlewares/notFound";
 import cookieParser from "cookie-parser";
+import { initializeSocket } from "./config/socket.config";
+import otService from "./modules/collaboration/services/otService";
 
 // Register models
 import "./modules/auth/models/Permission.model";
@@ -86,5 +89,34 @@ const PORT =
     ? Number(args[portArgIndex + 1])
     : env.PORT;
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Create HTTP server
+const httpServer = http.createServer(app);
+
+// Initialize Socket.io
+const io = initializeSocket(httpServer);
+
+// Start server
+httpServer.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Socket.io ready for real-time collaboration`);
+});
+
+// Graceful shutdown - save all notes before exit
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, saving all notes...');
+  await otService.saveAllNotes();
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, saving all notes...');
+  await otService.saveAllNotes();
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 

@@ -24,11 +24,14 @@ import * as meetingValidators from '../validators/meeting.validator';
 import * as credentialValidators from '../validators/credential.validator';
 import * as noteValidators from '../validators/note.validator';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
+import { filterPartnerData } from '../../partners/middlewares/filterPartnerData.middleware';
+import { isPartnerOrAdmin } from '../../partners/middlewares/isPartner.middleware';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(filterPartnerData);
 
 // Configure multer for file uploads (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -66,7 +69,7 @@ router.delete(
 router.post(
     '/',
     validateRequest(projectValidators.createProjectSchema),
-    checkAdmin,
+    isPartnerOrAdmin,
     projectController.createProject
 );
 

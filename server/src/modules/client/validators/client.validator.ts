@@ -51,6 +51,8 @@ export const createClientSchema = z.object({
         notes: z.string().optional(),
         // Lead conversion
         leadId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
+        // Optional partner relationship (primarily admin use)
+        partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
         // Client onboarding email
         sendOnboardingForm: z.boolean().optional(),
     }),
@@ -72,6 +74,7 @@ export const updateClientSchema = z.object({
         contacts: z.array(clientContactSchema).optional(),
         status: z.enum(['active', 'inactive', 'archived']).optional(),
         notes: z.string().optional(),
+        partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
     }),
 });
 
@@ -85,6 +88,7 @@ export const listClientsSchema = z.object({
     query: z.object({
         status: z.enum(['active', 'inactive', 'archived']).optional(),
         search: z.string().optional(),
+        partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
         page: z.string().regex(/^\d+$/).transform(Number).default(() => 1),
         limit: z.string().regex(/^\d+$/).transform(Number).default(() => 20),
     }),

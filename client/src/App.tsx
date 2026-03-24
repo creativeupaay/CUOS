@@ -56,6 +56,10 @@ const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminPermissionsPage = lazy(() => import('./pages/AdminPermissionsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const AdminAuditLogsPage = lazy(() => import('./pages/AdminAuditLogsPage'));
+const PartnersPage = lazy(() => import('./pages/PartnersPage'));
+const PartnerFormPage = lazy(() => import('./pages/PartnerFormPage'));
+const PartnerDetailPage = lazy(() => import('./pages/PartnerDetailPage'));
+const PartnerRegistrationPage = lazy(() => import('./pages/PartnerRegistrationPage'));
 const HiringJobsPage = lazy(() => import('./pages/HiringJobsPage'));
 const HiringJobFormPage = lazy(() => import('./pages/HiringJobFormPage'));
 const HiringApplicationsPage = lazy(() => import('./pages/HiringApplicationsPage'));
@@ -79,12 +83,42 @@ function loadable(element: React.ReactNode) {
   return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
 }
 
+function getRoleNameFromUser(user: any): string {
+  return user?.role
+    ? typeof user.role === 'object'
+      ? (user.role as any).name?.toLowerCase()
+      : String(user.role).toLowerCase()
+    : '';
+}
+
+function CrmRootRedirect() {
+  const user = useAppSelector((state) => state.auth.user);
+  const roleName = getRoleNameFromUser(user);
+  const isPartner = roleName === 'partner';
+
+  return <Navigate to={isPartner ? '/crm/clients' : '/crm/pipeline'} replace />;
+}
+
+function PartnerRestrictedRoute({ children }: { children: React.ReactNode }) {
+  const user = useAppSelector((state) => state.auth.user);
+  const roleName = getRoleNameFromUser(user);
+
+  if (roleName === 'partner') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 /** Redirects regular employees away from /hrms/* to /my-hrms/attendance */
 function HrmsRedirect({ children }: { children: React.ReactNode }) {
   const user = useAppSelector((state) => state.auth.user);
-  const roleName = user?.role
-    ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
-    : '';
+  const roleName = getRoleNameFromUser(user);
+
+  if (roleName === 'partner') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const isAdminOrHr = ['super-admin', 'admin', 'super_admin', 'hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
   if (!isAdminOrHr) {
     return <Navigate to="/my-hrms/attendance" replace />;
@@ -119,6 +153,8 @@ function App() {
         <Route path="/employee-form/:token" element={loadable(<EmployeeOnboardingFormPage />)} />
         {/* Client onboarding form — public, no login required */}
         <Route path="/onboarding/:token" element={loadable(<ClientOnboardingPage />)} />
+        {/* Partner registration form — public, no login required */}
+        <Route path="/partner-form/:token" element={loadable(<PartnerRegistrationPage />)} />
         {/* Public candidate application form */}
         <Route path="/apply/:jobId" element={loadable(<PublicJobApplyPage />)} />
         <Route path="/assignment/:applicationId" element={loadable(<PublicAssignmentSubmissionPage />)} />
@@ -157,7 +193,7 @@ function App() {
           </Route>
 
           {/* CRM Module */}
-          <Route path="/crm" element={<Navigate to="/crm/pipeline" replace />} />
+          <Route path="/crm" element={<CrmRootRedirect />} />
           <Route path="/crm/pipeline" element={loadable(<CrmPipelinePage />)} />
           <Route path="/crm/leads" element={loadable(<CrmLeadsPage />)} />
           <Route path="/crm/leads/new" element={loadable(<CrmLeadFormPage />)} />
@@ -173,11 +209,11 @@ function App() {
           <Route path="/crm/clients/:id/edit" element={loadable(<ClientFormPage />)} />
 
           {/* Finance Module */}
-          <Route path="/finance" element={loadable(<FinanceDashboardPage />)} />
-          <Route path="/finance/expenses" element={loadable(<FinanceExpensesPage />)} />
-          <Route path="/finance/invoices" element={loadable(<FinanceInvoicesPage />)} />
-          <Route path="/finance/reports" element={loadable(<FinanceReportsPage />)} />
-          <Route path="/finance/projects/:id" element={loadable(<ProjectFinancePage />)} />
+          <Route path="/finance" element={<PartnerRestrictedRoute>{loadable(<FinanceDashboardPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/expenses" element={<PartnerRestrictedRoute>{loadable(<FinanceExpensesPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/invoices" element={<PartnerRestrictedRoute>{loadable(<FinanceInvoicesPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/reports" element={<PartnerRestrictedRoute>{loadable(<FinanceReportsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/projects/:id" element={<PartnerRestrictedRoute>{loadable(<ProjectFinancePage />)}</PartnerRestrictedRoute>} />
           {/* HRMS Module — Admin/HR only */}
           <Route path="/hrms" element={<HrmsRedirect>{loadable(<HrmsDashboardPage />)}</HrmsRedirect>} />
           <Route path="/hrms/employees" element={<HrmsRedirect>{loadable(<HrmsEmployeesPage />)}</HrmsRedirect>} />
@@ -197,24 +233,28 @@ function App() {
           <Route path="/my-hrms/payroll" element={loadable(<EmployeePayrollPage />)} />
 
           {/* Admin Module */}
-          <Route path="/admin" element={loadable(<AdminDashboardPage />)} />
-          <Route path="/admin/users" element={loadable(<AdminUsersPage />)} />
-          <Route path="/admin/permissions" element={loadable(<AdminPermissionsPage />)} />
-          <Route path="/admin/settings" element={loadable(<AdminSettingsPage />)} />
-          <Route path="/admin/audit-logs" element={loadable(<AdminAuditLogsPage />)} />
+          <Route path="/admin" element={<PartnerRestrictedRoute>{loadable(<AdminDashboardPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/users" element={<PartnerRestrictedRoute>{loadable(<AdminUsersPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/permissions" element={<PartnerRestrictedRoute>{loadable(<AdminPermissionsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/settings" element={<PartnerRestrictedRoute>{loadable(<AdminSettingsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/audit-logs" element={<PartnerRestrictedRoute>{loadable(<AdminAuditLogsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners" element={<PartnerRestrictedRoute>{loadable(<PartnersPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/new" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/:id" element={<PartnerRestrictedRoute>{loadable(<PartnerDetailPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/:id/edit" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
 
           {/* Hiring Module */}
-          <Route path="/hiring" element={<Navigate to="/hiring/jobs" replace />} />
-          <Route path="/hiring/jobs" element={loadable(<HiringJobsPage />)} />
-          <Route path="/hiring/jobs/new" element={loadable(<HiringJobFormPage />)} />
-          <Route path="/hiring/jobs/:id/edit" element={loadable(<HiringJobFormPage />)} />
-          <Route path="/hiring/applications" element={loadable(<HiringApplicationsPage />)} />
-          <Route path="/hiring/applications/:id" element={loadable(<HiringApplicationDetailPage />)} />
-          <Route path="/hiring/reports" element={loadable(<HiringReportsPage />)} />
-          <Route path="/hiring/assignments" element={loadable(<AssignmentReviewPage />)} />
-          <Route path="/hiring/assignments/review" element={<Navigate to="/hiring/assignments" replace />} />
-          <Route path="/hiring/interviews" element={loadable(<HiringInterviewsPage />)} />
-          <Route path="/hiring/interviews/schedule" element={loadable(<HiringInterviewSchedulePage />)} />
+          <Route path="/hiring" element={<PartnerRestrictedRoute><Navigate to="/hiring/jobs" replace /></PartnerRestrictedRoute>} />
+          <Route path="/hiring/jobs" element={<PartnerRestrictedRoute>{loadable(<HiringJobsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/jobs/new" element={<PartnerRestrictedRoute>{loadable(<HiringJobFormPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/jobs/:id/edit" element={<PartnerRestrictedRoute>{loadable(<HiringJobFormPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/applications" element={<PartnerRestrictedRoute>{loadable(<HiringApplicationsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/applications/:id" element={<PartnerRestrictedRoute>{loadable(<HiringApplicationDetailPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/reports" element={<PartnerRestrictedRoute>{loadable(<HiringReportsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/assignments" element={<PartnerRestrictedRoute>{loadable(<AssignmentReviewPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/assignments/review" element={<PartnerRestrictedRoute><Navigate to="/hiring/assignments" replace /></PartnerRestrictedRoute>} />
+          <Route path="/hiring/interviews" element={<PartnerRestrictedRoute>{loadable(<HiringInterviewsPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/hiring/interviews/schedule" element={<PartnerRestrictedRoute>{loadable(<HiringInterviewSchedulePage />)}</PartnerRestrictedRoute>} />
         </Route>
 
         {/* Default redirect */}

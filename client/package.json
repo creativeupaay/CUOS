@@ -23,6 +23,7 @@
     "@tiptap/starter-kit": "^3.20.0",
     "async-mutex": "^0.5.0",
     "clsx": "^2.1.1",
+    "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.564.0",
     "react": "^19.2.0",
     "react-currency-input-field": "^4.0.3",
@@ -34,12 +35,14 @@
     "react-resizable-panels": "^4.6.4",
     "react-router-dom": "^7.13.0",
     "react-select": "^5.10.2",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.1.18",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/lodash.debounce": "^4.0.9",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",

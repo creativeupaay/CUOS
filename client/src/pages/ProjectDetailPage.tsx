@@ -14,7 +14,9 @@ import {
     AlertCircle,
     ChevronRight,
     Pencil,
+    Handshake,
 } from 'lucide-react';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
@@ -45,6 +47,9 @@ export default function ProjectDetailPage() {
             : String(currentUser.role).toLowerCase()
         : '';
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+    const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
+    const isPartner = roleName === 'partner';
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdmin });
 
     if (isLoading) {
         return (
@@ -70,6 +75,11 @@ export default function ProjectDetailPage() {
 
     const sColors = statusColors[project.status] || statusColors.planning;
     const pColors = priorityColors[project.priority] || priorityColors.low;
+    const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
+    const projectPartner = projectPartnerId
+        ? partnersData?.data?.partners?.find((p: any) => p._id === projectPartnerId)
+        : undefined;
+    const projectPartnerName = projectPartner?.userId?.name || projectPartner?.contactPerson || projectPartner?.companyName;
 
     const pmPerms = currentUser?.modulePermissions?.projectManagement;
     // Find THIS project's specific permission entry
@@ -85,18 +95,18 @@ export default function ProjectDetailPage() {
         { name: 'Documents', path: `/projects/${id}/documents`, icon: <FileText size={15} />, exact: false, permKey: 'documents' },
         { name: 'Notes', path: `/projects/${id}/notes`, icon: <StickyNote size={15} />, exact: false, permKey: 'notes' },
     ];
-    const tabs = isSuperAdmin
+    const tabs = isSuperAdmin || isPartner
         ? allTabs
         : allTabs.filter(t => pmSubs ? (pmSubs as Record<string, boolean>)[t.permKey] === true : false);
 
     // Redirect to first allowed tab if no overview access
     const isOnBasePath = location.pathname === `/projects/${id}`;
-    if (!isSuperAdmin && isOnBasePath && pmSubs && !pmSubs.overview && tabs.length > 0) {
+    if (!isSuperAdmin && !isPartner && isOnBasePath && pmSubs && !pmSubs.overview && tabs.length > 0) {
         return <Navigate to={tabs[0].path} replace />;
     }
 
     // No tabs at all or project not assigned = access denied
-    if (!isSuperAdmin && tabs.length === 0) {
+    if (!isSuperAdmin && !isPartner && tabs.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#FEF2F2' }}>
@@ -140,6 +150,16 @@ export default function ProjectDetailPage() {
                         >
                             {project.description}
                         </p>
+                    )}
+                    {isAdmin && projectPartnerId && projectPartnerName && (
+                        <Link
+                            to={`/admin/partners/${projectPartnerId}`}
+                            className="inline-flex items-center gap-2 mt-2 text-sm hover:underline"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                        >
+                            <Handshake size={14} />
+                            Partner: {projectPartnerName}
+                        </Link>
                     )}
                 </div>
 

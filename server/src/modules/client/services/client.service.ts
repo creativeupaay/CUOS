@@ -8,15 +8,30 @@ import { sendClientOnboardingEmail } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
 
 export class ClientService {
+    private isAdminRole(role?: string): boolean {
+        const normalizedRole = role?.toLowerCase();
+        return normalizedRole === 'admin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
+    }
+
+    private assertPartnerClientAccess(client: IClient, requesterPartnerId?: string): void {
+        if (!requesterPartnerId) {
+            return;
+        }
+
+        if (!client.partnerId || client.partnerId.toString() !== requesterPartnerId) {
+            throw new AppError('You do not have access to this client', 403);
+        }
+    }
+
     /**
      * Create a new client.
      * Handles optional lead-linking and optional onboarding email dispatch.
      */
     async createClient(
-        data: CreateClientInput,
+        data: CreateClientInput & { partnerId?: string },
         createdBy: Types.ObjectId
     ): Promise<IClient> {
-        const { sendOnboardingForm, leadId, ...clientData } = data as any;
+        const { sendOnboardingForm, leadId, partnerId, ...clientData } = data as any;
 
         // Build proposal linkage if this client comes from a lead
         let proposalIds: Types.ObjectId[] = [];
@@ -44,6 +59,7 @@ export class ClientService {
         const client = await Client.create({
             ...clientData,
             leadId: leadId ? new Types.ObjectId(leadId) : undefined,
+            partnerId: partnerId ? new Types.ObjectId(partnerId) : undefined,
             proposalIds,
             activities: leadActivities,
             createdBy,
@@ -77,13 +93,39 @@ export class ClientService {
     /**
      * Get all clients with optional filters
      */
-    async getClients(filters: ListClientsInput): Promise<{ clients: IClient[]; total: number; page: number; totalPages: number }> {
-        const { status, search, page = 1, limit = 20 } = filters;
+    async getClients(
+        filters: ListClientsInput & {
+            partnerId?: string;
+            requesterRole?: string;
+            requesterPartnerId?: string;
+        }
+    ): Promise<{ clients: IClient[]; total: number; page: number; totalPages: number }> {
+        const {
+            status,
+            search,
+            partnerId,
+            page = 1,
+            limit = 20,
+            requesterRole,
+            requesterPartnerId,
+        } = filters;
 
         const query: any = {};
+        const isAdmin = this.isAdminRole(requesterRole);
 
         if (status) {
             query.status = status;
+        }
+
+        // Partners are always restricted to their own clients.
+        if (requesterPartnerId) {
+            query.partnerId = new Types.ObjectId(requesterPartnerId);
+        } else if (partnerId && isAdmin) {
+            // Optional explicit partner filter for admin views.
+            query.partnerId = new Types.ObjectId(partnerId);
+        } else if (!isAdmin) {
+            // Non-admin employees should not see partner-owned clients.
+            query.partnerId = { $exists: false };
         }
 
         if (search) {
@@ -101,7 +143,8 @@ export class ClientService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate('createdBy', 'name email'),
+                .populate('createdBy', 'name email')
+                .populate('partnerId', 'companyName contactPerson email'),
             Client.countDocuments(query),
         ]);
 
@@ -116,13 +159,23 @@ export class ClientService {
     /**
      * Get client by ID
      */
-    async getClientById(id: string): Promise<IClient> {
+    async getClientById(
+        id: string,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
+    ): Promise<IClient> {
         const client = await Client.findById(id)
             .populate('createdBy', 'name email')
+            .populate('partnerId', 'companyName contactPerson email')
             .populate('activities.createdBy', 'name email');
 
         if (!client) {
             throw new AppError('Client not found', 404);
+        }
+
+        this.assertPartnerClientAccess(client, context?.requesterPartnerId);
+
+        if (!context?.requesterPartnerId && !this.isAdminRole(context?.requesterRole) && client.partnerId) {
+            throw new AppError('You do not have access to this client', 403);
         }
 
         return client;
@@ -131,12 +184,30 @@ export class ClientService {
     /**
      * Update client
      */
-    async updateClient(id: string, data: UpdateClientInput): Promise<IClient> {
+    async updateClient(
+        id: string,
+        data: UpdateClientInput,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
+    ): Promise<IClient> {
+        const existing = await Client.findById(id);
+
+        if (!existing) {
+            throw new AppError('Client not found', 404);
+        }
+
+        this.assertPartnerClientAccess(existing, context?.requesterPartnerId);
+
+        if (!context?.requesterPartnerId && !this.isAdminRole(context?.requesterRole) && existing.partnerId) {
+            throw new AppError('You do not have access to this client', 403);
+        }
+
         const client = await Client.findByIdAndUpdate(
             id,
             { $set: data },
             { new: true, runValidators: true }
-        ).populate('createdBy', 'name email');
+        )
+            .populate('createdBy', 'name email')
+            .populate('partnerId', 'companyName contactPerson email');
 
         if (!client) {
             throw new AppError('Client not found', 404);
@@ -159,11 +230,22 @@ export class ClientService {
     /**
      * Get client's projects
      */
-    async getClientProjects(clientId: string): Promise<IProject[]> {
+    async getClientProjects(
+        clientId: string,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
+    ): Promise<IProject[]> {
+        const client = await this.getClientById(clientId, context);
         const { Project } = await import('../../project/models/Project.model');
 
         // Use lean() for performance as we don't need Mongoose document methods here
-        const projects = await Project.find({ clientId, isArchived: false })
+        const projectQuery: any = { clientId: client._id, isArchived: false };
+
+        // Partners can only see projects they created.
+        if (context?.requesterPartnerId) {
+            projectQuery.partnerId = new Types.ObjectId(context.requesterPartnerId);
+        }
+
+        const projects = await Project.find(projectQuery)
             .sort({ createdAt: -1 })
             .select('-documents') // Exclude documents for list view
             .lean();

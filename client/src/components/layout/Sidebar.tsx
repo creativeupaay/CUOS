@@ -32,10 +32,19 @@ function getModuleConfig(
     isHrAdmin?: boolean
 ): ModuleConfig | null {
     const mp = user?.modulePermissions;
+    const roleName = user?.role
+        ? typeof user.role === 'object'
+            ? (user.role as any).name?.toLowerCase()
+            : String(user.role).toLowerCase()
+        : '';
+    const isPartner = roleName === 'partner';
 
     if (pathname.startsWith('/projects')) {
         const pmPerms = mp?.projectManagement;
-        const hasAccess = isAdmin || (pmPerms?.enabled && Array.isArray(pmPerms?.projectPermissions) && pmPerms.projectPermissions.length > 0);
+        const hasAccess =
+            isAdmin ||
+            (isPartner && pmPerms?.enabled) ||
+            (pmPerms?.enabled && Array.isArray(pmPerms?.projectPermissions) && pmPerms.projectPermissions.length > 0);
         if (!hasAccess) return null;
         const projectSubItems = projects?.map(p => ({ label: p.name, path: `/projects/${p._id}` })) || [];
         return {
@@ -97,7 +106,17 @@ function getModuleConfig(
             ],
         };
     }
+    if (pathname.startsWith('/admin/partners')) {
+        if (isPartner) return null;
+        return {
+            title: 'Partners',
+            items: [
+                { label: 'Partners', path: '/admin/partners', icon: <Users2 size={18} />, matchPrefix: '/admin/partners' },
+            ],
+        };
+    }
     if (pathname.startsWith('/admin')) {
+        if (isPartner) return null;
         const adminSubs = mp?.overallAdmin?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/admin', icon: <BarChart3 size={18} />, matchPrefix: '/admin' },
@@ -238,14 +257,24 @@ const NavItemComponent = ({
                                 style={
                                     isSubActive
                                         ? { color: 'var(--color-primary-dark)', fontWeight: 600, backgroundColor: 'var(--color-primary-soft)' }
-                                        : { color: 'var(--color-text-muted)' }
+                                        : { color: 'var(--color-text-secondary)', fontWeight: 500 }
                                 }
-                                onMouseEnter={(e) => { if (!isSubActive) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
-                                onMouseLeave={(e) => { if (!isSubActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                onMouseEnter={(e) => { 
+                                    if (!isSubActive) {
+                                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; 
+                                        e.currentTarget.style.color = 'var(--color-text-primary)';
+                                    }
+                                }}
+                                onMouseLeave={(e) => { 
+                                    if (!isSubActive) {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                                    }
+                                }}
                             >
                                 <div
-                                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                                    style={{ backgroundColor: isSubActive ? 'var(--color-primary)' : 'var(--color-text-muted)', opacity: isSubActive ? 1 : 0.5 }}
+                                    className="w-1.5 h-1.5 rounded-full shrink-0 transition-opacity"
+                                    style={{ backgroundColor: isSubActive ? 'var(--color-primary)' : 'var(--color-text-muted)', opacity: isSubActive ? 1 : 0.6 }}
                                 />
                                 <span className="truncate">{sub.label}</span>
                             </NavLink>

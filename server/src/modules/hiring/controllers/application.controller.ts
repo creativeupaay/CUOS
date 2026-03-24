@@ -35,7 +35,13 @@ export const createPublicApplication = asyncHandler(async (req: Request, res: Re
 });
 
 export const getApplications = asyncHandler(async (req: Request, res: Response) => {
-    const filters: ListApplicationsInput = req.query as any;
+    const filters: ListApplicationsInput = { ...req.query } as any;
+    
+    // The frontend sends `minExperience` as a string, make sure to convert it
+    if (filters.minExperience && typeof filters.minExperience === 'string') {
+        filters.minExperience = Number(filters.minExperience);
+    }
+
     const result = await applicationService.getApplications(filters);
 
     res.status(200).json({

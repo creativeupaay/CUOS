@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as clientController from '../controllers/client.controller';
 import * as onboardingController from '../controllers/clientOnboarding.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
+import { filterPartnerData } from '../../partners/middlewares/filterPartnerData.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     createClientSchema,
@@ -10,18 +11,29 @@ import {
     listClientsSchema,
     addClientActivitySchema,
 } from '../validators/client.validator';
+import AppError from '../../../utils/appError';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(filterPartnerData);
+
+const requireAdmin = (req: any, _res: any, next: any) => {
+    const role = req.user?.role?.toLowerCase();
+    if (role === 'admin' || role === 'super-admin' || role === 'super_admin') {
+        return next();
+    }
+
+    return next(new AppError('Access denied. Admins only.', 403));
+};
 
 // Client CRUD
 router.post('/', validateRequest(createClientSchema), clientController.createClient);
 router.get('/', validateRequest(listClientsSchema), clientController.getClients);
 router.get('/:id', validateRequest(getClientSchema), clientController.getClient);
 router.patch('/:id', validateRequest(getClientSchema), validateRequest(updateClientSchema), clientController.updateClient);
-router.delete('/:id', validateRequest(getClientSchema), clientController.deleteClient);
+router.delete('/:id', validateRequest(getClientSchema), requireAdmin, clientController.deleteClient);
 
 // Client projects
 router.get('/:id/projects', validateRequest(getClientSchema), clientController.getClientProjects);

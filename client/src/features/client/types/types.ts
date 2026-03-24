@@ -37,6 +37,16 @@ export interface Client {
     portalEnabled?: boolean;
     portalToken?: string;
 
+    // Partner relationship
+    partnerId?:
+        | string
+        | {
+            _id?: string;
+            companyName?: string;
+            contactPerson?: string;
+            email?: string;
+          };
+
     createdBy: string;
     createdAt: string;
     updatedAt: string;

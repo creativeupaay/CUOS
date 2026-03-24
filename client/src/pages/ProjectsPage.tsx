@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -50,6 +51,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 export default function ProjectsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
+    const [partnerFilter, setPartnerFilter] = useState('');
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
     const [statusModal, setStatusModal] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
     const [selectedStatus, setSelectedStatus] = useState('');
@@ -57,7 +59,11 @@ export default function ProjectsPage() {
     const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const user = useAppSelector((state) => state.auth.user);
 
-    const { data, isLoading, error } = useGetProjectsQuery({ status: statusFilter, priority: priorityFilter });
+    const { data, isLoading, error } = useGetProjectsQuery({
+        status: statusFilter,
+        priority: priorityFilter,
+        partnerId: partnerFilter || undefined,
+    });
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const projects = data?.data || [];
@@ -74,9 +80,17 @@ export default function ProjectsPage() {
 
     const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes((roleName as string).toLowerCase());
+    const isPartner = (roleName as string).toLowerCase() === 'partner';
     const isSuperAdmin = ['super-admin', 'super_admin'].includes((roleName as string).toLowerCase());
     const mp = user?.modulePermissions?.projectManagement;
-    const hasProjectAccess = isAdmin || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
+    const hasProjectAccess = isAdmin || isPartner || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdmin });
+    const partners = partnersData?.data?.partners || [];
+    const getPartnerName = (partnerId?: string) => {
+        if (!partnerId) return '';
+        const partner = partners.find((p: any) => p._id === partnerId);
+        return partner?.userId?.name || partner?.contactPerson || partner?.companyName || 'Partner';
+    };
 
     const handleDeleteProject = async () => {
         if (!deleteConfirm) return;
@@ -137,7 +151,7 @@ export default function ProjectsPage() {
                         {projects.length} project{projects.length !== 1 ? 's' : ''} {statusFilter ? `· ${statusFilter}` : ''}
                     </p>
                 </div>
-                {isAdmin && (
+                {(isAdmin || isPartner) && (
                     <Link
                         to="/projects/new"
                         className="btn btn-primary"
@@ -177,6 +191,28 @@ export default function ProjectsPage() {
                         ))}
                     </div>
                 </div>
+                {isAdmin && (
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)' }}>Partner</p>
+                        <select
+                            value={partnerFilter}
+                            onChange={(e) => setPartnerFilter(e.target.value)}
+                            className="w-full md:w-64 rounded-lg border px-3 py-2 text-sm"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                                color: 'var(--color-text-primary)',
+                            }}
+                        >
+                            <option value="">All Partners</option>
+                            {partners.map((partner: any) => (
+                                <option key={partner._id} value={partner._id}>
+                                    {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             {/* ── Grid ──────────────────────────────────────────────── */}
@@ -235,6 +271,12 @@ export default function ProjectsPage() {
                                         {project.description && (
                                             <p className="text-xs leading-relaxed mb-3 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>
                                                 {project.description}
+                                            </p>
+                                        )}
+
+                                        {isAdmin && project.partnerId && (
+                                            <p className="text-[11px] mb-2" style={{ color: 'var(--color-text-muted)' }}>
+                                                Created by Partner: {getPartnerName(project.partnerId)}
                                             </p>
                                         )}
 
@@ -344,7 +386,7 @@ export default function ProjectsPage() {
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         {isAdmin ? 'Create your first project to get started' : 'No projects have been assigned to you yet'}
                     </p>
-                    {isAdmin && (
+                    {(isAdmin || isPartner) && (
                         <Link to="/projects/new" className="btn btn-primary mt-5" style={{ gap: '6px' }}>
                             <Plus size={15} /> Create Project
                         </Link>

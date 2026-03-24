@@ -7,6 +7,7 @@
     "build": "tsc",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "seed": "ts-node src/scripts/seedRoles.ts",
+    "seed:safe": "ts-node src/scripts/seedRolesSafe.ts",
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit"
   },
@@ -40,6 +41,7 @@
     "react-icons": "^5.5.0",
     "resend": "^6.9.3",
     "shortid": "^2.2.17",
+    "socket.io": "^4.8.3",
     "uuid": "^11.1.0",
     "zod": "^4.1.12"
   },

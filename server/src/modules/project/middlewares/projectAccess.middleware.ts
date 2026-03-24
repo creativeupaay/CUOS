@@ -39,6 +39,15 @@ export const checkProjectAccess = async (
             return next();
         }
 
+        // Partner users can access only their own projects.
+        if (req.partnerId) {
+            if (project.partnerId && project.partnerId.toString() === req.partnerId) {
+                return next();
+            }
+
+            return next(new AppError('You do not have access to this project', 403));
+        }
+
         // Check if user is in assignees
         const employee = await Employee.findOne({ userId });
         if (!employee) {
@@ -90,6 +99,15 @@ export const checkProjectManager = async (
         // Check if user is super-admin
         if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
             return next();
+        }
+
+        // Partner users can manage only their own projects.
+        if (req.partnerId) {
+            if (project.partnerId && project.partnerId.toString() === req.partnerId) {
+                return next();
+            }
+
+            return next(new AppError('Only project managers can perform this action', 403));
         }
 
         // Check if user is a manager

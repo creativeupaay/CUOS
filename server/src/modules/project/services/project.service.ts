@@ -37,6 +37,7 @@ export interface CreateProjectData {
             notes: boolean;
         };
     }>;
+    partnerId?: string;
     createdBy: string;
 }
 
@@ -154,9 +155,11 @@ export const getProjects = async (
         status?: string;
         clientId?: string;
         priority?: string;
+        partnerId?: string;
     },
     projectAccess?: 'all' | 'assigned' | 'custom',
-    projectIds?: string[]
+    projectIds?: string[],
+    requesterPartnerId?: string
 ): Promise<IProject[]> => {
     const query: any = { isArchived: false };
 
@@ -164,10 +167,18 @@ export const getProjects = async (
     if (filters?.status) query.status = filters.status;
     if (filters?.clientId) query.clientId = filters.clientId;
     if (filters?.priority) query.priority = filters.priority;
+    if (requesterPartnerId) {
+        query.partnerId = new Types.ObjectId(requesterPartnerId);
+    }
 
-    const isAdmin = userRole === 'admin' || userRole === 'super-admin' || userRole === 'super_admin';
+    const normalizedRole = userRole?.toLowerCase();
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
 
-    if (!isAdmin) {
+    if (!requesterPartnerId && filters?.partnerId && isAdmin) {
+        query.partnerId = new Types.ObjectId(filters.partnerId);
+    }
+
+    if (!isAdmin && !requesterPartnerId) {
         const access = projectAccess ?? 'assigned';
         if (access === 'all') {
             // No restriction — show everything

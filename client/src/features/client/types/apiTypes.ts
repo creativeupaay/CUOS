@@ -19,6 +19,7 @@ export interface CreateClientRequest {
     leadId?: string;
     // Send onboarding form email to client
     sendOnboardingForm?: boolean;
+    partnerId?: string;
 }
 
 export interface UpdateClientRequest {
@@ -36,6 +37,7 @@ export interface UpdateClientRequest {
     contacts?: ClientContact[];
     status?: 'active' | 'inactive' | 'archived';
     notes?: string;
+    partnerId?: string;
 }
 
 export interface ListClientsRequest {
@@ -43,6 +45,7 @@ export interface ListClientsRequest {
     search?: string;
     page?: number;
     limit?: number;
+    partnerId?: string;
 }
 
 export interface ListClientsResponse {

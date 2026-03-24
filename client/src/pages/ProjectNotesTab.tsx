@@ -20,6 +20,11 @@ import {
     CheckSquare,
     Loader2,
 } from 'lucide-react';
+import { useNoteCollaboration } from '@/features/collaboration/hooks/useNoteCollaboration';
+import { PresenceAvatars } from '@/features/collaboration/components/PresenceAvatars';
+import { BlockPresenceIndicator } from '@/features/collaboration/components/BlockPresenceIndicator';
+import { CollaborationStatus } from '@/features/collaboration/components/CollaborationStatus';
+import type { NoteBroadcastResponse, UserPresence } from '@/features/collaboration/types/types';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -91,14 +96,24 @@ function flattenBlocks(blocks: NoteBlock[]): FormBlock[] {
         if (block.type === 'checklist') {
             const items = (block.items ?? []) as ChecklistItemData[];
             if (items.length === 0) {
-                result.push(emptyChecklistBlock());
+                result.push({
+                    id: block.id,
+                    type: 'checklist',
+                    items: [{ id: uid(), text: '', checked: false }],
+                });
             } else {
-                for (const item of items) {
-                    result.push({ id: uid(), type: 'checklist', items: [{ ...item }] });
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    result.push({
+                        // Keep IDs stable across clients so realtime operations target the same block.
+                        id: i === 0 ? block.id : `${block.id}:${item.id || i}`,
+                        type: 'checklist',
+                        items: [{ ...item }],
+                    });
                 }
             }
         } else if (block.type === 'text') {
-            result.push({ id: uid(), type: 'text', content: block.content ?? '' });
+            result.push({ id: block.id, type: 'text', content: block.content ?? '' });
         }
         // 'image' blocks are skipped (not supported in this editor)
     }
@@ -165,6 +180,16 @@ const TextBlock = forwardRef<TextBlockHandle, TextBlockProps>(function TextBlock
         if (divRef.current) divRef.current.innerHTML = block.content || '';
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Keep the editable DOM in sync with remote updates.
+    useEffect(() => {
+        if (!divRef.current) return;
+        const next = block.content || '';
+        if (divRef.current.innerHTML !== next) {
+            divRef.current.innerHTML = next;
+            setIsEmpty(!next || next === '<br>');
+        }
+    }, [block.content]);
 
     const syncFormats = () => setFormats(detectFormat());
 
@@ -439,8 +464,87 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     );
     const [noteId, setNoteId] = useState<string | null>(editingNote?._id || null);
     const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
-    const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
-    void focusedBlockId;
+    const [isSyncing, setIsSyncing] = useState(false);
+    const currentUser = useSelector((s: RootState) => s.auth.user);
+    const currentUserId = currentUser?._id;
+
+    // ── Real-time collaboration handlers ──────────────────────────────────────
+    const handleRemoteUpdate = useCallback((operation: NoteBroadcastResponse) => {
+        // Apply remote changes to local blocks
+        setBlocks(prev => {
+            const blockIndex = prev.findIndex(b => b.id === operation.blockId);
+
+            if (operation.type === 'update' && blockIndex !== -1) {
+                const updated = [...prev];
+                if (operation.data.content !== undefined) {
+                    updated[blockIndex] = { ...updated[blockIndex], content: operation.data.content };
+                }
+                if (operation.data.items !== undefined) {
+                    updated[blockIndex] = { ...updated[blockIndex], items: operation.data.items };
+                }
+                return updated;
+            }
+
+            if (operation.type === 'insert') {
+                const newBlock: FormBlock = {
+                    id: operation.blockId,
+                    type: operation.data.type || 'text',
+                    content: operation.data.content,
+                    items: operation.data.items,
+                };
+                const position = operation.data.position ?? prev.length;
+                const updated = [...prev];
+                updated.splice(position, 0, newBlock);
+                return updated;
+            }
+
+            if (operation.type === 'delete' && blockIndex !== -1) {
+                return prev.filter(b => b.id !== operation.blockId);
+            }
+
+            return prev;
+        });
+    }, []);
+
+    const handleSyncRequired = useCallback((version: number) => {
+        console.warn('Sync required, version:', version);
+        setIsSyncing(true);
+        // In a real implementation, we would refetch the note from server
+        // For now, we'll just reset the syncing state
+        setTimeout(() => setIsSyncing(false), 1000);
+    }, []);
+
+    const handleCollaborationError = useCallback((message: string) => {
+        console.error('Collaboration error:', message);
+    }, []);
+
+    const handleRoomState = useCallback((state: { blocks: NoteBlock[] }) => {
+        // Normalize from server shape to editor form shape.
+        const normalized = flattenBlocks(state.blocks as NoteBlock[]);
+        setBlocks(normalized.length > 0 ? normalized : [emptyTextBlock()]);
+    }, []);
+
+    const handleRemoteTitleUpdate = useCallback((nextTitle: string) => {
+        setTitle(prev => (prev === nextTitle ? prev : nextTitle));
+    }, []);
+
+    // Initialize collaboration only if we have a valid noteId
+    const { activeUsers, isConnected, broadcastChange, broadcastTitleChange, updatePresence } = useNoteCollaboration({
+        noteId: noteId || '',
+        projectId,
+        onRemoteUpdate: handleRemoteUpdate,
+        onRemoteTitleUpdate: handleRemoteTitleUpdate,
+        onRoomState: handleRoomState,
+        onSyncRequired: handleSyncRequired,
+        onError: handleCollaborationError,
+    });
+
+    // Find which user is editing which block
+    const getUserEditingBlock = useCallback((blockId: string): UserPresence | null => {
+        return activeUsers.find(u => u.currentBlock === blockId && u.userId !== currentUserId) || null;
+    }, [activeUsers, currentUserId]);
+
+    const visibleActiveUsers = activeUsers.filter(u => u.userId !== currentUserId);
 
     // Stable refs so async callbacks always read latest values
     const createResultRef = useRef<string | null>(editingNote?._id || null);
@@ -550,16 +654,38 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     const handleTextChange = useCallback((id: string, content: string) => {
         setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b));
         scheduleSave();
-    }, [scheduleSave]);
+        // Broadcast change to collaborators
+        if (noteId) {
+            broadcastChange({
+                blockId: id,
+                type: 'update',
+                data: { content },
+            });
+        }
+    }, [scheduleSave, noteId, broadcastChange]);
 
     const handleChecklistChange = useCallback((id: string, patch: Partial<FormBlock>) => {
         setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
         scheduleSave();
-    }, [scheduleSave]);
+        // Broadcast change to collaborators (immediate for checkbox)
+        if (noteId && patch.items) {
+            broadcastChange({
+                blockId: id,
+                type: 'update',
+                data: { items: patch.items },
+            });
+        }
+    }, [scheduleSave, noteId, broadcastChange]);
 
     /** Insert a new block after the given id, or at the end if afterId is null */
     const insertBlock = useCallback((afterId: string | null, type: 'text' | 'checklist') => {
         const newBlock = type === 'text' ? emptyTextBlock() : emptyChecklistBlock();
+        const current = blocksRef.current;
+        const afterIndex = afterId ? current.findIndex(b => b.id === afterId) : -1;
+        const insertPosition = afterId === null
+            ? current.length
+            : (afterIndex === -1 ? current.length : afterIndex + 1);
+
         pendingFocusRef.current = { id: newBlock.id };
         if (afterId === null) {
             setBlocks(prev => [...prev, newBlock]);
@@ -571,8 +697,23 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                 return next;
             });
         }
+
+        if (noteId) {
+            broadcastChange({
+                blockId: newBlock.id,
+                type: 'insert',
+                data: {
+                    type: newBlock.type,
+                    content: newBlock.content,
+                    items: newBlock.items,
+                    position: insertPosition,
+                },
+            });
+        }
+
         isDirtyRef.current = true;
-    }, []);
+        scheduleSave();
+    }, [noteId, broadcastChange, scheduleSave]);
 
     const handleInsertAfter = useCallback((id: string, type: 'text' | 'checklist') => {
         insertBlock(id, type);
@@ -581,6 +722,8 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     /** Convert a checklist block to a text block in-place */
     const handleConvertToText = useCallback((id: string) => {
         const newTextBlock = emptyTextBlock();
+        const current = blocksRef.current;
+        const convertIndex = current.findIndex(b => b.id === id);
         pendingFocusRef.current = { id: newTextBlock.id };
         setBlocks(prev => {
             const idx = prev.findIndex(b => b.id === id);
@@ -589,21 +732,67 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
             next.splice(idx, 1, newTextBlock);
             return next;
         });
+
+        if (noteId && convertIndex !== -1) {
+            broadcastChange({
+                blockId: id,
+                type: 'delete',
+                data: { position: convertIndex },
+            });
+            broadcastChange({
+                blockId: newTextBlock.id,
+                type: 'insert',
+                data: {
+                    type: 'text',
+                    content: '',
+                    position: convertIndex,
+                },
+            });
+        }
+
         isDirtyRef.current = true;
         scheduleSave();
-    }, [scheduleSave]);
+    }, [noteId, broadcastChange, scheduleSave]);
 
     const handleDeleteBlock = useCallback((id: string) => {
+        const current = blocksRef.current;
+        const deletedIndex = current.findIndex(b => b.id === id);
+        const isDeletingLastBlock = current.length === 1;
+        const replacement = isDeletingLastBlock ? emptyTextBlock() : null;
+
         setBlocks(prev => {
             const next = prev.filter(b => b.id !== id);
             if (next.length > 0) return next;
             // Last block was deleted — drop in an empty text block and focus it
-            const replacement = emptyTextBlock();
-            pendingFocusRef.current = { id: replacement.id };
-            return [replacement];
+            if (replacement) {
+                pendingFocusRef.current = { id: replacement.id };
+                return [replacement];
+            }
+            return [emptyTextBlock()];
         });
+
+        if (noteId && deletedIndex !== -1) {
+            broadcastChange({
+                blockId: id,
+                type: 'delete',
+                data: { position: deletedIndex },
+            });
+
+            if (replacement) {
+                broadcastChange({
+                    blockId: replacement.id,
+                    type: 'insert',
+                    data: {
+                        type: 'text',
+                        content: '',
+                        position: 0,
+                    },
+                });
+            }
+        }
+
         scheduleSave();
-    }, [scheduleSave]);
+    }, [noteId, broadcastChange, scheduleSave]);
 
     const handleFocusPrev = useCallback((id: string) => {
         const cur = blocksRef.current;
@@ -619,13 +808,15 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
 
     const handleFocused = useCallback((id: string) => {
         focusedBlockIdRef.current = id;
-        setFocusedBlockId(id);
-    }, []);
+        // Update presence to show which block user is editing
+        if (noteId) {
+            updatePresence(id);
+        }
+    }, [noteId, updatePresence]);
 
     /** Header buttons: insert after the focused block or at end */
     const handleHeaderInsert = (type: 'text' | 'checklist') => {
         insertBlock(focusedBlockIdRef.current, type);
-        scheduleSave();
     };
 
     return createPortal(
@@ -641,32 +832,46 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                 className={`relative w-full max-w-xl h-full shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${isAnimating ? 'translate-x-0' : 'translate-x-full'}`}
                 style={{ backgroundColor: color, borderLeft: '1px solid rgba(0,0,0,0.1)' }}
             >
-                {/* ── Header: color swatches + insert buttons + pin + save + close ── */}
+                {/* ── Header: color swatches + collaboration + insert buttons + pin + save + close ── */}
                 <div
-                    className="flex items-center justify-between px-4 pt-3 pb-3 gap-2 flex-wrap"
+                    className="flex items-center justify-between px-4 pt-3 pb-3 gap-2"
                     style={{ backgroundColor: 'rgba(0,0,0,0.04)', borderBottom: '1px solid rgba(0,0,0,0.07)' }}
                 >
-                    {/* Color swatches */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        {NOTE_COLORS.map(c => (
-                            <button
-                                key={c.value}
-                                type="button"
-                                onClick={() => { setColor(c.value); scheduleSave(); }}
-                                title={c.label}
-                                className="w-4 h-4 rounded-full border-2 transition-transform hover:scale-125"
-                                style={{
-                                    backgroundColor: c.value,
-                                    borderColor: color === c.value ? '#6366F1' : 'rgba(0,0,0,0.2)',
-                                    boxShadow: color === c.value ? '0 0 0 2px #6366F1' : undefined,
-                                }}
-                            />
-                        ))}
+                    {/* Left: Color swatches + collaboration indicators */}
+                    <div className="flex items-center gap-3 min-w-0">
+                        {/* Color swatches */}
+                        <div className="flex items-center gap-1.5">
+                            {NOTE_COLORS.map(c => (
+                                <button
+                                    key={c.value}
+                                    type="button"
+                                    onClick={() => { setColor(c.value); scheduleSave(); }}
+                                    title={c.label}
+                                    className="w-4 h-4 rounded-full border-2 transition-transform hover:scale-125"
+                                    style={{
+                                        backgroundColor: c.value,
+                                        borderColor: color === c.value ? '#6366F1' : 'rgba(0,0,0,0.2)',
+                                        boxShadow: color === c.value ? '0 0 0 2px #6366F1' : undefined,
+                                    }}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Collaboration indicators - show only when note exists */}
+                        {noteId && (
+                            <div className="flex items-center gap-2">
+                                <CollaborationStatus isConnected={isConnected} isSyncing={isSyncing} />
+                                <PresenceAvatars users={visibleActiveUsers} maxDisplay={4} />
+                            </div>
+                        )}
                     </div>
 
                     {/* Right: save status + insert buttons + pin + close */}
                     <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-xs mr-1 flex items-center gap-1" style={{ color: 'var(--color-text-muted)', opacity: 0.75 }}>
+                        <span
+                            className="text-xs mr-1 flex items-center gap-1 whitespace-nowrap min-w-[76px] justify-end"
+                            style={{ color: 'var(--color-text-muted)', opacity: 0.75 }}
+                        >
                             {saveStatus === 'saving' && <><Loader2 size={11} className="animate-spin" />Saving…</>}
                             {saveStatus === 'saved' && <><CheckSquare size={11} className="text-green-500" />Saved</>}
                             {saveStatus === 'error' && <span className="text-red-500 text-xs">Error saving</span>}
@@ -712,7 +917,14 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                     <input
                         type="text"
                         value={title}
-                        onChange={e => { setTitle(e.target.value); scheduleSave(); }}
+                        onChange={e => {
+                            const nextTitle = e.target.value;
+                            setTitle(nextTitle);
+                            scheduleSave();
+                            if (noteId) {
+                                broadcastTitleChange(nextTitle);
+                            }
+                        }}
                         placeholder="Title"
                         autoFocus
                         className="w-full bg-transparent outline-none font-bold leading-snug border-none mb-4"
@@ -725,40 +937,46 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                     {/* Content blocks — Notion-style flat list */}
                     <div className="flex flex-col gap-3">
                         {blocks.map(block => {
+                            const userEditing = getUserEditingBlock(block.id);
+
                             if (block.type === 'text') {
                                 return (
-                                    <TextBlock
-                                        key={block.id}
-                                        block={block}
-                                        ref={el => {
-                                            if (el) blockRefs.current.set(block.id, el);
-                                            else blockRefs.current.delete(block.id);
-                                        }}
-                                        onChange={handleTextChange}
-                                        onDelete={handleDeleteBlock}
-                                        onFocusPrev={handleFocusPrev}
-                                        onFocusNext={handleFocusNext}
-                                        onFocused={handleFocused}
-                                    />
+                                    <div key={block.id} className="relative">
+                                        <BlockPresenceIndicator user={userEditing} />
+                                        <TextBlock
+                                            block={block}
+                                            ref={el => {
+                                                if (el) blockRefs.current.set(block.id, el);
+                                                else blockRefs.current.delete(block.id);
+                                            }}
+                                            onChange={handleTextChange}
+                                            onDelete={handleDeleteBlock}
+                                            onFocusPrev={handleFocusPrev}
+                                            onFocusNext={handleFocusNext}
+                                            onFocused={handleFocused}
+                                        />
+                                    </div>
                                 );
                             }
                             if (block.type === 'checklist') {
                                 return (
-                                    <ChecklistBlock
-                                        key={block.id}
-                                        block={block}
-                                        ref={el => {
-                                            if (el) blockRefs.current.set(block.id, el);
-                                            else blockRefs.current.delete(block.id);
-                                        }}
-                                        onChange={handleChecklistChange}
-                                        onInsertAfter={handleInsertAfter}
-                                        onDelete={handleDeleteBlock}
-                                        onFocusPrev={handleFocusPrev}
-                                        onFocusNext={handleFocusNext}
-                                        onFocused={handleFocused}
-                                        onConvertToText={handleConvertToText}
-                                    />
+                                    <div key={block.id} className="relative">
+                                        <BlockPresenceIndicator user={userEditing} />
+                                        <ChecklistBlock
+                                            block={block}
+                                            ref={el => {
+                                                if (el) blockRefs.current.set(block.id, el);
+                                                else blockRefs.current.delete(block.id);
+                                            }}
+                                            onChange={handleChecklistChange}
+                                            onInsertAfter={handleInsertAfter}
+                                            onDelete={handleDeleteBlock}
+                                            onFocusPrev={handleFocusPrev}
+                                            onFocusNext={handleFocusNext}
+                                            onFocused={handleFocused}
+                                            onConvertToText={handleConvertToText}
+                                        />
+                                    </div>
                                 );
                             }
                             return null;

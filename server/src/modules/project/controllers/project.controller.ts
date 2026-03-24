@@ -13,6 +13,7 @@ export const createProject = asyncHandler(
 
         const project = await projectService.createProject({
             ...req.body,
+            partnerId: req.partnerId ?? req.body.partnerId,
             createdBy: userId,
         });
 
@@ -40,7 +41,8 @@ export const getProjects = asyncHandler(
             status: req.query.status as string,
             clientId: req.query.clientId as string,
             priority: req.query.priority as string,
-        }, 'custom', projectIds);
+            partnerId: req.query.partnerId as string,
+        }, 'custom', projectIds, req.partnerId);
 
         res.status(200).json({
             success: true,

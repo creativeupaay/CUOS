@@ -2,6 +2,7 @@ export interface User {
     _id: string;
     name: string;
     email: string;
+    partnerId?: string | { _id?: string };
     role: Role | string;
     department?: string;
     isActive: boolean;

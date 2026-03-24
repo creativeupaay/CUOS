@@ -11,10 +11,17 @@ const clientService = new ClientService();
  * Create a new client
  */
 export const createClient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const data: CreateClientInput = req.body;
+    const data: CreateClientInput & { partnerId?: string } = req.body;
     const createdBy = (req.user as any).id;
 
-    const client = await clientService.createClient(data, createdBy);
+    const client = await clientService.createClient(
+        {
+            ...data,
+            // Partner requests are always forced to their own partner ID.
+            partnerId: req.partnerId ?? data.partnerId,
+        },
+        createdBy
+    );
 
     res.status(201).json({
         status: 'success',
@@ -26,9 +33,13 @@ export const createClient = asyncHandler(async (req: Request, res: Response, nex
  * Get all clients
  */
 export const getClients = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const filters: ListClientsInput = req.query as any;
+    const filters: ListClientsInput & { partnerId?: string } = req.query as any;
 
-    const result = await clientService.getClients(filters);
+    const result = await clientService.getClients({
+        ...filters,
+        requesterRole: req.user?.role,
+        requesterPartnerId: req.partnerId,
+    });
 
     res.status(200).json({
         status: 'success',
@@ -42,7 +53,10 @@ export const getClients = asyncHandler(async (req: Request, res: Response, next:
 export const getClient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id }: GetClientInput = req.params as any;
 
-    const client = await clientService.getClientById(id);
+    const client = await clientService.getClientById(id, {
+        requesterRole: req.user?.role,
+        requesterPartnerId: req.partnerId,
+    });
 
     res.status(200).json({
         status: 'success',
@@ -57,7 +71,10 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
     const { id } = req.params;
     const data: UpdateClientInput = req.body;
 
-    const client = await clientService.updateClient(id, data);
+    const client = await clientService.updateClient(id, data, {
+        requesterRole: req.user?.role,
+        requesterPartnerId: req.partnerId,
+    });
 
     res.status(200).json({
         status: 'success',
@@ -85,7 +102,10 @@ export const deleteClient = asyncHandler(async (req: Request, res: Response, nex
 export const getClientProjects = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
-    const projects = await clientService.getClientProjects(id);
+    const projects = await clientService.getClientProjects(id, {
+        requesterRole: req.user?.role,
+        requesterPartnerId: req.partnerId,
+    });
 
     res.status(200).json({
         status: 'success',
