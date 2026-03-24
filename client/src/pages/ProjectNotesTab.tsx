@@ -468,6 +468,9 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const currentUserId = currentUser?._id;
 
+    // Guard against stale remote room-state replacing local unsaved edits.
+    const hasLocalPendingChangesRef = useRef(false);
+
     // ── Real-time collaboration handlers ──────────────────────────────────────
     const handleRemoteUpdate = useCallback((operation: NoteBroadcastResponse) => {
         // Apply remote changes to local blocks
@@ -519,6 +522,9 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     }, []);
 
     const handleRoomState = useCallback((state: { blocks: NoteBlock[] }) => {
+        if (hasLocalPendingChangesRef.current) {
+            return;
+        }
         // Normalize from server shape to editor form shape.
         const normalized = flattenBlocks(state.blocks as NoteBlock[]);
         setBlocks(normalized.length > 0 ? normalized : [emptyTextBlock()]);
@@ -549,6 +555,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     // Stable refs so async callbacks always read latest values
     const createResultRef = useRef<string | null>(editingNote?._id || null);
     const isSavingRef = useRef(false);
+    const saveQueuedRef = useRef(false);
     const isDirtyRef = useRef(false);
     const pendingFocusRef = useRef<{ id: string; atStart?: boolean } | null>(null);
     const focusedBlockIdRef = useRef<string | null>(null);
@@ -582,32 +589,54 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     // ── Save helpers ──────────────────────────────────────────────────────────
 
     const handleSaveNow = useCallback(async (): Promise<void> => {
-        if (isSavingRef.current) return;
-        isSavingRef.current = true;
-        const t = titleRef.current;
-        const c = colorRef.current;
-        const p = isPinnedRef.current;
-        const b = blocksRef.current;
-        const resolvedId = createResultRef.current ?? noteIdRef.current;
+        if (isSavingRef.current) {
+            saveQueuedRef.current = true;
+            return;
+        }
 
-        const cleanBlocks: NoteBlock[] = b.map(block =>
-            block.type === 'text'
-                ? ({ id: block.id, type: 'text', content: block.content ?? '' } as NoteBlock)
-                : ({ id: block.id, type: 'checklist', items: block.items ?? [] } as NoteBlock)
-        );
-        const data = { title: t.trim() || 'Untitled', color: c, isPinned: p, blocks: cleanBlocks };
+        isSavingRef.current = true;
+        setSaveStatus('saving');
 
         try {
-            if (resolvedId) {
-                await updateNote({ projectId, noteId: resolvedId, data }).unwrap();
-            } else {
-                const res = await createNote({ projectId, data }).unwrap();
-                const newId = res.data?._id as string | undefined;
-                if (newId) {
-                    createResultRef.current = newId;
-                    setNoteId(newId);
+            while (true) {
+                saveQueuedRef.current = false;
+
+                const t = titleRef.current;
+                const c = colorRef.current;
+                const p = isPinnedRef.current;
+                const b = blocksRef.current;
+                const resolvedId = createResultRef.current ?? noteIdRef.current;
+
+                const cleanBlocks: NoteBlock[] = b.map(block =>
+                    block.type === 'text'
+                        ? ({ id: block.id, type: 'text', content: block.content ?? '' } as NoteBlock)
+                        : ({ id: block.id, type: 'checklist', items: block.items ?? [] } as NoteBlock)
+                );
+                const data = { title: t.trim() || 'Untitled', color: c, isPinned: p, blocks: cleanBlocks };
+
+                if (resolvedId) {
+                    await updateNote({ projectId, noteId: resolvedId, data }).unwrap();
+                } else {
+                    const res = await createNote({ projectId, data }).unwrap();
+                    const newId = res.data?._id as string | undefined;
+                    if (newId) {
+                        createResultRef.current = newId;
+                        setNoteId(newId);
+                    }
+                }
+
+                isDirtyRef.current = false;
+
+                // If new edits arrived while this save was in-flight, flush them immediately.
+                if (!saveQueuedRef.current && !isDirtyRef.current) {
+                    hasLocalPendingChangesRef.current = false;
+                    setSaveStatus('saved');
+                    break;
                 }
             }
+        } catch (err) {
+            setSaveStatus('error');
+            throw err;
         } finally {
             isSavingRef.current = false;
         }
@@ -617,13 +646,15 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
 
     const scheduleSave = useCallback(() => {
         isDirtyRef.current = true;
+        hasLocalPendingChangesRef.current = true;
+        if (isSavingRef.current) {
+            saveQueuedRef.current = true;
+        }
         setSaveStatus('saving');
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(async () => {
             try {
                 await handleSaveNow();
-                isDirtyRef.current = false;
-                setSaveStatus('saved');
             } catch (err) {
                 console.error('Autosave failed', err);
                 setSaveStatus('error');
@@ -637,7 +668,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         if (isDirtyRef.current) {
             setSaveStatus('saving');
-            try { await handleSaveNow(); setSaveStatus('saved'); }
+            try { await handleSaveNow(); }
             catch (err) { console.error('Save on close failed', err); }
         }
         onClose();
