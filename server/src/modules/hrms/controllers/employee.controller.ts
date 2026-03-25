@@ -62,9 +62,48 @@ export const updateMyProfile = asyncHandler(async (req: Request, res: Response) 
     });
 });
 
+// ── Update My Profile Photo (employee self-service) ───────────────
+export const updateMyProfilePhoto = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.user as any).id;
+    const file = req.file as Express.Multer.File | undefined;
+
+    if (!file) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Profile photo file is required',
+        });
+    }
+
+    const employee = await employeeService.updateMyProfilePhoto(userId, file);
+
+    res.json({
+        status: 'success',
+        data: { employee },
+    });
+});
+
 // ── Update Employee ─────────────────────────────────────────────────
 export const updateEmployee = asyncHandler(async (req: Request, res: Response) => {
     const employee = await employeeService.updateEmployee(req.params.id, req.body);
+
+    res.json({
+        status: 'success',
+        data: { employee },
+    });
+});
+
+// ── Update Employee Profile Photo (HR admin only) ─────────────────
+export const updateEmployeeProfilePhoto = asyncHandler(async (req: Request, res: Response) => {
+    const file = req.file as Express.Multer.File | undefined;
+
+    if (!file) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Profile photo file is required',
+        });
+    }
+
+    const employee = await employeeService.updateEmployeeProfilePhoto(req.params.id, file);
 
     res.json({
         status: 'success',

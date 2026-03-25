@@ -123,3 +123,24 @@ export const getUsers = asyncHandler(
         });
     }
 );
+
+export const changePassword = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authenticated',
+            });
+        }
+
+        const { oldPassword, newPassword } = req.body;
+        await authService.changePassword(userId, oldPassword, newPassword);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Password changed successfully',
+        });
+    }
+);

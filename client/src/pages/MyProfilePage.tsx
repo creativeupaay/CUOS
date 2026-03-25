@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     useGetMyProfileQuery,
     useUpdateMyProfileMutation,
+    useUpdateMyProfilePhotoMutation,
 } from '@/features/hrms/hrmsApi';
 import {
     User, Briefcase, ShieldCheck, Eye, EyeOff,
-    Edit, X, Loader2, Save,
+    Edit, X, Loader2, Save, Camera,
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -58,6 +59,8 @@ function SectionHeader({
 export default function MyProfilePage() {
     const { data, isLoading, refetch } = useGetMyProfileQuery();
     const [updateMyProfile, { isLoading: isSaving }] = useUpdateMyProfileMutation();
+    const [updateMyProfilePhoto, { isLoading: isUploadingPhoto }] = useUpdateMyProfilePhotoMutation();
+    const photoInputRef = useRef<HTMLInputElement | null>(null);
 
     const employee = data?.data?.employee as any;
 
@@ -73,13 +76,9 @@ export default function MyProfilePage() {
         fatherPhone: '',
         gender: '',
         dob: '',
-        bloodGroup: '',
         address_street: '',
         address_state: '',
         address_postalCode: '',
-        emergencyContact_name: '',
-        emergencyContact_phone: '',
-        emergencyContact_relation: '',
     });
 
     // ── Bank Details Form ────────────────────────────────────────────
@@ -96,6 +95,17 @@ export default function MyProfilePage() {
     const [showBank, setShowBank] = useState(false);
     const [showIdNumber, setShowIdNumber] = useState(false);
 
+    const hasOpenModal = activeModal !== null;
+
+    useEffect(() => {
+        if (!hasOpenModal) return;
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = originalOverflow;
+        };
+    }, [hasOpenModal]);
+
     const openPersonalModal = () => {
         const pi = employee?.personalInfo || {};
         setPersonalForm({
@@ -105,13 +115,9 @@ export default function MyProfilePage() {
             fatherPhone: pi.fatherPhone || '',
             gender: pi.gender || '',
             dob: pi.dob ? pi.dob.split('T')[0] : '',
-            bloodGroup: pi.bloodGroup || '',
             address_street: pi.address?.street || '',
             address_state: pi.address?.state || '',
             address_postalCode: pi.address?.postalCode || '',
-            emergencyContact_name: pi.emergencyContact?.name || '',
-            emergencyContact_phone: pi.emergencyContact?.phone || '',
-            emergencyContact_relation: pi.emergencyContact?.relation || '',
         });
         setActiveModal('personal');
     };
@@ -140,16 +146,10 @@ export default function MyProfilePage() {
                     fatherPhone: personalForm.fatherPhone || undefined,
                     gender: (personalForm.gender as any) || undefined,
                     dob: personalForm.dob || undefined,
-                    bloodGroup: personalForm.bloodGroup || undefined,
                     address: {
                         street: personalForm.address_street || undefined,
                         state: personalForm.address_state || undefined,
                         postalCode: personalForm.address_postalCode || undefined,
-                    },
-                    emergencyContact: {
-                        name: personalForm.emergencyContact_name || undefined,
-                        phone: personalForm.emergencyContact_phone || undefined,
-                        relation: personalForm.emergencyContact_relation || undefined,
                     },
                 },
             }).unwrap();
@@ -168,6 +168,22 @@ export default function MyProfilePage() {
             refetch();
         } catch (err: any) {
             alert(err?.data?.message || 'Failed to save bank details');
+        }
+    };
+
+    const handleMyPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('profilePhoto', file);
+            await updateMyProfilePhoto(formData).unwrap();
+            refetch();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to update profile photo');
+        } finally {
+            e.target.value = '';
         }
     };
 
@@ -254,6 +270,24 @@ export default function MyProfilePage() {
                     <p className="text-xs mt-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>
                         {employee.department} · {employee.employmentType}
                     </p>
+                    <div className="mt-3">
+                        <button
+                            onClick={() => photoInputRef.current?.click()}
+                            disabled={isUploadingPhoto}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                        >
+                            {isUploadingPhoto ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                            Change Photo
+                        </button>
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={handleMyPhotoChange}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -312,15 +346,9 @@ export default function MyProfilePage() {
                             </FieldRow>
                             <FieldRow label="Father's Name">{employee.personalInfo?.fatherName}</FieldRow>
                             <FieldRow label="Father's Contact">{employee.personalInfo?.fatherPhone}</FieldRow>
-                            <FieldRow label="Blood Group">{employee.personalInfo?.bloodGroup}</FieldRow>
                             <FieldRow label="Address">{employee.personalInfo?.address?.street}</FieldRow>
                             <FieldRow label="State">{employee.personalInfo?.address?.state}</FieldRow>
                             <FieldRow label="Pincode">{employee.personalInfo?.address?.postalCode}</FieldRow>
-                            <FieldRow label="Emergency Contact">
-                                {employee.personalInfo?.emergencyContact?.name
-                                    ? `${employee.personalInfo.emergencyContact.name} (${employee.personalInfo.emergencyContact.relation}) — ${employee.personalInfo.emergencyContact.phone}`
-                                    : '—'}
-                            </FieldRow>
                         </div>
                     </div>
                 </div>
@@ -435,7 +463,7 @@ export default function MyProfilePage() {
             {/* ── Personal Info Modal ──────────────────────────────── */}
             {activeModal === 'personal' && (
                 <div className="modal-overlay">
-                    <div className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
+                    <div className="w-full max-w-4xl rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -446,20 +474,16 @@ export default function MyProfilePage() {
                                 <X size={18} style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleSavePersonal} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleSavePersonal} className="space-y-3">
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                 {[
                                     ['phone', 'Mobile'],
                                     ['alternatePhone', 'Alternate Mobile'],
                                     ['fatherName', "Father's Name"],
                                     ['fatherPhone', "Father's Contact"],
-                                    ['bloodGroup', 'Blood Group'],
                                     ['address_street', 'Address / Street'],
                                     ['address_state', 'State'],
                                     ['address_postalCode', 'Pincode'],
-                                    ['emergencyContact_name', 'Emergency Contact Name'],
-                                    ['emergencyContact_phone', 'Emergency Contact Phone'],
-                                    ['emergencyContact_relation', 'Relation'],
                                 ].map(([key, label]) => (
                                     <div key={key}>
                                         <label className="block text-xs font-medium mb-1.5"
@@ -525,7 +549,7 @@ export default function MyProfilePage() {
             {/* ── Bank Details Modal ────────────────────────────────── */}
             {activeModal === 'bank' && (
                 <div className="modal-overlay">
-                    <div className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                    <div className="w-full max-w-lg rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -536,8 +560,8 @@ export default function MyProfilePage() {
                                 <X size={18} style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleSaveBank} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleSaveBank} className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {[
                                     ['bankName', 'Bank Name'],
                                     ['accountNumber', 'Account Number'],

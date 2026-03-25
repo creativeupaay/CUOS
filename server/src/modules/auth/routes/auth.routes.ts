@@ -30,6 +30,12 @@ router.post(
 );
 
 router.post('/logout', authenticate, authController.logout);
+router.post(
+    '/change-password',
+    authenticate,
+    validateRequest(authValidators.changePasswordSchema),
+    authController.changePassword
+);
 
 router.get('/users', authenticate, authController.getUsers);
 router.get('/me', authenticate, authController.getMe);

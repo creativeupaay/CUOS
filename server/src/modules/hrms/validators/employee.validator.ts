@@ -95,7 +95,7 @@ export const selfUpdateSchema = z.object({
     body: z.object({
         personalInfo: personalInfoSchema,
         bankDetails: bankDetailsSchema,
-    }),
+    }).strict(),
 });
 
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>['body'];

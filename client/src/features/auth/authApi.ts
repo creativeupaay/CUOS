@@ -38,6 +38,16 @@ export const authApi = api.injectEndpoints({
                 method: 'POST',
             }),
         }),
+        changePassword: builder.mutation<
+            { success: boolean; message: string },
+            { oldPassword: string; newPassword: string }
+        >({
+            query: (body) => ({
+                url: '/auth/change-password',
+                method: 'POST',
+                body,
+            }),
+        }),
         getMe: builder.query<GetMeResponse, void>({
             query: () => '/auth/me',
             providesTags: ['User'],
@@ -53,6 +63,7 @@ export const {
     useRegisterMutation,
     useRefreshTokenMutation,
     useLogoutMutation,
+    useChangePasswordMutation,
     useGetMeQuery,
     useLazyGetMeQuery,
     useGetUsersQuery,

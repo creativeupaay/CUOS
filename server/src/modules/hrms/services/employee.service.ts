@@ -2,7 +2,7 @@ import path from 'path';
 import { Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { Employee, IEmployee } from '../models/Employee.model';
-import { uploadDocument, getSignedUrl } from '../../../utils/cloudinary.util';
+import { uploadDocument, getSignedUrl, deleteDocument } from '../../../utils/cloudinary.util';
 import { CreateEmployeeInput, UpdateEmployeeInput } from '../validators/employee.validator';
 import AppError from '../../../utils/appError';
 import { env } from '../../../config/env.config';
@@ -164,6 +164,53 @@ class EmployeeService {
         await employee.save();
         await employee.populate('userId', 'name email');
         return employee;
+    }
+
+    async updateMyProfilePhoto(userId: string, file: Express.Multer.File): Promise<IEmployee> {
+        const employee = await Employee.findOne({ userId });
+        if (!employee) {
+            throw new AppError('Employee record not found', 404);
+        }
+
+        await this.replaceProfilePhoto(employee, file);
+        await employee.populate('userId', 'name email');
+        return employee;
+    }
+
+    async updateEmployeeProfilePhoto(id: string, file: Express.Multer.File): Promise<IEmployee> {
+        const employee = await Employee.findById(id);
+        if (!employee) {
+            throw new AppError('Employee not found', 404);
+        }
+
+        await this.replaceProfilePhoto(employee, file);
+        await employee.populate('userId', 'name email');
+        return employee;
+    }
+
+    private async replaceProfilePhoto(employee: IEmployee, file: Express.Multer.File): Promise<void> {
+        const oldCloudId = employee.profilePhoto?.cloudinaryId;
+        const photoExt = path.extname(file.originalname) || '.jpg';
+        const result = await uploadDocument(
+            file.buffer,
+            `hrms/employees/${employee._id}/profile`,
+            `profile-${Date.now()}${photoExt}`,
+            false
+        );
+
+        employee.profilePhoto = {
+            cloudinaryId: result.cloudinaryId,
+            url: result.url,
+        } as any;
+        await employee.save();
+
+        if (oldCloudId && oldCloudId !== result.cloudinaryId) {
+            try {
+                await deleteDocument(oldCloudId);
+            } catch {
+                // Keep profile update successful even if old asset cleanup fails.
+            }
+        }
     }
 
     async deleteEmployee(id: string): Promise<void> {

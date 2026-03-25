@@ -5,6 +5,7 @@ import {
     useCreateSalaryMutation,
     useUpdateSalaryMutation,
     useUpdateEmployeeMutation,
+    useUpdateEmployeeProfilePhotoMutation,
     useGenerateFormTokenMutation,
 } from '@/features/hrms/hrmsApi';
 
@@ -12,9 +13,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 import {
     ArrowLeft, Edit, User, Briefcase, DollarSign,
     Plus, X, Loader2, Eye, EyeOff, Calendar,
-    CheckCircle2, Clock, ShieldCheck, Shirt, Save, Mail, Copy,
+    CheckCircle2, Clock, ShieldCheck, Shirt, Save, Mail, Copy, Camera,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // ── Status badge helper ──────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -62,7 +63,9 @@ export default function HrmsEmployeeDetailPage() {
     const [createSalary, { isLoading: isCreatingSalary }] = useCreateSalaryMutation();
     const [updateSalary, { isLoading: isUpdatingSalary }] = useUpdateSalaryMutation();
     const [updateEmployee, { isLoading: isUpdatingEmployee }] = useUpdateEmployeeMutation();
+    const [updateEmployeeProfilePhoto, { isLoading: isUploadingPhoto }] = useUpdateEmployeeProfilePhotoMutation();
     const [generateFormToken, { isLoading: isGeneratingToken }] = useGenerateFormTokenMutation();
+    const adminPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
     // ── Bank visibility toggle ───────────────────────────────────────
     const [showBankDetails, setShowBankDetails] = useState(false); const [showIdNumber, setShowIdNumber] = useState(false);
@@ -76,9 +79,8 @@ export default function HrmsEmployeeDetailPage() {
 
     const [personalEditForm, setPersonalEditForm] = useState({
         phone: '', alternatePhone: '', fatherName: '', fatherPhone: '',
-        gender: '', dob: '', bloodGroup: '',
+        gender: '', dob: '',
         address_street: '', address_state: '', address_postalCode: '',
-        emergencyContact_name: '', emergencyContact_phone: '', emergencyContact_relation: '',
     });
 
     const [bankEditForm, setBankEditForm] = useState({
@@ -105,13 +107,9 @@ export default function HrmsEmployeeDetailPage() {
             fatherPhone: pi.fatherPhone || '',
             gender: pi.gender || '',
             dob: pi.dob ? pi.dob.split('T')[0] : '',
-            bloodGroup: pi.bloodGroup || '',
             address_street: pi.address?.street || '',
             address_state: pi.address?.state || '',
             address_postalCode: pi.address?.postalCode || '',
-            emergencyContact_name: pi.emergencyContact?.name || '',
-            emergencyContact_phone: pi.emergencyContact?.phone || '',
-            emergencyContact_relation: pi.emergencyContact?.relation || '',
         });
         setEditModal('personal');
     };
@@ -151,16 +149,10 @@ export default function HrmsEmployeeDetailPage() {
                         fatherPhone: personalEditForm.fatherPhone || undefined,
                         gender: (personalEditForm.gender as any) || undefined,
                         dob: personalEditForm.dob || undefined,
-                        bloodGroup: personalEditForm.bloodGroup || undefined,
                         address: {
                             street: personalEditForm.address_street || undefined,
                             state: personalEditForm.address_state || undefined,
                             postalCode: personalEditForm.address_postalCode || undefined,
-                        },
-                        emergencyContact: {
-                            name: personalEditForm.emergencyContact_name || undefined,
-                            phone: personalEditForm.emergencyContact_phone || undefined,
-                            relation: personalEditForm.emergencyContact_relation || undefined,
                         },
                     } as any,
                 },
@@ -239,6 +231,17 @@ export default function HrmsEmployeeDetailPage() {
         }
     }, [salary, isSalaryModalOpen]);
 
+    const hasOpenModal = isSalaryModalOpen || editModal !== null;
+
+    useEffect(() => {
+        if (!hasOpenModal) return;
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = originalOverflow;
+        };
+    }, [hasOpenModal]);
+
     const handleSaveSalary = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -250,6 +253,20 @@ export default function HrmsEmployeeDetailPage() {
             setIsSalaryModalOpen(false);
         } catch (err: any) {
             alert(err?.data?.message || err?.message || 'Failed to save salary');
+        }
+    };
+
+    const handleAdminProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !id) return;
+        try {
+            const formData = new FormData();
+            formData.append('profilePhoto', file);
+            await updateEmployeeProfilePhoto({ id, formData }).unwrap();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to update profile photo');
+        } finally {
+            e.target.value = '';
         }
     };
 
@@ -579,9 +596,27 @@ export default function HrmsEmployeeDetailPage() {
                         className="rounded-xl border p-6"
                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
                     >
-                        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
-                            Profile Photo
-                        </h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Profile Photo
+                            </h2>
+                            <button
+                                onClick={() => adminPhotoInputRef.current?.click()}
+                                disabled={isUploadingPhoto}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 disabled:opacity-60"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                            >
+                                {isUploadingPhoto ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                                Change Photo
+                            </button>
+                            <input
+                                ref={adminPhotoInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="hidden"
+                                onChange={handleAdminProfilePhotoChange}
+                            />
+                        </div>
                         {(employee as any).profilePhoto?.url ? (
                             <div className="flex flex-col items-center gap-3">
                                 <img
@@ -750,7 +785,7 @@ export default function HrmsEmployeeDetailPage() {
                 <div className="modal-overlay">
 
                     <div
-                        className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                        className="w-full max-w-md rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
                     >
                         <div className="flex justify-between items-center mb-5">
@@ -860,7 +895,7 @@ export default function HrmsEmployeeDetailPage() {
             {/* ── Personal Info Edit Modal ─────────────────────────── */}
             {editModal === 'personal' && (
                 <div className="modal-overlay">
-                    <div className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
+                    <div className="w-full max-w-4xl rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -870,20 +905,16 @@ export default function HrmsEmployeeDetailPage() {
                                 <X size={18} style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleSavePersonalEdit} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleSavePersonalEdit} className="space-y-3">
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                 {([
                                     ['phone', 'Mobile'],
                                     ['alternatePhone', 'Alternate Mobile'],
                                     ['fatherName', "Father's Name"],
                                     ['fatherPhone', "Father's Contact"],
-                                    ['bloodGroup', 'Blood Group'],
                                     ['address_street', 'Address / Street'],
                                     ['address_state', 'State'],
                                     ['address_postalCode', 'Pincode'],
-                                    ['emergencyContact_name', 'Emergency Contact Name'],
-                                    ['emergencyContact_phone', 'Emergency Contact Phone'],
-                                    ['emergencyContact_relation', 'Relation'],
                                 ] as [string, string][]).map(([key, label]) => (
                                     <div key={key}>
                                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
@@ -933,7 +964,7 @@ export default function HrmsEmployeeDetailPage() {
             {/* ── Bank Details Edit Modal ──────────────────────────── */}
             {editModal === 'bank' && (
                 <div className="modal-overlay">
-                    <div className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                    <div className="w-full max-w-lg rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -943,8 +974,8 @@ export default function HrmsEmployeeDetailPage() {
                                 <X size={18} style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleSaveBankEdit} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleSaveBankEdit} className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {([
                                     ['bankName', 'Bank Name'],
                                     ['accountNumber', 'Account Number'],
@@ -984,7 +1015,7 @@ export default function HrmsEmployeeDetailPage() {
             {/* ── Identity Verification Edit Modal ─────────────────── */}
             {editModal === 'identity' && (
                 <div className="modal-overlay">
-                    <div className="w-full max-w-sm rounded-xl border p-6 shadow-xl"
+                    <div className="w-full max-w-sm rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>

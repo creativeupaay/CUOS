@@ -77,10 +77,8 @@ function getModuleConfig(
             return {
                 title: 'My HRMS',
                 items: [
-                    { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
-                    { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
-                    { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
-                    { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+                    { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
+                    { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
                 ],
             };
         }
@@ -96,9 +94,23 @@ function getModuleConfig(
         return { title: 'HRMS', items: isAdmin || !hrmsSubs ? allItems : allItems.filter(i => (hrmsSubs as any)[i.key] === true) };
     }
     if (pathname.startsWith('/my-hrms')) {
+        const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+
+        if (!isSuperAdmin) {
+            return {
+                title: 'My HRMS',
+                items: [
+                    { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
+                    { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
+                ],
+            };
+        }
+
         return {
             title: 'My HRMS',
             items: [
+                { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
+                { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
                 { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
                 { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
                 { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },

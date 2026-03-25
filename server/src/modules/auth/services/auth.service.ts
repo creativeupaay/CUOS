@@ -177,3 +177,31 @@ export const getAllUsers = async (): Promise<IUser[]> => {
         .populate('role', 'name');
     return users;
 };
+
+/**
+ * Change current user's password
+ */
+export const changePassword = async (
+    userId: string,
+    oldPassword: string,
+    newPassword: string
+): Promise<void> => {
+    const user = await User.findById(userId).select('+password');
+
+    if (!user) {
+        throw new AppError('User not found', 404);
+    }
+
+    const isOldPasswordValid = await user.comparePassword(oldPassword);
+    if (!isOldPasswordValid) {
+        throw new AppError('Old password is incorrect', 400);
+    }
+
+    const isSamePassword = await user.comparePassword(newPassword);
+    if (isSamePassword) {
+        throw new AppError('New password must be different from old password', 400);
+    }
+
+    user.password = newPassword;
+    await user.save();
+};

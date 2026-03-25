@@ -49,6 +49,7 @@ const EmployeeLeavesPage = lazy(() => import('./pages/EmployeeLeavesPage'));
 const EmployeeHolidaysPage = lazy(() => import('./pages/EmployeeHolidaysPage'));
 const EmployeePayrollPage = lazy(() => import('./pages/EmployeePayrollPage'));
 const MyProfilePage = lazy(() => import('./pages/MyProfilePage'));
+const MyProfileChangePasswordPage = lazy(() => import('./pages/MyProfileChangePasswordPage'));
 const EmployeeOnboardingFormPage = lazy(() => import('./pages/EmployeeOnboardingFormPage'));
 const ClientOnboardingPage = lazy(() => import('./pages/ClientOnboardingPage'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
@@ -110,7 +111,7 @@ function PartnerRestrictedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Redirects regular employees away from /hrms/* to /my-hrms/attendance */
+/** Redirects regular employees away from /hrms/* to /my-hrms/profile */
 function HrmsRedirect({ children }: { children: React.ReactNode }) {
   const user = useAppSelector((state) => state.auth.user);
   const roleName = getRoleNameFromUser(user);
@@ -121,8 +122,20 @@ function HrmsRedirect({ children }: { children: React.ReactNode }) {
 
   const isAdminOrHr = ['super-admin', 'admin', 'super_admin', 'hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
   if (!isAdminOrHr) {
-    return <Navigate to="/my-hrms/attendance" replace />;
+    return <Navigate to="/my-hrms/profile" replace />;
   }
+  return <>{children}</>;
+}
+
+function SuperAdminMyHrmsDataRoute({ children }: { children: React.ReactNode }) {
+  const user = useAppSelector((state) => state.auth.user);
+  const roleName = getRoleNameFromUser(user);
+  const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+
+  if (!isSuperAdmin) {
+    return <Navigate to="/my-hrms/profile" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -227,10 +240,11 @@ function App() {
 
           {/* Employee HRMS Module */}
           <Route path="/my-hrms/profile" element={loadable(<MyProfilePage />)} />
-          <Route path="/my-hrms/attendance" element={loadable(<EmployeeAttendancePage />)} />
-          <Route path="/my-hrms/leaves" element={loadable(<EmployeeLeavesPage />)} />
-          <Route path="/my-hrms/holidays" element={loadable(<EmployeeHolidaysPage />)} />
-          <Route path="/my-hrms/payroll" element={loadable(<EmployeePayrollPage />)} />
+          <Route path="/my-hrms/change-password" element={loadable(<MyProfileChangePasswordPage />)} />
+          <Route path="/my-hrms/attendance" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeAttendancePage />)}</SuperAdminMyHrmsDataRoute>} />
+          <Route path="/my-hrms/leaves" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeLeavesPage />)}</SuperAdminMyHrmsDataRoute>} />
+          <Route path="/my-hrms/holidays" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeHolidaysPage />)}</SuperAdminMyHrmsDataRoute>} />
+          <Route path="/my-hrms/payroll" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeePayrollPage />)}</SuperAdminMyHrmsDataRoute>} />
 
           {/* Admin Module */}
           <Route path="/admin" element={<PartnerRestrictedRoute>{loadable(<AdminDashboardPage />)}</PartnerRestrictedRoute>} />

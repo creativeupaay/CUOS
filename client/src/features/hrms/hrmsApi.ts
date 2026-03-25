@@ -56,6 +56,15 @@ export const hrmsApi = api.injectEndpoints({
             invalidatesTags: ['Employees'],
         }),
 
+        updateMyProfilePhoto: builder.mutation<ApiResponse<{ employee: Employee }>, FormData>({
+            query: (formData) => ({
+                url: '/hrms/employees/me/profile-photo',
+                method: 'POST',
+                body: formData,
+            }),
+            invalidatesTags: ['Employees'],
+        }),
+
         updateEmployee: builder.mutation<
             ApiResponse<{ employee: Employee }>,
             { id: string; data: UpdateEmployeeRequest }
@@ -64,6 +73,21 @@ export const hrmsApi = api.injectEndpoints({
                 url: `/hrms/employees/${id}`,
                 method: 'PATCH',
                 body: data,
+            }),
+            invalidatesTags: (_result, _error, { id }) => [
+                { type: 'Employees', id },
+                'Employees',
+            ],
+        }),
+
+        updateEmployeeProfilePhoto: builder.mutation<
+            ApiResponse<{ employee: Employee }>,
+            { id: string; formData: FormData }
+        >({
+            query: ({ id, formData }) => ({
+                url: `/hrms/employees/${id}/profile-photo`,
+                method: 'POST',
+                body: formData,
             }),
             invalidatesTags: (_result, _error, { id }) => [
                 { type: 'Employees', id },
@@ -429,7 +453,9 @@ export const {
     useGetEmployeeQuery,
     useGetMyProfileQuery,
     useUpdateMyProfileMutation,
+    useUpdateMyProfilePhotoMutation,
     useUpdateEmployeeMutation,
+    useUpdateEmployeeProfilePhotoMutation,
     useDeleteEmployeeMutation,
     useGetOnboardingEmployeesQuery,
     useGenerateFormTokenMutation,

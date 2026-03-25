@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import { checkHrmsAccess, hrAdminOnly } from '../middlewares/hrmsAccess.middleware';
@@ -21,6 +22,18 @@ import * as holidayController from '../controllers/holiday.controller';
 
 
 const router = Router();
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+            return;
+        }
+        cb(new Error('Only JPG, PNG, and WEBP images are allowed'));
+    },
+});
 
 // All HRMS routes require authentication
 router.use(authenticate);
@@ -30,6 +43,8 @@ router.use(authenticate);
 // ══════════════════════════════════════════════════════════════════════
 router.get('/employees/me', employeeController.getMyProfile);
 router.patch('/employees/me', validateRequest(selfUpdateSchema), employeeController.updateMyProfile);
+router.post('/employees/me/profile-photo', upload.single('profilePhoto'), employeeController.updateMyProfilePhoto);
+router.post('/employees/me/photo', upload.single('profilePhoto'), employeeController.updateMyProfilePhoto);
 router.get('/employees/onboarding', hrAdminOnly, employeeController.getOnboardingEmployees);
 router.get('/employees/:managerId/team', employeeController.getTeamMembers);
 
@@ -47,6 +62,8 @@ router.patch(
     validateRequest(updateEmployeeSchema),
     employeeController.updateEmployee
 );
+router.post('/employees/:id/profile-photo', hrAdminOnly, upload.single('profilePhoto'), employeeController.updateEmployeeProfilePhoto);
+router.post('/employees/:id/photo', hrAdminOnly, upload.single('profilePhoto'), employeeController.updateEmployeeProfilePhoto);
 router.delete('/employees/:id', hrAdminOnly, employeeController.deleteEmployee);
 router.patch(
     '/employees/:id/onboarding',
