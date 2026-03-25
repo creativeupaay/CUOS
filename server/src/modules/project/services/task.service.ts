@@ -1,7 +1,59 @@
 import { Task, ITask } from '../models/Task.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import * as timeLogService from './timeLog.service';
+
+/**
+ * Attaches profilePhoto (url) from the Employee collection to the assignee
+ * objects that Mongoose already populated from the User collection.
+ * Works for both single task objects and arrays.
+ */
+async function attachProfilePhotos(tasks: any | any[]): Promise<any> {
+    const arr = Array.isArray(tasks) ? tasks : [tasks];
+    if (arr.length === 0) return tasks;
+
+    // Collect all unique user IDs present as assignees
+    const userIds = new Set<string>();
+    for (const task of arr) {
+        if (!task || !task.assignees) continue;
+        for (const a of task.assignees) {
+            const uid = typeof a === 'object' ? (a._id || a.id)?.toString() : a?.toString();
+            if (uid) userIds.add(uid);
+        }
+    }
+
+    if (userIds.size === 0) return tasks;
+
+    // Single batch query — only select the fields we need
+    const employees = await Employee.find(
+        { userId: { $in: Array.from(userIds).map(id => new Types.ObjectId(id)) } },
+        { userId: 1, 'profilePhoto.url': 1 }
+    ).lean<{ userId: Types.ObjectId; profilePhoto?: { url?: string } }[]>();
+
+    // Build userId → photo URL map
+    const photoMap = new Map<string, string>();
+    for (const emp of employees) {
+        if (emp.profilePhoto?.url) {
+            photoMap.set(emp.userId.toString(), emp.profilePhoto.url);
+        }
+    }
+
+    if (photoMap.size === 0) return tasks;
+
+    // Mutate (or clone) the assignee objects in place
+    for (const task of arr) {
+        if (!task || !task.assignees) continue;
+        task.assignees = task.assignees.map((a: any) => {
+            if (typeof a !== 'object') return a;
+            const uid = (a._id || a.id)?.toString();
+            const photo = uid ? photoMap.get(uid) : undefined;
+            return photo ? { ...a, profilePhoto: photo } : a;
+        });
+    }
+
+    return tasks;
+}
 
 export interface CreateTaskData {
     title: string;
@@ -63,6 +115,9 @@ export const getTasks = async (
         .sort({ createdAt: -1 })
         .lean<any[]>();
 
+    // Attach profile photos from Employee model
+    await attachProfilePhotos(tasks);
+
     // For main-task queries, attach live subtask count per task
     if (!filters?.includeSubtasks && tasks.length > 0) {
         const taskIds = tasks.map((t: any) => t._id);
@@ -83,8 +138,10 @@ export const getTasks = async (
 export const getTaskById = async (taskId: string): Promise<ITask | null> => {
     const task = await Task.findById(taskId)
         .populate('assignees', 'name email role')
-        .populate('createdBy', 'name email');
+        .populate('createdBy', 'name email')
+        .lean<any>();
 
+    if (task) await attachProfilePhotos(task);
     return task;
 };
 
@@ -218,9 +275,12 @@ export const updateTask = async (
     }
 
     // Re-fetch with populated fields so the API response matches what getTasks returns
-    return Task.findById(task._id)
+    const updated = await Task.findById(task._id)
         .populate('assignees', 'name email')
-        .populate('createdBy', 'name email');
+        .populate('createdBy', 'name email')
+        .lean<any>();
+    if (updated) await attachProfilePhotos(updated);
+    return updated;
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {
@@ -232,7 +292,9 @@ export const getSubtasks = async (parentTaskId: string): Promise<ITask[]> => {
     const subtasks = await Task.find({ parentTaskId })
         .populate('assignees', 'name email')
         .populate('createdBy', 'name email')
-        .sort({ createdAt: 1 });
+        .sort({ createdAt: 1 })
+        .lean<any[]>();
 
-    return subtasks;
+    await attachProfilePhotos(subtasks);
+    return subtasks as any;
 };

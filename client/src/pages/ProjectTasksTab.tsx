@@ -29,10 +29,94 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
     low: { bg: '#14532D', text: '#86EFAC' },
 };
 
+const getEntityId = (value: any): string => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+        if (value._id) return getEntityId(value._id);
+        if (value.id) return getEntityId(value.id);
+        if (value.userId) return getEntityId(value.userId);
+    }
+    return String(value);
+};
+
+const hasAdminRole = (role: any): boolean => {
+    const normalized = typeof role === 'string'
+        ? role.toLowerCase()
+        : (role && typeof role === 'object')
+            ? String(role.name || '').toLowerCase()
+            : '';
+    return ['super-admin', 'super_admin', 'admin'].includes(normalized);
+};
+
+
+/**
+ * Reusable circular avatar.
+ * Shows the employee's profile photo when available; falls back to the
+ * first character of the name on a coloured background.
+ */
+function UserAvatar({
+    name,
+    photoUrl,
+    size = 20,
+    ring = false,
+    selected = false,
+}: {
+    name: string;
+    photoUrl?: string | null;
+    size?: number;
+    ring?: boolean;
+    selected?: boolean;
+}) {
+    const initials = name ? name.charAt(0).toUpperCase() : '?';
+    const sizeStyle = { width: size, height: size, minWidth: size, minHeight: size };
+    const ringStyle = ring ? { boxShadow: '0 0 0 2px white' } : {};
+
+    if (photoUrl) {
+        return (
+            <img
+                src={photoUrl}
+                alt={name}
+                title={name}
+                style={{
+                    ...sizeStyle,
+                    ...ringStyle,
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    display: 'inline-block',
+                    flexShrink: 0,
+                }}
+            />
+        );
+    }
+
+    return (
+        <div
+            title={name}
+            style={{
+                ...sizeStyle,
+                ...ringStyle,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: Math.max(8, Math.floor(size * 0.45)),
+                fontWeight: 700,
+                flexShrink: 0,
+                backgroundColor: selected ? 'var(--color-primary)' : '#BFDBFE',
+                color: selected ? 'white' : '#1D4ED8',
+            }}
+        >
+            {initials}
+        </div>
+    );
+}
+
 export default function ProjectTasksTab() {
+
     const { id: projectId } = useParams<{ id: string }>();
     const currentUser = useSelector((s: RootState) => s.auth.user);
-    const currentUserId = (currentUser as any)?._id || (currentUser as any)?.id;
+    const currentUserId = getEntityId((currentUser as any)?._id || (currentUser as any)?.id);
 
     // Determine if the current user is a super admin
     const roleName = currentUser?.role
@@ -40,7 +124,7 @@ export default function ProjectTasksTab() {
             ? (currentUser.role as any).name?.toLowerCase()
             : String(currentUser.role).toLowerCase()
         : '';
-    const isSuperAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
+    const isSuperAdmin = hasAdminRole(roleName);
 
     const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
     // Everyone sees 'all' tasks by default (super admin) or 'my' tasks by default (team members)
@@ -77,8 +161,7 @@ export default function ProjectTasksTab() {
         ? allBoardTasks
         : allBoardTasks.filter(t =>
             t.assignees.some((a: any) => {
-                const uid = typeof a === 'object' ? (a._id || a.id) : a;
-                return uid === currentUserId;
+                return getEntityId(a) === currentUserId;
             })
         );
 
@@ -88,8 +171,7 @@ export default function ProjectTasksTab() {
         : tasks.filter(t => {
             const assignees = t.assignees || [];
             return assignees.some((a: any) => {
-                const uid = typeof a === 'object' ? (a._id || a.id) : a;
-                return uid === currentUserId;
+                return getEntityId(a) === currentUserId;
             });
         });
 
@@ -193,8 +275,7 @@ export default function ProjectTasksTab() {
                                 }}
                             >
                                 {tasks.filter(t => !t.parentTaskId && t.assignees.some((a: any) => {
-                                    const uid = typeof a === 'object' ? (a._id || a.id) : a;
-                                    return uid === currentUserId;
+                                    return getEntityId(a) === currentUserId;
                                 })).length}
                             </span>
                         </button>
@@ -402,7 +483,7 @@ export default function ProjectTasksTab() {
                                                     {selectedAssignees.map(userId => {
                                                         const assigneeData = projectMembers.find((m: any) => {
                                                             const empId = typeof m.employeeId === 'object' ? m.employeeId : null;
-                                                            const uid = empId ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId) : (typeof m.userId === 'object' ? m.userId._id : m.userId);
+                                                            const uid = empId ? getEntityId(empId.userId) : getEntityId(m.userId);
                                                             return uid === userId;
                                                         });
                                                         const empId = assigneeData?.employeeId;
@@ -425,11 +506,14 @@ export default function ProjectTasksTab() {
                                                     projectMembers.map((member: any) => {
                                                         const empId = typeof member.employeeId === 'object' ? member.employeeId : null;
                                                         const userId = empId
-                                                            ? (typeof empId.userId === 'object' ? empId.userId._id : empId.userId)
-                                                            : (typeof member.userId === 'object' ? member.userId._id : member.userId);
+                                                            ? getEntityId(empId.userId)
+                                                            : getEntityId(member.userId);
                                                         const name = empId && typeof empId.userId === 'object'
                                                             ? (empId.userId as any).name
                                                             : (typeof member.userId === 'object' ? (member.userId as any).name : 'User');
+                                                        // Profile photo may be on employeeId if populated
+                                                        const photoUrl = (empId as any)?.profilePhoto?.url ||
+                                                            (member as any)?.profilePhoto?.url || null;
                                                         const isSelected = selectedAssignees.includes(userId);
                                                         return (
                                                             <div
@@ -439,9 +523,7 @@ export default function ProjectTasksTab() {
                                                                 style={{ borderColor: 'var(--color-border-default)', backgroundColor: isSelected ? 'var(--color-primary-soft)' : 'transparent' }}
                                                             >
                                                                 <input type="checkbox" readOnly checked={isSelected} className="rounded border-gray-300 pointer-events-none" />
-                                                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium" style={{ backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-bg-subtle)', color: isSelected ? 'white' : 'var(--color-text-muted)' }}>
-                                                                    {name.charAt(0)}
-                                                                </div>
+                                                                <UserAvatar name={name} photoUrl={photoUrl} size={20} selected={isSelected} />
                                                                 <span style={{ color: 'var(--color-text-primary)' }}>{name}</span>
                                                             </div>
                                                         );
@@ -519,7 +601,7 @@ export default function ProjectTasksTab() {
                             projectId={projectId!}
                             onEdit={(t) => {
                                 setEditingTask(t);
-                                setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? (a as any)._id || (a as any).id : a)) as string[]);
+                                setSelectedAssignees(t.assignees.map((a: any) => getEntityId(a)).filter(Boolean));
                                 resetEstTime(t);
                                 setShowForm(true);
                             }}
@@ -557,7 +639,7 @@ export default function ProjectTasksTab() {
                                 tasks={filteredBoardTasks.filter(t => t.status === statusId)}
                                 onEdit={(t) => {
                                     setEditingTask(t);
-                                    setSelectedAssignees(t.assignees.map(a => typeof a === 'string' ? a : typeof a === 'object' && 'userId' in a ? (typeof (a as any).userId === 'object' ? (a as any).userId._id : (a as any).userId) : (typeof a === 'object' ? a._id : a)) as string[]);
+                                    setSelectedAssignees(t.assignees.map((a: any) => getEntityId(a)).filter(Boolean));
                                     resetEstTime(t);
                                     setShowForm(true);
                                 }}
@@ -567,8 +649,7 @@ export default function ProjectTasksTab() {
                                     const droppedTask = filteredBoardTasks.find(t => t._id === taskId);
                                     if (!droppedTask) return;
                                     const isAssignee = droppedTask.assignees.some((a: any) => {
-                                        const uid = typeof a === 'object' ? (a._id || a.id) : a;
-                                        return uid === currentUserId;
+                                        return getEntityId(a) === currentUserId;
                                     });
                                     if (!isSuperAdmin && !isAssignee) return;
                                     updateTask({ projectId: projectId!, taskId, data: { status: newStatus as any } });
@@ -599,11 +680,11 @@ function TaskCard({
             ? (currentUser.role as any).name?.toLowerCase()
             : String(currentUser.role).toLowerCase()
         : '';
-    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+    const isSuperAdmin = hasAdminRole(roleName);
 
     const { data: projectData } = useGetProjectByIdQuery(projectId);
     const project = projectData?.data;
-    const currentUserId = (currentUser as any)?._id || (currentUser as any)?.id;
+    const currentUserId = getEntityId((currentUser as any)?._id || (currentUser as any)?.id);
 
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -611,10 +692,21 @@ function TaskCard({
         if (!project || !currentUserId) return false;
         const assignee = project.assignees.find((a: any) => {
             const empId = typeof a.employeeId === 'object' ? a.employeeId : null;
-            const uid = empId && typeof empId.userId === 'object' ? empId.userId._id : empId?.userId;
+            const uid = empId ? getEntityId(empId.userId) : getEntityId(a.userId);
             return uid === currentUserId;
         });
         return assignee?.role === 'manager';
+    })();
+
+    // Any member of the project (regardless of role) can edit tasks.
+    // Deletion remains manager-only.
+    const isProjectMember = isSuperAdmin || (() => {
+        if (!project || !currentUserId) return false;
+        return project.assignees.some((a: any) => {
+            const empId = typeof a.employeeId === 'object' ? a.employeeId : null;
+            const uid = empId ? getEntityId(empId.userId) : getEntityId(a.userId);
+            return uid === currentUserId;
+        });
     })();
 
     const pStyle = priorityStyles[task.priority] || priorityStyles.medium;
@@ -643,7 +735,7 @@ function TaskCard({
 
     const openSubtaskEdit = (sub: Task) => {
         setEditingSubtask(sub);
-        setSubEditAssignees(sub.assignees.map((a: any) => (a as any)._id || (a as any).id || a));
+        setSubEditAssignees(sub.assignees.map((a: any) => getEntityId(a)).filter(Boolean));
     };
     const closeSubtaskEdit = () => { setEditingSubtask(null); setSubEditAssignees([]); };
 
@@ -750,17 +842,16 @@ function TaskCard({
                     <div className="col-span-2 flex flex-wrap items-center gap-1.5 overflow-hidden max-h-12 py-1">
                         {task.assignees.length > 0 ? (
                             task.assignees.map((assignee, index) => {
-                                // Task assignees are populated as User objects: { _id, name, email }
+                                // Task assignees are populated as User objects: { _id, name, email, profilePhoto? }
                                 const name = typeof assignee === 'object' && (assignee as any).name
                                     ? (assignee as any).name
                                     : (typeof assignee === 'object' && 'userId' in assignee && typeof (assignee as any).userId === 'object'
                                         ? (assignee as any).userId.name
                                         : 'User');
+                                const photoUrl = (assignee as any).profilePhoto || null;
                                 return (
                                     <div key={index} className="flex items-center gap-1 pr-1.5 bg-black/5 rounded-full shrink-0">
-                                        <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium text-blue-700 shrink-0">
-                                            {name.charAt(0)}
-                                        </div>
+                                        <UserAvatar name={name} photoUrl={photoUrl} size={20} />
                                         <span className="text-[10px] font-medium truncate max-w-[60px]" style={{ color: 'var(--color-text-secondary)' }} title={name}>
                                             {name}
                                         </span>
@@ -806,14 +897,16 @@ function TaskCard({
                                 </button>
                             )
                         )}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onEdit(task); }}
-                            className="transition-colors hover:bg-black/5 p-1 rounded"
-                            style={{ color: 'var(--color-text-secondary)' }}
-                            title="Edit task"
-                        >
-                            <MoreVertical size={13} />
-                        </button>
+                        {isProjectMember && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+                                className="transition-colors hover:bg-black/5 p-1 rounded"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                                title="Edit task"
+                            >
+                                <MoreVertical size={13} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -886,15 +979,16 @@ function TaskCard({
                                         <p className="text-[10px] font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Assign to (task members only)</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {task.assignees.map((assignee: any) => {
-                                                const uid = assignee._id || assignee.id || assignee;
+                                                const uid = getEntityId(assignee);
                                                 const mName = assignee.name || 'User';
+                                                const mPhoto = (assignee as any).profilePhoto || null;
                                                 const sel = subSelectedAssignees.includes(uid);
                                                 return (
                                                     <button key={uid} type="button" onClick={() => toggleSubAssignee(uid)}
                                                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors"
                                                         style={{ borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-default)', backgroundColor: sel ? 'var(--color-primary-soft)' : 'var(--color-bg-surface)', color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
                                                     >
-                                                        <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>{mName.charAt(0)}</span>
+                                                        <UserAvatar name={mName} photoUrl={mPhoto} size={14} selected={sel} />
                                                         {mName}
                                                     </button>
                                                 );
@@ -951,10 +1045,9 @@ function TaskCard({
                                                                 : (typeof assignee === 'object' && 'userId' in assignee && typeof (assignee as any).userId === 'object'
                                                                     ? (assignee as any).userId.name
                                                                     : 'U');
+                                                            const photoUrl = (assignee as any).profilePhoto || null;
                                                             return (
-                                                                <div key={index} className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 flex-shrink-0 ring-2 ring-white" title={name}>
-                                                                    {name.charAt(0)}
-                                                                </div>
+                                                                <UserAvatar key={index} name={name} photoUrl={photoUrl} size={24} ring />
                                                             );
                                                         })}
                                                     </div>
@@ -1084,8 +1177,9 @@ function TaskCard({
                                             <span className="text-xs font-medium px-4 py-3 w-32 flex-shrink-0 border-r self-stretch flex items-start pt-3" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>Assignees</span>
                                             <div className="flex-1 px-3 py-2.5 flex flex-wrap gap-1.5">
                                                 {task.assignees.map((a: any) => {
-                                                    const uid = a._id || a.id;
+                                                    const uid = getEntityId(a);
                                                     const name = a.name || 'User';
+                                                    const aPhoto = (a as any).profilePhoto || null;
                                                     const sel = subEditAssignees.includes(uid);
                                                     return (
                                                         <button
@@ -1099,9 +1193,7 @@ function TaskCard({
                                                                 color: sel ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                                                             }}
                                                         >
-                                                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ backgroundColor: sel ? 'var(--color-primary)' : 'var(--color-text-muted)', color: 'white' }}>
-                                                                {name.charAt(0)}
-                                                            </span>
+                                                            <UserAvatar name={name} photoUrl={aPhoto} size={16} selected={sel} />
                                                             {name}
                                                             {sel && <CheckCircle2 size={10} style={{ color: 'var(--color-primary)' }} />}
                                                         </button>
@@ -1218,8 +1310,7 @@ function StatusDropdown({
 
     // ── Assignee gate
     const isAssignee = task.assignees.some((a) => {
-        const uid = typeof a === 'object' ? ((a as any)._id || (a as any).id) : a;
-        return uid === currentUserId;
+        return getEntityId(a) === currentUserId;
     });
     const canInteract = (isAssignee || canManage) && !isAutoManaged;
 
@@ -1241,18 +1332,12 @@ function StatusDropdown({
 
     // Current user's active timer (if any)
     const activeTimer = task.activeTimers?.find((t) => {
-        const uid = typeof t.userId === 'object'
-            ? (t.userId as any)._id || (t.userId as any).id
-            : t.userId;
-        return uid === currentUserId;
+        return getEntityId(t.userId) === currentUserId;
     });
 
     // Previously accumulated seconds for the current user
     const accEntry = task.accumulatedSeconds?.find((a) => {
-        const uid = typeof a.userId === 'object'
-            ? (a.userId as any)._id || (a.userId as any).id
-            : a.userId;
-        return uid === currentUserId;
+        return getEntityId(a.userId) === currentUserId;
     });
     const baseSeconds = accEntry?.seconds ?? 0;
 
@@ -1507,11 +1592,10 @@ function BoardColumn({
                                             : typeof assignee === 'object' && 'userId' in assignee
                                                 ? (typeof (assignee as any).userId === 'object' ? (assignee as any).userId.name : 'User')
                                                 : 'User';
+                                        const photoUrl = (assignee as any).profilePhoto || null;
                                         return (
                                             <div key={i} className="flex items-center gap-1 pr-1.5 bg-black/5 rounded-full shrink-0">
-                                                <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium text-blue-700 shrink-0">
-                                                    {name.charAt(0)}
-                                                </div>
+                                                <UserAvatar name={name} photoUrl={photoUrl} size={20} />
                                                 <span className="text-[10px] font-medium truncate max-w-[60px]" style={{ color: 'var(--color-text-secondary)' }} title={name}>
                                                     {name}
                                                 </span>
@@ -1573,10 +1657,9 @@ function BoardColumn({
                                     <div className="flex items-center gap-1 mt-1.5">
                                         {sub.assignees.slice(0, 3).map((a: any, i: number) => {
                                             const name = a?.name || 'U';
+                                            const photoUrl = (a as any)?.profilePhoto || null;
                                             return (
-                                                <div key={i} className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-700" title={name}>
-                                                    {name.charAt(0)}
-                                                </div>
+                                                <UserAvatar key={i} name={name} photoUrl={photoUrl} size={16} />
                                             );
                                         })}
                                     </div>

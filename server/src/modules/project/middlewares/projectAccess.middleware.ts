@@ -7,6 +7,17 @@ import { Credential } from '../models/Credential.model';
 import { Meeting } from '../models/Meeting.model';
 import { Employee } from '../../hrms/models/Employee.model';
 
+const normalizeRole = (role: any): string => {
+    if (typeof role === 'string') return role.toLowerCase();
+    if (role && typeof role === 'object') return String(role.name || '').toLowerCase();
+    return '';
+};
+
+const isAdminRole = (role: any): boolean => {
+    const normalized = normalizeRole(role);
+    return ['super-admin', 'super_admin', 'admin'].includes(normalized);
+};
+
 /**
  * Check if user has access to a project
  * User must be in project.assignees array OR be an admin
@@ -35,7 +46,7 @@ export const checkProjectAccess = async (
         }
 
         // Check if user is super-admin
-        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
+        if (isAdminRole(req.user?.role)) {
             return next();
         }
 
@@ -97,7 +108,7 @@ export const checkProjectManager = async (
         }
 
         // Check if user is super-admin
-        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
+        if (isAdminRole(req.user?.role)) {
             return next();
         }
 
@@ -133,8 +144,9 @@ export const checkProjectManager = async (
 };
 
 /**
- * Check if user has access to a task
- * User must be task assignee OR project manager OR admin
+ * Check if user has access to a task.
+ * Any project member can edit/update tasks (view or modify metadata, assignees, etc.).
+ * Deletion is separately guarded by checkProjectManager.
  */
 export const checkTaskAccess = async (
     req: Request,
@@ -160,30 +172,20 @@ export const checkTaskAccess = async (
         }
 
         // Check if user is admin
-        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
+        if (isAdminRole(req.user?.role)) {
             return next();
         }
 
-        // Check if user is task assignee.
-        // task.assignees stores User ObjectIds (ref: 'User'), so compare directly
-        // against the authenticated userId — NOT against an Employee._id.
-        const isAssignee = task.assignees.some(
-            (assigneeId) => assigneeId.toString() === userId
-        );
-
-        if (isAssignee) {
-            return next();
-        }
-
-        // Check if user is project manager
+        // Allow any project member to edit tasks (not just assignees/managers).
+        // Deletion is separately protected by checkProjectManager.
         const employee = await Employee.findOne({ userId });
         if (employee) {
             const project = await Project.findById(task.projectId);
             if (project) {
-                const assignee = project.assignees.find(
+                const isProjectMember = project.assignees.some(
                     (a) => a.employeeId.toString() === employee._id.toString()
                 );
-                if (assignee && assignee.role === 'manager') {
+                if (isProjectMember) {
                     return next();
                 }
             }
@@ -194,6 +196,7 @@ export const checkTaskAccess = async (
         next(error);
     }
 };
+
 
 /**
  * Check if user has access to a credential.

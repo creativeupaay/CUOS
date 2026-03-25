@@ -123,22 +123,26 @@ httpServer.listen(PORT, () => {
   console.log(`Socket.io ready for real-time collaboration`);
 });
 
-// Graceful shutdown - save all notes before exit
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, saving all notes...');
-  await otService.saveAllNotes();
-  httpServer.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+// Graceful shutdown - close ports early, save files safely, then exit
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n${signal} received, tearing down server connections...`);
+  
+  // Release the port listener immediately so rapid nodemon restarts do not crash with EADDRINUSE
+  httpServer.close();
+  if (io) io.close();
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, saving all notes...');
-  await otService.saveAllNotes();
-  httpServer.close(() => {
-    console.log('Server closed');
+  try {
+    console.log('Saving all pending OT blocks to database...');
+    await otService.saveAllNotes();
+    console.log('Shutdown saving complete.');
+  } catch (err) {
+    console.error('Error during shutdown note saving:', err);
+  } finally {
     process.exit(0);
-  });
-});
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.once('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // Nodemon explicit handling
 

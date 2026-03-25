@@ -57,9 +57,47 @@ function uid(): string {
     return Math.random().toString(36).slice(2, 11);
 }
 
-/** Strip HTML tags — used for plain-text presence check in card preview */
 function stripHtml(html: string): string {
     return (html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
+}
+
+/** Parses raw URLs from an HTML string and safely links them without breaking existing HTML tags */
+function linkifyHtml(html: string): string {
+    if (!html) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const urlRegex = /(https?:\/\/[^\s\u00A0<]+)/g;
+    const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+    const nodes: Text[] = [];
+    let node;
+    while ((node = walker.nextNode() as Text)) {
+        if (!node.parentElement?.closest('a')) nodes.push(node);
+    }
+    
+    let changed = false;
+    nodes.forEach(txtNode => {
+        const text = txtNode.nodeValue || '';
+        if (urlRegex.test(text)) {
+            changed = true;
+            const fragment = doc.createDocumentFragment();
+            let lastIdx = 0;
+            text.replace(urlRegex, (match, url, offset) => {
+                fragment.appendChild(doc.createTextNode(text.slice(lastIdx, offset)));
+                const a = doc.createElement('a');
+                a.href = url;
+                a.target = '_blank';
+                a.className = 'text-blue-500 hover:underline cursor-pointer';
+                a.innerText = url;
+                fragment.appendChild(a);
+                lastIdx = offset + match.length;
+                return match;
+            });
+            fragment.appendChild(doc.createTextNode(text.slice(lastIdx)));
+            txtNode.parentNode?.replaceChild(fragment, txtNode);
+        }
+    });
+    
+    return changed ? doc.body.innerHTML : html;
 }
 
 // ── Block types ───────────────────────────────────────────────────────────────
@@ -228,6 +266,35 @@ const TextBlock = forwardRef<TextBlockHandle, TextBlockProps>(function TextBlock
         setFormats(detectFormat());
     };
 
+    const handleBlur = () => {
+        if (!divRef.current) return;
+        const html = divRef.current.innerHTML;
+        const linkified = linkifyHtml(html);
+        if (html !== linkified) {
+            divRef.current.innerHTML = linkified;
+            onChange(block.id, linkified);
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        if (!text) return;
+        let htmlToInsert = linkifyHtml(text);
+        htmlToInsert = htmlToInsert.replace(/\n/g, '<br>');
+        document.execCommand('insertHTML', false, htmlToInsert);
+        handleInput();
+    };
+
+    const handleClick = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const anchor = target.closest('a');
+        if (anchor && anchor.href) {
+            e.preventDefault();
+            window.open(anchor.href, '_blank', 'noopener,noreferrer');
+        }
+    };
+
     const FORMATS: { cmd: string; label: string; title: string; style: React.CSSProperties }[] = [
         { cmd: 'bold', label: 'B', title: 'Bold (Ctrl+B)', style: { fontWeight: 700 } },
         { cmd: 'italic', label: 'I', title: 'Italic (Ctrl+I)', style: { fontStyle: 'italic' } },
@@ -279,6 +346,9 @@ const TextBlock = forwardRef<TextBlockHandle, TextBlockProps>(function TextBlock
                     onMouseUp={syncFormats}
                     onSelect={syncFormats}
                     onFocus={() => { syncFormats(); onFocused(block.id); }}
+                    onBlur={handleBlur}
+                    onPaste={handlePaste}
+                    onClick={handleClick}
                     className="w-full text-sm outline-none leading-relaxed py-0.5"
                     style={{ minHeight: '24px', color: 'var(--color-text-primary)', wordBreak: 'break-word' }}
                 />
@@ -307,31 +377,97 @@ const ChecklistBlock = forwardRef<ChecklistBlockHandle, ChecklistBlockProps>(fun
     { block, onChange, onInsertAfter, onDelete, onFocusPrev, onFocusNext, onFocused, onConvertToText },
     ref
 ) {
-    const inputRef = useRef<HTMLInputElement>(null);
+    const divRef = useRef<HTMLDivElement>(null);
     const item: ChecklistItemData = block.items?.[0] ?? { id: uid(), text: '', checked: false };
+    const [isEmpty, setIsEmpty] = useState(!item.text);
 
     useImperativeHandle(ref, () => ({
-        focus: () => inputRef.current?.focus(),
-        focusAtStart: () => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(0, 0); },
+        focus: () => {
+            if (!divRef.current) return;
+            divRef.current.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(divRef.current);
+            range.collapse(false);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        },
+        focusAtStart: () => {
+            if (!divRef.current) return;
+            divRef.current.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.setStart(divRef.current, 0);
+            range.collapse(true);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        },
     }));
+
+    useEffect(() => {
+        if (!divRef.current) return;
+        const next = item.text || '';
+        if (divRef.current.innerHTML !== next) {
+            divRef.current.innerHTML = next;
+            setIsEmpty(!next || next === '<br>');
+        }
+    }, [item.text]);
 
     const updateItem = (patch: Partial<ChecklistItemData>) => {
         onChange(block.id, { items: [{ ...item, ...patch }] });
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleInput = () => {
+        const html = divRef.current?.innerHTML || '';
+        const effective = html === '<br>' || html === '' ? '' : html;
+        setIsEmpty(!effective);
+        updateItem({ text: effective });
+    };
+
+    const handleBlur = () => {
+        if (!divRef.current) return;
+        const html = divRef.current.innerHTML;
+        const linkified = linkifyHtml(html);
+        if (html !== linkified) {
+            divRef.current.innerHTML = linkified;
+            updateItem({ text: linkified });
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        if (!text) return;
+        let htmlToInsert = linkifyHtml(text);
+        htmlToInsert = htmlToInsert.replace(/\n/g, '<br>');
+        document.execCommand('insertHTML', false, htmlToInsert);
+        handleInput();
+    };
+
+    const handleClick = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const anchor = target.closest('a');
+        if (anchor && anchor.href) {
+            e.preventDefault();
+            window.open(anchor.href, '_blank', 'noopener,noreferrer');
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (!item.text) {
-                // Empty checklist item — convert it to a text block in-place
+            if (!divRef.current?.innerText.trim()) {
                 onConvertToText(block.id);
             } else {
                 onInsertAfter(block.id, 'checklist');
             }
-        } else if (e.key === 'Backspace' && !item.text) {
-            e.preventDefault();
-            onDelete(block.id);
-            onFocusPrev(block.id);
+        } else if (e.key === 'Backspace') {
+            const html = divRef.current?.innerHTML || '';
+            if (!html || html === '<br>' || stripHtml(html).trim() === '') {
+                e.preventDefault();
+                onDelete(block.id);
+                onFocusPrev(block.id);
+            }
         } else if (e.key === 'ArrowDown') {
             onFocusNext(block.id);
         } else if (e.key === 'ArrowUp') {
@@ -340,28 +476,42 @@ const ChecklistBlock = forwardRef<ChecklistBlockHandle, ChecklistBlockProps>(fun
     };
 
     return (
-        <div className="flex items-center gap-2 py-0.5">
+        <div className="flex items-start gap-2 py-0.5">
             <input
                 type="checkbox"
                 checked={item.checked}
                 onChange={e => updateItem({ checked: e.target.checked })}
-                className="w-3.5 h-3.5 rounded flex-shrink-0 cursor-pointer accent-indigo-500"
+                className="w-3.5 h-3.5 rounded flex-shrink-0 cursor-pointer accent-indigo-500 mt-1"
             />
-            <input
-                ref={inputRef}
-                type="text"
-                value={item.text}
-                onChange={e => updateItem({ text: e.target.value })}
-                onKeyDown={handleKeyDown}
-                onFocus={() => onFocused(block.id)}
-                placeholder="List item…"
-                className="flex-1 text-sm bg-transparent outline-none border-b border-transparent focus:border-gray-300 pb-0.5 transition-colors"
-                style={{
-                    color: 'var(--color-text-primary)',
-                    textDecoration: item.checked ? 'line-through' : 'none',
-                    opacity: item.checked ? 0.55 : 1,
-                }}
-            />
+            <div className="relative flex-1">
+                {isEmpty && (
+                    <span
+                        className="absolute top-0 left-0 text-sm pointer-events-none select-none opacity-40"
+                        style={{ color: 'var(--color-text-secondary)', paddingTop: '2px' }}
+                    >
+                        List item…
+                    </span>
+                )}
+                <div
+                    ref={divRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={handleInput}
+                    onKeyDown={handleKeyDown}
+                    onFocus={() => onFocused(block.id)}
+                    onBlur={handleBlur}
+                    onPaste={handlePaste}
+                    onClick={handleClick}
+                    className="w-full text-sm outline-none border-b border-transparent focus:border-gray-300 pb-0.5 transition-colors leading-relaxed"
+                    style={{
+                        color: 'var(--color-text-primary)',
+                        textDecoration: item.checked ? 'line-through' : 'none',
+                        opacity: item.checked ? 0.55 : 1,
+                        minHeight: '24px',
+                        wordBreak: 'break-word',
+                    }}
+                />
+            </div>
         </div>
     );
 });
@@ -454,22 +604,39 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     const [createNote] = useCreateNoteMutation();
     const [updateNote] = useUpdateNoteMutation();
 
-    const [title, setTitle] = useState(editingNote?.title || '');
-    const [color, setColor] = useState(editingNote?.color || '#FFFFFF');
-    const [isPinned, setIsPinned] = useState(editingNote?.isPinned || false);
-    const [blocks, setBlocks] = useState<FormBlock[]>(() =>
-        editingNote?.blocks && editingNote.blocks.length > 0
+    // ── Offline sync helpers ──
+    const [tempId] = useState(() => editingNote?._id ? null : `temp_${uid()}`);
+    const OFFLINE_CACHE_KEY = `cuos_note_offline_${editingNote?._id || tempId}`;
+
+    const cachedRef = useRef<{ title: string, color: string, isPinned: boolean, blocks: FormBlock[] } | null>(null);
+    if (!cachedRef.current && typeof window !== 'undefined') {
+        try {
+            const cached = localStorage.getItem(OFFLINE_CACHE_KEY);
+            if (cached) cachedRef.current = JSON.parse(cached);
+        } catch (e) {
+            console.error('Failed to parse offline cache', e);
+        }
+    }
+    const cachedData = cachedRef.current;
+
+    const [title, setTitle] = useState(cachedData?.title ?? (editingNote?.title || ''));
+    const [color, setColor] = useState(cachedData?.color ?? (editingNote?.color || '#FFFFFF'));
+    const [isPinned, setIsPinned] = useState(cachedData?.isPinned ?? (editingNote?.isPinned || false));
+    const [blocks, setBlocks] = useState<FormBlock[]>(() => {
+        if (cachedData?.blocks && cachedData.blocks.length > 0) return cachedData.blocks;
+        return editingNote?.blocks && editingNote.blocks.length > 0
             ? flattenBlocks(editingNote.blocks as NoteBlock[])
-            : [emptyTextBlock()]
-    );
+            : [emptyTextBlock()];
+    });
+
     const [noteId, setNoteId] = useState<string | null>(editingNote?._id || null);
-    const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+    const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>(cachedData ? 'saving' : 'saved');
     const [isSyncing, setIsSyncing] = useState(false);
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const currentUserId = currentUser?._id;
 
     // Guard against stale remote room-state replacing local unsaved edits.
-    const hasLocalPendingChangesRef = useRef(false);
+    const hasLocalPendingChangesRef = useRef(!!cachedData);
 
     // ── Real-time collaboration handlers ──────────────────────────────────────
     const handleRemoteUpdate = useCallback((operation: NoteBroadcastResponse) => {
@@ -556,7 +723,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     const createResultRef = useRef<string | null>(editingNote?._id || null);
     const isSavingRef = useRef(false);
     const saveQueuedRef = useRef(false);
-    const isDirtyRef = useRef(false);
+    const isDirtyRef = useRef(!!cachedData);
     const pendingFocusRef = useRef<{ id: string; atStart?: boolean } | null>(null);
     const focusedBlockIdRef = useRef<string | null>(null);
     const blockRefs = useRef<Map<string, { focus: () => void; focusAtStart: () => void }>>(new Map());
@@ -573,6 +740,22 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
     useEffect(() => { isPinnedRef.current = isPinned; }, [isPinned]);
     useEffect(() => { blocksRef.current = blocks; }, [blocks]);
     useEffect(() => { noteIdRef.current = noteId; }, [noteId]);
+
+    // Continuously persist the dirty state to offline cache
+    useEffect(() => {
+        if (isDirtyRef.current) {
+            try {
+                localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify({
+                    title,
+                    color,
+                    isPinned,
+                    blocks
+                }));
+            } catch (e) {
+                console.error('Failed to save to offline cache', e);
+            }
+        }
+    }, [title, color, isPinned, blocks, OFFLINE_CACHE_KEY]);
 
     // Focus a newly inserted block after the state update lands
     useEffect(() => {
@@ -631,6 +814,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
                 if (!saveQueuedRef.current && !isDirtyRef.current) {
                     hasLocalPendingChangesRef.current = false;
                     setSaveStatus('saved');
+                    try { localStorage.removeItem(OFFLINE_CACHE_KEY); } catch(e) {}
                     break;
                 }
             }
@@ -662,7 +846,25 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, onClose }: NoteE
         }, 900);
     }, [handleSaveNow]);
 
+    // Auto-save on mount if we loaded cached offline data
+    useEffect(() => {
+        if (cachedData) {
+            scheduleSave();
+        }
+    }, [cachedData, scheduleSave]);
+
     useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
+
+    // Auto-sync offline edits when browser restores network
+    useEffect(() => {
+        const handleOnline = () => {
+            if (isDirtyRef.current) {
+                scheduleSave();
+            }
+        };
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, [scheduleSave]);
 
     const handleClose = useCallback(async () => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

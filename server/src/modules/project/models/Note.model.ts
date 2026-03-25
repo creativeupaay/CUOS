@@ -48,7 +48,7 @@ export interface INote extends Document {
 const ChecklistItemSchema = new Schema<IChecklistItem>(
     {
         id: { type: String, required: true },
-        text: { type: String, required: true },
+        text: { type: String, default: '' },
         checked: { type: Boolean, default: false },
     },
     { _id: false }

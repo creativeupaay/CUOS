@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const checklistItemSchema = z.object({
     id: z.string().min(1),
-    text: z.string().min(1).max(500),
+    text: z.string().max(500),
     checked: z.boolean().default(false),
 });
 

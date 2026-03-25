@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import * as taskService from '../services/task.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
+import { Employee } from '../../hrms/models/Employee.model';
+import { Project } from '../models/Project.model';
+import { Task } from '../models/Task.model';
 
 export const createTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -56,9 +59,35 @@ export const getTaskById = asyncHandler(
 export const updateTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const userId = req.user?.id!;
-        const userRole = (req.user?.role || '').toLowerCase();
-        // Super-admin, admin and project-manager roles bypass the assignee gate
-        const isAdmin = ['super-admin', 'super_admin', 'admin', 'manager'].some(r => userRole === r || userRole.includes(r));
+        const roleRaw = req.user?.role;
+        const userRole =
+            typeof roleRaw === 'string'
+                ? roleRaw.toLowerCase()
+                : typeof roleRaw === 'object' && roleRaw
+                    ? String((roleRaw as any).name || '').toLowerCase()
+                    : '';
+
+        // Only true admins or project managers bypass the assignee-only status gate.
+        // Project members can still edit metadata via checkTaskAccess, but status changes
+        // remain restricted inside the service.
+        let isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+
+        if (!isAdmin) {
+            const task = await Task.findById(req.params.taskId).select('projectId').lean();
+            if (task) {
+                const employee = await Employee.findOne({ userId }).select('_id').lean();
+                if (employee) {
+                    const project = await Project.findById(task.projectId).select('assignees').lean();
+                    const assignment = (project as any)?.assignees?.find(
+                        (a: any) => a.employeeId?.toString() === (employee as any)._id?.toString()
+                    );
+                    if (assignment?.role === 'manager') {
+                        isAdmin = true;
+                    }
+                }
+            }
+        }
+
         const task = await taskService.updateTask(req.params.taskId, { ...req.body, updatedBy: userId, isAdmin });
 
         if (!task) {
@@ -72,6 +101,7 @@ export const updateTask = asyncHandler(
         });
     }
 );
+
 
 export const deleteTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
