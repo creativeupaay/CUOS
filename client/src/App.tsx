@@ -115,7 +115,7 @@ function PartnerRestrictedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Redirects regular employees away from /hrms/* to /my-hrms/profile */
+/** Redirects regular employees away from /hrms/* to /my-hrms/attendance */
 function HrmsRedirect({ children }: { children: React.ReactNode }) {
   const user = useAppSelector((state) => state.auth.user);
   const roleName = getRoleNameFromUser(user);
@@ -126,22 +126,11 @@ function HrmsRedirect({ children }: { children: React.ReactNode }) {
 
   const isAdminOrHr = ['super-admin', 'admin', 'super_admin', 'hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
   if (!isAdminOrHr) {
-    return <Navigate to="/my-hrms/profile" replace />;
+    return <Navigate to="/my-hrms/attendance" replace />;
   }
   return <>{children}</>;
 }
 
-function SuperAdminMyHrmsDataRoute({ children }: { children: React.ReactNode }) {
-  const user = useAppSelector((state) => state.auth.user);
-  const roleName = getRoleNameFromUser(user);
-  const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
-
-  if (!isSuperAdmin) {
-    return <Navigate to="/my-hrms/profile" replace />;
-  }
-
-  return <>{children}</>;
-}
 
 function App() {
   const dispatch = useAppDispatch();
@@ -254,13 +243,13 @@ function App() {
           <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
           <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
 
-          {/* Employee HRMS Module */}
+          {/* Employee HRMS Module - All employees can access their own data */}
           <Route path="/my-hrms/profile" element={loadable(<MyProfilePage />)} />
           <Route path="/my-hrms/change-password" element={loadable(<MyProfileChangePasswordPage />)} />
-          <Route path="/my-hrms/attendance" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeAttendancePage />)}</SuperAdminMyHrmsDataRoute>} />
-          <Route path="/my-hrms/leaves" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeLeavesPage />)}</SuperAdminMyHrmsDataRoute>} />
-          <Route path="/my-hrms/holidays" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeeHolidaysPage />)}</SuperAdminMyHrmsDataRoute>} />
-          <Route path="/my-hrms/payroll" element={<SuperAdminMyHrmsDataRoute>{loadable(<EmployeePayrollPage />)}</SuperAdminMyHrmsDataRoute>} />
+          <Route path="/my-hrms/attendance" element={loadable(<EmployeeAttendancePage />)} />
+          <Route path="/my-hrms/leaves" element={loadable(<EmployeeLeavesPage />)} />
+          <Route path="/my-hrms/holidays" element={loadable(<EmployeeHolidaysPage />)} />
+          <Route path="/my-hrms/payroll" element={loadable(<EmployeePayrollPage />)} />
 
           {/* Admin Module */}
           <Route path="/admin" element={<PartnerRestrictedRoute>{loadable(<AdminDashboardPage />)}</PartnerRestrictedRoute>} />

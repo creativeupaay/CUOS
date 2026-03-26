@@ -74,13 +74,9 @@ function getModuleConfig(
     }
     if (pathname.startsWith('/hrms') && !pathname.startsWith('/my-hrms')) {
         if (!isAdmin && !isHrAdmin) {
-            return {
-                title: 'My HRMS',
-                items: [
-                    { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
-                    { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
-                ],
-            };
+            // Regular employees shouldn't access /hrms - they'll be redirected by HrmsRedirect
+            // Return null to hide sidebar during redirect
+            return null;
         }
         const hrmsSubs = mp?.hrms?.subModules;
         const allItems = [
@@ -96,16 +92,43 @@ function getModuleConfig(
     if (pathname.startsWith('/my-hrms')) {
         const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
 
+        // Check if accessing settings pages (profile or change-password)
+        const isSettingsPath = pathname === '/my-hrms/profile' || pathname === '/my-hrms/change-password';
+
+        // Check if accessing HRMS data pages (attendance, leaves, holidays, payroll)
+        const isHrmsDataPath = pathname.startsWith('/my-hrms/attendance') ||
+                               pathname.startsWith('/my-hrms/leaves') ||
+                               pathname.startsWith('/my-hrms/holidays') ||
+                               pathname.startsWith('/my-hrms/payroll');
+
+        // For regular employees
         if (!isSuperAdmin) {
-            return {
-                title: 'My HRMS',
-                items: [
-                    { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
-                    { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
-                ],
-            };
+            // If on settings pages, show only settings options
+            if (isSettingsPath) {
+                return {
+                    title: 'Settings',
+                    items: [
+                        { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
+                        { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
+                    ],
+                };
+            }
+
+            // If on HRMS data pages, show only HRMS options
+            if (isHrmsDataPath) {
+                return {
+                    title: 'My HRMS',
+                    items: [
+                        { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
+                        { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
+                        { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
+                        { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+                    ],
+                };
+            }
         }
 
+        // For Super Admin - show all options always
         return {
             title: 'My HRMS',
             items: [
