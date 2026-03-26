@@ -18,7 +18,12 @@ export class ClientService {
             return;
         }
 
-        if (!client.partnerId || client.partnerId.toString() !== requesterPartnerId) {
+        // Handle both populated and non-populated partnerId
+        const clientPartnerId = client.partnerId
+            ? (client.partnerId as any)._id?.toString() || client.partnerId.toString()
+            : null;
+
+        if (!clientPartnerId || clientPartnerId !== requesterPartnerId) {
             throw new AppError('You do not have access to this client', 403);
         }
     }
@@ -29,7 +34,8 @@ export class ClientService {
      */
     async createClient(
         data: CreateClientInput & { partnerId?: string },
-        createdBy: Types.ObjectId
+        createdBy: Types.ObjectId,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
     ): Promise<IClient> {
         const { sendOnboardingForm, leadId, partnerId, ...clientData } = data as any;
 
@@ -87,7 +93,7 @@ export class ClientService {
             await this.issueOnboardingToken(client._id.toString(), client.email, client.name);
         }
 
-        return this.getClientById(client._id.toString());
+        return this.getClientById(client._id.toString(), context);
     }
 
     /**
@@ -256,11 +262,23 @@ export class ClientService {
     /**
      * Add activity to client
      */
-    async addActivity(clientId: string, data: AddClientActivityInput, createdBy: Types.ObjectId): Promise<IClient> {
+    async addActivity(
+        clientId: string,
+        data: AddClientActivityInput,
+        createdBy: Types.ObjectId,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
+    ): Promise<IClient> {
         const client = await Client.findById(clientId);
 
         if (!client) {
             throw new AppError('Client not found', 404);
+        }
+
+        // Check access permissions
+        this.assertPartnerClientAccess(client, context?.requesterPartnerId);
+
+        if (!context?.requesterPartnerId && !this.isAdminRole(context?.requesterRole) && client.partnerId) {
+            throw new AppError('You do not have access to this client', 403);
         }
 
         if (!client.activities) {
@@ -275,7 +293,7 @@ export class ClientService {
 
         await client.save();
 
-        return this.getClientById(clientId);
+        return this.getClientById(clientId, context);
     }
 
     // ================================================================

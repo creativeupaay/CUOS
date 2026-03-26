@@ -9,6 +9,11 @@ export interface User {
     lastLogin?: string;
     createdAt: string;
     updatedAt: string;
+    // Partner-specific fields (populated during partner login)
+    partnerSlug?: string;
+    companyName?: string;
+    companyLogo?: string;
+    isPartnerEmployee?: boolean;
     modulePermissions?: {
         projectManagement?: {
             enabled: boolean;

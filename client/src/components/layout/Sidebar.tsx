@@ -151,6 +151,16 @@ function getModuleConfig(
         ];
         return { title: 'Hiring', items: isAdmin ? allItems : allItems };
     }
+    // Partner Admin Module (for partners to manage their team)
+    if (pathname.startsWith('/partner-admin')) {
+        if (!isPartner) return null; // Only partners can access this module
+        return {
+            title: 'Team Management',
+            items: [
+                { label: 'Team Members', path: '/partner-admin/team', icon: <Users2 size={18} />, matchPrefix: '/partner-admin/team' },
+            ],
+        };
+    }
     return null;
 }
 
@@ -314,17 +324,37 @@ export default function Sidebar({
 
     const handleLogout = async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
+
+        // Determine logout redirect based on user role and partner status
+        const isPartner = roleName === 'partner';
+        const partnerSlug = (user as any)?.partnerSlug;
+        const logoutPath = isPartner && partnerSlug
+            ? `/partner/${partnerSlug}/login`
+            : isPartner
+                ? '/partner/login'
+                : '/login';
+
         dispatch(logout());
         dispatch(api.util.resetApiState());
-        navigate('/login');
+        navigate(logoutPath);
     };
 
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
         : '';
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName);
+    const isPartner = roleName === 'partner';
     const isHrAdmin = isAdmin || ['hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
     const displayRole = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : String(user.role)) : 'User';
+
+    // Partner branding
+    const partnerCompanyName = (user as any)?.companyName;
+    const partnerCompanyLogo = (user as any)?.companyLogo;
+    const brandName = isPartner && partnerCompanyName ? partnerCompanyName : 'CUOS';
+    const brandSubtitle = isPartner && partnerCompanyName ? 'Partner Portal' : 'Creative Upaay';
+    const brandInitials = isPartner && partnerCompanyName
+        ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+        : 'CU';
 
     const { data: employeeProfile } = useGetMyProfileQuery();
     const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
@@ -351,16 +381,29 @@ export default function Sidebar({
             {/* ── Brand ─────────────────────────────────────────────── */}
             <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                 <div className="flex items-center gap-2.5 mb-4">
-                    <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
-                        style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
-                    >
-                        CU
-                    </div>
-                    <div>
-                        <div className="font-bold text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>CUOS</div>
-                        <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Creative Upaay</div>
-                    </div>
+                    {isPartner && partnerCompanyLogo ? (
+                        <img
+                            src={partnerCompanyLogo}
+                            alt={partnerCompanyName || 'Company Logo'}
+                            className="h-8 max-w-[120px] object-contain"
+                        />
+                    ) : (
+                        <>
+                            <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
+                                style={{
+                                    background: isPartner ? 'linear-gradient(135deg, #6366F1, #8B5CF6)' : 'linear-gradient(135deg,#059669,#0EA5E9)',
+                                    boxShadow: 'var(--shadow-brand)'
+                                }}
+                            >
+                                {brandInitials}
+                            </div>
+                            <div>
+                                <div className="font-bold text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
+                                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Back + Module name */}
@@ -423,7 +466,11 @@ export default function Sidebar({
                         ) : (
                             <div
                                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                style={{ background: 'linear-gradient(135deg,#059669,#0369a1)' }}
+                                style={{
+                                    background: isPartner
+                                        ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
+                                        : 'linear-gradient(135deg,#059669,#0369a1)'
+                                }}
                             >
                                 {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                             </div>

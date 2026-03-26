@@ -8,6 +8,7 @@ const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout')
 const ClientPortalLayout = lazy(() => import('./components/layout/ClientPortalLayout'));
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const PartnerLoginPage = lazy(() => import('./pages/PartnerLoginPage'));
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
 const ClientPortalAccessPage = lazy(() => import('./pages/ClientPortalAccessPage'));
 const ClientPortalProjectsPage = lazy(() => import('./pages/ClientPortalProjectsPage'));
@@ -61,6 +62,9 @@ const PartnersPage = lazy(() => import('./pages/PartnersPage'));
 const PartnerFormPage = lazy(() => import('./pages/PartnerFormPage'));
 const PartnerDetailPage = lazy(() => import('./pages/PartnerDetailPage'));
 const PartnerRegistrationPage = lazy(() => import('./pages/PartnerRegistrationPage'));
+const PartnerEmployeesPage = lazy(() => import('./pages/PartnerEmployeesPage'));
+const PartnerOnboardingPage = lazy(() => import('./pages/PartnerOnboardingPage'));
+const PersonalizedPartnerLoginPage = lazy(() => import('./pages/PersonalizedPartnerLoginPage'));
 const HiringJobsPage = lazy(() => import('./pages/HiringJobsPage'));
 const HiringJobFormPage = lazy(() => import('./pages/HiringJobFormPage'));
 const HiringApplicationsPage = lazy(() => import('./pages/HiringApplicationsPage'));
@@ -161,13 +165,25 @@ function App() {
           path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<LoginPage />)}
         />
+        {/* Old partner login route - redirect to dashboard if authenticated */}
+        <Route
+          path="/partner/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<PartnerLoginPage />)}
+        />
+        {/* Personalized partner login with slug */}
+        <Route
+          path="/partner/:slug/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<PersonalizedPartnerLoginPage />)}
+        />
 
         {/* Employee self-onboarding form — public, no login required */}
         <Route path="/employee-form/:token" element={loadable(<EmployeeOnboardingFormPage />)} />
         {/* Client onboarding form — public, no login required */}
         <Route path="/onboarding/:token" element={loadable(<ClientOnboardingPage />)} />
-        {/* Partner registration form — public, no login required */}
+        {/* Partner registration form — public, no login required (legacy) */}
         <Route path="/partner-form/:token" element={loadable(<PartnerRegistrationPage />)} />
+        {/* Partner onboarding form — new flow with password setup */}
+        <Route path="/partner/onboarding/:token" element={loadable(<PartnerOnboardingPage />)} />
         {/* Public candidate application form */}
         <Route path="/apply/:jobId" element={loadable(<PublicJobApplyPage />)} />
         <Route path="/assignment/:applicationId" element={loadable(<PublicAssignmentSubmissionPage />)} />
@@ -256,6 +272,10 @@ function App() {
           <Route path="/admin/partners/new" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
           <Route path="/admin/partners/:id" element={<PartnerRestrictedRoute>{loadable(<PartnerDetailPage />)}</PartnerRestrictedRoute>} />
           <Route path="/admin/partners/:id/edit" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
+
+          {/* Partner Admin Module (for Partners to manage their own team) */}
+          <Route path="/partner-admin" element={<Navigate to="/partner-admin/team" replace />} />
+          <Route path="/partner-admin/team" element={loadable(<PartnerEmployeesPage />)} />
 
           {/* Hiring Module */}
           <Route path="/hiring" element={<PartnerRestrictedRoute><Navigate to="/hiring/jobs" replace /></PartnerRestrictedRoute>} />

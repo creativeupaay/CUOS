@@ -14,6 +14,13 @@ router.post(
     authController.login
 );
 
+// Personalized partner login - requires partner slug
+router.post(
+    '/partner/:slug/login',
+    validateRequest(authValidators.partnerLoginSchema),
+    authController.partnerLogin
+);
+
 router.post(
     '/refresh',
     validateRequest(authValidators.refreshTokenSchema),

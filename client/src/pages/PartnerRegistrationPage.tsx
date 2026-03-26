@@ -2,25 +2,30 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, User } from 'lucide-react';
 import {
-    useGetPartnerRegistrationByTokenQuery,
-    useSubmitPartnerRegistrationMutation,
+    useGetPartnerOnboardingByTokenQuery,
+    useSubmitPartnerOnboardingMutation,
 } from '@/features/partners/partnersApi';
 
 export default function PartnerRegistrationPage() {
     const { token } = useParams<{ token: string }>();
 
-    const { data, isLoading, isError, error } = useGetPartnerRegistrationByTokenQuery(token || '', {
+    const { data, isLoading, isError, error } = useGetPartnerOnboardingByTokenQuery(token || '', {
         skip: !token,
     });
 
-    const [submitPartnerRegistration, { isLoading: isSubmitting }] = useSubmitPartnerRegistrationMutation();
+    const [submitPartnerOnboarding, { isLoading: isSubmitting }] = useSubmitPartnerOnboardingMutation();
 
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [form, setForm] = useState({
-        companyName: '',
-        contactPerson: '',
+        name: '', // Added to match payload
         phone: '',
+        photo: '', // Added to match payload
+        companyName: '',
+        companyLogo: '', // Added to match payload
+        contactPersonName: '', // Renamed from contactPerson
+        contactPersonPhone: '', // Added to match payload
+        websiteLink: '', // Added to match payload
         address: {
             street: '',
             city: '',
@@ -28,6 +33,8 @@ export default function PartnerRegistrationPage() {
             country: '',
             postalCode: '',
         },
+        password: '', // Added to match payload
+        confirmPassword: '', // Added to match payload
     });
 
     const registration = data?.data;
@@ -39,7 +46,7 @@ export default function PartnerRegistrationPage() {
         setSubmitError('');
 
         try {
-            await submitPartnerRegistration({ token, data: form }).unwrap();
+            await submitPartnerOnboarding({ token, data: { ...form, name: registration?.name || '' } }).unwrap();
             setSubmitted(true);
         } catch (err: any) {
             setSubmitError(err?.data?.message || 'Failed to submit registration form');
@@ -128,8 +135,8 @@ export default function PartnerRegistrationPage() {
                         <div>
                             <label className="block text-sm font-medium mb-1">Contact Person</label>
                             <input
-                                value={form.contactPerson}
-                                onChange={(e) => setForm((prev) => ({ ...prev, contactPerson: e.target.value }))}
+                                value={form.contactPersonName}
+                                onChange={(e) => setForm((prev) => ({ ...prev, contactPersonName: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                             />
                         </div>

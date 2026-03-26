@@ -41,6 +41,8 @@ const ROUTE_TITLES: Record<string, string> = {
     '/admin/permissions': 'Permissions',
     '/admin/settings': 'Settings',
     '/admin/audit-logs': 'Audit Logs',
+    '/partner-admin': 'Team Management',
+    '/partner-admin/team': 'Team Members',
     '/hiring/assignments': 'Assignment',
 };
 
@@ -97,6 +99,14 @@ export default function DashboardLayout() {
     const { data: profileData } = useGetMyProfileQuery();
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
+    // Check if user is a partner
+    const roleName = user?.role
+        ? typeof user.role === 'object'
+            ? (user.role as any).name?.toLowerCase()
+            : String(user.role).toLowerCase()
+        : '';
+    const isPartner = roleName === 'partner';
+
     useEffect(() => {
         setMobileSidebarOpen(false);
     }, [location.pathname]);
@@ -104,7 +114,11 @@ export default function DashboardLayout() {
     return (
         <div
             className="min-h-screen"
-            style={{ backgroundColor: 'var(--color-bg-app)' }}
+            style={{
+                background: isPartner
+                    ? 'linear-gradient(to bottom right, #EEF2FF, #FEFEFE, #F3E8FF)'
+                    : 'var(--color-bg-app)'
+            }}
         >
             <div className="hidden lg:block">
                 <Sidebar />
@@ -194,7 +208,12 @@ export default function DashboardLayout() {
                             ) : (
                                 <div
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                    style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
+                                    style={{
+                                        background: isPartner
+                                            ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
+                                            : 'linear-gradient(135deg, #059669, #0EA5E9)',
+                                        boxShadow: 'var(--shadow-brand)'
+                                    }}
                                 >
                                     {initials}
                                 </div>

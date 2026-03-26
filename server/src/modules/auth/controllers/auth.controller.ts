@@ -44,6 +44,37 @@ export const login = asyncHandler(
     }
 );
 
+export const partnerLogin = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { slug } = req.params;
+        const { user, accessToken, refreshToken } = await authService.partnerLogin(req.body, slug);
+
+        // Set refresh token in HTTP-only cookie
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        // Set access token in HTTP-only cookie
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 8 * 60 * 60 * 1000, // 8 hours
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Login successful',
+            data: {
+                user,
+            },
+        });
+    }
+);
+
 export const refreshToken = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         // Get refresh token from cookie or body

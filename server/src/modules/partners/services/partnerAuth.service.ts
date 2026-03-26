@@ -1,11 +1,17 @@
 import { Partner, IPartner } from '../models/Partner.model';
 import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
+import { Types } from 'mongoose';
 
-export interface PartnerRegistrationInput {
-    companyName?: string;
-    contactPerson?: string;
-    phone?: string;
+export interface PartnerOnboardingInput {
+    name: string;
+    phone: string;
+    photo?: string;
+    companyName: string;
+    companyLogo?: string;
+    contactPersonName: string;
+    contactPersonPhone: string;
+    websiteLink?: string;
     address?: {
         street?: string;
         city?: string;
@@ -13,18 +19,60 @@ export interface PartnerRegistrationInput {
         country?: string;
         postalCode?: string;
     };
+    password: string;
+    confirmPassword: string;
 }
 
 export class PartnerAuthService {
+    /**
+     * Ensure partner role exists
+     */
+    private async ensurePartnerRole() {
+        const { Role } = await import('../../auth/models/Role.model');
+
+        let partnerRole = await Role.findOne({ name: /^partner$/i });
+        if (partnerRole) {
+            return partnerRole;
+        }
+
+        const { Permission } = await import('../../auth/models/Permission.model');
+        const permissions = await Permission.find({
+            $or: [
+                { resource: 'crm', action: { $in: ['create', 'read', 'update'] } },
+                { resource: 'projects', action: { $in: ['create', 'read', 'update'] } },
+            ],
+        }).select('_id');
+
+        try {
+            partnerRole = await Role.create({
+                name: 'partner',
+                description: 'External partner with limited CRM and Project access',
+                permissions: permissions.map((p) => p._id),
+                level: 6,
+            });
+
+            return partnerRole;
+        } catch (error: any) {
+            if (error?.code === 11000) {
+                const existing = await Role.findOne({ name: /^partner$/i });
+                if (existing) {
+                    return existing;
+                }
+            }
+
+            throw error;
+        }
+    }
+
     /**
      * Validate registration token and return partner info
      */
     async getPartnerByRegistrationToken(token: string): Promise<{
         partner: IPartner;
-        user: any;
+        email: string;
+        name: string;
     }> {
-        const partner = await Partner.findOne({ registrationToken: token })
-            .populate('userId', 'name email');
+        const partner = await Partner.findOne({ registrationToken: token });
 
         if (!partner) {
             throw new AppError('Invalid or expired registration link', 404);
@@ -40,57 +88,109 @@ export class PartnerAuthService {
 
         return {
             partner,
-            user: partner.userId,
+            email: partner.email || '',
+            name: partner.contactPerson || '',
         };
     }
 
     /**
-     * Complete partner registration by submitting form data
+     * Complete partner onboarding - creates user and updates partner with full details
      */
-    async completePartnerRegistration(
+    async completePartnerOnboarding(
         token: string,
-        formData: PartnerRegistrationInput
-    ): Promise<IPartner> {
+        formData: PartnerOnboardingInput
+    ): Promise<{
+        partner: IPartner;
+        loginUrl: string;
+    }> {
         const { partner } = await this.getPartnerByRegistrationToken(token);
 
-        // Update partner with submitted data
+        // Validate passwords match
+        if (formData.password !== formData.confirmPassword) {
+            throw new AppError('Passwords do not match', 400);
+        }
+
+        // Validate password strength
+        if (formData.password.length < 8) {
+            throw new AppError('Password must be at least 8 characters long', 400);
+        }
+
+        const partnerRole = await this.ensurePartnerRole();
+
+        // Create User with Partner role
+        const user = await User.create({
+            name: formData.name,
+            email: partner.email,
+            password: formData.password,
+            role: partnerRole._id,
+            isActive: true,
+            modulePermissions: {
+                projectManagement: {
+                    enabled: true,
+                    projectPermissions: [],
+                },
+                crm: {
+                    enabled: true,
+                    subModules: {
+                        pipeline: false,
+                        leads: false,
+                        proposals: false,
+                        clients: true,
+                    },
+                },
+                finance: { enabled: false, subModules: {} },
+                hrms: { enabled: false, subModules: {} },
+                overallAdmin: { enabled: false, subModules: {} },
+            },
+        });
+
+        // Update partner with full details
         const updatedPartner = await Partner.findByIdAndUpdate(
             partner._id,
             {
                 $set: {
-                    ...formData,
+                    userId: user._id,
+                    contactPerson: formData.contactPersonName,
+                    contactPersonPhone: formData.contactPersonPhone,
+                    companyName: formData.companyName,
+                    companyLogo: formData.companyLogo,
+                    phone: formData.phone,
+                    photo: formData.photo,
+                    websiteLink: formData.websiteLink,
+                    address: formData.address,
                     registrationStatus: 'completed',
                     registrationSubmittedAt: new Date(),
+                    isActive: true,
+                },
+                $unset: {
+                    registrationToken: 1,
+                    registrationTokenExpiry: 1,
                 },
             },
             { new: true, runValidators: true }
-        )
-            .populate('userId', 'name email')
-            .populate('createdBy', 'name email');
+        );
 
         if (!updatedPartner) {
             throw new AppError('Partner not found', 404);
         }
 
-        // Activate the associated user account
-        await User.findByIdAndUpdate(partner.userId, {
-            $set: { isActive: true },
-        });
+        const { env } = await import('../../../config/env.config');
+        const loginUrl = `${env.FRONTEND_URL}/partner/${updatedPartner.slug}/login`;
 
-        // Notify admins about partner registration (optional)
-        try {
-            const admins = await User.find({
-                'role.name': { $in: ['super-admin', 'admin'] },
-                isActive: true,
-            }).select('email');
+        return {
+            partner: updatedPartner,
+            loginUrl,
+        };
+    }
 
-            // You can implement email notification here if needed
-            console.log('[Partner Registration] Partner completed registration:', updatedPartner.email);
-        } catch (err) {
-            console.error('[Partner Registration] Failed to notify admins:', err);
-        }
+    /**
+     * Get partner by slug (for personalized login page)
+     */
+    async getPartnerBySlug(slug: string): Promise<IPartner | null> {
+        const partner = await Partner.findOne({ slug })
+            .populate('userId', 'name email isActive');
 
-        return updatedPartner;
+        return partner;
     }
 
     /**
@@ -109,7 +209,7 @@ export class PartnerAuthService {
 
         const crypto = await import('crypto');
         const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
         await Partner.findByIdAndUpdate(partnerId, {
             $set: {
@@ -119,8 +219,15 @@ export class PartnerAuthService {
             },
         });
 
+        // Also deactivate the user if they had one
+        if (partner.userId) {
+            await User.findByIdAndUpdate(partner.userId, {
+                $set: { isActive: false },
+            });
+        }
+
         const { env } = await import('../../../config/env.config');
-        const registrationLink = `${env.FRONTEND_URL}/partner-form/${token}`;
+        const registrationLink = `${env.FRONTEND_URL}/partner/onboarding/${token}`;
 
         return {
             token,

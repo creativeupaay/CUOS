@@ -140,3 +140,82 @@ export const getPartnerStats = asyncHandler(async (req: Request, res: Response) 
         data: stats,
     });
 });
+
+// ========== PUBLIC ONBOARDING ENDPOINTS ==========
+
+/**
+ * Get partner info by registration token (Public - for onboarding form)
+ */
+export const getPartnerByToken = asyncHandler(async (req: Request, res: Response) => {
+    const partner = await partnerService.getPartnerByToken(req.params.token);
+
+    if (!partner) {
+        return res.status(404).json({
+            success: false,
+            message: 'Invalid or expired registration link',
+        });
+    }
+
+    res.json({
+        success: true,
+        message: 'Partner information retrieved successfully',
+        data: {
+            email: partner.email,
+            contactPerson: partner.contactPerson,
+        },
+    });
+});
+
+/**
+ * Complete partner onboarding (Public - partner fills out the form)
+ */
+export const completeOnboarding = asyncHandler(async (req: Request, res: Response) => {
+    const result = await partnerService.completeOnboarding(req.params.token, req.body);
+
+    res.json({
+        success: true,
+        message: 'Partner onboarding completed successfully',
+        data: {
+            loginUrl: result.loginUrl,
+            partner: {
+                companyName: result.partner.companyName,
+                slug: result.partner.slug,
+            },
+        },
+    });
+});
+
+/**
+ * Get partner info by slug (Public - for personalized login page)
+ */
+export const getPartnerBySlug = asyncHandler(async (req: Request, res: Response) => {
+    const partner = await partnerService.getPartnerBySlug(req.params.slug);
+
+    if (!partner) {
+        return res.status(404).json({
+            success: false,
+            message: 'Partner not found',
+        });
+    }
+
+    // Check if partner has completed onboarding
+    if (partner.registrationStatus !== 'completed') {
+        return res.status(400).json({
+            success: false,
+            message: 'Partner has not completed onboarding',
+        });
+    }
+
+    // Return only public info for login page
+    res.json({
+        success: true,
+        data: {
+            id: partner._id,
+            slug: partner.slug,
+            companyName: partner.companyName,
+            companyLogo: partner.companyLogo,
+            contactPerson: partner.contactPerson,
+            photo: partner.photo,
+        },
+    });
+});

@@ -8,24 +8,24 @@ const partnerAddressSchema = z.object({
     postalCode: z.string().optional(),
 });
 
+// Minimal partner creation - just name and email
 export const createPartnerSchema = z.object({
     body: z.object({
         name: z.string().min(1, 'Partner name is required').trim(),
         email: z.string().email('Invalid email').trim().toLowerCase(),
-        password: z.string().min(8, 'Password must be at least 8 characters'),
-        companyName: z.string().optional(),
-        contactPerson: z.string().optional(),
-        phone: z.string().optional(),
-        address: partnerAddressSchema.optional(),
     }),
 });
 
 export const updatePartnerSchema = z.object({
     body: z.object({
         companyName: z.string().optional(),
+        companyLogo: z.string().optional(),
         contactPerson: z.string().optional(),
+        contactPersonPhone: z.string().optional(),
         phone: z.string().optional(),
         email: z.string().email('Invalid email').trim().toLowerCase().optional(),
+        photo: z.string().optional(),
+        websiteLink: z.string().optional(),
         address: partnerAddressSchema.optional(),
     }),
 });
@@ -45,21 +45,38 @@ export const listPartnersSchema = z.object({
     }),
 });
 
+// Full onboarding form submission with password
 export const submitPartnerRegistrationSchema = z.object({
     params: z.object({
         token: z.string().min(1, 'Registration token is required'),
     }),
     body: z.object({
-        companyName: z.string().optional(),
-        contactPerson: z.string().optional(),
-        phone: z.string().optional(),
+        name: z.string().min(1, 'Name is required').trim(),
+        phone: z.string().min(1, 'Phone number is required').trim(),
+        photo: z.string().optional(),
+        companyName: z.string().min(1, 'Company name is required').trim(),
+        companyLogo: z.string().optional(),
+        contactPersonName: z.string().min(1, 'Contact person name is required').trim(),
+        contactPersonPhone: z.string().min(1, 'Contact person phone is required').trim(),
+        websiteLink: z.string().optional(),
         address: partnerAddressSchema.optional(),
+        password: z.string().min(8, 'Password must be at least 8 characters'),
+        confirmPassword: z.string().min(1, 'Please confirm your password'),
+    }).refine((data) => data.password === data.confirmPassword, {
+        message: "Passwords don't match",
+        path: ["confirmPassword"],
     }),
 });
 
 export const getPartnerByTokenSchema = z.object({
     params: z.object({
         token: z.string().min(1, 'Registration token is required'),
+    }),
+});
+
+export const getPartnerBySlugSchema = z.object({
+    params: z.object({
+        slug: z.string().min(1, 'Partner slug is required'),
     }),
 });
 

@@ -12,6 +12,7 @@ import financeRoutes from '../../modules/finance/routes/finance.routes';
 import hiringRoutes from '../../modules/hiring/routes/hiring.routes';
 import partnerRoutes from '../../modules/partners/routes/partner.routes';
 import partnerAuthRoutes from '../../modules/partners/routes/partnerAuth.routes';
+import partnerEmployeeRoutes from '../../modules/partners/routes/partnerEmployee.routes';
 
 const router = Router();
 
@@ -40,7 +41,9 @@ router.use('/finance', financeRoutes);
 router.use('/hiring', hiringRoutes);
 // Partner Management (Admin routes)
 router.use('/partners', partnerRoutes);
-// Public partner registration form (no auth required)
-router.use('/partner-form', partnerAuthRoutes);
+// Public partner onboarding and login info (no auth required)
+router.use('/partner', partnerAuthRoutes);
+// Partner Employee Management (Partner's own employee management)
+router.use('/partner-employees', partnerEmployeeRoutes);
 
 export default router;

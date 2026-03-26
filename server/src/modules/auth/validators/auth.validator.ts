@@ -43,3 +43,14 @@ export const changePasswordSchema = z.object({
             ),
     }),
 });
+
+// Partner login with slug validation
+export const partnerLoginSchema = z.object({
+    params: z.object({
+        slug: z.string().min(1, 'Partner slug is required'),
+    }),
+    body: z.object({
+        email: z.string().email('Invalid email address'),
+        password: z.string().min(1, 'Password is required'),
+    }),
+});

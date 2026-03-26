@@ -18,7 +18,7 @@ export const clientApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: ['Clients'],
+            invalidatesTags: ['Clients', 'Partners'],
         }),
 
         // Get all clients

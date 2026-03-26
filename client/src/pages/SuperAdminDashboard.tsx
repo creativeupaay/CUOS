@@ -30,6 +30,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     overallAdmin: { from: '#374151', to: '#6B7280' },
     hiring: { from: '#0F766E', to: '#0EA5E9' },
     partners: { from: '#0E7490', to: '#06B6D4' },
+    teamManagement: { from: '#6366F1', to: '#8B5CF6' },
 };
 
 /* ── Department Card ─────────────────────────────────────── */
@@ -131,9 +132,21 @@ export default function SuperAdminDashboard() {
 
     const handleLogout = async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
+
+        // Determine logout redirect based on user role and partner status
+        const isPartnerRole = roleName === 'partner';
+        const partnerSlug = (user as any)?.partnerSlug;
+
+        // Redirect to partner's personalized login page if they have a slug
+        const logoutPath = isPartnerRole && partnerSlug
+            ? `/partner/${partnerSlug}/login`
+            : isPartnerRole
+                ? '/partner/login'
+                : '/login';
+
         dispatch(logout());
         dispatch(api.util.resetApiState());
-        navigate('/login');
+        navigate(logoutPath);
     };
 
     const roleName = user?.role
@@ -219,18 +232,32 @@ export default function SuperAdminDashboard() {
         },
     ];
 
-    const partnerDepartments = allDepartments
-        .filter(d => d.key === 'projectManagement' || d.key === 'crm')
-        .filter(d => {
-            const perm = mp?.[d.key as keyof typeof mp] as any;
-            return !!perm?.enabled;
-        })
-        .map(d => ({
-            ...d,
+    const partnerDepartments = [
+        // Team Management — always available for partners
+        {
+            key: 'teamManagement',
+            title: 'Team Management',
+            description: 'Manage your team members, access and credentials',
+            icon: <Users size={22} />,
+            path: '/partner-admin/team',
             isActive: true,
-            accentFrom: MODULE_ACCENTS[d.key].from,
-            accentTo: MODULE_ACCENTS[d.key].to,
-        }));
+            accentFrom: MODULE_ACCENTS.teamManagement.from,
+            accentTo: MODULE_ACCENTS.teamManagement.to,
+        },
+        // Project Management and CRM based on permissions
+        ...allDepartments
+            .filter(d => d.key === 'projectManagement' || d.key === 'crm')
+            .filter(d => {
+                const perm = mp?.[d.key as keyof typeof mp] as any;
+                return !!perm?.enabled;
+            })
+            .map(d => ({
+                ...d,
+                isActive: true,
+                accentFrom: MODULE_ACCENTS[d.key].from,
+                accentTo: MODULE_ACCENTS[d.key].to,
+            })),
+    ];
 
     const nonAdminDepartments = allDepartments
         .filter(d => {
@@ -262,8 +289,23 @@ export default function SuperAdminDashboard() {
 
     const firstName = user?.name?.split(' ')[0] || 'there';
 
+    // Partner branding - get company info from user object (set during partner login)
+    const partnerCompanyName = (user as any)?.companyName;
+    const partnerCompanyLogo = (user as any)?.companyLogo;
+
+    // Determine branding
+    const brandName = isPartner && partnerCompanyName ? partnerCompanyName : 'CUOS';
+    const brandSubtitle = isPartner && partnerCompanyName ? 'Partner Portal' : 'Creative Upaay';
+    const brandInitials = isPartner && partnerCompanyName
+        ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+        : 'CU';
+
     return (
-        <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg-app)' }}>
+        <div className="min-h-screen flex flex-col" style={{
+            background: isPartner
+                ? 'linear-gradient(to bottom right, #EEF2FF, #FEFEFE, #F3E8FF)'
+                : 'var(--color-bg-app)'
+        }}>
 
             {/* ── Top Navigation Bar ────────────────────────────────── */}
             <header
@@ -278,21 +320,34 @@ export default function SuperAdminDashboard() {
                 <div className="flex items-center justify-between px-6 h-14" style={{ maxWidth: '1300px', margin: '0 auto' }}>
                     {/* Brand */}
                     <div className="flex items-center gap-3">
-                        <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                            style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
-                        >
-                            CU
-                        </div>
+                        {partnerCompanyLogo && isPartner ? (
+                            <img
+                                src={partnerCompanyLogo}
+                                alt={brandName}
+                                className="h-8 w-auto object-contain"
+                            />
+                        ) : (
+                            <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                                style={{
+                                    background: isPartner
+                                        ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
+                                        : 'linear-gradient(135deg, #059669, #0EA5E9)',
+                                    boxShadow: 'var(--shadow-brand)'
+                                }}
+                            >
+                                {brandInitials}
+                            </div>
+                        )}
                         <div>
                             <div
                                 className="font-bold text-sm leading-tight"
                                 style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}
                             >
-                                CUOS
+                                {brandName}
                             </div>
                             <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                                Creative Upaay
+                                {brandSubtitle}
                             </div>
                         </div>
                     </div>
@@ -434,7 +489,10 @@ export default function SuperAdminDashboard() {
                 className="px-6 py-4 border-t text-center text-xs"
                 style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-muted)' }}
             >
-                CUOS — Creative Upaay Operating System &nbsp;·&nbsp; © {new Date().getFullYear()} Creative Upaay
+                {isPartner && partnerCompanyName
+                    ? `${partnerCompanyName} — Partner Portal · © ${new Date().getFullYear()}`
+                    : `CUOS — Creative Upaay Operating System · © ${new Date().getFullYear()} Creative Upaay`
+                }
             </footer>
         </div>
     );

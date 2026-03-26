@@ -11,10 +11,15 @@ export interface IPartnerAddress {
 export interface IPartner extends Document {
     _id: Types.ObjectId;
     userId: Types.ObjectId; // Reference to User model
+    slug: string; // Unique slug for personalized login URL
     companyName?: string;
+    companyLogo?: string; // URL of company logo
     contactPerson?: string;
+    contactPersonPhone?: string;
     phone?: string;
     email?: string;
+    photo?: string; // URL of partner's photo
+    websiteLink?: string;
     address?: IPartnerAddress;
 
     // Registration form fields
@@ -48,11 +53,27 @@ const PartnerSchema = new Schema<IPartner>(
             required: true,
             unique: true,
         },
+        slug: {
+            type: String,
+            unique: true,
+            sparse: true,
+            trim: true,
+            lowercase: true,
+            index: true,
+        },
         companyName: {
             type: String,
             trim: true,
         },
+        companyLogo: {
+            type: String,
+            trim: true,
+        },
         contactPerson: {
+            type: String,
+            trim: true,
+        },
+        contactPersonPhone: {
             type: String,
             trim: true,
         },
@@ -64,6 +85,14 @@ const PartnerSchema = new Schema<IPartner>(
             type: String,
             trim: true,
             lowercase: true,
+        },
+        photo: {
+            type: String,
+            trim: true,
+        },
+        websiteLink: {
+            type: String,
+            trim: true,
         },
         address: PartnerAddressSchema,
 
@@ -105,5 +134,6 @@ const PartnerSchema = new Schema<IPartner>(
 PartnerSchema.index({ email: 1 });
 PartnerSchema.index({ isActive: 1 });
 PartnerSchema.index({ createdAt: -1 });
+PartnerSchema.index({ slug: 1 });
 
 export const Partner = mongoose.model<IPartner>('Partner', PartnerSchema);

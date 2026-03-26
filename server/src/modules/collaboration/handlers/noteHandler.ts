@@ -67,7 +67,12 @@ const checkProjectAccess = async (
         return false;
       }
 
-      return project.partnerId.toString() === partner._id.toString();
+      // Handle both populated and non-populated partnerId
+      const projectPartnerId = project.partnerId
+        ? (project.partnerId as any)._id?.toString() || project.partnerId.toString()
+        : null;
+
+      return projectPartnerId === partner._id.toString();
     }
 
     // Find employee record

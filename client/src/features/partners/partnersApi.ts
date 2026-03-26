@@ -29,35 +29,42 @@ export interface Partner {
         email: string;
         isActive?: boolean;
     };
+    slug?: string;
     companyName?: string;
+    companyLogo?: string;
     contactPerson?: string;
+    contactPersonPhone?: string;
     phone?: string;
     email?: string;
+    photo?: string;
+    websiteLink?: string;
     address?: PartnerAddress;
     registrationStatus?: 'pending' | 'completed';
     registrationToken?: string;
     registrationTokenExpiry?: string;
+    loginUrl?: string;
+    onboardingUrl?: string;
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
     stats?: PartnerStats;
 }
 
+// Simplified - just name and email for minimal creation
 export interface CreatePartnerPayload {
     name: string;
     email: string;
-    password: string;
-    companyName?: string;
-    contactPerson?: string;
-    phone?: string;
-    address?: PartnerAddress;
 }
 
 export interface UpdatePartnerPayload {
     companyName?: string;
+    companyLogo?: string;
     contactPerson?: string;
+    contactPersonPhone?: string;
     phone?: string;
     email?: string;
+    photo?: string;
+    websiteLink?: string;
     address?: PartnerAddress;
 }
 
@@ -68,11 +75,36 @@ export interface ListPartnersParams {
     limit?: number;
 }
 
-export interface PartnerRegistrationPayload {
-    companyName?: string;
-    contactPerson?: string;
-    phone?: string;
+// Full onboarding form with password
+export interface PartnerOnboardingPayload {
+    name: string;
+    phone: string;
+    photo?: string;
+    companyName: string;
+    companyLogo?: string;
+    contactPersonName: string;
+    contactPersonPhone: string;
+    websiteLink?: string;
     address?: PartnerAddress;
+    password: string;
+    confirmPassword: string;
+}
+
+// Partner info for onboarding form
+export interface PartnerOnboardingInfo {
+    name: string;
+    email: string;
+    registrationStatus: 'pending' | 'completed';
+}
+
+// Partner info for personalized login page
+export interface PartnerLoginInfo {
+    id: string;
+    slug: string;
+    companyName?: string;
+    companyLogo?: string;
+    contactPerson?: string;
+    photo?: string;
 }
 
 export const partnersApi = api.injectEndpoints({
@@ -148,19 +180,26 @@ export const partnersApi = api.injectEndpoints({
             providesTags: (_result, _error, id) => [{ type: 'Partners', id: `${id}-projects` }],
         }),
 
-        getPartnerRegistrationByToken: builder.query<
-            ApiResponse<{ name: string; email: string; registrationStatus: 'pending' | 'completed' }>,
-            string
-        >({
-            query: (token) => `/partner-form/${token}`,
+        // Public: Get partner info by registration token (for onboarding form)
+        getPartnerOnboardingByToken: builder.query<ApiResponse<PartnerOnboardingInfo>, string>({
+            query: (token) => `/partner/onboarding/${token}`,
         }),
 
-        submitPartnerRegistration: builder.mutation<ApiResponse<Partner>, { token: string; data: PartnerRegistrationPayload }>({
+        // Public: Submit partner onboarding form
+        submitPartnerOnboarding: builder.mutation<
+            ApiResponse<{ loginUrl: string; companyName: string; slug: string }>,
+            { token: string; data: PartnerOnboardingPayload }
+        >({
             query: ({ token, data }) => ({
-                url: `/partner-form/${token}`,
+                url: `/partner/onboarding/${token}`,
                 method: 'POST',
                 body: data,
             }),
+        }),
+
+        // Public: Get partner info by slug (for personalized login page)
+        getPartnerBySlug: builder.query<ApiResponse<PartnerLoginInfo>, string>({
+            query: (slug) => `/partner/login/${slug}`,
         }),
     }),
 });
@@ -175,6 +214,7 @@ export const {
     useRegeneratePartnerTokenMutation,
     useGetPartnerClientsQuery,
     useGetPartnerProjectsQuery,
-    useGetPartnerRegistrationByTokenQuery,
-    useSubmitPartnerRegistrationMutation,
+    useGetPartnerOnboardingByTokenQuery,
+    useSubmitPartnerOnboardingMutation,
+    useGetPartnerBySlugQuery,
 } = partnersApi;

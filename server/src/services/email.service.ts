@@ -856,3 +856,112 @@ export async function sendHiringOfferEmail(opts: {
 </html>`,
     });
 }
+
+// ============================================================
+// Send partner onboarding form link
+// ============================================================
+export async function sendPartnerOnboardingEmail(opts: {
+    to: string;
+    partnerName: string;
+    formUrl: string;
+    expiresAt: Date;
+}): Promise<void> {
+    const { to, partnerName, formUrl, expiresAt } = opts;
+    const client = getResend();
+
+    const expiryFormatted = expiresAt.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    });
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: 'Complete your partner onboarding — Creative Upaay',
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <!-- Header with gradient -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #6366F1, #8B5CF6);padding:32px;">
+              <p style="margin:0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:-0.5px;">Welcome to CUOS</p>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Partner Portal — Creative Upaay</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#111827;font-weight:600;">Hello ${partnerName},</p>
+              <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7;">
+                Welcome to the Creative Upaay Partner Network! We're excited to have you on board.
+              </p>
+              <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7;">
+                To get started, please complete your partner registration by filling out your company details and setting up your password. This will give you access to your personalized partner portal.
+              </p>
+
+              <!-- Benefits section -->
+              <div style="background:#F3F4F6;border-radius:8px;padding:20px;margin:0 0 26px;">
+                <p style="margin:0 0 12px;font-size:13px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">What's Next?</p>
+                <ul style="margin:0;padding:0 0 0 20px;list-style:none;">
+                  <li style="margin:0 0 8px;font-size:14px;color:#374151;position:relative;padding-left:0;">
+                    <span style="position:absolute;left:-20px;color:#6366F1;">✓</span> Fill out your company information
+                  </li>
+                  <li style="margin:0 0 8px;font-size:14px;color:#374151;position:relative;padding-left:0;">
+                    <span style="position:absolute;left:-20px;color:#6366F1;">✓</span> Set up your secure password
+                  </li>
+                  <li style="margin:0;font-size:14px;color:#374151;position:relative;padding-left:0;">
+                    <span style="position:absolute;left:-20px;color:#6366F1;">✓</span> Access your personalized partner portal
+                  </li>
+                </ul>
+              </div>
+
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:linear-gradient(135deg, #6366F1, #8B5CF6);border-radius:8px;box-shadow:0 4px 12px rgba(99, 102, 241, 0.3);">
+                    <a href="${formUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:15px;font-weight:600;text-decoration:none;letter-spacing:0.3px;">
+                      Complete Registration →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:13px;color:#6B7280;line-height:1.6;">
+                Or copy this link into your browser:<br/>
+                <a href="${formUrl}" style="color:#6366F1;word-break:break-all;text-decoration:none;font-weight:500;">${formUrl}</a>
+              </p>
+
+              <hr style="margin:28px 0;border:none;border-top:1px solid #E5E7EB;"/>
+
+              <div style="background:#FEF3C7;border-left:3px solid #F59E0B;padding:12px 16px;border-radius:4px;">
+                <p style="margin:0;font-size:13px;color:#92400E;line-height:1.5;">
+                  <strong>⏰ Important:</strong> This link expires on <strong>${expiryFormatted}</strong>. Please complete your registration before then.
+                </p>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#F9FAFB;padding:20px 32px;border-top:1px solid #E5E7EB;text-align:center;">
+              <p style="margin:0 0 6px;font-size:12px;color:#9CA3AF;line-height:1.5;">
+                Need help? Contact us or visit our support center
+              </p>
+              <p style="margin:0;font-size:11px;color:#D1D5DB;">
+                &copy; ${new Date().getFullYear()} Creative Upaay. This is an automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}

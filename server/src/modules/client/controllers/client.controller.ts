@@ -20,7 +20,11 @@ export const createClient = asyncHandler(async (req: Request, res: Response, nex
             // Partner requests are always forced to their own partner ID.
             partnerId: req.partnerId ?? data.partnerId,
         },
-        createdBy
+        createdBy,
+        {
+            requesterRole: req.user?.role,
+            requesterPartnerId: req.partnerId,
+        }
     );
 
     res.status(201).json({
@@ -121,7 +125,10 @@ export const addActivity = asyncHandler(async (req: Request, res: Response, next
     const data: AddClientActivityInput = req.body;
     const createdBy = (req.user as any).id;
 
-    const client = await clientService.addActivity(id, data, createdBy);
+    const client = await clientService.addActivity(id, data, createdBy, {
+        requesterRole: req.user?.role,
+        requesterPartnerId: req.partnerId,
+    });
 
     res.status(200).json({
         status: 'success',

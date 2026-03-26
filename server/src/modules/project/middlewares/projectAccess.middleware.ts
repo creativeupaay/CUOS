@@ -52,7 +52,12 @@ export const checkProjectAccess = async (
 
         // Partner users can access only their own projects.
         if (req.partnerId) {
-            if (project.partnerId && project.partnerId.toString() === req.partnerId) {
+            // Handle both populated and non-populated partnerId
+            const projectPartnerId = project.partnerId
+                ? (project.partnerId as any)._id?.toString() || (project.partnerId as any).toString()
+                : null;
+
+            if (projectPartnerId && projectPartnerId === req.partnerId) {
                 return next();
             }
 
@@ -114,7 +119,12 @@ export const checkProjectManager = async (
 
         // Partner users can manage only their own projects.
         if (req.partnerId) {
-            if (project.partnerId && project.partnerId.toString() === req.partnerId) {
+            // Handle both populated and non-populated partnerId
+            const projectPartnerId = project.partnerId
+                ? (project.partnerId as any)._id?.toString() || (project.partnerId as any).toString()
+                : null;
+
+            if (projectPartnerId && projectPartnerId === req.partnerId) {
                 return next();
             }
 

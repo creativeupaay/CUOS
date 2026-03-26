@@ -59,6 +59,7 @@ export const attachPartnerContext = async (
 /**
  * Middleware to ensure partners only see their own data
  * Adds partnerId filter to query/body based on user role
+ * Also supports PartnerEmployee users
  */
 export const filterPartnerData = async (
     req: Request,
@@ -73,6 +74,28 @@ export const filterPartnerData = async (
         const user = await User.findById(req.user.id).populate('role');
 
         if (!user) {
+            // Check if it's a partner employee
+            const { PartnerEmployee } = await import('../models/PartnerEmployee.model');
+            const partnerEmployee = await PartnerEmployee.findById(req.user.id);
+
+            if (partnerEmployee) {
+                // Partner employee - use parent partner's ID
+                const partnerId = partnerEmployee.partnerId.toString();
+
+                if (req.method === 'GET') {
+                    req.query.partnerId = partnerId;
+                }
+
+                if (req.method === 'POST' || req.method === 'PUT') {
+                    req.body.partnerId = partnerId;
+                }
+
+                req.partnerId = partnerId;
+                req.isPartner = true;
+
+                return next();
+            }
+
             return next(new AppError('User not found', 401));
         }
 

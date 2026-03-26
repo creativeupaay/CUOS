@@ -6,13 +6,22 @@ import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import crypto from 'crypto';
 
+// Minimal input for initial partner creation (just name and email)
 export interface CreatePartnerInput {
     name: string;
     email: string;
-    password: string;
-    companyName?: string;
-    contactPerson?: string;
-    phone?: string;
+}
+
+// Full input for partner onboarding completion
+export interface CompleteOnboardingInput {
+    name: string;
+    phone: string;
+    photo?: string;
+    companyName: string;
+    companyLogo?: string;
+    contactPersonName: string;
+    contactPersonPhone: string;
+    websiteLink?: string;
     address?: {
         street?: string;
         city?: string;
@@ -20,13 +29,19 @@ export interface CreatePartnerInput {
         country?: string;
         postalCode?: string;
     };
+    password: string;
+    confirmPassword: string;
 }
 
 export interface UpdatePartnerInput {
     companyName?: string;
+    companyLogo?: string;
     contactPerson?: string;
+    contactPersonPhone?: string;
     phone?: string;
     email?: string;
+    photo?: string;
+    websiteLink?: string;
     address?: {
         street?: string;
         city?: string;
@@ -124,23 +139,30 @@ export class PartnerService {
             Partner.countDocuments(query),
         ]);
 
-        // Attach statistics for each partner
-        const partnersWithStats = await Promise.all(
-            partners.map(async (partner) => {
-                const [clientsCount, projectsCount] = await Promise.all([
-                    Client.countDocuments({ partnerId: partner._id }),
-                    Project.countDocuments({ partnerId: partner._id }),
-                ]);
+        // Optimize: Fetch all counts in bulk using aggregation
+        const partnerIds = partners.map(p => p._id);
 
-                return {
-                    ...partner,
-                    stats: {
-                        clientsCount,
-                        projectsCount,
-                    },
-                };
-            })
-        );
+        const [clientCounts, projectCounts] = await Promise.all([
+            Client.aggregate([
+                { $match: { partnerId: { $in: partnerIds } } },
+                { $group: { _id: '$partnerId', count: { $sum: 1 } } }
+            ]),
+            Project.aggregate([
+                { $match: { partnerId: { $in: partnerIds } } },
+                { $group: { _id: '$partnerId', count: { $sum: 1 } } }
+            ])
+        ]);
+
+        const clientCountMap = new Map(clientCounts.map(c => [c._id.toString(), c.count]));
+        const projectCountMap = new Map(projectCounts.map(p => [p._id.toString(), p.count]));
+
+        const partnersWithStats = partners.map((partner) => ({
+            ...partner,
+            stats: {
+                clientsCount: clientCountMap.get(partner._id.toString()) || 0,
+                projectsCount: projectCountMap.get(partner._id.toString()) || 0,
+            },
+        }));
 
         return {
             partners: partnersWithStats,
@@ -168,8 +190,16 @@ export class PartnerService {
             Project.countDocuments({ partnerId: partner._id }),
         ]);
 
+        const { env } = await import('../../../config/env.config');
+        const loginUrl = partner.slug ? `${env.FRONTEND_URL}/partner/${partner.slug}/login` : null;
+        const onboardingUrl = partner.registrationToken && partner.registrationStatus === 'pending'
+            ? `${env.FRONTEND_URL}/partner/onboarding/${partner.registrationToken}`
+            : null;
+
         return {
             ...partner.toObject(),
+            loginUrl,
+            onboardingUrl,
             stats: {
                 clientsCount,
                 projectsCount,
@@ -189,15 +219,46 @@ export class PartnerService {
     }
 
     /**
-     * Create a new partner
-     * This creates both a User record (for authentication) and a Partner record (for partner-specific data)
+     * Generate unique slug from name
+     */
+    private async generateUniqueSlug(name: string): Promise<string> {
+        // Create base slug from name
+        let baseSlug = name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        // If slug is empty, use a random string
+        if (!baseSlug) {
+            baseSlug = 'partner';
+        }
+
+        // Check if slug exists
+        let slug = baseSlug;
+        let counter = 1;
+
+        while (await Partner.findOne({ slug })) {
+            slug = `${baseSlug}-${counter}`;
+            counter++;
+        }
+
+        return slug;
+    }
+
+    /**
+     * Create a new partner (minimal - just name and email)
+     * This creates a pending Partner record and sends an onboarding form link
      */
     async createPartner(data: CreatePartnerInput, createdBy: Types.ObjectId): Promise<{
         partner: IPartner;
         registrationToken: string;
         registrationLink: string;
     }> {
-        const partnerRole = await this.ensurePartnerRole();
+        // Check if partner with this email already exists
+        const existingPartner = await Partner.findOne({ email: data.email });
+        if (existingPartner) {
+            throw new AppError('A partner with this email already exists', 400);
+        }
 
         // Check if user with this email already exists
         const existingUser = await User.findOne({ email: data.email });
@@ -205,17 +266,117 @@ export class PartnerService {
             throw new AppError('A user with this email already exists', 400);
         }
 
+        // Generate unique slug
+        const slug = await this.generateUniqueSlug(data.name);
+
+        // Generate registration token
+        const registrationToken = crypto.randomBytes(32).toString('hex');
+        const registrationTokenExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+        // Create Partner record (without userId for now - will be created on onboarding completion)
+        const partner = await Partner.create({
+            slug,
+            email: data.email,
+            contactPerson: data.name, // Initially use name as contact person
+            registrationToken,
+            registrationTokenExpiry,
+            registrationStatus: 'pending',
+            isActive: false, // Inactive until onboarding is complete
+            createdBy,
+            userId: createdBy, // Temporarily set to creator - will be updated on onboarding
+        });
+
+        const {env } = await import('../../../config/env.config');
+        const registrationLink = `${env.FRONTEND_URL}/partner/onboarding/${registrationToken}`;
+
+        // Send onboarding email
+        try {
+            const { sendPartnerOnboardingEmail } = await import('../../../services/email.service');
+            await sendPartnerOnboardingEmail({
+                to: data.email,
+                partnerName: data.name,
+                formUrl: registrationLink,
+                expiresAt: registrationTokenExpiry,
+            });
+        } catch (emailError: any) {
+            console.error('Failed to send partner onboarding email:', emailError.message);
+            // Don't fail partner creation if email fails
+        }
+
+        return {
+            partner,
+            registrationToken,
+            registrationLink,
+        };
+    }
+
+    /**
+     * Get partner by registration token (for onboarding form)
+     */
+    async getPartnerByToken(token: string): Promise<IPartner | null> {
+        const partner = await Partner.findOne({
+            registrationToken: token,
+            registrationStatus: 'pending'
+        });
+
+        if (!partner) {
+            return null;
+        }
+
+        // Check if token has expired
+        if (partner.registrationTokenExpiry && partner.registrationTokenExpiry < new Date()) {
+            throw new AppError('This registration link has expired. Please contact the administrator.', 400);
+        }
+
+        return partner;
+    }
+
+    /**
+     * Get partner by slug (for personalized login page)
+     */
+    async getPartnerBySlug(slug: string): Promise<IPartner | null> {
+        const partner = await Partner.findOne({ slug })
+            .populate('userId', 'name email isActive');
+
+        return partner;
+    }
+
+    /**
+     * Complete partner onboarding - creates user account and updates partner details
+     */
+    async completeOnboarding(token: string, data: CompleteOnboardingInput): Promise<{
+        partner: IPartner;
+        loginUrl: string;
+    }> {
+        // Find partner by token
+        const partner = await this.getPartnerByToken(token);
+        if (!partner) {
+            throw new AppError('Invalid or expired registration token', 400);
+        }
+
+        // Validate passwords match
+        if (data.password !== data.confirmPassword) {
+            throw new AppError('Passwords do not match', 400);
+        }
+
+        // Validate password strength
+        if (data.password.length < 8) {
+            throw new AppError('Password must be at least 8 characters long', 400);
+        }
+
+        const partnerRole = await this.ensurePartnerRole();
+
         // Create User with Partner role
         const user = await User.create({
             name: data.name,
-            email: data.email,
+            email: partner.email,
             password: data.password,
             role: partnerRole._id,
-            isActive: false, // Inactive until registration is completed
+            isActive: true, // Active immediately after onboarding
             modulePermissions: {
                 projectManagement: {
                     enabled: true,
-                    projectPermissions: [], // Will be populated as they create projects
+                    projectPermissions: [],
                 },
                 crm: {
                     enabled: true,
@@ -223,7 +384,7 @@ export class PartnerService {
                         pipeline: false,
                         leads: false,
                         proposals: false,
-                        clients: true, // Only clients module
+                        clients: true,
                     },
                 },
                 finance: { enabled: false, subModules: {} },
@@ -232,32 +393,30 @@ export class PartnerService {
             },
         });
 
-        // Generate registration token
-        const registrationToken = crypto.randomBytes(32).toString('hex');
-        const registrationTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        // Update partner with full details
+        partner.userId = user._id as Types.ObjectId;
+        partner.contactPerson = data.contactPersonName;
+        partner.contactPersonPhone = data.contactPersonPhone;
+        partner.companyName = data.companyName;
+        partner.companyLogo = data.companyLogo;
+        partner.phone = data.phone;
+        partner.photo = data.photo;
+        partner.websiteLink = data.websiteLink;
+        partner.address = data.address;
+        partner.registrationStatus = 'completed';
+        partner.registrationSubmittedAt = new Date();
+        partner.registrationToken = undefined; // Clear token after use
+        partner.registrationTokenExpiry = undefined;
+        partner.isActive = true;
 
-        // Create Partner record
-        const partner = await Partner.create({
-            userId: user._id,
-            companyName: data.companyName,
-            contactPerson: data.contactPerson,
-            phone: data.phone,
-            email: data.email,
-            address: data.address,
-            registrationToken,
-            registrationTokenExpiry,
-            registrationStatus: 'pending',
-            isActive: false,
-            createdBy,
-        });
+        await partner.save();
 
         const { env } = await import('../../../config/env.config');
-        const registrationLink = `${env.FRONTEND_URL}/partner-form/${registrationToken}`;
+        const loginUrl = `${env.FRONTEND_URL}/partner/${partner.slug}/login`;
 
         return {
             partner,
-            registrationToken,
-            registrationLink,
+            loginUrl,
         };
     }
 
@@ -353,7 +512,12 @@ export class PartnerService {
             .populate('createdBy', 'name email')
             .lean();
 
-        return clients;
+        // Deduplicate clients by _id just in case there are duplicates
+        const uniqueClients = Array.from(
+            new Map(clients.map((client) => [client._id.toString(), client])).values()
+        );
+
+        return uniqueClients;
     }
 
     /**

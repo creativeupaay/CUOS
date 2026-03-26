@@ -18,6 +18,14 @@ export const authApi = api.injectEndpoints({
                 body: credentials,
             }),
         }),
+        // Partner login requires slug for personalized portal
+        partnerLogin: builder.mutation<LoginResponse, LoginRequest & { slug: string }>({
+            query: ({ slug, ...credentials }) => ({
+                url: `/auth/partner/${slug}/login`,
+                method: 'POST',
+                body: credentials,
+            }),
+        }),
         register: builder.mutation<RegisterResponse, RegisterRequest>({
             query: (userData) => ({
                 url: '/auth/register',
@@ -60,6 +68,7 @@ export const authApi = api.injectEndpoints({
 
 export const {
     useLoginMutation,
+    usePartnerLoginMutation,
     useRegisterMutation,
     useRefreshTokenMutation,
     useLogoutMutation,
