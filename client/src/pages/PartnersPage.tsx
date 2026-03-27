@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Handshake, Plus, Search, ExternalLink, ToggleLeft, ToggleRight } from 'lucide-react';
+import { BarChart3, Handshake, Plus, Search, ExternalLink, ToggleLeft, ToggleRight } from 'lucide-react';
 import {
     useActivatePartnerMutation,
     useDeactivatePartnerMutation,
@@ -80,21 +80,30 @@ export default function PartnersPage() {
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            Partners
+                            Manage Partners
                         </h1>
                         <p className="text-base mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                            {total} partner{total !== 1 ? 's' : ''} registered
+                            {total} partner{total !== 1 ? 's' : ''} in your network
                         </p>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate('/admin/partners/new')}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all"
-                    style={{ backgroundColor: 'var(--color-primary)' }}
-                >
-                    <Plus size={18} strokeWidth={2.5} /> Add Partner
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/admin/partners/dashboard')}
+                        className="flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-semibold transition-all hover:shadow-md"
+                        style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    >
+                        <BarChart3 size={18} strokeWidth={2.5} /> Dashboard
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/partners/manage/new')}
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                        <Plus size={18} strokeWidth={2.5} /> Add Partner
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -269,7 +278,7 @@ export default function PartnersPage() {
                                         <td className="px-6 py-5">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => navigate(`/admin/partners/${partner._id}`)}
+                                                    onClick={() => navigate(`/admin/partners/manage/${partner._id}`)}
                                                     className="p-2 rounded-lg hover:bg-neutral-100 transition-colors"
                                                     title="View partner details"
                                                 >

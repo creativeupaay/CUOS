@@ -276,7 +276,7 @@ export default function ClientDetailPage() {
                                     <div>
                                         <p className="text-sm text-neutral-500 mb-1">Referred By Partner</p>
                                         <Link
-                                            to={`/admin/partners/${referredPartner._id}`}
+                                            to={`/admin/partners/manage/${referredPartner._id}`}
                                             className="inline-flex items-center gap-2 text-neutral-900 font-medium hover:text-primary"
                                         >
                                             <Shield size={16} className="text-neutral-400" />

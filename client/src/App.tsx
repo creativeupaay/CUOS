@@ -59,6 +59,7 @@ const AdminPermissionsPage = lazy(() => import('./pages/AdminPermissionsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const AdminAuditLogsPage = lazy(() => import('./pages/AdminAuditLogsPage'));
 const PartnersPage = lazy(() => import('./pages/PartnersPage'));
+const PartnersDashboardPage = lazy(() => import('./pages/PartnersDashboardPage'));
 const PartnerFormPage = lazy(() => import('./pages/PartnerFormPage'));
 const PartnerDetailPage = lazy(() => import('./pages/PartnerDetailPage'));
 const PartnerRegistrationPage = lazy(() => import('./pages/PartnerRegistrationPage'));
@@ -257,10 +258,12 @@ function App() {
           <Route path="/admin/permissions" element={<PartnerRestrictedRoute>{loadable(<AdminPermissionsPage />)}</PartnerRestrictedRoute>} />
           <Route path="/admin/settings" element={<PartnerRestrictedRoute>{loadable(<AdminSettingsPage />)}</PartnerRestrictedRoute>} />
           <Route path="/admin/audit-logs" element={<PartnerRestrictedRoute>{loadable(<AdminAuditLogsPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/admin/partners" element={<PartnerRestrictedRoute>{loadable(<PartnersPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/admin/partners/new" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/admin/partners/:id" element={<PartnerRestrictedRoute>{loadable(<PartnerDetailPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/admin/partners/:id/edit" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners" element={<PartnerRestrictedRoute><Navigate to="/admin/partners/dashboard" replace /></PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/dashboard" element={<PartnerRestrictedRoute>{loadable(<PartnersDashboardPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/manage" element={<PartnerRestrictedRoute>{loadable(<PartnersPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/manage/new" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/manage/:id" element={<PartnerRestrictedRoute>{loadable(<PartnerDetailPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/admin/partners/manage/:id/edit" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
 
           {/* Partner Admin Module (for Partners to manage their own team) */}
           <Route path="/partner-admin" element={<Navigate to="/partner-admin/team" replace />} />

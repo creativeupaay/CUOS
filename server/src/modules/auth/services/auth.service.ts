@@ -336,6 +336,29 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
         throw new AppError('User not found', 404);
     }
 
+    const roleName = ((user.role as any)?.name || '').toLowerCase();
+
+    if (roleName === 'partner') {
+        const { Partner } = await import('../../partners/models/Partner.model');
+        const partnerPortal = await Partner.findOne({ userId: user._id })
+            .select('slug companyName companyLogo')
+            .lean();
+
+        if (partnerPortal) {
+            const userObj = user.toObject() as IUser & {
+                partnerSlug?: string;
+                companyName?: string;
+                companyLogo?: string;
+            };
+
+            userObj.partnerSlug = partnerPortal.slug;
+            userObj.companyName = partnerPortal.companyName;
+            userObj.companyLogo = partnerPortal.companyLogo;
+
+            return userObj as IUser;
+        }
+    }
+
     return user;
 };
 

@@ -283,7 +283,6 @@ export class PartnerService {
             registrationStatus: 'pending',
             isActive: false, // Inactive until onboarding is complete
             createdBy,
-            userId: createdBy, // Temporarily set to creator - will be updated on onboarding
         });
 
         const {env } = await import('../../../config/env.config');
@@ -452,7 +451,7 @@ export class PartnerService {
         // Deactivate both partner and associated user
         await Promise.all([
             Partner.findByIdAndUpdate(id, { $set: { isActive: false } }),
-            User.findByIdAndUpdate(partner.userId, { $set: { isActive: false } }),
+            ...(partner.userId ? [User.findByIdAndUpdate(partner.userId, { $set: { isActive: false } })] : []),
         ]);
     }
 
@@ -469,7 +468,7 @@ export class PartnerService {
         // Activate both partner and associated user
         await Promise.all([
             Partner.findByIdAndUpdate(id, { $set: { isActive: true } }),
-            User.findByIdAndUpdate(partner.userId, { $set: { isActive: true } }),
+            ...(partner.userId ? [User.findByIdAndUpdate(partner.userId, { $set: { isActive: true } })] : []),
         ]);
     }
 
@@ -499,7 +498,7 @@ export class PartnerService {
         // Delete both partner and associated user
         await Promise.all([
             Partner.findByIdAndDelete(id),
-            User.findByIdAndDelete(partner.userId),
+            ...(partner.userId ? [User.findByIdAndDelete(partner.userId)] : []),
         ]);
     }
 

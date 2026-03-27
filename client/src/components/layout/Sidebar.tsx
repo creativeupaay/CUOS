@@ -146,7 +146,8 @@ function getModuleConfig(
         return {
             title: 'Partners',
             items: [
-                { label: 'Partners', path: '/admin/partners', icon: <Users2 size={18} />, matchPrefix: '/admin/partners' },
+                { label: 'Dashboard', path: '/admin/partners/dashboard', icon: <BarChart3 size={18} />, matchPrefix: '/admin/partners/dashboard' },
+                { label: 'Manage Partners', path: '/admin/partners/manage', icon: <Users2 size={18} />, matchPrefix: '/admin/partners/manage' },
             ],
         };
     }
@@ -350,12 +351,19 @@ export default function Sidebar({
 
         // Determine logout redirect based on user role and partner status
         const isPartner = roleName === 'partner';
-        const partnerSlug = (user as any)?.partnerSlug;
+        const partnerSlug = (user as any)?.partnerSlug || (
+            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
+        );
         const logoutPath = isPartner && partnerSlug
             ? `/partner/${partnerSlug}/login`
             : isPartner
                 ? '/partner/login'
                 : '/login';
+
+        if (typeof window !== 'undefined') {
+            window.location.replace(logoutPath);
+            return;
+        }
 
         dispatch(logout());
         dispatch(api.util.resetApiState());

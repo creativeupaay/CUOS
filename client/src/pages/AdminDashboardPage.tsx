@@ -107,7 +107,7 @@ export default function AdminDashboardPage() {
             label: 'Manage Partners',
             description: 'Track partner performance and ownership',
             icon: <Handshake size={22} />,
-            path: '/admin/partners',
+            path: '/admin/partners/dashboard',
         },
     ];
 
@@ -193,7 +193,7 @@ export default function AdminDashboardPage() {
                         Partner Insights
                     </h2>
                     <button
-                        onClick={() => navigate('/admin/partners')}
+                        onClick={() => navigate('/admin/partners/dashboard')}
                         className="text-sm font-medium flex items-center gap-1"
                         style={{ color: 'var(--color-primary)' }}
                     >

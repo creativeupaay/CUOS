@@ -74,7 +74,6 @@ export default function PersonalizedPartnerLoginPage() {
         );
     }
 
-    const firstName = partner.contactPerson?.split(' ')[0] || 'Partner';
     const hasLogo = !!partner.companyLogo;
 
     return (
@@ -125,7 +124,7 @@ export default function PersonalizedPartnerLoginPage() {
                     )}
 
                     <p className="text-xl text-white/90 font-medium mb-8 drop-shadow">
-                        Partner Portal
+                        Portal
                     </p>
 
                     {/* Features */}
@@ -178,9 +177,9 @@ export default function PersonalizedPartnerLoginPage() {
                         {/* Welcome Text */}
                         <div className="mb-8">
                             <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                                Welcome back, {firstName}! 👋
+                                Welcome!
                             </h2>
-                            <p className="text-gray-600">Sign in to access your partner portal</p>
+                            <p className="text-gray-600">Sign in to access your portal</p>
                         </div>
 
                         {/* Error Message */}

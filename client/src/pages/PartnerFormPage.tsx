@@ -112,7 +112,7 @@ export default function PartnerFormPage() {
                     },
                 }).unwrap();
                 alert('Partner updated successfully');
-                navigate(`/admin/partners/${id}`);
+                navigate(`/admin/partners/manage/${id}`);
                 return;
             }
 
@@ -162,6 +162,10 @@ export default function PartnerFormPage() {
                         An onboarding form link has been generated. Share this link with <strong>{form.name}</strong> to complete their registration.
                     </p>
 
+                    <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                        The onboarding email has also been sent to <strong>{form.email}</strong>.
+                    </div>
+
                     <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
                         <p className="text-xs font-semibold text-indigo-800 uppercase mb-2">Onboarding Form Link</p>
                         <p className="text-sm text-indigo-700 break-all mb-3">{registrationLink}</p>
@@ -181,7 +185,7 @@ export default function PartnerFormPage() {
 
                     <div className="flex gap-3 justify-center">
                         <button
-                            onClick={() => navigate('/admin/partners')}
+                            onClick={() => navigate('/admin/partners/manage')}
                             className="px-6 py-2.5 rounded-xl border text-sm font-medium transition-all hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border-default)' }}
                         >
@@ -208,7 +212,7 @@ export default function PartnerFormPage() {
         <div className="p-8 mx-auto" style={{ maxWidth: '960px' }}>
             <div className="flex items-center gap-4 mb-8">
                 <button
-                    onClick={() => navigate(isEdit ? `/admin/partners/${id}` : '/admin/partners')}
+                    onClick={() => navigate(isEdit ? `/admin/partners/manage/${id}` : '/admin/partners/manage')}
                     className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
                 >
                     <ArrowLeft size={22} />

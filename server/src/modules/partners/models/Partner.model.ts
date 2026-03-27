@@ -10,7 +10,7 @@ export interface IPartnerAddress {
 
 export interface IPartner extends Document {
     _id: Types.ObjectId;
-    userId: Types.ObjectId; // Reference to User model
+    userId?: Types.ObjectId; // Reference to User model after onboarding is completed
     slug: string; // Unique slug for personalized login URL
     companyName?: string;
     companyLogo?: string; // URL of company logo
@@ -50,8 +50,8 @@ const PartnerSchema = new Schema<IPartner>(
         userId: {
             type: Schema.Types.ObjectId,
             ref: 'User',
-            required: true,
             unique: true,
+            sparse: true,
         },
         slug: {
             type: String,

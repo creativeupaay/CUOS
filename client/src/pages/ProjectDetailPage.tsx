@@ -149,7 +149,7 @@ export default function ProjectDetailPage() {
                     )}
                     {isAdmin && projectPartnerId && projectPartnerName && (
                         <Link
-                            to={`/admin/partners/${projectPartnerId}`}
+                            to={`/admin/partners/manage/${projectPartnerId}`}
                             className="inline-flex items-center gap-2 mt-2 text-sm hover:underline"
                             style={{ color: 'var(--color-text-secondary)' }}
                         >

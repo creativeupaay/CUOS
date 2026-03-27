@@ -135,7 +135,9 @@ export default function SuperAdminDashboard() {
 
         // Determine logout redirect based on user role and partner status
         const isPartnerRole = roleName === 'partner';
-        const partnerSlug = (user as any)?.partnerSlug;
+        const partnerSlug = (user as any)?.partnerSlug || (
+            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
+        );
 
         // Redirect to partner's personalized login page if they have a slug
         const logoutPath = isPartnerRole && partnerSlug
@@ -143,6 +145,11 @@ export default function SuperAdminDashboard() {
             : isPartnerRole
                 ? '/partner/login'
                 : '/login';
+
+        if (typeof window !== 'undefined') {
+            window.location.replace(logoutPath);
+            return;
+        }
 
         dispatch(logout());
         dispatch(api.util.resetApiState());
@@ -221,7 +228,7 @@ export default function SuperAdminDashboard() {
             title: 'Partners',
             description: 'Manage partner onboarding, attribution and performance',
             icon: <Handshake size={22} />,
-            path: '/admin/partners',
+            path: '/admin/partners/dashboard',
         },
         {
             key: 'hiring',

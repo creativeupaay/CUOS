@@ -41,6 +41,8 @@ const ROUTE_TITLES: Record<string, string> = {
     '/admin/permissions': 'Permissions',
     '/admin/settings': 'Settings',
     '/admin/audit-logs': 'Audit Logs',
+    '/admin/partners/dashboard': 'Partner Dashboard',
+    '/admin/partners/manage': 'Manage Partners',
     '/partner-admin': 'Team Management',
     '/partner-admin/team': 'Team Members',
     '/hiring/assignments': 'Assignment',
@@ -64,6 +66,10 @@ function resolveTitle(pathname: string): string {
         return pathname.endsWith('/edit') ? 'Edit Client' : 'Client Details';
     }
     if (pathname === '/crm/clients/new') return 'New Client';
+
+    if (pathname.startsWith('/admin/partners/manage/')) {
+        return pathname.endsWith('/edit') ? 'Edit Partner' : 'Partner Details';
+    }
 
     // Lead detail pages
     if (pathname.startsWith('/crm/leads/') && pathname !== '/crm/leads/new') {
