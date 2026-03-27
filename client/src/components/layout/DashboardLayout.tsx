@@ -102,9 +102,6 @@ export default function DashboardLayout() {
         ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
         : 'U';
 
-    const { data: profileData } = useGetMyProfileQuery();
-    const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
-
     // Check if user is a partner
     const roleName = user?.role
         ? typeof user.role === 'object'
@@ -112,6 +109,8 @@ export default function DashboardLayout() {
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
+    const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
+    const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
     useEffect(() => {
         setMobileSidebarOpen(false);

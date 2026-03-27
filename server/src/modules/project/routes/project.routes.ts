@@ -110,7 +110,7 @@ router.post(
 
 // Remove assignee from project
 router.delete(
-    '/:id/assignees/:employeeId',
+    '/:id/assignees/:memberId',
     validateRequest(projectValidators.removeAssigneeSchema),
     checkProjectManager,
     projectController.removeAssignee
@@ -118,7 +118,7 @@ router.delete(
 
 // Get assignee permissions
 router.get(
-    '/:id/assignees/:employeeId/permissions',
+    '/:id/assignees/:memberId/permissions',
     validateRequest(projectValidators.removeAssigneeSchema), // reuse schema since it just needs id and employeeId
     checkProjectAccess,
     projectController.getAssigneePermissions
@@ -126,7 +126,7 @@ router.get(
 
 // Update assignee permissions
 router.patch(
-    '/:id/assignees/:employeeId/permissions',
+    '/:id/assignees/:memberId/permissions',
     validateRequest(projectValidators.updateAssigneePermissionsSchema),
     checkProjectManager,
     projectController.updateAssigneePermissions

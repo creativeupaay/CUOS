@@ -32,6 +32,7 @@ import { Project } from '../../project/models/Project.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Note } from '../../project/models/Note.model';
 import { Partner } from '../../partners/models/Partner.model';
+import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 
 /**
  * Check if user has access to a project
@@ -62,7 +63,15 @@ const checkProjectAccess = async (
 
     // Partner users can only access their own partner-bound projects.
     if (normalizedRole === 'partner') {
-      const partner = await Partner.findOne({ userId: new Types.ObjectId(userId) }).select('_id').lean();
+      let partner = await Partner.findOne({ userId: new Types.ObjectId(userId) }).select('_id').lean();
+
+      if (!partner) {
+        const partnerEmployee = await PartnerEmployee.findById(userId).select('partnerId').lean();
+        if (partnerEmployee?.partnerId) {
+          partner = { _id: partnerEmployee.partnerId } as any;
+        }
+      }
+
       if (!partner || !project.partnerId) {
         return false;
       }
@@ -84,7 +93,7 @@ const checkProjectAccess = async (
 
     // Check if user is assigned to project
     const isAssigned = project.assignees.some(
-      (assignee) => assignee.employeeId.toString() === employee._id.toString()
+      (assignee) => assignee.memberType === 'employee' && assignee.employeeId?.toString() === employee._id.toString()
     );
 
     return isAssigned;

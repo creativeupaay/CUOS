@@ -2,6 +2,8 @@ import { Meeting, IMeeting } from '../models/Meeting.model';
 import { Project } from '../models/Project.model';
 import AppError from '../../../utils/appError';
 import { Employee } from '../../hrms/models/Employee.model';
+import { Partner } from '../../partners/models/Partner.model';
+import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 
 export interface CreateMeetingData {
     title: string;
@@ -90,9 +92,26 @@ export const getMeetings = async (
     if (userRole !== 'admin' && userRole !== 'super-admin') {
         const project = await Project.findById(projectId);
 
+        if (userRole === 'partner' && project?.partnerId) {
+            const partner = await Partner.findOne({ userId }).select('_id').lean();
+            const partnerEmployee = partner ? null : await PartnerEmployee.findById(userId).select('partnerId').lean();
+            const viewerPartnerId = partner?._id?.toString() || partnerEmployee?.partnerId?.toString();
+            const projectPartnerId = (project.partnerId as any)._id?.toString() || project.partnerId.toString();
+
+            if (viewerPartnerId && viewerPartnerId === projectPartnerId) {
+                meetings = meetings.filter((meeting) => {
+                    if (meeting.accessLevel === 'custom') {
+                        return meeting.customAccessUsers?.some((id) => id.toString() === userId);
+                    }
+                    return true;
+                });
+                return meetings;
+            }
+        }
+
         const employee = await Employee.findOne({ userId });
         const userAssignee = employee && project?.assignees.find(
-            (a) => a.employeeId.toString() === employee._id.toString()
+            (a) => a.memberType === 'employee' && a.employeeId?.toString() === employee._id.toString()
         );
 
         meetings = meetings.filter((meeting) => {

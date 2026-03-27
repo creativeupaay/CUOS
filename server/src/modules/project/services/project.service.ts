@@ -25,7 +25,9 @@ export interface CreateProjectData {
     hourlyRate?: number;
     invoiceDetails?: any;
     assignees?: Array<{
-        employeeId: string;
+        employeeId?: string;
+        partnerEmployeeId?: string;
+        memberType: 'employee' | 'partner-employee';
         role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
         subModules?: {
             overview: boolean;
@@ -91,6 +93,57 @@ async function ensureProjectInPermissions(userId: string, projectId: string, sub
     );
 }
 
+function serializeAssignee(assignee: any) {
+    const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
+    const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object'
+        ? assignee.partnerEmployeeId
+        : null;
+    const employeeUser = employee?.userId && typeof employee.userId === 'object' ? employee.userId : null;
+
+    if (assignee?.memberType === 'partner-employee' || partnerEmployee) {
+        return {
+            ...assignee,
+            memberId: partnerEmployee?._id?.toString() || assignee?.partnerEmployeeId?.toString?.() || '',
+            displayName: partnerEmployee?.name || 'Partner Team Member',
+            displayEmail: partnerEmployee?.email || '',
+            displayDesignation: partnerEmployee?.designation || '',
+            displayCode: 'Partner',
+            sourceType: 'partner',
+            sourceLabel: 'Partner Team',
+        };
+    }
+
+    return {
+        ...assignee,
+        memberId: employee?._id?.toString() || assignee?.employeeId?.toString?.() || '',
+        displayName: employeeUser?.name || 'Creative Upaay Member',
+        displayEmail: employeeUser?.email || '',
+        displayDesignation: employee?.designation || '',
+        displayCode: 'CU',
+        sourceType: 'cu',
+        sourceLabel: 'Creative Upaay',
+    };
+}
+
+function serializeProjectAssignees(project: any) {
+    if (!project?.assignees) return project;
+
+    return {
+        ...project,
+        assignees: project.assignees.map((assignee: any) => serializeAssignee(assignee)),
+    };
+}
+
+function normalizeLegacyAssignees(project: any) {
+    if (!project?.assignees?.length) return;
+
+    project.assignees.forEach((assignee: any) => {
+        if (!assignee.memberType) {
+            assignee.memberType = assignee.partnerEmployeeId ? 'partner-employee' : 'employee';
+        }
+    });
+}
+
 /**
  * Create a new project
  */
@@ -124,7 +177,9 @@ export const createProject = async (
     // Auto-populate projectPermissions for all initial assignees
     if (data.assignees && data.assignees.length > 0) {
         // Fetch employees to get their userIds
-        const employeeIds = data.assignees.map(a => a.employeeId);
+        const employeeIds = data.assignees
+            .filter((a) => a.memberType === 'employee' && a.employeeId)
+            .map((a) => a.employeeId as string);
         const employees = await Employee.find({ _id: { $in: employeeIds } }).lean();
 
         const employeeUserMap = new Map(
@@ -133,6 +188,10 @@ export const createProject = async (
 
         await Promise.all(
             data.assignees.map(a => {
+                if (a.memberType !== 'employee' || !a.employeeId) {
+                    return Promise.resolve();
+                }
+
                 const uId = employeeUserMap.get(a.employeeId);
                 if (uId) {
                     return ensureProjectInPermissions(uId, (project._id as any).toString(), a.subModules);
@@ -159,7 +218,8 @@ export const getProjects = async (
     },
     projectAccess?: 'all' | 'assigned' | 'custom',
     projectIds?: string[],
-    requesterPartnerId?: string
+    requesterPartnerId?: string,
+    requesterIsPartnerEmployee?: boolean
 ): Promise<IProject[]> => {
     const query: any = { isArchived: false };
 
@@ -169,6 +229,9 @@ export const getProjects = async (
     if (filters?.priority) query.priority = filters.priority;
     if (requesterPartnerId) {
         query.partnerId = new Types.ObjectId(requesterPartnerId);
+        if (requesterIsPartnerEmployee) {
+            query['assignees.partnerEmployeeId'] = new Types.ObjectId(userId);
+        }
     }
 
     const normalizedRole = userRole?.toLowerCase();
@@ -204,10 +267,12 @@ export const getProjects = async (
             select: 'designation department',
             populate: { path: 'userId', select: 'name email' } // Get user info through employee
         })
+        .populate('assignees.partnerEmployeeId', 'name email designation phone isActive')
         .populate('createdBy', 'name email')
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .lean();
 
-    return projects;
+    return projects.map((project: any) => serializeProjectAssignees(project)) as any;
 };
 
 /**
@@ -228,10 +293,12 @@ export const getProjectById = async (
             select: 'designation department',
             populate: { path: 'userId', select: 'name email role' }
         })
+        .populate('assignees.partnerEmployeeId', 'name email designation phone isActive')
         .populate('createdBy', 'name email')
-        .populate('documents.uploadedBy', 'name email');
+        .populate('documents.uploadedBy', 'name email')
+        .lean();
 
-    return project;
+    return project ? (serializeProjectAssignees(project) as any) : null;
 };
 
 /**
@@ -270,10 +337,12 @@ export const deleteProject = async (
  */
 export const addAssignee = async (
     projectId: string,
-    employeeId: string,
+    memberId: string,
+    memberType: 'employee' | 'partner-employee',
     role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member',
     assignedBy: string,
-    subModules?: any
+    subModules?: any,
+    requesterPartnerId?: string
 ): Promise<IProject | null> => {
     const project = await Project.findById(projectId);
 
@@ -281,31 +350,73 @@ export const addAssignee = async (
         throw new AppError('Project not found', 404);
     }
 
+    // Older projects may still have assignees from before memberType existed.
+    // Normalize them before saving so adding a new member doesn't fail validation.
+    normalizeLegacyAssignees(project);
+
     // Check if employee is already assigned
-    const existingAssignee = project.assignees.find(
-        (a) => a.employeeId.toString() === employeeId
-    );
+    const existingAssignee = project.assignees.find((a) => {
+        if (memberType === 'partner-employee') {
+            return a.partnerEmployeeId?.toString() === memberId;
+        }
+
+        return a.employeeId?.toString() === memberId;
+    });
 
     if (existingAssignee) {
         throw new AppError('Employee is already assigned to this project', 400);
     }
 
-    project.assignees.push({
-        employeeId: new Types.ObjectId(employeeId),
-        role,
-        assignedBy: new Types.ObjectId(assignedBy),
-        assignedAt: new Date(),
-    });
+    if (memberType === 'partner-employee') {
+        const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+        const partnerEmployee = await PartnerEmployee.findById(memberId);
 
-    await project.save();
+        if (!partnerEmployee) {
+            throw new AppError('Partner team member not found', 404);
+        }
 
-    // Auto-add project to the user's projectPermissions
-    const employee = await Employee.findById(employeeId);
-    if (employee) {
+        if (!partnerEmployee.isActive) {
+            throw new AppError('This partner team member is inactive', 400);
+        }
+
+        const projectPartnerId = project.partnerId?.toString();
+        if (!projectPartnerId || projectPartnerId !== partnerEmployee.partnerId.toString()) {
+            throw new AppError('Partner team members can only be added to their own partner projects', 400);
+        }
+
+        if (requesterPartnerId && requesterPartnerId !== partnerEmployee.partnerId.toString()) {
+            throw new AppError('You can only add your own team members to this project', 403);
+        }
+
+        project.assignees.push({
+            partnerEmployeeId: new Types.ObjectId(memberId),
+            memberType,
+            userId: new Types.ObjectId(memberId),
+            role,
+            assignedBy: new Types.ObjectId(assignedBy),
+            assignedAt: new Date(),
+        });
+    } else {
+        const employee = await Employee.findById(memberId);
+        if (!employee) {
+            throw new AppError('Employee not found', 404);
+        }
+
+        project.assignees.push({
+            employeeId: new Types.ObjectId(memberId),
+            memberType,
+            userId: new Types.ObjectId((employee.userId as any).toString()),
+            role,
+            assignedBy: new Types.ObjectId(assignedBy),
+            assignedAt: new Date(),
+        });
+
         await ensureProjectInPermissions((employee.userId as any).toString(), projectId, subModules);
     }
 
-    return project;
+    await project.save();
+
+    return getProjectById(projectId) as any;
 };
 
 /**
@@ -313,7 +424,7 @@ export const addAssignee = async (
  */
 export const removeAssignee = async (
     projectId: string,
-    employeeId: string
+    memberId: string
 ): Promise<IProject | null> => {
     const project = await Project.findById(projectId);
 
@@ -321,16 +432,26 @@ export const removeAssignee = async (
         throw new AppError('Project not found', 404);
     }
 
+    normalizeLegacyAssignees(project);
+
+    const assigneeToRemove = project.assignees.find(
+        (a) => a.employeeId?.toString() === memberId || a.partnerEmployeeId?.toString() === memberId
+    );
+
     project.assignees = project.assignees.filter(
-        (a) => a.employeeId.toString() !== employeeId
+        (a) => a.employeeId?.toString() !== memberId && a.partnerEmployeeId?.toString() !== memberId
     );
 
     await project.save();
 
     // Pull the project completely from the user's personal modulePermissions
     // This ensures it is hidden from the user's dashboard
-    const employee = await Employee.findById(employeeId);
-    if (employee) {
+    if (assigneeToRemove?.memberType === 'employee' && assigneeToRemove.employeeId) {
+        const employee = await Employee.findById(assigneeToRemove.employeeId);
+        if (!employee) {
+            return getProjectById(projectId) as any;
+        }
+
         await User.updateOne(
             { _id: employee.userId },
             {
@@ -340,9 +461,9 @@ export const removeAssignee = async (
             }
         );
 
-        return project;
+        return getProjectById(projectId) as any;
     }
-    return project;
+    return getProjectById(projectId) as any;
 };
 
 /**

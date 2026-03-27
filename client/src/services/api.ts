@@ -25,6 +25,7 @@ const baseQueryWithReauth = async (
   api: Parameters<typeof baseQuery>[1],
   extraOptions: Parameters<typeof baseQuery>[2]
 ) => {
+  const wasAuthenticatedAtStart = Boolean((api.getState() as any)?.auth?.isAuthenticated);
   // wait until the mutex is available without locking it
   await mutex.waitForUnlock();
 
@@ -53,7 +54,7 @@ const baseQueryWithReauth = async (
           // Only hard-logout when the refresh token itself is rejected (401/403)
           // Don't logout on transient network errors or server 5xx — session may still be valid
           const refreshErrStatus = (refreshResult.error as any)?.status;
-          if (refreshErrStatus === 401 || refreshErrStatus === 403) {
+          if ((refreshErrStatus === 401 || refreshErrStatus === 403) && wasAuthenticatedAtStart) {
             api.dispatch({ type: 'auth/logout' });
           }
         }

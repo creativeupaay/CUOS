@@ -92,6 +92,7 @@ export const filterPartnerData = async (
 
                 req.partnerId = partnerId;
                 req.isPartner = true;
+                req.isPartnerEmployee = true;
 
                 return next();
             }
@@ -127,9 +128,11 @@ export const filterPartnerData = async (
             // Store partner ID in request for later use
             req.partnerId = partner._id.toString();
             req.isPartner = true;
+            req.isPartnerEmployee = false;
         } else if (roleName === 'super-admin' || roleName === 'admin') {
             // Admins can see/edit all data without filtering
             req.isPartner = false;
+            req.isPartnerEmployee = false;
         }
 
         next();
@@ -144,6 +147,7 @@ declare global {
         interface Request {
             partnerId?: string;
             isPartner?: boolean;
+            isPartnerEmployee?: boolean;
             userRole?: string;
         }
     }

@@ -61,23 +61,19 @@ function getProjectMembers(project: Project): { userId: string; name: string; em
     const seen = new Set<string>();
     const members: { userId: string; name: string; email: string }[] = [];
     project.assignees?.forEach((a: any) => {
-        let userId: string | undefined;
-        let userData: any = null;
-        if (a.employeeId) {
-            const emp = typeof a.employeeId === 'object' ? a.employeeId : null;
-            if (emp?.userId) {
-                const u = typeof emp.userId === 'object' ? emp.userId : null;
-                userId = u?._id ?? (typeof emp.userId === 'string' ? emp.userId : undefined);
-                userData = u;
-            }
-        } else if (a.userId) {
-            const u = typeof a.userId === 'object' ? a.userId : null;
-            userId = u?._id ?? (typeof a.userId === 'string' ? a.userId : undefined);
-            userData = u;
-        }
+        const rawUser = typeof a.userId === 'object' ? a.userId : null;
+        const userId =
+            a.userId
+                ? (rawUser?._id ?? (typeof a.userId === 'string' ? a.userId : undefined))
+                : a.memberId;
+        const userData = rawUser;
         if (userId && !seen.has(userId)) {
             seen.add(userId);
-            members.push({ userId, name: userData?.name ?? 'Team Member', email: userData?.email ?? '' });
+            members.push({
+                userId,
+                name: a.displayName ?? userData?.name ?? 'Team Member',
+                email: a.displayEmail ?? userData?.email ?? '',
+            });
         }
     });
     return members;
@@ -1327,4 +1323,3 @@ const ProjectDocumentsTab: React.FC = () => {
 };
 
 export default ProjectDocumentsTab;
-

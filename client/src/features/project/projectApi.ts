@@ -84,25 +84,25 @@ export const projectApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
         }),
 
-        removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; employeeId: string }>({
-            query: ({ projectId, employeeId }) => ({
-                url: `/projects/${projectId}/assignees/${employeeId}`,
+        removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; memberId: string }>({
+            query: ({ projectId, memberId }) => ({
+                url: `/projects/${projectId}/assignees/${memberId}`,
                 method: 'DELETE',
             }),
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
         }),
 
-        updateAssigneePermissions: builder.mutation<ApiResponse<void>, { projectId: string; employeeId: string; data: UpdateAssigneePermissionsRequest }>({
-            query: ({ projectId, employeeId, data }) => ({
-                url: `/projects/${projectId}/assignees/${employeeId}/permissions`,
+        updateAssigneePermissions: builder.mutation<ApiResponse<void>, { projectId: string; memberId: string; data: UpdateAssigneePermissionsRequest }>({
+            query: ({ projectId, memberId, data }) => ({
+                url: `/projects/${projectId}/assignees/${memberId}/permissions`,
                 method: 'PATCH',
                 body: data,
             }),
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
         }),
 
-        getAssigneePermissions: builder.query<ApiResponse<any>, { projectId: string; employeeId: string }>({
-            query: ({ projectId, employeeId }) => `/projects/${projectId}/assignees/${employeeId}/permissions`,
+        getAssigneePermissions: builder.query<ApiResponse<any>, { projectId: string; memberId: string }>({
+            query: ({ projectId, memberId }) => `/projects/${projectId}/assignees/${memberId}/permissions`,
             providesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 

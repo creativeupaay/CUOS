@@ -42,7 +42,7 @@ export const getProjects = asyncHandler(
             clientId: req.query.clientId as string,
             priority: req.query.priority as string,
             partnerId: req.query.partnerId as string,
-        }, 'custom', projectIds, req.partnerId);
+        }, 'custom', projectIds, req.partnerId, req.isPartnerEmployee);
 
         res.status(200).json({
             success: true,
@@ -103,14 +103,23 @@ export const deleteProject = asyncHandler(
 export const addAssignee = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const adminId = req.user?.id!;
-        const { employeeId: assigneeId, role, subModules } = req.body;
+        const {
+            memberId,
+            memberType = 'employee',
+            employeeId: legacyEmployeeId,
+            role,
+            subModules,
+        } = req.body;
+        const assigneeId = memberId || legacyEmployeeId;
 
         const project = await projectService.addAssignee(
             req.params.id,
             assigneeId,
+            memberType,
             role,
             adminId,
-            subModules // Pass through optional sub permissions
+            subModules,
+            req.partnerId
         );
 
         res.status(200).json({
@@ -125,7 +134,7 @@ export const removeAssignee = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const project = await projectService.removeAssignee(
             req.params.id,
-            req.params.employeeId
+            req.params.memberId
         );
 
         res.status(200).json({
@@ -141,7 +150,7 @@ export const updateAssigneePermissions = asyncHandler(
         const { subModules } = req.body;
 
         await projectService.updateAssigneePermissions(
-            req.params.employeeId,
+            req.params.memberId,
             req.params.id,
             subModules
         );
@@ -156,7 +165,7 @@ export const updateAssigneePermissions = asyncHandler(
 export const getAssigneePermissions = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const permissions = await projectService.getAssigneePermissions(
-            req.params.employeeId,
+            req.params.memberId,
             req.params.id
         );
 

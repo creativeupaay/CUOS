@@ -31,6 +31,7 @@ declare global {
         id: string;
         email: string;
         role: string;
+        isPartnerEmployee?: boolean;
         [key: string]: any;
       };
     }

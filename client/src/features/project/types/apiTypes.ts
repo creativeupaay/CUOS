@@ -56,8 +56,9 @@ export interface UpdateProjectRequest {
 }
 
 export interface AddAssigneeRequest {
-    employeeId: string;
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+    memberId: string;
+    memberType: 'employee' | 'partner-employee';
+    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     subModules?: {
         overview: boolean;
         tasks: boolean;

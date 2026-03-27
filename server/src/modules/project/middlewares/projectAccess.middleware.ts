@@ -6,6 +6,7 @@ import { Task } from '../models/Task.model';
 import { Credential } from '../models/Credential.model';
 import { Meeting } from '../models/Meeting.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 
 const normalizeRole = (role: any): string => {
     if (typeof role === 'string') return role.toLowerCase();
@@ -16,6 +17,33 @@ const normalizeRole = (role: any): string => {
 const isAdminRole = (role: any): boolean => {
     const normalized = normalizeRole(role);
     return ['super-admin', 'super_admin', 'admin'].includes(normalized);
+};
+
+const matchesPartnerProject = (project: any, partnerId?: string): boolean => {
+    if (!project || !partnerId || !project.partnerId) return false;
+    const projectPartnerId = (project.partnerId as any)._id?.toString() || project.partnerId.toString();
+    return projectPartnerId === partnerId;
+};
+
+const isInternalEmployeeAssigned = (project: any, employeeId: string): boolean => {
+    if (!project) return false;
+    return project.assignees.some(
+        (assignee: any) => assignee.memberType === 'employee' && assignee.employeeId?.toString() === employeeId
+    );
+};
+
+const getInternalEmployeeAssignee = (project: any, employeeId: string) => {
+    if (!project) return undefined;
+    return project.assignees.find(
+        (assignee: any) => assignee.memberType === 'employee' && assignee.employeeId?.toString() === employeeId
+    );
+};
+
+const getPartnerEmployeeAssignee = (project: any, partnerEmployeeId: string) => {
+    if (!project) return undefined;
+    return project.assignees.find(
+        (assignee: any) => assignee.memberType === 'partner-employee' && assignee.partnerEmployeeId?.toString() === partnerEmployeeId
+    );
 };
 
 /**
@@ -52,16 +80,18 @@ export const checkProjectAccess = async (
 
         // Partner users can access only their own projects.
         if (req.partnerId) {
-            // Handle both populated and non-populated partnerId
-            const projectPartnerId = project.partnerId
-                ? (project.partnerId as any)._id?.toString() || (project.partnerId as any).toString()
-                : null;
-
-            if (projectPartnerId && projectPartnerId === req.partnerId) {
-                return next();
+            if (!matchesPartnerProject(project, req.partnerId)) {
+                return next(new AppError('You do not have access to this project', 403));
             }
 
-            return next(new AppError('You do not have access to this project', 403));
+            if (req.isPartnerEmployee) {
+                const assignee = getPartnerEmployeeAssignee(project, userId);
+                if (!assignee) {
+                    return next(new AppError('You do not have access to this project', 403));
+                }
+            }
+
+            return next();
         }
 
         // Check if user is in assignees
@@ -70,9 +100,7 @@ export const checkProjectAccess = async (
             return next(new AppError('No matching employee record found for user', 403));
         }
 
-        const isAssigned = project.assignees.some(
-            (assignee) => assignee.employeeId.toString() === employee._id.toString()
-        );
+        const isAssigned = isInternalEmployeeAssigned(project, employee._id.toString());
 
         if (!isAssigned) {
             return next(
@@ -119,16 +147,18 @@ export const checkProjectManager = async (
 
         // Partner users can manage only their own projects.
         if (req.partnerId) {
-            // Handle both populated and non-populated partnerId
-            const projectPartnerId = project.partnerId
-                ? (project.partnerId as any)._id?.toString() || (project.partnerId as any).toString()
-                : null;
-
-            if (projectPartnerId && projectPartnerId === req.partnerId) {
-                return next();
+            if (!matchesPartnerProject(project, req.partnerId)) {
+                return next(new AppError('Only project managers can perform this action', 403));
             }
 
-            return next(new AppError('Only project managers can perform this action', 403));
+            if (req.isPartnerEmployee) {
+                const assignee = getPartnerEmployeeAssignee(project, userId);
+                if (!assignee || assignee.role !== 'manager') {
+                    return next(new AppError('Only project managers can perform this action', 403));
+                }
+            }
+
+            return next();
         }
 
         // Check if user is a manager
@@ -137,9 +167,7 @@ export const checkProjectManager = async (
             return next(new AppError('No matching employee record found for user', 403));
         }
 
-        const assignee = project.assignees.find(
-            (a) => a.employeeId.toString() === employee._id.toString()
-        );
+        const assignee = getInternalEmployeeAssignee(project, employee._id.toString());
 
         if (!assignee || assignee.role !== 'manager') {
             return next(
@@ -188,17 +216,22 @@ export const checkTaskAccess = async (
 
         // Allow any project member to edit tasks (not just assignees/managers).
         // Deletion is separately protected by checkProjectManager.
+        const project = await Project.findById(task.projectId);
+
+        if (req.partnerId && matchesPartnerProject(project, req.partnerId)) {
+            return next();
+        }
+
+        const partnerEmployee = await PartnerEmployee.findById(userId).select('_id');
+        if (partnerEmployee && project?.assignees.some(
+            (assignee: any) => assignee.memberType === 'partner-employee' && assignee.partnerEmployeeId?.toString() === partnerEmployee._id.toString()
+        )) {
+            return next();
+        }
+
         const employee = await Employee.findOne({ userId });
-        if (employee) {
-            const project = await Project.findById(task.projectId);
-            if (project) {
-                const isProjectMember = project.assignees.some(
-                    (a) => a.employeeId.toString() === employee._id.toString()
-                );
-                if (isProjectMember) {
-                    return next();
-                }
-            }
+        if (employee && isInternalEmployeeAssigned(project, employee._id.toString())) {
+            return next();
         }
 
         return next(new AppError('You do not have access to this task', 403));
@@ -359,29 +392,32 @@ export const checkMeetingAccess = async (
 
         // Check access level
         if (meeting.accessLevel === 'project-team') {
+            const project = await Project.findById(meeting.projectId);
+
+            if (req.partnerId && matchesPartnerProject(project, req.partnerId)) {
+                return next();
+            }
+
             // Check if user is in project
             const employee = await Employee.findOne({ userId });
             if (!employee) return next(new AppError('No matching employee record found', 403));
 
-            const project = await Project.findById(meeting.projectId);
-            if (project) {
-                const isAssigned = project.assignees.some(
-                    (assignee) => assignee.employeeId.toString() === employee._id.toString()
-                );
-                if (isAssigned) {
-                    return next();
-                }
+            if (isInternalEmployeeAssigned(project, employee._id.toString())) {
+                return next();
             }
         } else if (meeting.accessLevel === 'managers-only') {
+            const project = await Project.findById(meeting.projectId);
+
+            if (req.partnerId && matchesPartnerProject(project, req.partnerId)) {
+                return next();
+            }
+
             // Check if user is project manager
             const employee = await Employee.findOne({ userId });
             if (!employee) return next(new AppError('No matching employee record found', 403));
 
-            const project = await Project.findById(meeting.projectId);
             if (project) {
-                const assignee = project.assignees.find(
-                    (a) => a.employeeId.toString() === employee._id.toString()
-                );
+                const assignee = getInternalEmployeeAssignee(project, employee._id.toString());
                 if (assignee && assignee.role === 'manager') {
                     return next();
                 }

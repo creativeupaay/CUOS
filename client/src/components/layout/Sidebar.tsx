@@ -387,7 +387,7 @@ export default function Sidebar({
         ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
         : 'CU';
 
-    const { data: employeeProfile } = useGetMyProfileQuery();
+    const { data: employeeProfile } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
 
     const isPMRoute = location.pathname.startsWith('/projects');

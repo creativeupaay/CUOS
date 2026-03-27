@@ -93,7 +93,9 @@ export const addAssigneeSchema = z.object({
         id: z.string().min(1, 'Project ID is required'),
     }),
     body: z.object({
-        employeeId: z.string().min(1, 'Employee ID is required'),
+        memberId: z.string().min(1, 'Member ID is required').optional(),
+        employeeId: z.string().min(1, 'Employee ID is required').optional(),
+        memberType: z.enum(['employee', 'partner-employee']).default('employee'),
         role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer', 'member']),
         subModules: z.object({
             overview: z.boolean(),
@@ -104,20 +106,23 @@ export const addAssigneeSchema = z.object({
             documents: z.boolean(),
             notes: z.boolean(),
         }).optional(),
+    }).refine((data) => !!(data.memberId || data.employeeId), {
+        message: 'Member ID is required',
+        path: ['memberId'],
     }),
 });
 
 export const removeAssigneeSchema = z.object({
     params: z.object({
         id: z.string().min(1, 'Project ID is required'),
-        employeeId: z.string().min(1, 'Employee ID is required'),
+        memberId: z.string().min(1, 'Member ID is required'),
     }),
 });
 
 export const updateAssigneePermissionsSchema = z.object({
     params: z.object({
         id: z.string().min(1, 'Project ID is required'),
-        employeeId: z.string().min(1, 'Employee ID is required'),
+        memberId: z.string().min(1, 'Member ID is required'),
     }),
     body: z.object({
         subModules: z.object({

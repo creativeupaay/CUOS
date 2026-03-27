@@ -9,6 +9,11 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
     const { isAuthenticated, user, isInitialized } = useAppSelector((state) => state.auth);
 
+    const partnerSlug = (() => {
+        if (typeof window === 'undefined') return null;
+        return window.sessionStorage.getItem('partnerPortalSlug');
+    })();
+
     if (!isInitialized) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -18,7 +23,7 @@ export default function ProtectedRoute({ children, roles }: ProtectedRouteProps)
     }
 
     if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to={partnerSlug ? `/partner/${partnerSlug}/login` : '/login'} replace />;
     }
 
     // Check role if specified

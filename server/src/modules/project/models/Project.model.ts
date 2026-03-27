@@ -18,7 +18,10 @@ export interface IProjectDocument {
 }
 
 export interface IProjectAssignee {
-    employeeId: Types.ObjectId;
+    employeeId?: Types.ObjectId;
+    partnerEmployeeId?: Types.ObjectId;
+    memberType: 'employee' | 'partner-employee';
+    userId?: Types.ObjectId;
     role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     assignedAt: Date;
     assignedBy: Types.ObjectId;
@@ -99,7 +102,14 @@ const ProjectDocumentSchema = new Schema<IProjectDocument>(
 
 const ProjectAssigneeSchema = new Schema<IProjectAssignee>(
     {
-        employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
+        employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        partnerEmployeeId: { type: Schema.Types.ObjectId, ref: 'PartnerEmployee' },
+        memberType: {
+            type: String,
+            enum: ['employee', 'partner-employee'],
+            required: true,
+        },
+        userId: { type: Schema.Types.ObjectId },
         role: {
             type: String,
             enum: ['manager', 'developer', 'designer', 'qa', 'viewer', 'member'],
@@ -196,6 +206,8 @@ const ProjectSchema = new Schema<IProject>(
 ProjectSchema.index({ clientId: 1 });
 ProjectSchema.index({ status: 1 });
 ProjectSchema.index({ 'assignees.employeeId': 1 });
+ProjectSchema.index({ 'assignees.partnerEmployeeId': 1 });
+ProjectSchema.index({ 'assignees.userId': 1 });
 ProjectSchema.index({ partnerId: 1 });
 ProjectSchema.index({ createdAt: -1 });
 ProjectSchema.index({ isArchived: 1 });

@@ -43,7 +43,6 @@ export default function PersonalizedPartnerLoginPage() {
             // Set credentials in Redux store
             dispatch(setCredentials({ user: result.data.user }));
 
-            // Redirect to dashboard
             navigate('/dashboard', { replace: true });
         } catch (err: any) {
             setError(err?.data?.message || 'Invalid email or password');

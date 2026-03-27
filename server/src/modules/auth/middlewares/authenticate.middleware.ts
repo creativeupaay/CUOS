@@ -33,19 +33,37 @@ export const authenticate = async (
         // 4. Get user from database
         const user = await User.findById(payload.userId).populate('role');
 
-        if (!user) {
+        if (user) {
+            if (!user.isActive) {
+                return next(new AppError('User account is deactivated', 403));
+            }
+
+            (req as any).user = {
+                id: (user._id as any).toString(),
+                email: user.email,
+                role: (user.role as any).name,
+            };
+
+            return next();
+        }
+
+        // Partner employees authenticate against their own collection, not User.
+        const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+        const partnerEmployee = await PartnerEmployee.findById(payload.userId);
+
+        if (!partnerEmployee) {
             return next(new AppError('User not found', 401));
         }
 
-        if (!user.isActive) {
+        if (!partnerEmployee.isActive) {
             return next(new AppError('User account is deactivated', 403));
         }
 
-        // 5. Attach user to request
         (req as any).user = {
-            id: (user._id as any).toString(),
-            email: user.email,
-            role: (user.role as any).name,
+            id: (partnerEmployee._id as any).toString(),
+            email: partnerEmployee.email,
+            role: 'partner',
+            isPartnerEmployee: true,
         };
 
         next();

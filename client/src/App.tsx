@@ -97,6 +97,10 @@ function getRoleNameFromUser(user: any): string {
     : '';
 }
 
+function getAuthenticatedHome(_user: any): string {
+  return '/dashboard';
+}
+
 function CrmRootRedirect() {
   const user = useAppSelector((state) => state.auth.user);
   const roleName = getRoleNameFromUser(user);
@@ -137,6 +141,7 @@ function App() {
   const dispatch = useAppDispatch();
   const { data: userData, isLoading: isAuthLoading } = useGetMeQuery();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const user = useAppSelector((state) => state.auth.user);
 
   useEffect(() => {
     if (!isAuthLoading) {
@@ -153,17 +158,17 @@ function App() {
         {/* Public routes */}
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<LoginPage />)}
+          element={isAuthenticated ? <Navigate to={getAuthenticatedHome(user)} replace /> : loadable(<LoginPage />)}
         />
         {/* Old partner login route - redirect to dashboard if authenticated */}
         <Route
           path="/partner/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<PartnerLoginPage />)}
+          element={isAuthenticated ? <Navigate to={getAuthenticatedHome(user)} replace /> : loadable(<PartnerLoginPage />)}
         />
         {/* Personalized partner login with slug */}
         <Route
           path="/partner/:slug/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : loadable(<PersonalizedPartnerLoginPage />)}
+          element={isAuthenticated ? <Navigate to={getAuthenticatedHome(user)} replace /> : loadable(<PersonalizedPartnerLoginPage />)}
         />
 
         {/* Employee self-onboarding form — public, no login required */}
@@ -286,7 +291,7 @@ function App() {
         {/* Default redirect */}
         <Route
           path="/"
-          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+          element={<Navigate to={isAuthenticated ? getAuthenticatedHome(user) : '/login'} replace />}
         />
 
         {/* ── Client Portal (standalone — no admin auth required) ── */}

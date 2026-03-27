@@ -4,10 +4,46 @@ import type { RootState } from '@/app/store';
 import type { Project, ProjectPhase } from '@/features/project';
 import { useAddAssigneeMutation, useRemoveAssigneeMutation, useUpdateAssigneePermissionsMutation, useLazyGetAssigneePermissionsQuery, useUpdateProjectMutation } from '@/features/project';
 import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
-import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle, Handshake } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import { useGetPartnerEmployeesQuery } from '@/features/partners/partnerEmployeeApi';
+
+function getAssigneeMeta(assignee: any) {
+    const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
+    const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object' ? assignee.partnerEmployeeId : null;
+    const employeeUser = employee?.userId && typeof employee.userId === 'object' ? employee.userId : null;
+
+    const sourceType = assignee?.sourceType
+        || (assignee?.memberType === 'partner-employee' || partnerEmployee ? 'partner' : 'cu');
+    const memberId = assignee?.memberId
+        || partnerEmployee?._id
+        || employee?._id
+        || (typeof assignee?.partnerEmployeeId === 'string' ? assignee.partnerEmployeeId : assignee?.employeeId);
+    const displayName = assignee?.displayName
+        || partnerEmployee?.name
+        || employeeUser?.name
+        || 'Team Member';
+    const displayEmail = assignee?.displayEmail
+        || partnerEmployee?.email
+        || employeeUser?.email
+        || '';
+    const displayDesignation = assignee?.displayDesignation
+        || partnerEmployee?.designation
+        || employee?.designation
+        || '';
+    const displayCode = assignee?.displayCode || (sourceType === 'partner' ? 'Partner' : 'CU');
+
+    return {
+        memberId: String(memberId || ''),
+        sourceType,
+        displayName,
+        displayEmail,
+        displayDesignation,
+        displayCode,
+    };
+}
 
 export default function ProjectOverviewTab() {
     const { project } = useOutletContext<{ project: Project }>();
@@ -21,6 +57,8 @@ export default function ProjectOverviewTab() {
         : '';
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
     const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName);
+    const isPartnerUser = roleName === 'partner';
+    const currentPartnerId = typeof currentUser?.partnerId === 'object' ? (currentUser.partnerId as any)?._id : currentUser?.partnerId;
     const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
     const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
     const partnerName = projectPartnerId
@@ -29,9 +67,12 @@ export default function ProjectOverviewTab() {
             return partner?.userId?.name || partner?.contactPerson || partner?.companyName;
         })()
         : undefined;
+    const isPartnerOwnedProject = Boolean(isPartnerUser && currentPartnerId && projectPartnerId && String(currentPartnerId) === String(projectPartnerId));
+    const canManageTeam = isSuperAdmin || isPartnerOwnedProject;
 
     const [isAddingMember, setIsAddingMember] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedMemberType, setSelectedMemberType] = useState<'employee' | 'partner-employee'>('employee');
     const [selectedRole, setSelectedRole] = useState('');
     const [roleError, setRoleError] = useState(false);
     const [subModules, setSubModules] = useState({
@@ -57,8 +98,13 @@ export default function ProjectOverviewTab() {
     });
 
     // Load all active employees — the employee list is the team pool for project assignment
-    const { data: employeesData, isLoading: isLoadingEmployees } = useGetEmployeesQuery({ status: 'active', limit: 200 });
+    const { data: employeesData, isLoading: isLoadingEmployees } = useGetEmployeesQuery({ status: 'active', limit: 200 }, { skip: !isSuperAdmin });
     const employees = (employeesData?.data as any)?.employees ?? [];
+    const { data: partnerEmployeesResponse, isLoading: isLoadingPartnerEmployees } = useGetPartnerEmployeesQuery(
+        { isActive: true, limit: 200 },
+        { skip: !isPartnerOwnedProject }
+    );
+    const partnerEmployees = partnerEmployeesResponse?.data?.employees || [];
     const [addAssignee, { isLoading: isAdding }] = useAddAssigneeMutation();
     const [removeAssignee, { isLoading: isRemoving }] = useRemoveAssigneeMutation();
     const [updatePermissions, { isLoading: isUpdatingPermissions }] = useUpdateAssigneePermissionsMutation();
@@ -74,10 +120,16 @@ export default function ProjectOverviewTab() {
         try {
             await addAssignee({
                 projectId: project._id,
-                data: { employeeId: selectedUserId, role: selectedRole as any, subModules }
+                data: {
+                    memberId: selectedUserId,
+                    memberType: selectedMemberType,
+                    role: selectedRole as any,
+                    subModules,
+                }
             }).unwrap();
             setIsAddingMember(false);
             setSelectedUserId('');
+            setSelectedMemberType(isPartnerOwnedProject ? 'partner-employee' : 'employee');
             setSelectedRole('');
             setRoleError(false);
             setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
@@ -89,7 +141,7 @@ export default function ProjectOverviewTab() {
     const handleRemoveMember = async (employeeId: string) => {
         if (window.confirm('Are you sure you want to remove this member from the project?')) {
             try {
-                await removeAssignee({ projectId: project._id, employeeId }).unwrap();
+                await removeAssignee({ projectId: project._id, memberId: employeeId }).unwrap();
             } catch (error) {
                 console.error('Failed to remove assignee:', error);
             }
@@ -104,7 +156,7 @@ export default function ProjectOverviewTab() {
 
         // Fetch current custom permissions from the backend instead of using defaults
         try {
-            const res = await fetchAssigneePermissions({ projectId: project._id, employeeId }).unwrap();
+            const res = await fetchAssigneePermissions({ projectId: project._id, memberId: employeeId }).unwrap();
             // Merge: defaults first so old records without `notes` still have it, backend values win
             setEditSubModules({ ...fullDefaults, ...(res.data ?? {}) });
         } catch (error) {
@@ -118,7 +170,7 @@ export default function ProjectOverviewTab() {
         try {
             await updatePermissions({
                 projectId: project._id,
-                employeeId: editingUserId,
+                memberId: editingUserId,
                 data: { subModules: editSubModules }
             }).unwrap();
             setEditingUserId(null);
@@ -126,6 +178,8 @@ export default function ProjectOverviewTab() {
             console.error('Failed to update permissions:', error);
         }
     };
+
+    const availableMembers = isPartnerOwnedProject ? partnerEmployees : employees;
 
     return (
         <div className="space-y-5">
@@ -195,9 +249,12 @@ export default function ProjectOverviewTab() {
                             {project.assignees.length}
                         </span>
                     </div>
-                    {isSuperAdmin && !isAddingMember && (
+                    {canManageTeam && !isAddingMember && (
                         <button
-                            onClick={() => setIsAddingMember(true)}
+                            onClick={() => {
+                                setSelectedMemberType(isPartnerOwnedProject ? 'partner-employee' : 'employee');
+                                setIsAddingMember(true);
+                            }}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors hover:bg-gray-50 border"
                             style={{
                                 borderColor: 'var(--color-border-default)',
@@ -209,7 +266,7 @@ export default function ProjectOverviewTab() {
                     )}
                 </div>
 
-                {isSuperAdmin && isAddingMember && (
+                {canManageTeam && isAddingMember && (
                     <div className="mb-4 p-4 rounded-lg border" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-1">
@@ -218,20 +275,18 @@ export default function ProjectOverviewTab() {
                                     style={{ borderColor: 'var(--color-border-default)' }}
                                     value={selectedUserId}
                                     onChange={(e) => setSelectedUserId(e.target.value)}
-                                    disabled={isLoadingEmployees}
+                                    disabled={isLoadingEmployees || isLoadingPartnerEmployees}
                                 >
-                                    <option value="">Select Employee...</option>
-                                    {employees.map((emp: any) => {
-                                        const empUserId = emp.userId?._id ?? emp.userId;
-                                        // Don't show employees already assigned
-                                        const isAssigned = project.assignees.some((a: any) =>
-                                            (typeof a.employeeId === 'object' ? a.employeeId._id : a.employeeId) === emp._id
-                                            || (a.userId && (typeof a.userId === 'object' ? a.userId._id : a.userId) === empUserId) // Fallback for old records
-                                        );
+                                    <option value="">{isPartnerOwnedProject ? 'Select Partner Team Member...' : 'Select Employee...'}</option>
+                                    {availableMembers.map((member: any) => {
+                                        const memberMeta = isPartnerOwnedProject
+                                            ? { id: member._id, label: `${member.name} · ${member.designation || 'Team Member'}` }
+                                            : { id: member._id, label: `${member.userId?.name ?? '—'} · ${member.designation} (${member.employeeId})` };
+                                        const isAssigned = project.assignees.some((a: any) => getAssigneeMeta(a).memberId === memberMeta.id);
                                         if (isAssigned) return null;
                                         return (
-                                            <option key={emp._id} value={emp._id}>
-                                                {emp.userId?.name ?? '—'} · {emp.designation} ({emp.employeeId})
+                                            <option key={memberMeta.id} value={memberMeta.id}>
+                                                {memberMeta.label}
                                             </option>
                                         );
                                     })}
@@ -268,11 +323,12 @@ export default function ProjectOverviewTab() {
                                     Add Team Member
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        setIsAddingMember(false);
-                                        setSelectedUserId('');
-                                        setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
-                                    }}
+                                        onClick={() => {
+                                            setIsAddingMember(false);
+                                            setSelectedUserId('');
+                                            setSelectedMemberType(isPartnerOwnedProject ? 'partner-employee' : 'employee');
+                                            setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
+                                        }}
                                     className="px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50 bg-white"
                                     style={{ borderColor: 'var(--color-border-default)' }}
                                     disabled={isAdding}
@@ -282,71 +338,82 @@ export default function ProjectOverviewTab() {
                             </div>
                         </div>
 
-                        {/* Sub Module Permissions */}
-                        <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--color-border-default)' }}>
-                            <div className="flex items-center justify-between mb-3">
-                                <p className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>Initial Tab Access</p>
-                                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        checked={Object.values(subModules).every(Boolean)}
-                                        onChange={(e) => {
-                                            const val = e.target.checked;
-                                            setSubModules({
-                                                overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val, notes: val
-                                            });
-                                        }}
-                                        disabled={isAdding}
-                                    />
-                                    <span style={{ color: 'var(--color-text-secondary)' }}>Select All</span>
-                                </label>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {Object.keys(subModules).map((key) => (
-                                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                        {selectedMemberType === 'employee' && (
+                            <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>Initial Tab Access</p>
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
                                         <input
                                             type="checkbox"
                                             className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                            checked={(subModules as any)[key]}
-                                            onChange={(e) => setSubModules((prev) => ({ ...prev, [key]: e.target.checked }))}
+                                            checked={Object.values(subModules).every(Boolean)}
+                                            onChange={(e) => {
+                                                const val = e.target.checked;
+                                                setSubModules({
+                                                    overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val, notes: val
+                                                });
+                                            }}
                                             disabled={isAdding}
                                         />
-                                        <span className="capitalize" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                                        </span>
+                                        <span style={{ color: 'var(--color-text-secondary)' }}>Select All</span>
                                     </label>
-                                ))}
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {Object.keys(subModules).map((key) => (
+                                        <label key={key} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                checked={(subModules as any)[key]}
+                                                onChange={(e) => setSubModules((prev) => ({ ...prev, [key]: e.target.checked }))}
+                                                disabled={isAdding}
+                                            />
+                                            <span className="capitalize" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
 
                 <div className="space-y-2">
                     {project.assignees.map((assignee) => {
-                        // Backend populates assignees.employeeId with: { _id, designation, employeeId, userId: { name, email } }
-                        const empObj = typeof assignee.employeeId === 'object' && assignee.employeeId !== null
-                            ? (assignee.employeeId as any)
-                            : null;
-                        const userObj = empObj && typeof empObj.userId === 'object' ? empObj.userId : null;
-                        const displayName = userObj?.name || 'Unknown';
-                        const displayEmail = userObj?.email || '';
-                        const displayDesignation = empObj?.designation || '';
-                        const displayEmpId = empObj?.employeeId || '';
-                        const keyId = empObj?._id || (typeof assignee.employeeId === 'string' ? assignee.employeeId : '');
+                        const meta = getAssigneeMeta(assignee);
+                        const canEditPermissions = isSuperAdmin && meta.sourceType === 'cu' && !!meta.memberId;
+                        const canRemoveMember = isSuperAdmin || (isPartnerOwnedProject && meta.sourceType === 'partner');
+                        const sourceBadgeLabel = meta.sourceType === 'partner' ? 'Partner' : 'CU';
+                        const sourceBadgeTitle = meta.sourceType === 'partner'
+                            ? 'Partner team member'
+                            : 'Creative Upaay team member';
 
                         return (
                             <div
-                                key={keyId || Math.random()}
+                                key={meta.memberId || Math.random()}
                                 className="flex items-center justify-between px-3.5 py-2.5 rounded-lg group"
                                 style={{ backgroundColor: 'var(--color-bg-subtle)' }}
                             >
                                 <div>
-                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                        {displayName}{displayDesignation ? ` · ${displayDesignation}` : ''}
-                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                            {meta.displayName}{meta.displayDesignation ? ` · ${meta.displayDesignation}` : ''}
+                                        </p>
+                                        <span
+                                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                            title={sourceBadgeTitle}
+                                            style={{
+                                                backgroundColor: meta.sourceType === 'partner' ? '#FEF3C7' : '#DBEAFE',
+                                                color: meta.sourceType === 'partner' ? '#92400E' : '#1D4ED8',
+                                            }}
+                                        >
+                                            {meta.sourceType === 'partner' ? <Handshake size={10} /> : null}
+                                            {sourceBadgeLabel}
+                                        </span>
+                                    </div>
                                     <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                        {displayEmpId}{displayEmail ? ` · ${displayEmail}` : ''}
+                                        {meta.displayEmail || ''}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -359,17 +426,21 @@ export default function ProjectOverviewTab() {
                                     >
                                         {assignee.role}
                                     </span>
-                                    {isSuperAdmin && (
+                                    {canEditPermissions && (
                                         <>
                                             <button
-                                                onClick={() => handleOpenEdit(keyId)}
+                                                onClick={() => handleOpenEdit(meta.memberId)}
                                                 className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all cursor-pointer"
                                                 title="Edit Tab Access"
                                             >
                                                 <Settings2 size={14} />
                                             </button>
+                                        </>
+                                    )}
+                                    {canRemoveMember && (
+                                        <>
                                             <button
-                                                onClick={() => handleRemoveMember(keyId)}
+                                                onClick={() => handleRemoveMember(meta.memberId)}
                                                 disabled={isRemoving}
                                                 className="opacity-0 group-hover:opacity-100 p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-all disabled:opacity-50 cursor-pointer"
                                                 title="Revoke access"
@@ -465,17 +536,13 @@ export default function ProjectOverviewTab() {
                                 <span className="flex-shrink-0">Team</span>
                                 <ChevronRight size={11} className="flex-shrink-0" />
                                 <span className="font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                                    {(() => {
-                                        const a = project.assignees.find((a: any) => {
-                                            const empObj = typeof a.employeeId === 'object' ? a.employeeId as any : null;
-                                            return empObj?._id === editingUserId;
-                                        });
-                                        const empObj = a && typeof a.employeeId === 'object' ? a.employeeId as any : null;
-                                        return empObj?.userId?.name || 'Member';
-                                    })()}
-                                </span>
-                            </div>
-                        </div>
+                                                    {(() => {
+                                                        const assignee = project.assignees.find((item: any) => getAssigneeMeta(item).memberId === editingUserId);
+                                                        return assignee ? getAssigneeMeta(assignee).displayName : 'Member';
+                                                    })()}
+                                                </span>
+                                            </div>
+                                        </div>
 
                         {/* Body */}
                         <div className="flex-1 overflow-y-auto p-5 space-y-5">

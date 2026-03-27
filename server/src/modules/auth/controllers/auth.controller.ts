@@ -23,6 +23,7 @@ export const login = asyncHandler(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
+            path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
@@ -31,6 +32,7 @@ export const login = asyncHandler(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
+            path: '/',
             maxAge: 8 * 60 * 60 * 1000, // 8 hours
         });
 
@@ -54,6 +56,7 @@ export const partnerLogin = asyncHandler(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
+            path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
@@ -62,6 +65,7 @@ export const partnerLogin = asyncHandler(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
+            path: '/',
             maxAge: 8 * 60 * 60 * 1000, // 8 hours
         });
 
@@ -94,6 +98,7 @@ export const refreshToken = asyncHandler(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
+            path: '/',
             maxAge: 8 * 60 * 60 * 1000, // 8 hours
         });
 

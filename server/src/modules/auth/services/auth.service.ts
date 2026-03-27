@@ -155,6 +155,15 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     let partnerIdForEmployee: string | null = null;
     let belongsToThisPortal = false;
 
+    const normalizeEntityId = (value: any): string | null => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object' && '_id' in value && value._id) {
+            return (value._id as any).toString();
+        }
+        return value.toString?.() || null;
+    };
+
     if (user) {
         // Check if user is active
         if (!user.isActive) {
@@ -220,7 +229,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
 
         // Mark as partner employee and store parent partnerId
         isPartnerEmployee = true;
-        partnerIdForEmployee = (partnerEmployee.partnerId as any).toString();
+        partnerIdForEmployee = normalizeEntityId(partnerEmployee.partnerId);
 
         // Create a user-like object for partner employee
         user = {
@@ -229,7 +238,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
             name: partnerEmployee.name,
             role: 'partner' as any, // Treat partner employees as partners for access control
             isActive: partnerEmployee.isActive,
-            partnerId: partnerEmployee.partnerId,
+            partnerId: normalizeEntityId(partnerEmployee.partnerId),
             isPartnerEmployee: true,
             save: async function() { return this; },
             toObject: function() {
@@ -241,6 +250,13 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
                     isActive: this.isActive,
                     partnerId: this.partnerId,
                     isPartnerEmployee: true,
+                    modulePermissions: {
+                        projectManagement: { enabled: true, projectPermissions: [] },
+                        crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
+                        finance: { enabled: false, subModules: {} },
+                        hrms: { enabled: false, subModules: {} },
+                        overallAdmin: { enabled: false, subModules: {} },
+                    },
                 };
             },
         } as any;
@@ -277,6 +293,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     delete (userObj as any).password;
 
     // Add partner info to response
+    (userObj as any).partnerId = partnerPortal._id;
     (userObj as any).partnerSlug = partnerPortal.slug;
     (userObj as any).companyName = partnerPortal.companyName;
     (userObj as any).companyLogo = partnerPortal.companyLogo;
@@ -285,6 +302,13 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     if (isPartnerEmployee) {
         (userObj as any).partnerId = partnerIdForEmployee;
         (userObj as any).isPartnerEmployee = true;
+        (userObj as any).modulePermissions = {
+            projectManagement: { enabled: true, projectPermissions: [] },
+            crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
+            finance: { enabled: false, subModules: {} },
+            hrms: { enabled: false, subModules: {} },
+            overallAdmin: { enabled: false, subModules: {} },
+        };
     }
 
     return {
@@ -333,7 +357,40 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
     });
 
     if (!user) {
-        throw new AppError('User not found', 404);
+        const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+        const { Partner } = await import('../../partners/models/Partner.model');
+
+        const partnerEmployee = await PartnerEmployee.findById(userId).lean();
+
+        if (!partnerEmployee) {
+            throw new AppError('User not found', 404);
+        }
+
+        const partnerPortal = await Partner.findById(partnerEmployee.partnerId)
+            .select('slug companyName companyLogo')
+            .lean();
+
+        return {
+            _id: partnerEmployee._id,
+            name: partnerEmployee.name,
+            email: partnerEmployee.email,
+            role: 'partner' as any,
+            isActive: partnerEmployee.isActive,
+            createdAt: partnerEmployee.createdAt,
+            updatedAt: partnerEmployee.updatedAt,
+            partnerId: partnerEmployee.partnerId as any,
+            partnerSlug: partnerPortal?.slug,
+            companyName: partnerPortal?.companyName,
+            companyLogo: partnerPortal?.companyLogo,
+            isPartnerEmployee: true,
+            modulePermissions: {
+                projectManagement: { enabled: true, projectPermissions: [] },
+                crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
+                finance: { enabled: false, subModules: {} as any },
+                hrms: { enabled: false, subModules: {} as any },
+                overallAdmin: { enabled: false, subModules: {} as any },
+            },
+        } as any;
     }
 
     const roleName = ((user.role as any)?.name || '').toLowerCase();
@@ -346,11 +403,13 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
 
         if (partnerPortal) {
             const userObj = user.toObject() as IUser & {
+                partnerId?: any;
                 partnerSlug?: string;
                 companyName?: string;
                 companyLogo?: string;
             };
 
+            userObj.partnerId = partnerPortal._id as any;
             userObj.partnerSlug = partnerPortal.slug;
             userObj.companyName = partnerPortal.companyName;
             userObj.companyLogo = partnerPortal.companyLogo;

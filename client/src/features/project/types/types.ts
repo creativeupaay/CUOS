@@ -60,8 +60,17 @@ export interface ProjectDocument {
 
 export interface ProjectAssignee {
     employeeId?: string | any;
+    partnerEmployeeId?: string | any;
     userId?: string | User;
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+    memberId?: string;
+    memberType?: 'employee' | 'partner-employee';
+    sourceType?: 'cu' | 'partner';
+    sourceLabel?: string;
+    displayCode?: string;
+    displayName?: string;
+    displayEmail?: string;
+    displayDesignation?: string;
+    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     assignedAt: string;
     assignedBy: string | User;
 }

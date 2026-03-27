@@ -169,7 +169,7 @@ export default function SuperAdminDashboard() {
             : String(user.role)
         : 'User';
 
-    const { data: profileData } = useGetMyProfileQuery();
+    const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
     const mp = user?.modulePermissions;
