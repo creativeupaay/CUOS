@@ -28,14 +28,18 @@ const matchesPartnerProject = (project: any, partnerId?: string): boolean => {
 const isInternalEmployeeAssigned = (project: any, employeeId: string): boolean => {
     if (!project) return false;
     return project.assignees.some(
-        (assignee: any) => assignee.memberType === 'employee' && assignee.employeeId?.toString() === employeeId
+        (assignee: any) =>
+            assignee.employeeId?.toString() === employeeId &&
+            (assignee.memberType === 'employee' || !assignee.memberType)
     );
 };
 
 const getInternalEmployeeAssignee = (project: any, employeeId: string) => {
     if (!project) return undefined;
     return project.assignees.find(
-        (assignee: any) => assignee.memberType === 'employee' && assignee.employeeId?.toString() === employeeId
+        (assignee: any) =>
+            assignee.employeeId?.toString() === employeeId &&
+            (assignee.memberType === 'employee' || !assignee.memberType)
     );
 };
 
