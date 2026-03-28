@@ -187,6 +187,9 @@ const DEFAULT_STANDARD_FIELD_SETTINGS: Record<
     },
 };
 
+const DEFAULT_ABOUT_COMPANY_TEXT =
+    'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
+
 function normalizeApplicationForm(input?: JobApplicationFormInput) {
     const selectedStandardFields = Array.isArray(input?.selectedStandardFields)
         ? Array.from(
@@ -234,10 +237,25 @@ function normalizeApplicationForm(input?: JobApplicationFormInput) {
         customFields.reduce((map, field) => map.set(field.key, field), new Map<string, (typeof customFields)[number]>()).values()
     );
 
+    const pageSectionsInput = (input?.pageSections || {}) as {
+        showAboutRole?: boolean;
+        showRequirements?: boolean;
+        showWhatYouGet?: boolean;
+        whatYouGet?: string;
+    };
+
     return {
         selectedStandardFields,
         standardFieldSettings,
         customFields: uniqueCustomFields,
+        pageSections: {
+            showAboutCompany: true,
+            showAboutRole: pageSectionsInput.showAboutRole ?? true,
+            showRequirements: pageSectionsInput.showRequirements ?? true,
+            showWhatYouGet: pageSectionsInput.showWhatYouGet ?? true,
+            aboutCompany: '',
+            whatYouGet: String(pageSectionsInput.whatYouGet || '').trim() || '',
+        },
     };
 }
 
@@ -531,10 +549,35 @@ export class JobService {
     /**
      * Get all active (isHiring = true) jobs — public endpoint
      */
-    async getActiveJobs(): Promise<IJob[]> {
-        return Job.find({ isHiring: true }).sort({ createdAt: -1 }).select(
-            'title department locationType location description requirements employmentType assignmentRequired applicationForm createdAt'
-        );
+    async getActiveJobs(): Promise<any[]> {
+        const jobs = await Job.find({ isHiring: true })
+            .sort({ createdAt: -1 })
+            .select(
+                'title department locationType location description requirements employmentType assignmentRequired applicationForm createdAt'
+            )
+            .lean();
+
+        let settings = await OrgSettings.findOne().select('hiring');
+        if (!settings) {
+            settings = await OrgSettings.create({});
+        }
+
+        const showAboutCompany = settings.hiring?.publicJobPage?.showAboutCompany ?? true;
+        const aboutCompanyText =
+            String(settings.hiring?.publicJobPage?.aboutCompanyText || '').trim() ||
+            DEFAULT_ABOUT_COMPANY_TEXT;
+
+        return jobs.map((job: any) => ({
+            ...job,
+            applicationForm: {
+                ...(job.applicationForm || {}),
+                pageSections: {
+                    ...(job.applicationForm?.pageSections || {}),
+                    showAboutCompany,
+                    aboutCompany: aboutCompanyText,
+                },
+            },
+        }));
     }
 
     async getApplicationFieldLibrary() {

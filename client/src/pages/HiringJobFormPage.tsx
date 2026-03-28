@@ -119,6 +119,14 @@ interface FormState {
         selectedStandardFields: StandardApplicationFieldId[];
         standardFieldSettings: ApplicationStandardFieldSetting[];
         customFields: ApplicationCustomFieldDefinition[];
+        pageSections: {
+            showAboutCompany: boolean;
+            showAboutRole: boolean;
+            showRequirements: boolean;
+            showWhatYouGet: boolean;
+            aboutCompany: string;
+            whatYouGet: string;
+        };
     };
 }
 
@@ -164,6 +172,14 @@ const EMPTY_FORM: FormState = {
             helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
         })),
         customFields: [],
+        pageSections: {
+            showAboutCompany: true,
+            showAboutRole: true,
+            showRequirements: true,
+            showWhatYouGet: true,
+            aboutCompany: '',
+            whatYouGet: '',
+        },
     },
 };
 
@@ -338,6 +354,14 @@ export default function HiringJobFormPage() {
                               helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
                           })),
                 customFields: job.applicationForm?.customFields || [],
+                pageSections: {
+                    showAboutCompany: true,
+                    showAboutRole: job.applicationForm?.pageSections?.showAboutRole ?? true,
+                    showRequirements: job.applicationForm?.pageSections?.showRequirements ?? true,
+                    showWhatYouGet: job.applicationForm?.pageSections?.showWhatYouGet ?? true,
+                    aboutCompany: '',
+                    whatYouGet: job.applicationForm?.pageSections?.whatYouGet || '',
+                },
             },
         });
     }, [isEdit, jobData]);
@@ -403,6 +427,15 @@ export default function HiringJobFormPage() {
                               helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
                           })),
                 customFields: selected.applicationForm?.customFields || [],
+                pageSections: {
+                    showAboutCompany: true,
+                    showAboutRole: selected.applicationForm?.pageSections?.showAboutRole ?? true,
+                    showRequirements:
+                        selected.applicationForm?.pageSections?.showRequirements ?? true,
+                    showWhatYouGet: selected.applicationForm?.pageSections?.showWhatYouGet ?? true,
+                    aboutCompany: '',
+                    whatYouGet: selected.applicationForm?.pageSections?.whatYouGet || '',
+                },
             },
         }));
         setSuccessMsg('Template applied successfully');
@@ -665,6 +698,7 @@ export default function HiringJobFormPage() {
                 selectedStandardFields: form.applicationForm.selectedStandardFields,
                 standardFieldSettings: form.applicationForm.standardFieldSettings,
                 customFields: form.applicationForm.customFields,
+                pageSections: form.applicationForm.pageSections,
             },
         };
 
@@ -919,6 +953,73 @@ export default function HiringJobFormPage() {
                                 style={inputStyle}
                             />
                         </Field>
+
+                        <Field label="What you get">
+                            <textarea
+                                value={form.applicationForm.pageSections.whatYouGet}
+                                onChange={(e) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        applicationForm: {
+                                            ...prev.applicationForm,
+                                            pageSections: {
+                                                ...prev.applicationForm.pageSections,
+                                                whatYouGet: e.target.value,
+                                            },
+                                        },
+                                    }))
+                                }
+                                rows={5}
+                                placeholder="Role specific perks, growth, benefits, and learning opportunities"
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                Job Details Page Sections
+                            </p>
+                            <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                About the Company is managed centrally in Org Settings. Use toggles to control visibility of role sections.
+                            </p>
+
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {[
+                                    { key: 'showAboutRole', label: 'About the Role' },
+                                    { key: 'showRequirements', label: 'Requirements & Qualifications' },
+                                    { key: 'showWhatYouGet', label: 'What you get' },
+                                ].map((section) => (
+                                    <label
+                                        key={section.key}
+                                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={Boolean(
+                                                form.applicationForm.pageSections[
+                                                    section.key as keyof typeof form.applicationForm.pageSections
+                                                ]
+                                            )}
+                                            onChange={(e) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    applicationForm: {
+                                                        ...prev.applicationForm,
+                                                        pageSections: {
+                                                            ...prev.applicationForm.pageSections,
+                                                            [section.key]: e.target.checked,
+                                                        },
+                                                    },
+                                                }))
+                                            }
+                                        />
+                                        <span style={{ color: 'var(--color-text-primary)' }}>{section.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
 

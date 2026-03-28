@@ -30,6 +30,14 @@ export interface JobApplicationFormConfig {
     selectedStandardFields: StandardApplicationFieldId[];
     standardFieldSettings: ApplicationStandardFieldSetting[];
     customFields: ApplicationCustomFieldDefinition[];
+    pageSections: {
+        showAboutCompany: boolean;
+        showAboutRole: boolean;
+        showRequirements: boolean;
+        showWhatYouGet: boolean;
+        aboutCompany: string;
+        whatYouGet?: string;
+    };
 }
 
 export type InterviewScheduleSyncStatus =

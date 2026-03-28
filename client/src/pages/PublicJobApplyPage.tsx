@@ -24,6 +24,8 @@ import type {
 
 const MAX_RESUME_SIZE_MB = 5;
 const MAX_APPLICATION_ATTACHMENT_SIZE_MB = 25;
+const DEFAULT_ABOUT_COMPANY_TEXT =
+    'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
 const ALLOWED_RESUME_TYPES = [
     'application/pdf',
     'application/msword',
@@ -334,6 +336,15 @@ export default function PublicJobApplyPage() {
         [standardFieldSettings]
     );
 
+    const pageSections = job?.applicationForm?.pageSections || {
+        showAboutCompany: true,
+        showAboutRole: true,
+        showRequirements: true,
+        showWhatYouGet: true,
+        aboutCompany: DEFAULT_ABOUT_COMPANY_TEXT,
+        whatYouGet: '',
+    };
+
     const [showForm, setShowForm] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
@@ -549,6 +560,13 @@ export default function PublicJobApplyPage() {
                 {!showForm ? (
                     <div className="mx-auto max-w-4xl animate-fade-scale">
                         <div className="glass-card rounded-[2rem] p-8 md:p-12">
+                            <div className="mb-5">
+                                <img
+                                    src="/company-logo.png"
+                                    alt="Company Logo"
+                                    className="h-12 w-auto object-contain"
+                                />
+                            </div>
                             <h1 className="mb-6 text-4xl font-extrabold tracking-tight md:text-5xl" style={{ color: 'var(--color-text-primary)' }}>
                                 {job?.title}
                             </h1>
@@ -566,18 +584,44 @@ export default function PublicJobApplyPage() {
                             </div>
 
                             <div className="space-y-8">
-                                <div>
-                                    <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>About the Role</h3>
-                                    <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
-                                        {job?.description || 'No description provided.'}
+                                {pageSections.showAboutCompany && (
+                                    <div>
+                                        <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                            About the Company
+                                        </h3>
+                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {pageSections.aboutCompany || DEFAULT_ABOUT_COMPANY_TEXT}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
-                                {job?.requirements && (
+                                {pageSections.showAboutRole && (
+                                    <div className="border-t pt-6" style={{ borderColor: 'var(--color-border-subtle)' }}>
+                                        <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                            About the Role
+                                        </h3>
+                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {job?.description || 'No description provided.'}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {pageSections.showRequirements && job?.requirements && (
                                     <div className="border-t pt-6" style={{ borderColor: 'var(--color-border-subtle)' }}>
                                         <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Requirements & Qualifications</h3>
                                         <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
                                             {job.requirements}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {pageSections.showWhatYouGet && pageSections.whatYouGet?.trim() && (
+                                    <div className="border-t pt-6" style={{ borderColor: 'var(--color-border-subtle)' }}>
+                                        <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                            What you get
+                                        </h3>
+                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {pageSections.whatYouGet}
                                         </div>
                                     </div>
                                 )}

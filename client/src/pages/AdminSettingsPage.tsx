@@ -5,6 +5,9 @@ import {
     useUpdateOrgSettingsMutation,
 } from '@/features/overall-admin/api/adminApi';
 
+const DEFAULT_ABOUT_COMPANY_TEXT =
+    'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
+
 export default function AdminSettingsPage() {
     const { data, isLoading } = useGetOrgSettingsQuery();
     const [updateSettings] = useUpdateOrgSettingsMutation();
@@ -55,6 +58,10 @@ export default function AdminSettingsPage() {
     const [sessionExpiry, setSessionExpiry] = useState(15);
     const [departments, setDepartments] = useState<string[]>([]);
     const [departmentInput, setDepartmentInput] = useState('');
+    const [hiringContent, setHiringContent] = useState({
+        showAboutCompany: true,
+        aboutCompanyText: DEFAULT_ABOUT_COMPANY_TEXT,
+    });
 
     useEffect(() => {
         if (settings) {
@@ -69,6 +76,12 @@ export default function AdminSettingsPage() {
             setWorkingHours(settings.workingHours || { startTime: '09:00', endTime: '18:00', daysPerWeek: 5, hoursPerDay: 8 });
             setTaxSettings(settings.taxSettings || { gstEnabled: true, gstRate: 18, tdsEnabled: true, tdsRate: 10 });
             setFeatureToggles(settings.featureToggles || { projectManagement: true, finance: false, crm: true, hrms: true, leads: true });
+            setHiringContent({
+                showAboutCompany:
+                    settings.hiring?.publicJobPage?.showAboutCompany ?? true,
+                aboutCompanyText:
+                    settings.hiring?.publicJobPage?.aboutCompanyText || DEFAULT_ABOUT_COMPANY_TEXT,
+            });
             setPasswordPolicy(settings.passwordPolicy || { minLength: 8, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: false });
             setSessionExpiry(settings.sessionExpiryMinutes || 15);
         }
@@ -310,6 +323,59 @@ export default function AdminSettingsPage() {
                         ))}
                     </div>
                     <SaveButton section="features" onClick={() => handleSaveSection('features', { featureToggles })} />
+                </div>
+
+                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+                    <SectionHeader icon={<Building2 size={20} />} title="Hiring Page Content" />
+                    <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                        About the Company is centrally controlled here and auto-applies to all public job pages.
+                    </p>
+                    <label className="flex items-center gap-3 mb-4 text-sm cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                        <input
+                            type="checkbox"
+                            checked={hiringContent.showAboutCompany}
+                            onChange={(e) =>
+                                setHiringContent((prev) => ({
+                                    ...prev,
+                                    showAboutCompany: e.target.checked,
+                                }))
+                            }
+                            className="rounded"
+                        />
+                        Show About the Company section on public job pages
+                    </label>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
+                            About the Company Text
+                        </label>
+                        <textarea
+                            value={hiringContent.aboutCompanyText}
+                            onChange={(e) =>
+                                setHiringContent((prev) => ({
+                                    ...prev,
+                                    aboutCompanyText: e.target.value,
+                                }))
+                            }
+                            rows={8}
+                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
+                        />
+                    </div>
+
+                    <SaveButton
+                        section="hiringContent"
+                        onClick={() =>
+                            handleSaveSection('hiringContent', {
+                                hiring: {
+                                    publicJobPage: {
+                                        showAboutCompany: hiringContent.showAboutCompany,
+                                        aboutCompanyText: hiringContent.aboutCompanyText,
+                                    },
+                                },
+                            })
+                        }
+                    />
                 </div>
 
                 {/* Password Policy */}

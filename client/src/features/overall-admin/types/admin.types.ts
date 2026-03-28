@@ -149,6 +149,19 @@ export interface OrgSettings {
         hrms: boolean;
         leads: boolean;
     };
+    hiring?: {
+        applicationFieldLibrary?: Array<{
+            key: string;
+            label: string;
+            type: 'text' | 'url' | 'number' | 'note' | 'date' | 'attachment';
+            placeholder?: string;
+            helpText?: string;
+        }>;
+        publicJobPage?: {
+            showAboutCompany: boolean;
+            aboutCompanyText: string;
+        };
+    };
     passwordPolicy: {
         minLength: number;
         requireUppercase: boolean;

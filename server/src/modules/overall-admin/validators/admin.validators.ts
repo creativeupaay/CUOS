@@ -158,6 +158,16 @@ export const updateSettingsSchema = z.object({
             hrms: z.boolean().optional(),
             leads: z.boolean().optional(),
         }).optional(),
+        hiring: z
+            .object({
+                publicJobPage: z
+                    .object({
+                        showAboutCompany: z.boolean().optional(),
+                        aboutCompanyText: z.string().trim().optional(),
+                    })
+                    .optional(),
+            })
+            .optional(),
         passwordPolicy: z.object({
             minLength: z.number().optional(),
             requireUppercase: z.boolean().optional(),

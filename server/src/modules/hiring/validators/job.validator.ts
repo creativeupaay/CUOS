@@ -58,6 +58,23 @@ const applicationFormSchema = z.object({
     selectedStandardFields: z.array(standardFieldSchema).default([]),
     standardFieldSettings: z.array(standardFieldSettingSchema).default([]),
     customFields: z.array(customApplicationFieldSchema).default([]),
+    pageSections: z
+        .object({
+            showAboutCompany: z.boolean().default(true),
+            showAboutRole: z.boolean().default(true),
+            showRequirements: z.boolean().default(true),
+            showWhatYouGet: z.boolean().default(true),
+            aboutCompany: z.string().trim().default(''),
+            whatYouGet: z.string().trim().optional(),
+        })
+        .default({
+            showAboutCompany: true,
+            showAboutRole: true,
+            showRequirements: true,
+            showWhatYouGet: true,
+            aboutCompany: '',
+            whatYouGet: '',
+        }),
 });
 
 const reminderMinutesSchema = z.preprocess(

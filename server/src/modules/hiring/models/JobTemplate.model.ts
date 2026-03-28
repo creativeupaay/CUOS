@@ -56,6 +56,19 @@ const JobApplicationFormConfigSchema = new Schema(
             type: [JobApplicationCustomFieldSchema],
             default: [],
         },
+        pageSections: {
+            showAboutCompany: { type: Boolean, default: true },
+            showAboutRole: { type: Boolean, default: true },
+            showRequirements: { type: Boolean, default: true },
+            showWhatYouGet: { type: Boolean, default: true },
+            aboutCompany: {
+                type: String,
+                default:
+                    'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.',
+                trim: true,
+            },
+            whatYouGet: { type: String, trim: true, default: '' },
+        },
     },
     { _id: false }
 );
@@ -89,6 +102,15 @@ const JobTemplateSchema = new Schema<IJobTemplate>(
                 ],
                 standardFieldSettings: [],
                 customFields: [],
+                pageSections: {
+                    showAboutCompany: true,
+                    showAboutRole: true,
+                    showRequirements: true,
+                    showWhatYouGet: true,
+                    aboutCompany:
+                        'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.',
+                    whatYouGet: '',
+                },
             }),
         },
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

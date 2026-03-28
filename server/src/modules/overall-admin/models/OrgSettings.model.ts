@@ -44,6 +44,10 @@ export interface IOrgSettings extends Document {
     };
     hiring: {
         applicationFieldLibrary: IHiringApplicationFieldLibraryItem[];
+        publicJobPage: {
+            showAboutCompany: boolean;
+            aboutCompanyText: string;
+        };
     };
     passwordPolicy: {
         minLength: number;
@@ -72,6 +76,9 @@ const HiringApplicationFieldLibraryItemSchema = new Schema<IHiringApplicationFie
     },
     { _id: false }
 );
+
+const DEFAULT_ABOUT_COMPANY_TEXT =
+    'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
 
 const OrgSettingsSchema = new Schema<IOrgSettings>(
     {
@@ -132,6 +139,14 @@ const OrgSettingsSchema = new Schema<IOrgSettings>(
             applicationFieldLibrary: {
                 type: [HiringApplicationFieldLibraryItemSchema],
                 default: [],
+            },
+            publicJobPage: {
+                showAboutCompany: { type: Boolean, default: true },
+                aboutCompanyText: {
+                    type: String,
+                    trim: true,
+                    default: DEFAULT_ABOUT_COMPANY_TEXT,
+                },
             },
         },
         passwordPolicy: {
