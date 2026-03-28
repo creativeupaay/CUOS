@@ -1,17 +1,42 @@
-import { useEffect, useState } from 'react';
+import {
+    useEffect,
+    useMemo,
+    useState,
+    type ChangeEvent,
+    type CSSProperties,
+    type FormEvent,
+    type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ChevronLeft, Loader2, Trash2, CheckCircle2 } from 'lucide-react';
+import {
+    AlertCircle,
+    CheckCircle2,
+    ChevronLeft,
+    Loader2,
+    Plus,
+    Sparkles,
+    Trash2,
+} from 'lucide-react';
 import {
     useCreateJobMutation,
-    useGetJobByIdQuery,
-    useUpdateJobMutation,
-    useGetJobTemplatesQuery,
-    useCreateJobTemplateMutation,
+    useDeleteApplicationFieldMutation,
     useDeleteJobTemplateMutation,
+    useGetApplicationFieldLibraryQuery,
+    useGetJobByIdQuery,
+    useGetJobTemplatesQuery,
+    useSaveApplicationFieldMutation,
+    useUpdateJobMutation,
+    useCreateJobTemplateMutation,
 } from '@/features/hiring/hiringApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
-import type { EmploymentType } from '@/features/hiring/types/types';
+import type {
+    ApplicationCustomFieldDefinition,
+    ApplicationFieldType,
+    ApplicationStandardFieldSetting,
+    EmploymentType,
+    StandardApplicationFieldId,
+} from '@/features/hiring/types/types';
 
 const DEFAULT_DEPARTMENTS = [
     'Engineering',
@@ -20,39 +45,60 @@ const DEFAULT_DEPARTMENTS = [
     'Finance',
     'HR',
     'Operations',
+    'Creative',
 ];
 
-function Field({
-    label,
-    required,
-    error,
-    children,
-}: {
-    label: string;
-    required?: boolean;
-    error?: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <div className="flex flex-col gap-1.5 w-full">
-            <label
-                className="text-sm font-medium"
-                style={{ color: 'var(--color-text-primary)' }}
-            >
-                {label}
-                {required && <span style={{ color: 'var(--color-danger)' }}> *</span>}
-            </label>
-            {children}
-            {error && (
-                <p className="text-xs" style={{ color: 'var(--color-danger)' }}>
-                    {error}
-                </p>
-            )}
-        </div>
-    );
-}
+const MANDATORY_FIELDS = [
+    { key: 'name', label: 'Full Name', description: 'Always required in every job form.' },
+    { key: 'email', label: 'Email', description: 'Primary communication channel for the candidate.' },
+    { key: 'phone', label: 'Phone Number', description: 'Required for direct recruiter follow-up.' },
+    { key: 'location', label: 'Current Location', description: 'Always collected for every application.' },
+    { key: 'yearsOfExperience', label: 'Years of Experience', description: 'Numeric experience field shown on all jobs.' },
+    { key: 'resume', label: 'Resume', description: 'Kept required so recruiter review flow stays intact.' },
+] as const;
 
-const inputStyle: React.CSSProperties = {
+const OPTIONAL_STANDARD_FIELDS: Array<{
+    key: StandardApplicationFieldId;
+    label: string;
+    description: string;
+}> = [
+    { key: 'portfolio', label: 'Portfolio URL', description: 'Great for design, marketing, and product roles.' },
+    { key: 'github', label: 'GitHub URL', description: 'Useful for engineering and technical hiring.' },
+    { key: 'linkedin', label: 'LinkedIn URL', description: 'Quick professional profile reference.' },
+    { key: 'experience', label: 'Relevant Experience', description: 'Long-form written experience summary.' },
+    { key: 'coverLetter', label: 'Cover Letter', description: 'Lets candidates explain why they are a fit.' },
+    { key: 'figmaUrl', label: 'Figma URL', description: 'Useful for design and collaborative case studies.' },
+];
+
+const DEFAULT_STANDARD_FIELD_SETTINGS: Record<
+    StandardApplicationFieldId,
+    { label: string; placeholder?: string; helpText?: string }
+> = {
+    portfolio: { label: 'Portfolio URL', placeholder: 'https://your-portfolio.com' },
+    github: { label: 'GitHub URL', placeholder: 'https://github.com/username' },
+    linkedin: { label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/username' },
+    experience: { label: 'Relevant Experience', placeholder: 'Briefly highlight your most relevant work' },
+    coverLetter: { label: 'Cover Letter', placeholder: 'Tell us why you are a fit for this role' },
+    figmaUrl: { label: 'Figma URL', placeholder: 'https://figma.com/file/...' },
+};
+
+const DEFAULT_SELECTED_STANDARD_FIELDS: StandardApplicationFieldId[] = [
+    'portfolio',
+    'linkedin',
+    'experience',
+    'coverLetter',
+];
+
+const FIELD_TYPE_OPTIONS: Array<{ value: ApplicationFieldType; label: string }> = [
+    { value: 'text', label: 'Text' },
+    { value: 'url', label: 'URL' },
+    { value: 'number', label: 'Number' },
+    { value: 'note', label: 'Note' },
+    { value: 'date', label: 'Date' },
+    { value: 'attachment', label: 'Attachment' },
+];
+
+const inputStyle: CSSProperties = {
     backgroundColor: 'var(--color-bg-surface)',
     borderColor: 'var(--color-border-default)',
     color: 'var(--color-text-primary)',
@@ -69,6 +115,11 @@ interface FormState {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    applicationForm: {
+        selectedStandardFields: StandardApplicationFieldId[];
+        standardFieldSettings: ApplicationStandardFieldSetting[];
+        customFields: ApplicationCustomFieldDefinition[];
+    };
 }
 
 interface FormErrors {
@@ -77,6 +128,21 @@ interface FormErrors {
     location?: string;
     description?: string;
     requirements?: string;
+}
+
+interface NewFieldState {
+    label: string;
+    type: ApplicationFieldType;
+    placeholder: string;
+    helpText: string;
+}
+
+interface EditableFieldState {
+    mode: 'standard' | 'custom';
+    key: string;
+    label: string;
+    placeholder: string;
+    helpText: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -89,7 +155,102 @@ const EMPTY_FORM: FormState = {
     employmentType: 'full-time',
     isHiring: false,
     assignmentRequired: false,
+    applicationForm: {
+        selectedStandardFields: DEFAULT_SELECTED_STANDARD_FIELDS,
+        standardFieldSettings: DEFAULT_SELECTED_STANDARD_FIELDS.map((key) => ({
+            key,
+            label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
+            placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
+            helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
+        })),
+        customFields: [],
+    },
 };
+
+const EMPTY_NEW_FIELD: NewFieldState = {
+    label: '',
+    type: 'text',
+    placeholder: '',
+    helpText: '',
+};
+
+function normalizeFieldKey(label: string) {
+    return label
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60);
+}
+
+function Field({
+    label,
+    required,
+    error,
+    children,
+}: {
+    label: string;
+    required?: boolean;
+    error?: string;
+    children: ReactNode;
+}) {
+    return (
+        <div className="flex flex-col gap-1.5 w-full">
+            <label className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                {label}
+                {required && <span style={{ color: 'var(--color-danger)' }}> *</span>}
+            </label>
+            {children}
+            {error && (
+                <p className="text-xs" style={{ color: 'var(--color-danger)' }}>
+                    {error}
+                </p>
+            )}
+        </div>
+    );
+}
+
+function Modal({
+    open,
+    title,
+    children,
+    onClose,
+}: {
+    open: boolean;
+    title: string;
+    children: ReactNode;
+    onClose: () => void;
+}) {
+    if (!open || typeof document === 'undefined') return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div
+                className="w-full max-w-lg rounded-2xl border p-6 shadow-xl"
+                style={{
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border-default)',
+                }}
+            >
+                <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        {title}
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-sm"
+                        style={{ color: 'var(--color-text-muted)' }}
+                    >
+                        Close
+                    </button>
+                </div>
+                {children}
+            </div>
+        </div>,
+        document.body
+    );
+}
 
 export default function HiringJobFormPage() {
     const navigate = useNavigate();
@@ -100,33 +261,50 @@ export default function HiringJobFormPage() {
         skip: !isEdit,
     });
     const { data: orgSettingsData } = useGetOrgSettingsQuery();
-
     const { data: templatesData } = useGetJobTemplatesQuery();
-    const [createTemplate, { isLoading: isCreatingTemplate }] = useCreateJobTemplateMutation();
-    const [deleteTemplate, { isLoading: isDeletingTemplate }] = useDeleteJobTemplateMutation();
+    const { data: fieldLibraryData } = useGetApplicationFieldLibraryQuery();
 
     const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
     const [updateJob, { isLoading: isUpdating }] = useUpdateJobMutation();
+    const [createTemplate, { isLoading: isCreatingTemplate }] = useCreateJobTemplateMutation();
+    const [deleteTemplate, { isLoading: isDeletingTemplate }] = useDeleteJobTemplateMutation();
+    const [saveApplicationField, { isLoading: isSavingField }] = useSaveApplicationFieldMutation();
+    const [deleteApplicationField, { isLoading: isDeletingField }] =
+        useDeleteApplicationFieldMutation();
+
     const isSubmitting = isCreating || isUpdating;
+    const templates = templatesData?.data?.templates || [];
+    const fieldLibrary = fieldLibraryData?.data?.fields || [];
 
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
     const [errors, setErrors] = useState<FormErrors>({});
     const [serverError, setServerError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
-
     const [showManageTemplates, setShowManageTemplates] = useState(false);
     const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+    const [showNewFieldModal, setShowNewFieldModal] = useState(false);
+    const [showEditFieldModal, setShowEditFieldModal] = useState(false);
     const [newTemplateName, setNewTemplateName] = useState('');
+    const [newField, setNewField] = useState<NewFieldState>(EMPTY_NEW_FIELD);
+    const [editingField, setEditingField] = useState<EditableFieldState | null>(null);
 
-    const templates = templatesData?.data?.templates || [];
+    const configuredDepartments = useMemo(() => {
+        const orgDepartments = orgSettingsData?.data?.departments?.length
+            ? orgSettingsData.data.departments
+            : DEFAULT_DEPARTMENTS;
 
-    const configuredDepartments = orgSettingsData?.data?.departments?.length
-        ? orgSettingsData.data.departments
-        : DEFAULT_DEPARTMENTS;
+        return Array.from(new Set([...orgDepartments, 'Creative']));
+    }, [orgSettingsData?.data?.departments]);
+
     const departmentOptions =
         form.department && !configuredDepartments.includes(form.department)
             ? [form.department, ...configuredDepartments]
             : configuredDepartments;
+
+    const selectedCustomFieldKeys = useMemo(
+        () => new Set(form.applicationForm.customFields.map((field) => field.key)),
+        [form.applicationForm.customFields]
+    );
 
     useEffect(() => {
         if (!isEdit || !jobData?.data.job) return;
@@ -142,13 +320,32 @@ export default function HiringJobFormPage() {
             employmentType: job.employmentType,
             isHiring: job.isHiring,
             assignmentRequired: job.assignmentRequired,
+            applicationForm: {
+                selectedStandardFields:
+                    job.applicationForm?.selectedStandardFields?.length
+                        ? job.applicationForm.selectedStandardFields
+                        : DEFAULT_SELECTED_STANDARD_FIELDS,
+                standardFieldSettings:
+                    job.applicationForm?.standardFieldSettings?.length
+                        ? job.applicationForm.standardFieldSettings
+                        : (job.applicationForm?.selectedStandardFields?.length
+                              ? job.applicationForm.selectedStandardFields
+                              : DEFAULT_SELECTED_STANDARD_FIELDS
+                          ).map((key) => ({
+                              key,
+                              label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
+                              placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
+                              helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
+                          })),
+                customFields: job.applicationForm?.customFields || [],
+            },
         });
     }, [isEdit, jobData]);
 
     const set =
         (key: keyof FormState) =>
         (
-            e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+            e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
         ) => {
             const value =
                 e.target.type === 'checkbox'
@@ -166,30 +363,51 @@ export default function HiringJobFormPage() {
                 }
                 return next;
             });
+
             if (errors[key as keyof FormErrors]) {
                 setErrors((prev) => ({ ...prev, [key]: undefined }));
             }
         };
 
-    const handleImportTemplate = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const handleImportTemplate = (e: ChangeEvent<HTMLSelectElement>) => {
         const templateId = e.target.value;
         if (!templateId) return;
-        const selected = templates.find((t) => t._id === templateId);
-        if (selected) {
-            setForm((prev) => ({
-                ...prev,
-                title: selected.title || '',
-                department: selected.department || '',
-                locationType: selected.locationType || 'In-Office',
-                location: selected.location || '',
-                description: selected.description || '',
-                requirements: selected.requirements || '',
-                employmentType: selected.employmentType || 'full-time',
-            }));
-            setSuccessMsg('Template applied successfully');
-            setTimeout(() => setSuccessMsg(''), 3000);
-            e.target.value = ''; // Reset dropdown
-        }
+
+        const selected = templates.find((template) => template._id === templateId);
+        if (!selected) return;
+
+        setForm((prev) => ({
+            ...prev,
+            title: selected.title || '',
+            department: selected.department || '',
+            locationType: selected.locationType || 'In-Office',
+            location: selected.location || '',
+            description: selected.description || '',
+            requirements: selected.requirements || '',
+            employmentType: selected.employmentType || 'full-time',
+            applicationForm: {
+                selectedStandardFields:
+                    selected.applicationForm?.selectedStandardFields?.length
+                        ? selected.applicationForm.selectedStandardFields
+                        : DEFAULT_SELECTED_STANDARD_FIELDS,
+                standardFieldSettings:
+                    selected.applicationForm?.standardFieldSettings?.length
+                        ? selected.applicationForm.standardFieldSettings
+                        : (selected.applicationForm?.selectedStandardFields?.length
+                              ? selected.applicationForm.selectedStandardFields
+                              : DEFAULT_SELECTED_STANDARD_FIELDS
+                          ).map((key) => ({
+                              key,
+                              label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
+                              placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
+                              helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
+                          })),
+                customFields: selected.applicationForm?.customFields || [],
+            },
+        }));
+        setSuccessMsg('Template applied successfully');
+        window.setTimeout(() => setSuccessMsg(''), 3000);
+        e.target.value = '';
     };
 
     const validate = () => {
@@ -207,12 +425,67 @@ export default function HiringJobFormPage() {
         return Object.keys(nextErrors).length === 0;
     };
 
+    const toggleStandardField = (fieldKey: StandardApplicationFieldId) => {
+        setForm((prev) => {
+            const current = new Set(prev.applicationForm.selectedStandardFields);
+            if (current.has(fieldKey)) {
+                current.delete(fieldKey);
+            } else {
+                current.add(fieldKey);
+            }
+
+            return {
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    selectedStandardFields: Array.from(current) as StandardApplicationFieldId[],
+                    standardFieldSettings: Array.from(current).map((key) => {
+                        const existing = prev.applicationForm.standardFieldSettings.find(
+                            (item) => item.key === key
+                        );
+                        return (
+                            existing || {
+                                key: key as StandardApplicationFieldId,
+                                label: DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].label,
+                                placeholder:
+                                    DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].placeholder,
+                                helpText:
+                                    DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].helpText,
+                            }
+                        );
+                    }) as ApplicationStandardFieldSetting[],
+                },
+            };
+        });
+    };
+
+    const toggleCustomField = (field: ApplicationCustomFieldDefinition) => {
+        setForm((prev) => {
+            const exists = prev.applicationForm.customFields.some(
+                (customField) => customField.key === field.key
+            );
+
+            return {
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    customFields: exists
+                        ? prev.applicationForm.customFields.filter(
+                              (customField) => customField.key !== field.key
+                          )
+                        : [...prev.applicationForm.customFields, field],
+                },
+            };
+        });
+    };
+
     const handleSaveTemplate = async () => {
         if (!newTemplateName.trim()) return;
+
         setServerError('');
         try {
             await createTemplate({
-                templateName: newTemplateName,
+                templateName: newTemplateName.trim(),
                 title: form.title,
                 department: form.department,
                 locationType: form.locationType,
@@ -220,13 +493,15 @@ export default function HiringJobFormPage() {
                 description: form.description,
                 requirements: form.requirements,
                 employmentType: form.employmentType,
+                applicationForm: form.applicationForm,
             }).unwrap();
+
             setShowSaveTemplateModal(false);
             setNewTemplateName('');
             setSuccessMsg('Template saved successfully');
-            setTimeout(() => setSuccessMsg(''), 3000);
+            window.setTimeout(() => setSuccessMsg(''), 3000);
         } catch (err: any) {
-             setServerError(err?.data?.message || 'Failed to save template');
+            setServerError(err?.data?.message || 'Failed to save template');
         }
     };
 
@@ -238,22 +513,159 @@ export default function HiringJobFormPage() {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSaveNewField = async () => {
+        const label = newField.label.trim();
+        if (!label) {
+            setServerError('Field name is required');
+            return;
+        }
+
+        setServerError('');
+        try {
+            const saved = await saveApplicationField({
+                key: normalizeFieldKey(label),
+                label,
+                type: newField.type,
+                placeholder: newField.placeholder.trim() || undefined,
+                helpText: newField.helpText.trim() || undefined,
+            }).unwrap();
+
+            const latestField =
+                saved.data.fields.find(
+                    (field) => field.key === normalizeFieldKey(label)
+                ) || {
+                    key: normalizeFieldKey(label),
+                    label,
+                    type: newField.type,
+                    placeholder: newField.placeholder.trim() || undefined,
+                    helpText: newField.helpText.trim() || undefined,
+                };
+
+            setForm((prev) => {
+                if (prev.applicationForm.customFields.some((field) => field.key === latestField.key)) {
+                    return prev;
+                }
+
+                return {
+                    ...prev,
+                    applicationForm: {
+                        ...prev.applicationForm,
+                        customFields: [...prev.applicationForm.customFields, latestField],
+                    },
+                };
+            });
+
+            setNewField(EMPTY_NEW_FIELD);
+            setShowNewFieldModal(false);
+            setSuccessMsg('Custom field saved to your reusable library');
+            window.setTimeout(() => setSuccessMsg(''), 3000);
+        } catch (err: any) {
+            setServerError(err?.data?.message || 'Failed to save custom field');
+        }
+    };
+
+    const handleDeleteSavedField = async (fieldKey: string) => {
+        try {
+            await deleteApplicationField(fieldKey).unwrap();
+            setForm((prev) => ({
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    customFields: prev.applicationForm.customFields.filter(
+                        (field) => field.key !== fieldKey
+                    ),
+                },
+            }));
+        } catch (err: any) {
+            setServerError(err?.data?.message || 'Failed to delete custom field');
+        }
+    };
+
+    const openEditStandardField = (fieldKey: StandardApplicationFieldId) => {
+        const existing = form.applicationForm.standardFieldSettings.find((item) => item.key === fieldKey);
+        const defaults = DEFAULT_STANDARD_FIELD_SETTINGS[fieldKey];
+        setEditingField({
+            mode: 'standard',
+            key: fieldKey,
+            label: existing?.label || defaults.label,
+            placeholder: existing?.placeholder || defaults.placeholder || '',
+            helpText: existing?.helpText || defaults.helpText || '',
+        });
+        setShowEditFieldModal(true);
+    };
+
+    const openEditCustomField = (field: ApplicationCustomFieldDefinition) => {
+        setEditingField({
+            mode: 'custom',
+            key: field.key,
+            label: field.label,
+            placeholder: field.placeholder || '',
+            helpText: field.helpText || '',
+        });
+        setShowEditFieldModal(true);
+    };
+
+    const handleSaveFieldEdits = () => {
+        if (!editingField) return;
+
+        setForm((prev) => ({
+            ...prev,
+            applicationForm: {
+                ...prev.applicationForm,
+                standardFieldSettings:
+                    editingField.mode === 'standard'
+                        ? prev.applicationForm.standardFieldSettings.map((field) =>
+                              field.key === editingField.key
+                                  ? {
+                                        ...field,
+                                        label: editingField.label.trim() || field.label,
+                                        placeholder: editingField.placeholder.trim() || undefined,
+                                        helpText: editingField.helpText.trim() || undefined,
+                                    }
+                                  : field
+                          )
+                        : prev.applicationForm.standardFieldSettings,
+                customFields:
+                    editingField.mode === 'custom'
+                        ? prev.applicationForm.customFields.map((field) =>
+                              field.key === editingField.key
+                                  ? {
+                                        ...field,
+                                        label: editingField.label.trim() || field.label,
+                                        placeholder: editingField.placeholder.trim() || undefined,
+                                        helpText: editingField.helpText.trim() || undefined,
+                                    }
+                                  : field
+                          )
+                        : prev.applicationForm.customFields,
+            },
+        }));
+
+        setShowEditFieldModal(false);
+        setEditingField(null);
+    };
+
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setServerError('');
 
         if (!validate()) return;
 
         const payload = {
-            title: form.title,
-            department: form.department,
+            title: form.title.trim(),
+            department: form.department.trim(),
             locationType: form.locationType,
-            location: form.locationType === 'Remote' ? '' : form.location,
-            description: form.description,
-            requirements: form.requirements,
+            location: form.locationType === 'Remote' ? '' : form.location.trim(),
+            description: form.description.trim(),
+            requirements: form.requirements.trim(),
             employmentType: form.employmentType,
             isHiring: form.isHiring,
             assignmentRequired: form.assignmentRequired,
+            applicationForm: {
+                selectedStandardFields: form.applicationForm.selectedStandardFields,
+                standardFieldSettings: form.applicationForm.standardFieldSettings,
+                customFields: form.applicationForm.customFields,
+            },
         };
 
         try {
@@ -264,22 +676,17 @@ export default function HiringJobFormPage() {
             }
             navigate('/hiring/jobs');
         } catch (err: any) {
-            setServerError(
-                err?.data?.message || 'Something went wrong. Please try again.'
-            );
+            setServerError(err?.data?.message || 'Something went wrong. Please try again.');
         }
     };
 
     if (isEdit && isLoadingJob) {
         return (
             <div
-                className="flex items-center justify-center h-[calc(100vh-64px)]"
+                className="flex h-[calc(100vh-64px)] items-center justify-center"
                 style={{ backgroundColor: 'var(--color-bg-app)' }}
             >
-                <div
-                    className="flex items-center gap-2 text-sm"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                >
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                     <Loader2 size={18} className="animate-spin" />
                     Loading job...
                 </div>
@@ -289,72 +696,74 @@ export default function HiringJobFormPage() {
 
     return (
         <div
-            className="px-8 py-6 max-w-[720px] mx-auto relative"
+            className="mx-auto max-w-[900px] px-8 py-6"
             style={{ backgroundColor: 'var(--color-bg-app)', minHeight: '100vh' }}
         >
+            <style>{`
+                .builder-shell {
+                    background:
+                        linear-gradient(180deg, rgba(var(--color-primary-rgb), 0.08) 0%, rgba(255,255,255,0) 28%),
+                        var(--color-bg-surface);
+                    border: 1px solid var(--color-border-default);
+                    box-shadow: 0 18px 45px -20px rgba(15, 23, 42, 0.18);
+                }
+                .field-choice {
+                    transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+                }
+                .field-choice:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 10px 20px -18px rgba(15, 23, 42, 0.35);
+                }
+            `}</style>
             <button
                 onClick={() => navigate('/hiring/jobs')}
-                className="flex items-center gap-1.5 text-sm mb-6 transition-colors"
+                className="mb-6 flex items-center gap-1.5 text-sm transition-colors"
                 style={{ color: 'var(--color-text-muted)' }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.color = 'var(--color-text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'var(--color-text-muted)';
-                }}
             >
                 <ChevronLeft size={16} />
                 Back to Jobs
             </button>
 
-            <div className="flex items-center justify-between mb-1">
-                <h1
-                    className="text-2xl font-bold"
-                    style={{ color: 'var(--color-text-primary)' }}
-                >
+            <div className="mb-1 flex items-center justify-between gap-3">
+                <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
                     {isEdit ? 'Edit Job Posting' : 'Create Job Posting'}
                 </h1>
-                
+
                 <div className="flex items-center gap-2">
                     <select
                         onChange={handleImportTemplate}
-                        className="px-3 py-2 text-sm rounded-lg border cursor-pointer"
-                        style={{ ...inputStyle, minWidth: '180px' }}
+                        className="h-10 min-w-[190px] rounded-lg border px-3 text-sm"
+                        style={inputStyle}
                     >
                         <option value="">+ Import from Template</option>
-                        {templates.map(t => (
-                            <option key={t._id} value={t._id}>{t.templateName}</option>
+                        {templates.map((template) => (
+                            <option key={template._id} value={template._id}>
+                                {template.templateName}
+                            </option>
                         ))}
                     </select>
                     <button
+                        type="button"
                         onClick={() => setShowManageTemplates(true)}
-                        className="px-3 py-2 text-sm rounded-lg border transition-colors whitespace-nowrap"
-                        style={{
-                            borderColor: 'var(--color-border-default)',
-                            color: 'var(--color-text-secondary)',
-                            backgroundColor: 'var(--color-bg-surface)',
-                        }}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                        style={inputStyle}
                     >
                         Manage Templates
                     </button>
                 </div>
             </div>
-            <p
-                className="text-sm mb-8"
-                style={{ color: 'var(--color-text-secondary)' }}
-            >
-                {isEdit
-                    ? 'Update the details of this job posting.'
-                    : 'Fill in the details to publish a new job position or import a template to start quickly.'}
+
+            <p className="mb-8 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                Configure the job details and control exactly which fields appear in the public application form.
             </p>
 
             {serverError && (
                 <div
-                    className="flex items-center gap-2 px-4 py-3 rounded-lg mb-6 text-sm"
+                    className="mb-6 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm"
                     style={{
                         backgroundColor: 'var(--color-danger-soft)',
                         color: 'var(--color-danger)',
-                        border: '1px solid var(--color-danger)',
+                        borderColor: 'var(--color-danger)',
                     }}
                 >
                     <AlertCircle size={15} />
@@ -364,11 +773,11 @@ export default function HiringJobFormPage() {
 
             {successMsg && (
                 <div
-                    className="flex items-center gap-2 px-4 py-3 rounded-lg mb-6 text-sm"
+                    className="mb-6 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm"
                     style={{
                         backgroundColor: 'rgba(34, 197, 94, 0.1)',
                         color: 'rgb(22, 163, 74)',
-                        border: '1px solid rgb(34, 197, 94)',
+                        borderColor: 'rgb(34, 197, 94)',
                     }}
                 >
                     <CheckCircle2 size={15} />
@@ -378,433 +787,685 @@ export default function HiringJobFormPage() {
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
                 <div
-                    className="rounded-xl p-6 flex flex-col gap-5"
+                    className="rounded-xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-default)',
+                        borderColor: 'var(--color-border-default)',
                     }}
                 >
-                    <h2
-                        className="text-sm font-semibold"
-                        style={{ color: 'var(--color-text-secondary)' }}
-                    >
+                    <h2 className="mb-5 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                         Basic Information
                     </h2>
 
-                    <Field label="Job Title" required error={errors.title}>
-                        <input
-                            type="text"
-                            value={form.title}
-                            onChange={set('title')}
-                            placeholder="e.g. Frontend Developer"
-                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
-                            style={inputStyle}
-                        />
-                    </Field>
-
-                    <div className="grid grid-cols-2 gap-5 w-full">
-                        <Field label="Department" required error={errors.department}>
-                            <select
-                                value={form.department}
-                                onChange={set('department')}
-                                className="px-3 py-2.5 text-sm rounded-lg border w-full h-11"
+                    <div className="flex flex-col gap-5">
+                        <Field label="Job Title" required error={errors.title}>
+                            <input
+                                type="text"
+                                value={form.title}
+                                onChange={set('title')}
+                                placeholder="e.g. Frontend Developer"
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                 style={inputStyle}
-                            >
-                                <option value="">Select department</option>
-                                {departmentOptions.map((department) => (
-                                    <option key={department} value={department}>
-                                        {department}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </Field>
 
-                        <div className="flex flex-col gap-1.5 w-full">
-                            <label className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                Location Type <span style={{ color: 'var(--color-danger)' }}>*</span>
-                            </label>
-                            <div 
-                                className="flex bg-[var(--color-bg-surface)] p-1 rounded-lg border w-full h-11" 
-                                style={{ borderColor: 'var(--color-border-default)' }}
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => set('locationType')({ target: { value: 'In-Office' } } as any)}
-                                    className={`flex-1 py-1 text-sm font-medium rounded-md transition-all duration-200 ${
-                                        form.locationType === 'In-Office'
-                                            ? 'shadow-sm border'
-                                            : 'hover:-translate-y-px hover:shadow-sm'
-                                    }`}
-                                    style={{
-                                        backgroundColor: form.locationType === 'In-Office' ? 'var(--color-bg-app)' : 'transparent',
-                                        color: form.locationType === 'In-Office' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                        borderColor: form.locationType === 'In-Office' ? 'var(--color-border-default)' : 'transparent'
-                                    }}
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <Field label="Department" required error={errors.department}>
+                                <select
+                                    value={form.department}
+                                    onChange={set('department')}
+                                    className="h-11 w-full rounded-lg border px-3 text-sm"
+                                    style={inputStyle}
                                 >
-                                    In-Office
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => set('locationType')({ target: { value: 'Remote' } } as any)}
-                                    className={`flex-1 py-1 text-sm font-medium rounded-md transition-all duration-200 ${
-                                        form.locationType === 'Remote'
-                                            ? 'shadow-sm border'
-                                            : 'hover:-translate-y-px hover:shadow-sm'
-                                    }`}
-                                    style={{
-                                        backgroundColor: form.locationType === 'Remote' ? 'var(--color-bg-app)' : 'transparent',
-                                        color: form.locationType === 'Remote' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                        borderColor: form.locationType === 'Remote' ? 'var(--color-border-default)' : 'transparent'
-                                    }}
+                                    <option value="">Select department</option>
+                                    {departmentOptions.map((department) => (
+                                        <option key={department} value={department}>
+                                            {department}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+
+                            <Field label="Employment Type">
+                                <select
+                                    value={form.employmentType}
+                                    onChange={set('employmentType')}
+                                    className="h-11 w-full rounded-lg border px-3 text-sm"
+                                    style={inputStyle}
                                 >
-                                    Remote
-                                </button>
-                            </div>
+                                    <option value="full-time">Full-time</option>
+                                    <option value="part-time">Part-time</option>
+                                    <option value="contract">Contract</option>
+                                    <option value="internship">Internship</option>
+                                </select>
+                            </Field>
                         </div>
 
-                        {form.locationType === 'In-Office' && (
-                            <div className="col-span-2">
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                    Location Type <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                </label>
+                                <div className="flex h-11 rounded-lg border p-1" style={inputStyle}>
+                                    {(['In-Office', 'Remote'] as const).map((option) => (
+                                        <button
+                                            key={option}
+                                            type="button"
+                                            onClick={() =>
+                                                set('locationType')({ target: { value: option } } as any)
+                                            }
+                                            className="flex-1 rounded-md text-sm font-medium transition-all"
+                                            style={{
+                                                backgroundColor:
+                                                    form.locationType === option
+                                                        ? 'var(--color-bg-app)'
+                                                        : 'transparent',
+                                                color:
+                                                    form.locationType === option
+                                                        ? 'var(--color-primary)'
+                                                        : 'var(--color-text-secondary)',
+                                            }}
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {form.locationType === 'In-Office' && (
                                 <Field label="Location" required error={errors.location}>
                                     <input
                                         type="text"
                                         value={form.location}
                                         onChange={set('location')}
                                         placeholder="e.g. Udaipur, Rajasthan"
-                                        className="px-3 py-2.5 text-sm rounded-lg border w-full h-11"
+                                        className="h-11 w-full rounded-lg border px-3 text-sm"
                                         style={inputStyle}
                                     />
                                 </Field>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    className="rounded-xl border p-6"
+                    style={{
+                        backgroundColor: 'var(--color-bg-surface)',
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <h2 className="mb-5 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                        Role Details
+                    </h2>
+
+                    <div className="flex flex-col gap-5">
+                        <Field label="Job Description" required error={errors.description}>
+                            <textarea
+                                value={form.description}
+                                onChange={set('description')}
+                                rows={5}
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <Field label="Requirements" required error={errors.requirements}>
+                            <textarea
+                                value={form.requirements}
+                                onChange={set('requirements')}
+                                rows={4}
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                style={inputStyle}
+                            />
+                        </Field>
+                    </div>
+                </div>
+
+                <div
+                    className="builder-shell rounded-[1.4rem] p-6"
+                    style={{
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <div className="mb-5 flex items-center justify-between gap-3">
+                        <div>
+                            <div className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+                                style={{
+                                    backgroundColor: 'rgba(var(--color-primary-rgb), 0.12)',
+                                    color: 'var(--color-primary)',
+                                }}
+                            >
+                                <Sparkles size={14} />
+                                Application Form Builder
+                            </div>
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                Application Form Builder
+                            </h2>
+                            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Mandatory fields stay locked for every job. Optional and custom fields can be selected per posting.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowNewFieldModal(true)}
+                            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+                            style={{ ...inputStyle, color: 'var(--color-primary)' }}
+                        >
+                            <Plus size={16} />
+                            Add New Field
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                        <div>
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                Always Included
+                            </p>
+                            <div className="space-y-3">
+                                {MANDATORY_FIELDS.map((field) => (
+                                    <div
+                                        key={field.key}
+                                        className="field-choice rounded-2xl border px-4 py-4"
+                                        style={{
+                                            backgroundColor: 'rgba(255,255,255,0.7)',
+                                            borderColor: 'var(--color-border-default)',
+                                        }}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {field.label}
+                                                </p>
+                                                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                    {field.description}
+                                                </p>
+                                            </div>
+                                            <span
+                                                className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                                                style={{ backgroundColor: '#DCFCE7', color: '#166534' }}
+                                            >
+                                                Required
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                Optional Standard Fields
+                            </p>
+                            <div className="space-y-3">
+                                {OPTIONAL_STANDARD_FIELDS.map((field) => {
+                                    const selected = form.applicationForm.selectedStandardFields.includes(field.key);
+                                    return (
+                                        <label
+                                            key={field.key}
+                                            className="field-choice flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-4"
+                                            style={{
+                                                backgroundColor: selected
+                                                    ? 'rgba(var(--color-primary-rgb), 0.12)'
+                                                    : 'rgba(255,255,255,0.72)',
+                                                borderColor: selected
+                                                    ? 'var(--color-primary)'
+                                                    : 'var(--color-border-default)',
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() => toggleStandardField(field.key)}
+                                                className="mt-1"
+                                            />
+                                            <div>
+                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {field.label}
+                                                </p>
+                                                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                    {field.description}
+                                                </p>
+                                            </div>
+                                            {selected && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        openEditStandardField(field.key);
+                                                    }}
+                                                    className="ml-auto rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                                                    style={{
+                                                        borderColor: 'var(--color-border-default)',
+                                                        color: 'var(--color-text-secondary)',
+                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                    }}
+                                                >
+                                                    Edit
+                                                </button>
+                                            )}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                Reusable Custom Fields
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                Saved here once, reusable in future jobs.
+                            </p>
+                        </div>
+
+                        {fieldLibrary.length === 0 ? (
+                            <div
+                                className="rounded-xl border border-dashed px-4 py-5 text-sm"
+                                style={{
+                                    backgroundColor: 'var(--color-bg-app)',
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
+                                No custom fields saved yet. Use “Add New Field” to build your reusable library.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {fieldLibrary.map((field) => {
+                                    const selected = selectedCustomFieldKeys.has(field.key);
+                                    return (
+                                        <div
+                                            key={field.key}
+                                            className="field-choice flex items-start justify-between gap-3 rounded-2xl border px-4 py-4"
+                                            style={{
+                                                backgroundColor: selected
+                                                    ? 'rgba(var(--color-primary-rgb), 0.12)'
+                                                    : 'rgba(255,255,255,0.72)',
+                                                borderColor: selected
+                                                    ? 'var(--color-primary)'
+                                                    : 'var(--color-border-default)',
+                                            }}
+                                        >
+                                            <label className="flex cursor-pointer items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={() => toggleCustomField(field)}
+                                                    className="mt-1"
+                                                />
+                                                <div>
+                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {field.label}
+                                                    </p>
+                                                    <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {FIELD_TYPE_OPTIONS.find((option) => option.value === field.type)?.label || field.type}
+                                                        {field.helpText ? ` · ${field.helpText}` : ''}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                {selected && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditCustomField(field)}
+                                                        className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                                                        style={{
+                                                            borderColor: 'var(--color-border-default)',
+                                                            color: 'var(--color-text-secondary)',
+                                                            backgroundColor: 'var(--color-bg-surface)',
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteSavedField(field.key)}
+                                                    disabled={isDeletingField}
+                                                    className="rounded-lg border p-2"
+                                                    style={inputStyle}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
 
-                    <Field label="Employment Type">
-                        <select
-                            value={form.employmentType}
-                            onChange={set('employmentType')}
-                            className="px-3 py-2.5 text-sm rounded-lg border w-full"
-                            style={inputStyle}
-                        >
-                            <option value="full-time">Full-time</option>
-                            <option value="part-time">Part-time</option>
-                            <option value="contract">Contract</option>
-                            <option value="internship">Internship</option>
-                        </select>
-                    </Field>
                 </div>
 
                 <div
-                    className="rounded-xl p-6 flex flex-col gap-5"
+                    className="rounded-xl border p-6"
                     style={{
                         backgroundColor: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-default)',
+                        borderColor: 'var(--color-border-default)',
                     }}
                 >
-                    <h2
-                        className="text-sm font-semibold"
-                        style={{ color: 'var(--color-text-secondary)' }}
-                    >
-                        Role Details
-                    </h2>
-
-                    <Field label="Job Description" required error={errors.description}>
-                        <textarea
-                            value={form.description}
-                            onChange={set('description')}
-                            rows={5}
-                            placeholder="Describe the role, responsibilities, and what the candidate will be doing..."
-                            className="px-3 py-2.5 text-sm rounded-lg border w-full resize-y"
-                            style={inputStyle}
-                        />
-                    </Field>
-
-                    <Field label="Requirements" required error={errors.requirements}>
-                        <textarea
-                            value={form.requirements}
-                            onChange={set('requirements')}
-                            rows={4}
-                            placeholder="List skills, qualifications, and experience required..."
-                            className="px-3 py-2.5 text-sm rounded-lg border w-full resize-y"
-                            style={inputStyle}
-                        />
-                    </Field>
-                </div>
-
-                <div
-                    className="rounded-xl p-6 flex flex-col gap-4"
-                    style={{
-                        backgroundColor: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-default)',
-                    }}
-                >
-                    <h2
-                        className="text-sm font-semibold"
-                        style={{ color: 'var(--color-text-secondary)' }}
-                    >
+                    <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                         Settings
                     </h2>
 
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <div className="relative">
-                            <input
-                                type="checkbox"
-                                checked={form.isHiring}
-                                onChange={set('isHiring')}
-                                className="sr-only"
-                            />
-                            <div
-                                className="w-10 h-6 rounded-full transition-colors duration-200"
-                                style={{
-                                    backgroundColor: form.isHiring
-                                        ? 'var(--color-primary)'
-                                        : 'var(--color-border-default)',
-                                }}
-                            />
-                            <div
-                                className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
-                                style={{
-                                    transform: form.isHiring
-                                        ? 'translateX(16px)'
-                                        : 'translateX(0)',
-                                }}
-                            />
-                        </div>
-                        <div>
-                            <p
-                                className="text-sm font-medium"
-                                style={{ color: 'var(--color-text-primary)' }}
-                            >
-                                Actively Hiring
-                            </p>
-                            <p
-                                className="text-xs"
-                                style={{ color: 'var(--color-text-muted)' }}
-                            >
-                                When on, this job will appear on the public website.
-                            </p>
-                        </div>
-                    </label>
-
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <div className="relative">
-                            <input
-                                type="checkbox"
-                                checked={form.assignmentRequired}
-                                onChange={set('assignmentRequired')}
-                                className="sr-only"
-                            />
-                            <div
-                                className="w-10 h-6 rounded-full transition-colors duration-200"
-                                style={{
-                                    backgroundColor: form.assignmentRequired
-                                        ? 'var(--color-primary)'
-                                        : 'var(--color-border-default)',
-                                }}
-                            />
-                            <div
-                                className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
-                                style={{
-                                    transform: form.assignmentRequired
-                                        ? 'translateX(16px)'
-                                        : 'translateX(0)',
-                                }}
-                            />
-                        </div>
-                        <div>
-                            <p
-                                className="text-sm font-medium"
-                                style={{ color: 'var(--color-text-primary)' }}
-                            >
-                                Assignment Required
-                            </p>
-                            <p
-                                className="text-xs"
-                                style={{ color: 'var(--color-text-muted)' }}
-                            >
-                                Shortlisted candidates will receive a task assignment.
-                            </p>
-                        </div>
-                    </label>
-
+                    <div className="space-y-4">
+                        {[
+                            {
+                                checked: form.isHiring,
+                                onChange: set('isHiring'),
+                                title: 'Actively Hiring',
+                                description: 'When on, this job will appear on the public website.',
+                            },
+                            {
+                                checked: form.assignmentRequired,
+                                onChange: set('assignmentRequired'),
+                                title: 'Assignment Required',
+                                description: 'Shortlisted candidates will receive a task assignment.',
+                            },
+                        ].map((setting) => (
+                            <label key={setting.title} className="flex cursor-pointer items-center gap-3">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={setting.checked}
+                                        onChange={setting.onChange}
+                                        className="sr-only"
+                                    />
+                                    <div
+                                        className="h-6 w-10 rounded-full"
+                                        style={{
+                                            backgroundColor: setting.checked
+                                                ? 'var(--color-primary)'
+                                                : 'var(--color-border-default)',
+                                        }}
+                                    />
+                                    <div
+                                        className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+                                        style={{
+                                            transform: setting.checked
+                                                ? 'translateX(16px)'
+                                                : 'translateX(0)',
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                        {setting.title}
+                                    </p>
+                                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                        {setting.description}
+                                    </p>
+                                </div>
+                            </label>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
                     <button
                         type="button"
                         onClick={() => setShowSaveTemplateModal(true)}
-                        className="px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors hover:opacity-80 disabled:opacity-50"
-                        style={{
-                            borderColor: 'var(--color-border-default)',
-                            color: 'var(--color-primary)',
-                            backgroundColor: 'transparent',
-                        }}
+                        className="rounded-lg border px-4 py-2.5 text-sm font-medium"
+                        style={{ ...inputStyle, color: 'var(--color-primary)' }}
                     >
                         Save as Template
                     </button>
-                    
-                    <div className="flex gap-3">
+
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                        {isSubmitting && <Loader2 size={16} className="animate-spin" />}
+                        {isEdit ? 'Update Job' : 'Create Job'}
+                    </button>
+                </div>
+            </form>
+
+            <Modal
+                open={showSaveTemplateModal}
+                title="Save Job Template"
+                onClose={() => setShowSaveTemplateModal(false)}
+            >
+                <div className="space-y-4">
+                    <Field label="Template Name" required>
+                        <input
+                            type="text"
+                            value={newTemplateName}
+                            onChange={(e) => setNewTemplateName(e.target.value)}
+                            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                            style={inputStyle}
+                        />
+                    </Field>
+                    <div className="flex justify-end gap-3">
                         <button
                             type="button"
-                            onClick={() => navigate('/hiring/jobs')}
-                            className="px-5 py-2.5 rounded-lg text-sm border transition-colors hover:opacity-80"
-                            style={{
-                                borderColor: 'var(--color-border-default)',
-                                color: 'var(--color-text-secondary)',
-                                backgroundColor: 'var(--color-bg-surface)',
-                            }}
+                            onClick={() => setShowSaveTemplateModal(false)}
+                            className="rounded-lg border px-4 py-2 text-sm"
+                            style={inputStyle}
                         >
                             Cancel
                         </button>
                         <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="px-5 py-2.5 rounded-lg text-sm font-medium inline-flex items-center gap-2 transition-all hover:-translate-y-0.5 shadow-sm hover:shadow-md"
-                            style={{
-                                backgroundColor: 'var(--color-primary)',
-                                color: '#fff',
-                                opacity: isSubmitting ? 0.7 : 1,
-                            }}
+                            type="button"
+                            onClick={handleSaveTemplate}
+                            disabled={isCreatingTemplate}
+                            className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
                         >
-                            {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-                            {isEdit ? 'Save Changes' : 'Create Job'}
+                            {isCreatingTemplate ? 'Saving...' : 'Save Template'}
                         </button>
                     </div>
                 </div>
-            </form>
+            </Modal>
 
-            {/* Modal - Save Template */}
-            {showSaveTemplateModal && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                    <div 
-                        className="rounded-xl w-full max-w-sm p-6 shadow-2xl"
-                        style={{ backgroundColor: 'var(--color-bg-app)', border: '1px solid var(--color-border-default)' }}
-                    >
-                        <h3 className="text-lg font-bold mb-2 cursor-default" style={{ color: 'var(--color-text-primary)' }}>Save Template</h3>
-                        <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                            Save your current form data as a reusable template.
+            <Modal
+                open={showManageTemplates}
+                title="Manage Templates"
+                onClose={() => setShowManageTemplates(false)}
+            >
+                <div className="space-y-3">
+                    {templates.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            No templates saved yet.
                         </p>
-                        
-                        <Field label="Template Name" required>
+                    ) : (
+                        templates.map((template) => (
+                            <div
+                                key={template._id}
+                                className="flex items-center justify-between rounded-xl border px-4 py-3"
+                                style={{ borderColor: 'var(--color-border-default)' }}
+                            >
+                                <div>
+                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                        {template.templateName}
+                                    </p>
+                                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                        {template.title || 'Untitled role'}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDeleteTemplate(template._id)}
+                                    disabled={isDeletingTemplate}
+                                    className="rounded-lg border p-2"
+                                    style={inputStyle}
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </Modal>
+
+            <Modal
+                open={showNewFieldModal}
+                title="Add Reusable Custom Field"
+                onClose={() => setShowNewFieldModal(false)}
+            >
+                <div className="space-y-4">
+                    <Field label="Field Name" required>
+                        <input
+                            type="text"
+                            value={newField.label}
+                            onChange={(e) =>
+                                setNewField((prev) => ({ ...prev, label: e.target.value }))
+                            }
+                            placeholder="e.g. Dribbble URL"
+                            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                            style={inputStyle}
+                        />
+                    </Field>
+
+                    <Field label="Field Type" required>
+                        <select
+                            value={newField.type}
+                            onChange={(e) =>
+                                setNewField((prev) => ({
+                                    ...prev,
+                                    type: e.target.value as ApplicationFieldType,
+                                }))
+                            }
+                            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                            style={inputStyle}
+                        >
+                            {FIELD_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <Field label="Placeholder">
+                        <input
+                            type="text"
+                            value={newField.placeholder}
+                            onChange={(e) =>
+                                setNewField((prev) => ({ ...prev, placeholder: e.target.value }))
+                            }
+                            placeholder="Optional helper placeholder"
+                            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                            style={inputStyle}
+                        />
+                    </Field>
+
+                    <Field label="Help Text">
+                        <input
+                            type="text"
+                            value={newField.helpText}
+                            onChange={(e) =>
+                                setNewField((prev) => ({ ...prev, helpText: e.target.value }))
+                            }
+                            placeholder="Optional note shown in the checklist"
+                            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                            style={inputStyle}
+                        />
+                    </Field>
+
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowNewFieldModal(false)}
+                            className="rounded-lg border px-4 py-2 text-sm"
+                            style={inputStyle}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSaveNewField}
+                            disabled={isSavingField}
+                            className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            {isSavingField ? 'Saving...' : 'Save Field'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                open={showEditFieldModal}
+                title="Edit Selected Field"
+                onClose={() => {
+                    setShowEditFieldModal(false);
+                    setEditingField(null);
+                }}
+            >
+                {editingField && (
+                    <div className="space-y-4">
+                        <Field label="Field Label" required>
                             <input
-                                autoFocus
                                 type="text"
-                                value={newTemplateName}
-                                onChange={(e) => setNewTemplateName(e.target.value)}
-                                placeholder="e.g. Senior Backend Dev"
-                                className="px-3 py-2.5 text-sm rounded-lg border w-full"
+                                value={editingField.label}
+                                onChange={(e) =>
+                                    setEditingField((prev) =>
+                                        prev ? { ...prev, label: e.target.value } : prev
+                                    )
+                                }
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                 style={inputStyle}
                             />
                         </Field>
 
-                        <div className="flex justify-end gap-3 mt-6">
+                        <Field label="Placeholder">
+                            <input
+                                type="text"
+                                value={editingField.placeholder}
+                                onChange={(e) =>
+                                    setEditingField((prev) =>
+                                        prev ? { ...prev, placeholder: e.target.value } : prev
+                                    )
+                                }
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <Field label="Help Text">
+                            <input
+                                type="text"
+                                value={editingField.helpText}
+                                onChange={(e) =>
+                                    setEditingField((prev) =>
+                                        prev ? { ...prev, helpText: e.target.value } : prev
+                                    )
+                                }
+                                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <div className="flex justify-end gap-3">
                             <button
+                                type="button"
                                 onClick={() => {
-                                    setShowSaveTemplateModal(false);
-                                    setNewTemplateName('');
+                                    setShowEditFieldModal(false);
+                                    setEditingField(null);
                                 }}
-                                className="px-4 py-2 flex-grow rounded-lg text-sm font-medium border transition-colors hover:opacity-80"
-                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                className="rounded-lg border px-4 py-2 text-sm"
+                                style={inputStyle}
                             >
                                 Cancel
                             </button>
                             <button
-                                onClick={handleSaveTemplate}
-                                disabled={isCreatingTemplate || !newTemplateName.trim()}
-                                className="px-4 py-2 flex-grow rounded-lg text-sm font-medium inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-50 hover:opacity-90 shadow-sm"
-                                style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
+                                type="button"
+                                onClick={handleSaveFieldEdits}
+                                className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
                             >
-                                {isCreatingTemplate ? <Loader2 size={16} className="animate-spin" /> : 'Save Template'}
+                                Save Changes
                             </button>
                         </div>
                     </div>
-                </div>,
-                document.body
-            )}
-
-            {/* Slide-over Drawer - Manage Templates */}
-            {showManageTemplates && createPortal(
-                <div className="fixed inset-0 z-[100] flex justify-end">
-                    <div 
-                        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-                        onClick={() => setShowManageTemplates(false)}
-                    />
-                    
-                    <div 
-                        className="relative w-full max-w-sm h-full shadow-2xl flex flex-col animate-[slideIn_0.2s_ease-out]"
-                        style={{ backgroundColor: 'var(--color-bg-app)', borderLeft: '1px solid var(--color-border-default)' }}
-                    >
-                        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                            <div>
-                                <h3 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>Manage Templates</h3>
-                                <p className="text-[13px] mt-1" style={{ color: 'var(--color-text-secondary)' }}>Review and remove saved templates.</p>
-                            </div>
-                            <button
-                                onClick={() => setShowManageTemplates(false)}
-                                className="p-2 rounded-lg transition-colors hover:opacity-80"
-                                style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-app)', border: '1px solid var(--color-border-default)' }}
-                            >
-                                <ChevronLeft size={18} className="rotate-180" />
-                            </button>
-                        </div>
-                        
-                        <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: 'var(--color-bg-app)' }}>
-                            {templates.length === 0 ? (
-                                <div className="text-center py-12 flex flex-col items-center justify-center border border-dashed rounded-xl" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                        No templates available
-                                    </p>
-                                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                                        Save a job as a template to see it here.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col gap-3">
-                                    {templates.map((t) => (
-                                        <div 
-                                            key={t._id}
-                                            className="flex items-start justify-between p-4 rounded-xl border transition-all hover:shadow-sm group"
-                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
-                                        >
-                                            <div className="flex flex-col gap-1.5">
-                                                <p className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>{t.templateName}</p>
-                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                    {t.department && (
-                                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: 'var(--color-bg-app)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }}>
-                                                            {t.department}
-                                                        </span>
-                                                    )}
-                                                    {t.locationType && (
-                                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: 'var(--color-bg-app)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }}>
-                                                            {t.locationType}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => handleDeleteTemplate(t._id)}
-                                                disabled={isDeletingTemplate}
-                                                className="p-2 -mr-1 rounded-lg hover:bg-red-50 text-[var(--color-text-muted)] hover:text-red-500 disabled:opacity-50 transition-colors"
-                                                title="Delete template"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Define animation via inline style inject for simple slide */}
-                        <style>{`
-                            @keyframes slideIn {
-                                from { transform: translateX(100%); }
-                                to { transform: translateX(0); }
-                            }
-                        `}</style>
-                    </div>
-                </div>,
-                document.body
-            )}
+                )}
+            </Modal>
         </div>
     );
 }

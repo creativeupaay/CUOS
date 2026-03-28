@@ -5,7 +5,7 @@ import { useGetUsersQuery } from '@/features/auth/authApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { ArrowLeft, Save, Loader2, UserPlus } from 'lucide-react';
 
-const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'];
+const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Creative'];
 const EMPLOYMENT_TYPES = ['full-time', 'part-time', 'contract', 'intern'];
 
 const DEFAULT_ONBOARDING_CHECKLIST = [

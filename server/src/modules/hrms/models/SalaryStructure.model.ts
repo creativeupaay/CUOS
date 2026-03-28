@@ -82,9 +82,6 @@ const SalaryStructureSchema = new Schema<ISalaryStructure>(
     }
 );
 
-// Indexes
-SalaryStructureSchema.index({ employeeId: 1 });
-
 // Virtual: gross salary
 SalaryStructureSchema.virtual('grossSalary').get(function () {
     return this.basic + this.hra + this.da + this.specialAllowance;

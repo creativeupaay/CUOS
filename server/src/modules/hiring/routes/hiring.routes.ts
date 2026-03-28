@@ -51,17 +51,33 @@ import { hiringReportSummarySchema } from '../validators/report.validator';
 const router = Router();
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 25 * 1024 * 1024, files: 12 },
     fileFilter: (_req, file, cb) => {
-        const allowed = [
+        const resumeAllowed = [
             'application/pdf',
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ];
-        if (allowed.includes(file.mimetype)) {
+        const attachmentAllowed = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'text/plain',
+        ];
+        if (
+            resumeAllowed.includes(file.mimetype) ||
+            attachmentAllowed.includes(file.mimetype) ||
+            file.mimetype.startsWith('image/')
+        ) {
             cb(null, true);
         } else {
-            cb(new Error('Only PDF, DOC, and DOCX files are allowed'));
+            cb(new Error('Only common document, spreadsheet, zip, text, and image files are allowed'));
         }
     },
 });
@@ -106,7 +122,7 @@ const assignmentUpload = multer({
 router.get('/public/jobs', jobController.getActiveJobs);
 router.post(
     '/public/apply/:jobId',
-    upload.single('resume'),
+    upload.any(),
     validateRequest(createPublicApplicationSchema),
     applicationController.createPublicApplication
 );
@@ -119,7 +135,7 @@ router.get(
 
 router.post(
     '/assignment/submit/:applicationId',
-    assignmentUpload.fields([{ name: 'attachments', maxCount: 8 }]),
+    assignmentUpload.any(),
     validateRequest(submitAssignmentSchema),
     assignmentController.submitAssignment
 );
@@ -255,6 +271,24 @@ router.delete(
     authorize(manageRoles),
     validateRequest(getJobTemplateSchema),
     jobTemplateController.deleteTemplate
+);
+
+router.get(
+    '/application-fields',
+    authorize(viewRoles),
+    jobController.getApplicationFieldLibrary
+);
+
+router.post(
+    '/application-fields',
+    authorize(manageRoles),
+    jobController.saveApplicationField
+);
+
+router.delete(
+    '/application-fields/:key',
+    authorize(manageRoles),
+    jobController.deleteApplicationField
 );
 
 // ============================================

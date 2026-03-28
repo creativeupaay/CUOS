@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     AlertCircle,
+    Plus,
     CheckCircle2,
     ExternalLink,
     Figma,
@@ -11,6 +12,7 @@ import {
     Pencil,
     Clock3,
     XCircle,
+    Trash2,
 } from 'lucide-react';
 import {
     useCreateAssignmentMutation,
@@ -21,11 +23,16 @@ import {
     useUpdateAssignmentMutation,
     useUpdateApplicationStatusMutation,
 } from '@/features/hiring/hiringApi';
-import type { AssignmentSubmission, AssignmentSubmissionFields } from '@/features/hiring/types/types';
+import type {
+    AssignmentCustomSubmissionFieldType,
+    AssignmentSubmission,
+    AssignmentSubmissionFields,
+} from '@/features/hiring/types/types';
 
 type AssignmentTab = 'assignments' | 'assignment-review';
 type SubmissionTimingFilter = 'all' | 'on-time' | 'late';
 type SubmissionActionState = 'rejected' | 'invited';
+type BuiltInSubmissionFieldKey = Exclude<keyof AssignmentSubmissionFields, 'customFields'>;
 
 const DEFAULT_SUBMISSION_FIELDS: AssignmentSubmissionFields = {
     githubLink: true,
@@ -34,10 +41,11 @@ const DEFAULT_SUBMISSION_FIELDS: AssignmentSubmissionFields = {
     figmaLink: false,
     attachments: false,
     notes: true,
+    customFields: [],
 };
 
 const SUBMISSION_FIELD_OPTIONS: {
-    key: keyof AssignmentSubmissionFields;
+    key: BuiltInSubmissionFieldKey;
     label: string;
     description: string;
 }[] = [
@@ -48,6 +56,28 @@ const SUBMISSION_FIELD_OPTIONS: {
     { key: 'attachments', label: 'Attachments', description: 'Files like images, videos, PDFs, or docs' },
     { key: 'notes', label: 'Notes', description: 'Extra written explanation from candidate' },
 ];
+
+const CUSTOM_SUBMISSION_FIELD_TYPES: {
+    value: AssignmentCustomSubmissionFieldType;
+    label: string;
+}[] = [
+    { value: 'text', label: 'Text' },
+    { value: 'url', label: 'URL' },
+    { value: 'number', label: 'Number' },
+    { value: 'note', label: 'Long Text' },
+    { value: 'date', label: 'Date' },
+    { value: 'attachment', label: 'Attachment' },
+];
+
+function toCustomSubmissionFieldKey(name: string) {
+    const slug = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    return `custom_${slug || 'field'}_${Date.now().toString(36)}`;
+}
 
 export default function AssignmentReviewPage() {
     const [searchParams] = useSearchParams();
@@ -62,6 +92,9 @@ export default function AssignmentReviewPage() {
     const [submissionTimingFilter, setSubmissionTimingFilter] =
         useState<SubmissionTimingFilter>('all');
     const [submissionActionById, setSubmissionActionById] = useState<Record<string, SubmissionActionState>>({});
+    const [customFieldName, setCustomFieldName] = useState('');
+    const [customFieldType, setCustomFieldType] = useState<AssignmentCustomSubmissionFieldType>('text');
+    const [customFieldPlaceholder, setCustomFieldPlaceholder] = useState('');
     const [submissionFields, setSubmissionFields] = useState<AssignmentSubmissionFields>(
         DEFAULT_SUBMISSION_FIELDS
     );
@@ -171,7 +204,9 @@ export default function AssignmentReviewPage() {
     const [updateStatus, { isLoading: updatingStatus }] = useUpdateApplicationStatusMutation();
     const [sendInterviewInvite, { isLoading: sendingInvite }] = useSendInterviewInviteMutation();
 
-    const hasAtLeastOneSubmissionField = Object.values(submissionFields).some(Boolean);
+    const hasAtLeastOneSubmissionField =
+        SUBMISSION_FIELD_OPTIONS.some((field) => Boolean(submissionFields[field.key])) ||
+        submissionFields.customFields.length > 0;
 
     const selectedJob = useMemo(
         () => jobs.find((job) => job._id === jobId),
@@ -186,6 +221,9 @@ export default function AssignmentReviewPage() {
             setInstructions('');
             setTimeLimitDays(2);
             setSubmissionFields(DEFAULT_SUBMISSION_FIELDS);
+            setCustomFieldName('');
+            setCustomFieldType('text');
+            setCustomFieldPlaceholder('');
             return;
         }
 
@@ -196,8 +234,39 @@ export default function AssignmentReviewPage() {
         setSubmissionFields({
             ...DEFAULT_SUBMISSION_FIELDS,
             ...selectedAssignment.submissionFields,
+            customFields: selectedAssignment.submissionFields?.customFields || [],
         });
     }, [selectedAssignment?._id]);
+
+    function addCustomSubmissionField() {
+        const trimmedName = customFieldName.trim();
+        const trimmedPlaceholder = customFieldPlaceholder.trim();
+        if (!trimmedName) return;
+
+        setSubmissionFields((prev) => ({
+            ...prev,
+            customFields: [
+                ...prev.customFields,
+                {
+                    key: toCustomSubmissionFieldKey(trimmedName),
+                    label: trimmedName,
+                    type: customFieldType,
+                    placeholder: trimmedPlaceholder || undefined,
+                },
+            ],
+        }));
+
+        setCustomFieldName('');
+        setCustomFieldType('text');
+        setCustomFieldPlaceholder('');
+    }
+
+    function removeCustomSubmissionField(key: string) {
+        setSubmissionFields((prev) => ({
+            ...prev,
+            customFields: prev.customFields.filter((field) => field.key !== key),
+        }));
+    }
 
     async function handleSaveAssignment(e: FormEvent) {
         e.preventDefault();
@@ -506,6 +575,92 @@ export default function AssignmentReviewPage() {
                                     </label>
                                 ))}
                             </div>
+
+                            <div className="mt-3 rounded-lg border p-3" style={{ borderColor: 'var(--color-border-default)' }}>
+                                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                    Custom Fields
+                                </p>
+
+                                {submissionFields.customFields.length > 0 ? (
+                                    <div className="mt-2 space-y-2">
+                                        {submissionFields.customFields.map((field) => (
+                                            <div
+                                                key={field.key}
+                                                className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2"
+                                                style={{ borderColor: 'var(--color-border-default)' }}
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {field.label}
+                                                    </p>
+                                                    <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {field.type.toUpperCase()}
+                                                        {field.placeholder ? ` • ${field.placeholder}` : ''}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeCustomSubmissionField(field.key)}
+                                                    disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border"
+                                                    style={{ borderColor: '#FCA5A5', color: '#B91C1C' }}
+                                                >
+                                                    <Trash2 size={11} />
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+                                        No custom fields added yet.
+                                    </p>
+                                )}
+
+                                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    <input
+                                        value={customFieldName}
+                                        onChange={(e) => setCustomFieldName(e.target.value)}
+                                        disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                        placeholder="Field name"
+                                        className="h-9 px-2.5 text-xs rounded-md border outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    />
+                                    <select
+                                        value={customFieldType}
+                                        onChange={(e) => setCustomFieldType(e.target.value as AssignmentCustomSubmissionFieldType)}
+                                        disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                        className="h-9 px-2.5 text-xs rounded-md border outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
+                                        {CUSTOM_SUBMISSION_FIELD_TYPES.map((typeOption) => (
+                                            <option key={typeOption.value} value={typeOption.value}>
+                                                {typeOption.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        value={customFieldPlaceholder}
+                                        onChange={(e) => setCustomFieldPlaceholder(e.target.value)}
+                                        disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                        placeholder="Placeholder"
+                                        className="h-9 px-2.5 text-xs rounded-md border outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    />
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={addCustomSubmissionField}
+                                    disabled={!customFieldName.trim() || !jobId || (Boolean(selectedAssignment) && !isEditing)}
+                                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium"
+                                    style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                                >
+                                    <Plus size={12} />
+                                    Add Custom Field
+                                </button>
+                            </div>
+
                             {!hasAtLeastOneSubmissionField && (
                                 <p className="text-xs mt-2" style={{ color: '#B91C1C' }}>
                                     Enable at least one field so candidates can submit assignment.
@@ -732,10 +887,27 @@ export default function AssignmentReviewPage() {
                                                             Figma <ExternalLink size={11} />
                                                         </a>
                                                     )}
+                                                    {submission.customFieldResponses
+                                                        ?.filter((field) => field.type === 'url' && field.value)
+                                                        .map((field) => (
+                                                            <a
+                                                                key={`${submission._id}-${field.key}`}
+                                                                href={field.value}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1 text-xs"
+                                                                style={{ color: 'var(--color-primary)' }}
+                                                            >
+                                                                {field.label} <ExternalLink size={11} />
+                                                            </a>
+                                                        ))}
                                                     {!submission.githubLink &&
                                                         !submission.demoLink &&
                                                         !submission.videoLink &&
-                                                        !submission.figmaLink && (
+                                                        !submission.figmaLink &&
+                                                        !submission.customFieldResponses?.some(
+                                                            (field) => field.type === 'url' && field.value
+                                                        ) && (
                                                             <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                                                         )}
                                                 </div>
@@ -759,6 +931,39 @@ export default function AssignmentReviewPage() {
                                                     ) : (
                                                         <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                                                     )}
+
+                                                    {submission.customFieldResponses
+                                                        ?.filter(
+                                                            (field) =>
+                                                                field.type !== 'url' && field.value
+                                                        )
+                                                        .map((field) => (
+                                                            field.type === 'attachment' ? (
+                                                                <a
+                                                                    key={`${submission._id}-${field.key}`}
+                                                                    href={field.value}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1 text-xs"
+                                                                    style={{ color: 'var(--color-primary)' }}
+                                                                >
+                                                                    <Paperclip size={11} />
+                                                                    {field.label}
+                                                                    <ExternalLink size={11} />
+                                                                </a>
+                                                            ) : (
+                                                            <p
+                                                                key={`${submission._id}-${field.key}`}
+                                                                className="text-xs"
+                                                                style={{ color: 'var(--color-text-secondary)' }}
+                                                            >
+                                                                <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                                    {field.label}:
+                                                                </span>{' '}
+                                                                {field.value}
+                                                            </p>
+                                                            )
+                                                        ))}
                                                 </div>
                                             </td>
                                             <td

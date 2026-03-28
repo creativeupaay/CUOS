@@ -229,6 +229,62 @@ export default function HiringApplicationDetailPage() {
         bookingUrlFromTimeline;
     const hasInterviewInviteBeenSent = Boolean(latestInviteActivity) || inviteSent;
 
+    // Build dynamic list of all URLs and attachments
+    const allLinksAndAttachments = useMemo(() => {
+        if (!application) return [];
+
+        const items: Array<{
+            label: string;
+            url: string;
+            isResume?: boolean;
+            isAttachment?: boolean;
+        }> = [];
+
+        // Resume is always first (mandatory)
+        if (application.resumeUrl) {
+            items.push({
+                label: 'View Resume',
+                url: application.resumeUrl,
+                isResume: true,
+            });
+        }
+
+        // Standard URL fields
+        const standardUrlFields: Array<{ key: keyof typeof application; label: string }> = [
+            { key: 'portfolio', label: 'Portfolio' },
+            { key: 'github', label: 'GitHub' },
+            { key: 'linkedin', label: 'LinkedIn' },
+            { key: 'figmaUrl', label: 'Figma' },
+        ];
+
+        standardUrlFields.forEach(({ key, label }) => {
+            const value = application[key];
+            if (value && typeof value === 'string' && value.trim()) {
+                items.push({ label, url: value.trim() });
+            }
+        });
+
+        // Custom field responses (URLs and attachments)
+        if (application.customFieldResponses && Array.isArray(application.customFieldResponses)) {
+            application.customFieldResponses.forEach((response: any) => {
+                if (response.type === 'url' && response.value && response.value.trim()) {
+                    items.push({
+                        label: response.label || 'Custom Link',
+                        url: response.value.trim(),
+                    });
+                } else if (response.type === 'attachment' && response.fileUrl && response.fileUrl.trim()) {
+                    items.push({
+                        label: response.label || response.fileName || 'Attachment',
+                        url: response.fileUrl.trim(),
+                        isAttachment: true,
+                    });
+                }
+            });
+        }
+
+        return items;
+    }, [application]);
+
     const [updateStatus, { isLoading: updatingStatus }] = useUpdateApplicationStatusMutation();
     const [addTag, { isLoading: addingTag }] = useAddApplicationTagMutation();
     const [removeTag] = useRemoveApplicationTagMutation();
@@ -411,53 +467,31 @@ export default function HiringApplicationDetailPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 mt-4">
-                            {application.resumeUrl && (
+                        <div className="flex items-center flex-wrap gap-3 mt-4">
+                            {allLinksAndAttachments.map((item, index) => (
                                 <a
-                                    href={application.resumeUrl}
+                                    key={index}
+                                    href={item.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border font-medium"
-                                    style={{
-                                        borderColor: 'var(--color-primary)',
-                                        color: 'var(--color-primary)',
-                                        backgroundColor: '#DCFCE7',
-                                    }}
+                                    style={
+                                        item.isResume
+                                            ? {
+                                                  borderColor: 'var(--color-primary)',
+                                                  color: 'var(--color-primary)',
+                                                  backgroundColor: '#DCFCE7',
+                                              }
+                                            : {
+                                                  borderColor: 'var(--color-border-default)',
+                                                  color: 'var(--color-text-secondary)',
+                                              }
+                                    }
                                 >
-                                    View Resume
+                                    {item.label}
                                     <ExternalLink size={11} />
                                 </a>
-                            )}
-                            {application.portfolio && (
-                                <a
-                                    href={application.portfolio}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
-                                    style={{
-                                        borderColor: 'var(--color-border-default)',
-                                        color: 'var(--color-text-secondary)',
-                                    }}
-                                >
-                                    Portfolio
-                                    <ExternalLink size={11} />
-                                </a>
-                            )}
-                            {application.linkedin && (
-                                <a
-                                    href={application.linkedin}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
-                                    style={{
-                                        borderColor: 'var(--color-border-default)',
-                                        color: 'var(--color-text-secondary)',
-                                    }}
-                                >
-                                    LinkedIn
-                                    <ExternalLink size={11} />
-                                </a>
-                            )}
+                            ))}
                             <button
                                 onClick={handleCopyAssignmentLink}
                                 className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
@@ -469,6 +503,23 @@ export default function HiringApplicationDetailPage() {
                                 Copy Assignment Link
                                 <Link size={11} />
                             </button>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                                <p style={{ color: 'var(--color-text-muted)' }}>Current Location</p>
+                                <p style={{ color: 'var(--color-text-primary)' }}>
+                                    {application.location || 'Not provided'}
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ color: 'var(--color-text-muted)' }}>Years of Experience</p>
+                                <p style={{ color: 'var(--color-text-primary)' }}>
+                                    {typeof application.yearsOfExperience === 'number'
+                                        ? application.yearsOfExperience
+                                        : 'Not provided'}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -517,6 +568,38 @@ export default function HiringApplicationDetailPage() {
                             >
                                 {application.coverLetter}
                             </p>
+                        </div>
+                    )}
+
+                    {application.customFieldResponses?.filter((field: any) => field.type !== 'url' && field.type !== 'attachment').length > 0 && (
+                        <div
+                            className="rounded-xl border p-5"
+                            style={{
+                                backgroundColor: 'var(--color-bg-surface)',
+                                borderColor: 'var(--color-border-default)',
+                            }}
+                        >
+                            <p
+                                className="text-xs font-semibold uppercase tracking-wide mb-4"
+                                style={{ color: 'var(--color-text-secondary)' }}
+                            >
+                                Additional Responses
+                            </p>
+
+                            <div className="space-y-4">
+                                {application.customFieldResponses
+                                    .filter((field: any) => field.type !== 'url' && field.type !== 'attachment')
+                                    .map((field: any) => (
+                                        <div key={field.key} className="rounded-lg border p-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                                            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--color-text-muted)' }}>
+                                                {field.label}
+                                            </p>
+                                            <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                {field.value || 'No response submitted'}
+                                            </p>
+                                        </div>
+                                    ))}
+                            </div>
                         </div>
                     )}
 
@@ -657,6 +740,56 @@ export default function HiringApplicationDetailPage() {
                                         'No additional notes submitted by candidate.'}
                                 </div>
                             </div>
+
+                            {submissionForApplication.customFieldResponses &&
+                                submissionForApplication.customFieldResponses.length > 0 && (
+                                    <div className="mt-4">
+                                        <p
+                                            className="text-xs font-semibold uppercase tracking-wide mb-2"
+                                            style={{ color: 'var(--color-text-secondary)' }}
+                                        >
+                                            Custom Assignment Responses
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {submissionForApplication.customFieldResponses.map((field) => (
+                                                <div
+                                                    key={`${submissionForApplication._id}-${field.key}`}
+                                                    className="rounded-lg border px-3 py-2.5 text-sm"
+                                                    style={{
+                                                        borderColor: 'var(--color-border-default)',
+                                                        backgroundColor: 'var(--color-bg-subtle)',
+                                                        color: 'var(--color-text-primary)',
+                                                    }}
+                                                >
+                                                    <p
+                                                        className="text-xs font-semibold uppercase tracking-wide mb-1"
+                                                        style={{ color: 'var(--color-text-muted)' }}
+                                                    >
+                                                        {field.label}
+                                                    </p>
+                                                    {(field.type === 'url' || field.type === 'attachment') && field.value ? (
+                                                        <a
+                                                            href={normalizeExternalUrl(field.value)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            {field.type === 'attachment'
+                                                                ? field.fileName || field.label
+                                                                : field.value}
+                                                            <ExternalLink size={11} />
+                                                        </a>
+                                                    ) : (
+                                                        <p className="whitespace-pre-wrap">
+                                                            {field.value || 'No response submitted'}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                         </div>
                     )}
 

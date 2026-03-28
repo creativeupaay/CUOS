@@ -134,6 +134,5 @@ const PartnerSchema = new Schema<IPartner>(
 PartnerSchema.index({ email: 1 });
 PartnerSchema.index({ isActive: 1 });
 PartnerSchema.index({ createdAt: -1 });
-PartnerSchema.index({ slug: 1 });
 
 export const Partner = mongoose.model<IPartner>('Partner', PartnerSchema);

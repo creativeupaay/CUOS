@@ -16,6 +16,8 @@ import type {
     InterviewDailySlot,
     InterviewAvailabilityRange,
     InterviewDateOverride,
+    JobApplicationFormConfig,
+    ApplicationCustomFieldDefinition,
 } from './types';
 
 // ============================================
@@ -58,6 +60,7 @@ export interface CreateJobTemplateRequest {
     description: string;
     requirements: string;
     employmentType: EmploymentType;
+    applicationForm?: JobApplicationFormConfig;
 }
 
 export interface UpdateJobTemplateRequest extends Partial<CreateJobTemplateRequest> {}
@@ -74,6 +77,7 @@ export interface CreateJobRequest {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    applicationForm?: JobApplicationFormConfig;
     interviewScheduling?: {
         enabled: boolean;
         active: boolean;
@@ -99,6 +103,7 @@ export interface UpdateJobRequest {
     employmentType?: EmploymentType;
     isHiring?: boolean;
     assignmentRequired?: boolean;
+    applicationForm?: Partial<JobApplicationFormConfig>;
     interviewScheduling?: {
         enabled?: boolean;
         active?: boolean;
@@ -160,7 +165,14 @@ export interface PublicApplyRequest {
     github?: string;
     experience?: string;
     coverLetter?: string;
+    figmaUrl?: string;
+    customFieldValues?: Record<string, string>;
+    customFieldFiles?: Record<string, File>;
     resume: File;
+}
+
+export interface ApplicationFieldLibraryResponse {
+    fields: ApplicationCustomFieldDefinition[];
 }
 
 export interface CreateAssignmentRequest {
@@ -187,6 +199,8 @@ export interface SubmitAssignmentRequest {
     figmaLink?: string;
     attachments?: File[];
     notes?: string;
+    customFieldValues?: Record<string, string>;
+    customFieldFiles?: Record<string, File>;
 }
 
 export interface AssignmentForApplicationResponse {

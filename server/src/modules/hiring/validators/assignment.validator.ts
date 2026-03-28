@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
+const customFieldTypeSchema = z.enum(['text', 'url', 'number', 'note', 'date', 'attachment']);
+
+const assignmentCustomFieldSchema = z.object({
+    key: z.string().min(1, 'Custom field key is required').trim(),
+    label: z.string().min(1, 'Custom field name is required').trim(),
+    type: customFieldTypeSchema,
+    placeholder: z.string().trim().optional(),
+});
+
 const submissionFieldsSchema = z.object({
     githubLink: z.boolean().default(true),
     demoLink: z.boolean().default(true),
@@ -9,6 +18,7 @@ const submissionFieldsSchema = z.object({
     figmaLink: z.boolean().default(false),
     attachments: z.boolean().default(false),
     notes: z.boolean().default(true),
+    customFields: z.array(assignmentCustomFieldSchema).default([]),
 });
 
 export const createAssignmentSchema = z.object({
@@ -54,6 +64,33 @@ export const getAssignmentForApplicationSchema = z.object({
 });
 
 const optionalUrl = z.string().trim().optional().or(z.literal(''));
+const optionalCustomFieldValues = z.preprocess(
+    (value) => {
+        if (typeof value !== 'string') return value;
+        const trimmed = value.trim();
+        if (!trimmed) return {};
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return value;
+        }
+    },
+    z.record(z.string(), z.string().trim()).optional()
+);
+
+const optionalCustomFieldFiles = z.preprocess(
+    (value) => {
+        if (typeof value !== 'string') return value;
+        const trimmed = value.trim();
+        if (!trimmed) return {};
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return value;
+        }
+    },
+    z.record(z.string(), z.string().trim()).optional()
+);
 
 export const submitAssignmentSchema = z.object({
     params: z.object({
@@ -65,6 +102,8 @@ export const submitAssignmentSchema = z.object({
         videoLink: optionalUrl,
         figmaLink: optionalUrl,
         notes: z.string().trim().optional().or(z.literal('')),
+        customFieldValues: optionalCustomFieldValues,
+        customFieldFiles: optionalCustomFieldFiles,
     }),
 });
 

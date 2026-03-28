@@ -2,6 +2,35 @@
 // JOB TYPES
 // ============================================
 export type EmploymentType = 'full-time' | 'part-time' | 'contract' | 'internship';
+export type ApplicationFieldType = 'text' | 'url' | 'number' | 'note' | 'date' | 'attachment';
+export type StandardApplicationFieldId =
+    | 'portfolio'
+    | 'github'
+    | 'linkedin'
+    | 'experience'
+    | 'coverLetter'
+    | 'figmaUrl';
+
+export interface ApplicationCustomFieldDefinition {
+    key: string;
+    label: string;
+    type: ApplicationFieldType;
+    placeholder?: string;
+    helpText?: string;
+}
+
+export interface ApplicationStandardFieldSetting {
+    key: StandardApplicationFieldId;
+    label: string;
+    placeholder?: string;
+    helpText?: string;
+}
+
+export interface JobApplicationFormConfig {
+    selectedStandardFields: StandardApplicationFieldId[];
+    standardFieldSettings: ApplicationStandardFieldSetting[];
+    customFields: ApplicationCustomFieldDefinition[];
+}
 
 export type InterviewScheduleSyncStatus =
     | 'not_configured'
@@ -60,6 +89,7 @@ export interface Job {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    applicationForm: JobApplicationFormConfig;
     interviewScheduling: InterviewSchedulingConfig;
     createdBy: string | { _id: string; name: string; email: string };
     createdAt: string;
@@ -76,6 +106,7 @@ export interface JobTemplate {
     description: string;
     requirements: string;
     employmentType: EmploymentType;
+    applicationForm?: JobApplicationFormConfig;
     createdBy: string | { _id: string; name: string; email: string };
     createdAt: string;
     updatedAt: string;
@@ -119,6 +150,17 @@ export interface Application {
     coverLetter?: string;
     location?: string;
     yearsOfExperience?: number;
+    figmaUrl?: string;
+    customFieldResponses: Array<{
+        key: string;
+        label: string;
+        type: ApplicationFieldType;
+        value?: string;
+        fileUrl?: string;
+        fileName?: string;
+        mimeType?: string;
+        size?: number;
+    }>;
     status: ApplicationStatus;
     tags: string[];
     createdAt: string;
@@ -151,6 +193,23 @@ export interface AssignmentSubmissionFields {
     figmaLink: boolean;
     attachments: boolean;
     notes: boolean;
+    customFields: AssignmentCustomSubmissionField[];
+}
+
+export type AssignmentCustomSubmissionFieldType =
+    | 'text'
+    | 'url'
+    | 'number'
+    | 'note'
+    | 'date'
+    | 'attachment';
+
+export interface AssignmentCustomSubmissionField {
+    key: string;
+    label: string;
+    type: AssignmentCustomSubmissionFieldType;
+    placeholder?: string;
+    createdAt?: string;
 }
 
 export interface AssignmentSubmissionAttachment {
@@ -191,6 +250,16 @@ export interface AssignmentSubmission {
     figmaLink?: string;
     attachments?: AssignmentSubmissionAttachment[];
     notes?: string;
+    customFieldResponses?: {
+        key: string;
+        label: string;
+        type: AssignmentCustomSubmissionFieldType;
+        value?: string;
+        fileName?: string;
+        mimeType?: string;
+        size?: number;
+        cloudinaryId?: string;
+    }[];
     submittedAt: string;
     deadlineAt?: string;
     submittedAfterDeadline: boolean;

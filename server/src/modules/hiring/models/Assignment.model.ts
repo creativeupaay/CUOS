@@ -1,5 +1,21 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
+export type AssignmentCustomSubmissionFieldType =
+    | 'text'
+    | 'url'
+    | 'number'
+    | 'note'
+    | 'date'
+    | 'attachment';
+
+export interface IAssignmentCustomSubmissionField {
+    key: string;
+    label: string;
+    type: AssignmentCustomSubmissionFieldType;
+    placeholder?: string;
+    createdAt?: Date;
+}
+
 export interface IAssignmentSubmissionFields {
     githubLink: boolean;
     demoLink: boolean;
@@ -7,6 +23,7 @@ export interface IAssignmentSubmissionFields {
     figmaLink: boolean;
     attachments: boolean;
     notes: boolean;
+    customFields: IAssignmentCustomSubmissionField[];
 }
 
 export interface IAssignment extends Document {
@@ -38,6 +55,25 @@ const AssignmentSchema = new Schema<IAssignment>(
             figmaLink: { type: Boolean, default: false },
             attachments: { type: Boolean, default: false },
             notes: { type: Boolean, default: true },
+            customFields: {
+                type: [
+                    new Schema<IAssignmentCustomSubmissionField>(
+                        {
+                            key: { type: String, required: true, trim: true },
+                            label: { type: String, required: true, trim: true },
+                            type: {
+                                type: String,
+                                enum: ['text', 'url', 'number', 'note', 'date', 'attachment'],
+                                required: true,
+                            },
+                            placeholder: { type: String, trim: true },
+                            createdAt: { type: Date, default: Date.now },
+                        },
+                        { _id: false }
+                    ),
+                ],
+                default: [],
+            },
         },
     },
     {

@@ -8,6 +8,17 @@ export interface IAssignmentSubmissionAttachment {
     cloudinaryId?: string;
 }
 
+export interface IAssignmentSubmissionCustomFieldResponse {
+    key: string;
+    label: string;
+    type: 'text' | 'url' | 'number' | 'note' | 'date' | 'attachment';
+    value?: string;
+    fileName?: string;
+    mimeType?: string;
+    size?: number;
+    cloudinaryId?: string;
+}
+
 export interface IAssignmentSubmission extends Document {
     _id: Types.ObjectId;
     assignmentId: Types.ObjectId;
@@ -18,6 +29,7 @@ export interface IAssignmentSubmission extends Document {
     figmaLink?: string;
     attachments?: IAssignmentSubmissionAttachment[];
     notes?: string;
+    customFieldResponses?: IAssignmentSubmissionCustomFieldResponse[];
     submittedAt: Date;
     deadlineAt?: Date;
     submittedAfterDeadline: boolean;
@@ -53,6 +65,22 @@ const AssignmentSubmissionSchema = new Schema<IAssignmentSubmission>(
             },
         ],
         notes: { type: String, trim: true },
+        customFieldResponses: [
+            {
+                key: { type: String, trim: true, required: true },
+                label: { type: String, trim: true, required: true },
+                type: {
+                    type: String,
+                    enum: ['text', 'url', 'number', 'note', 'date', 'attachment'],
+                    required: true,
+                },
+                value: { type: String, trim: true },
+                fileName: { type: String, trim: true },
+                mimeType: { type: String, trim: true },
+                size: { type: Number },
+                cloudinaryId: { type: String, trim: true },
+            },
+        ],
         submittedAt: { type: Date, required: true, default: Date.now },
         deadlineAt: { type: Date },
         submittedAfterDeadline: { type: Boolean, required: true, default: false },

@@ -30,6 +30,36 @@ const interviewDateOverrideSchema = z.object({
     slots: z.array(interviewDailySlotSchema).min(1),
 });
 
+const standardFieldSchema = z.enum([
+    'portfolio',
+    'github',
+    'linkedin',
+    'experience',
+    'coverLetter',
+    'figmaUrl',
+]);
+
+const customApplicationFieldSchema = z.object({
+    key: z.string().min(1).trim(),
+    label: z.string().min(1).trim(),
+    type: z.enum(['text', 'url', 'number', 'note', 'date', 'attachment']),
+    placeholder: z.string().trim().optional(),
+    helpText: z.string().trim().optional(),
+});
+
+const standardFieldSettingSchema = z.object({
+    key: standardFieldSchema,
+    label: z.string().min(1).trim(),
+    placeholder: z.string().trim().optional(),
+    helpText: z.string().trim().optional(),
+});
+
+const applicationFormSchema = z.object({
+    selectedStandardFields: z.array(standardFieldSchema).default([]),
+    standardFieldSettings: z.array(standardFieldSettingSchema).default([]),
+    customFields: z.array(customApplicationFieldSchema).default([]),
+});
+
 const reminderMinutesSchema = z.preprocess(
     (value) => {
         if (value === undefined || value === null) {
@@ -99,6 +129,7 @@ export const createJobSchema = z.object({
             .default('full-time'),
         isHiring: z.boolean().default(false),
         assignmentRequired: z.boolean().default(false),
+        applicationForm: applicationFormSchema.optional(),
         interviewScheduling: interviewSchedulingSchema.optional(),
     }),
 });
@@ -116,6 +147,7 @@ export const updateJobSchema = z.object({
             .optional(),
         isHiring: z.boolean().optional(),
         assignmentRequired: z.boolean().optional(),
+        applicationForm: applicationFormSchema.partial().optional(),
         interviewScheduling: interviewSchedulingUpdateSchema.optional(),
     }),
 });
@@ -158,6 +190,7 @@ export type GetJobInput = z.infer<typeof getJobSchema>['params'];
 export type ListJobsInput = z.infer<typeof listJobsSchema>['query'];
 export type InterviewSchedulingInput = NonNullable<CreateJobInput['interviewScheduling']>;
 export type InterviewSchedulingUpdateInput = NonNullable<UpdateJobInput['interviewScheduling']>;
+export type JobApplicationFormInput = NonNullable<CreateJobInput['applicationForm']>;
 
 // ============================================
 // JOB TEMPLATE VALIDATORS
@@ -174,6 +207,7 @@ export const createJobTemplateSchema = z.object({
         employmentType: z
             .enum(['full-time', 'part-time', 'contract', 'internship'])
             .default('full-time'),
+        applicationForm: applicationFormSchema.optional(),
     }),
 });
 
@@ -189,6 +223,7 @@ export const updateJobTemplateSchema = z.object({
         employmentType: z
             .enum(['full-time', 'part-time', 'contract', 'internship'])
             .optional(),
+        applicationForm: applicationFormSchema.partial().optional(),
     }),
 });
 

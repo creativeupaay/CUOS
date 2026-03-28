@@ -5,6 +5,7 @@ import { env } from '../../../config/env.config';
 import { calcomService } from './calcom.service';
 import { Application } from '../models/Application.model';
 import { Assignment } from '../models/Assignment.model';
+import { OrgSettings } from '../../overall-admin/models/OrgSettings.model';
 import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
 import type {
     CreateJobInput,
@@ -12,6 +13,7 @@ import type {
     ListJobsInput,
     InterviewSchedulingInput,
     InterviewSchedulingUpdateInput,
+    JobApplicationFormInput,
 } from '../validators/job.validator';
 
 function toDate(value?: string | null): Date | undefined {
@@ -146,6 +148,99 @@ function normalizeCreateScheduling(input?: InterviewSchedulingInput) {
     };
 }
 
+function slugifyFieldKey(value: string) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60);
+}
+
+const DEFAULT_STANDARD_FIELD_SETTINGS: Record<
+    string,
+    { label: string; placeholder?: string; helpText?: string }
+> = {
+    portfolio: {
+        label: 'Portfolio URL',
+        placeholder: 'https://your-portfolio.com',
+    },
+    github: {
+        label: 'GitHub URL',
+        placeholder: 'https://github.com/username',
+    },
+    linkedin: {
+        label: 'LinkedIn URL',
+        placeholder: 'https://linkedin.com/in/username',
+    },
+    experience: {
+        label: 'Relevant Experience',
+        placeholder: 'Briefly highlight your most relevant work',
+    },
+    coverLetter: {
+        label: 'Cover Letter',
+        placeholder: 'Tell us why you are a fit for this role',
+    },
+    figmaUrl: {
+        label: 'Figma URL',
+        placeholder: 'https://figma.com/file/...',
+    },
+};
+
+function normalizeApplicationForm(input?: JobApplicationFormInput) {
+    const selectedStandardFields = Array.isArray(input?.selectedStandardFields)
+        ? Array.from(
+              new Set(
+                  input.selectedStandardFields.filter((field) =>
+                      ['portfolio', 'github', 'linkedin', 'experience', 'coverLetter', 'figmaUrl'].includes(field)
+                  )
+              )
+          )
+        : ['portfolio', 'linkedin', 'experience', 'coverLetter'];
+
+    const standardFieldSettingsInput = Array.isArray(input?.standardFieldSettings)
+        ? input.standardFieldSettings
+        : [];
+
+    const standardFieldSettings = selectedStandardFields.map((fieldKey) => {
+        const matchingInput = standardFieldSettingsInput.find((item) => item.key === fieldKey);
+        const defaults = DEFAULT_STANDARD_FIELD_SETTINGS[fieldKey] || {
+            label: fieldKey,
+        };
+
+        return {
+            key: fieldKey,
+            label: String(matchingInput?.label || defaults.label).trim(),
+            placeholder:
+                String(matchingInput?.placeholder || defaults.placeholder || '').trim() || undefined,
+            helpText:
+                String(matchingInput?.helpText || defaults.helpText || '').trim() || undefined,
+        };
+    });
+
+    const customFields = Array.isArray(input?.customFields)
+        ? input.customFields
+              .map((field) => ({
+                  key: slugifyFieldKey(field.key || field.label),
+                  label: String(field.label || '').trim(),
+                  type: field.type,
+                  placeholder: String(field.placeholder || '').trim() || undefined,
+                  helpText: String(field.helpText || '').trim() || undefined,
+              }))
+              .filter((field) => field.key && field.label)
+        : [];
+
+    const uniqueCustomFields = Array.from(
+        customFields.reduce((map, field) => map.set(field.key, field), new Map<string, (typeof customFields)[number]>()).values()
+    );
+
+    return {
+        selectedStandardFields,
+        standardFieldSettings,
+        customFields: uniqueCustomFields,
+    };
+}
+
 function toPlainScheduling(existing: any) {
     if (!existing) return {};
     if (typeof existing.toObject === 'function') {
@@ -214,9 +309,11 @@ export class JobService {
      */
     async createJob(data: CreateJobInput, createdBy: Types.ObjectId): Promise<IJob> {
         const scheduling = normalizeCreateScheduling(data.interviewScheduling);
+        const applicationForm = normalizeApplicationForm(data.applicationForm);
 
         const job = await Job.create({
             ...data,
+            applicationForm,
             interviewScheduling: scheduling,
             createdBy,
         });
@@ -330,6 +427,17 @@ export class JobService {
             );
         }
 
+        if (data.applicationForm) {
+            const existingApplicationForm =
+                existing.applicationForm && typeof (existing.applicationForm as any).toObject === 'function'
+                    ? (existing.applicationForm as any).toObject()
+                    : existing.applicationForm;
+            updatePayload.applicationForm = normalizeApplicationForm({
+                ...(existingApplicationForm || {}),
+                ...data.applicationForm,
+            });
+        }
+
         const job = await Job.findByIdAndUpdate(id, updatePayload, {
             new: true,
             runValidators: true,
@@ -425,7 +533,67 @@ export class JobService {
      */
     async getActiveJobs(): Promise<IJob[]> {
         return Job.find({ isHiring: true }).sort({ createdAt: -1 }).select(
-            'title department locationType location description requirements employmentType assignmentRequired createdAt'
+            'title department locationType location description requirements employmentType assignmentRequired applicationForm createdAt'
         );
+    }
+
+    async getApplicationFieldLibrary() {
+        let settings = await OrgSettings.findOne().select('hiring');
+        if (!settings) {
+            settings = await OrgSettings.create({});
+        }
+
+        return settings.hiring?.applicationFieldLibrary || [];
+    }
+
+    async saveApplicationField(field: {
+        key?: string;
+        label: string;
+        type: 'text' | 'url' | 'number' | 'note' | 'date' | 'attachment';
+        placeholder?: string;
+        helpText?: string;
+    }) {
+        let settings = await OrgSettings.findOne();
+        if (!settings) {
+            settings = await OrgSettings.create({});
+        }
+
+        const nextField = {
+            key: slugifyFieldKey(field.key || field.label),
+            label: String(field.label || '').trim(),
+            type: field.type,
+            placeholder: String(field.placeholder || '').trim() || undefined,
+            helpText: String(field.helpText || '').trim() || undefined,
+            createdAt: new Date(),
+        };
+
+        if (!nextField.key || !nextField.label) {
+            throw new AppError('Field name is required', 400);
+        }
+
+        const existingFields = settings.hiring?.applicationFieldLibrary || [];
+        const deduped = existingFields.filter((item: any) => item.key !== nextField.key);
+        settings.hiring = {
+            ...(settings.hiring || { applicationFieldLibrary: [] }),
+            applicationFieldLibrary: [...deduped, nextField],
+        };
+        await settings.save();
+        return settings.hiring.applicationFieldLibrary;
+    }
+
+    async deleteApplicationField(key: string) {
+        const settings = await OrgSettings.findOne();
+        if (!settings) {
+            return [];
+        }
+
+        settings.hiring = {
+            ...(settings.hiring || { applicationFieldLibrary: [] }),
+            applicationFieldLibrary: (settings.hiring?.applicationFieldLibrary || []).filter(
+                (field: any) => field.key !== key
+            ),
+        };
+        await settings.save();
+        return settings.hiring.applicationFieldLibrary;
     }
 }

@@ -24,7 +24,7 @@ interface UserFormData {
 }
 
 const initialForm: UserFormData = { name: '', email: '', password: '', role: '', department: '', customDepartment: '' };
-const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'];
+const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Creative'];
 
 // ─── Edit User Details Modal ──────────────────────────────────────────────────
 

@@ -1,4 +1,14 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import type { JobApplicationFieldType } from '../../hiring/models/Job.model';
+
+export interface IHiringApplicationFieldLibraryItem {
+    key: string;
+    label: string;
+    type: JobApplicationFieldType;
+    placeholder?: string;
+    helpText?: string;
+    createdAt?: Date;
+}
 
 export interface IOrgSettings extends Document {
     companyName: string;
@@ -32,6 +42,9 @@ export interface IOrgSettings extends Document {
         hrms: boolean;
         leads: boolean;
     };
+    hiring: {
+        applicationFieldLibrary: IHiringApplicationFieldLibraryItem[];
+    };
     passwordPolicy: {
         minLength: number;
         requireUppercase: boolean;
@@ -43,6 +56,22 @@ export interface IOrgSettings extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
+
+const HiringApplicationFieldLibraryItemSchema = new Schema<IHiringApplicationFieldLibraryItem>(
+    {
+        key: { type: String, required: true, trim: true },
+        label: { type: String, required: true, trim: true },
+        type: {
+            type: String,
+            enum: ['text', 'url', 'number', 'note', 'date', 'attachment'],
+            required: true,
+        },
+        placeholder: { type: String, trim: true },
+        helpText: { type: String, trim: true },
+        createdAt: { type: Date, default: Date.now },
+    },
+    { _id: false }
+);
 
 const OrgSettingsSchema = new Schema<IOrgSettings>(
     {
@@ -72,7 +101,7 @@ const OrgSettingsSchema = new Schema<IOrgSettings>(
         },
         departments: {
             type: [String],
-            default: ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations'],
+            default: ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Creative'],
         },
         currency: {
             type: String,
@@ -98,6 +127,12 @@ const OrgSettingsSchema = new Schema<IOrgSettings>(
             crm: { type: Boolean, default: true },
             hrms: { type: Boolean, default: true },
             leads: { type: Boolean, default: true },
+        },
+        hiring: {
+            applicationFieldLibrary: {
+                type: [HiringApplicationFieldLibraryItemSchema],
+                default: [],
+            },
         },
         passwordPolicy: {
             minLength: { type: Number, default: 8 },

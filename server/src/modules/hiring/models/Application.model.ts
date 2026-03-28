@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import type { JobApplicationFieldType } from './Job.model';
 
 export type ApplicationStatus =
     | 'new'
@@ -29,6 +30,18 @@ export interface IApplication extends Document {
     coverLetter?: string;
     location?: string;
     yearsOfExperience?: number;
+    figmaUrl?: string;
+    customFieldResponses: Array<{
+        key: string;
+        label: string;
+        type: JobApplicationFieldType;
+        value?: string;
+        fileUrl?: string;
+        fileCloudinaryId?: string;
+        fileName?: string;
+        mimeType?: string;
+        size?: number;
+    }>;
     status: ApplicationStatus;
     tags: string[];
     assignmentWindowStartedAt?: Date;
@@ -36,6 +49,25 @@ export interface IApplication extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
+
+const ApplicationCustomFieldResponseSchema = new Schema(
+    {
+        key: { type: String, required: true, trim: true },
+        label: { type: String, required: true, trim: true },
+        type: {
+            type: String,
+            enum: ['text', 'url', 'number', 'note', 'date', 'attachment'],
+            required: true,
+        },
+        value: { type: String, trim: true },
+        fileUrl: { type: String, trim: true },
+        fileCloudinaryId: { type: String, trim: true },
+        fileName: { type: String, trim: true },
+        mimeType: { type: String, trim: true },
+        size: { type: Number },
+    },
+    { _id: false }
+);
 
 const ApplicationSchema = new Schema<IApplication>(
     {
@@ -52,6 +84,11 @@ const ApplicationSchema = new Schema<IApplication>(
         coverLetter: { type: String, trim: true },
         location: { type: String, trim: true },
         yearsOfExperience: { type: Number },
+        figmaUrl: { type: String, trim: true },
+        customFieldResponses: {
+            type: [ApplicationCustomFieldResponseSchema],
+            default: [],
+        },
         status: {
             type: String,
             enum: [

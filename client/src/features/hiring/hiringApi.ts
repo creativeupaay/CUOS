@@ -36,6 +36,7 @@ import type {
     RequestInterviewRescheduleRequest,
     ApplicationTimelineResponse,
     HiringReportSummaryResponse,
+    ApplicationFieldLibraryResponse,
 } from './types/apiTypes';
 
 export const hiringApi = api.injectEndpoints({
@@ -61,6 +62,37 @@ export const hiringApi = api.injectEndpoints({
         getJobById: builder.query<ApiResponse<{ job: Job }>, string>({
             query: (id) => `/hiring/${id}`,
             providesTags: (_result, _error, id) => [{ type: 'Jobs', id }],
+        }),
+
+        getApplicationFieldLibrary: builder.query<
+            ApiResponse<ApplicationFieldLibraryResponse>,
+            void
+        >({
+            query: () => '/hiring/application-fields',
+            providesTags: ['Jobs'],
+        }),
+
+        saveApplicationField: builder.mutation<
+            ApiResponse<ApplicationFieldLibraryResponse>,
+            { key?: string; label: string; type: string; placeholder?: string; helpText?: string }
+        >({
+            query: (data) => ({
+                url: '/hiring/application-fields',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Jobs'],
+        }),
+
+        deleteApplicationField: builder.mutation<
+            ApiResponse<ApplicationFieldLibraryResponse>,
+            string
+        >({
+            query: (key) => ({
+                url: `/hiring/application-fields/${key}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Jobs'],
         }),
 
         createJob: builder.mutation<ApiResponse<{ job: Job }>, CreateJobRequest>({
@@ -282,6 +314,13 @@ export const hiringApi = api.injectEndpoints({
                 formData.append('location', data.location);
                 formData.append('yearsOfExperience', String(data.yearsOfExperience));
                 if (data.coverLetter) formData.append('coverLetter', data.coverLetter);
+                if (data.figmaUrl) formData.append('figmaUrl', data.figmaUrl);
+                if (data.customFieldValues) {
+                    formData.append('customFieldValues', JSON.stringify(data.customFieldValues));
+                }
+                Object.entries(data.customFieldFiles || {}).forEach(([key, file]) => {
+                    formData.append(`custom_${key}`, file);
+                });
                 formData.append('resume', data.resume);
 
                 return {
@@ -367,7 +406,15 @@ export const hiringApi = api.injectEndpoints({
                 if (data.videoLink) formData.append('videoLink', data.videoLink);
                 if (data.figmaLink) formData.append('figmaLink', data.figmaLink);
                 if (data.notes) formData.append('notes', data.notes);
+                if (data.customFieldValues) {
+                    formData.append('customFieldValues', JSON.stringify(data.customFieldValues));
+                }
                 data.attachments?.forEach((file) => formData.append('attachments', file));
+                if (data.customFieldFiles) {
+                    Object.entries(data.customFieldFiles).forEach(([key, file]) => {
+                        formData.append(`custom_${key}`, file);
+                    });
+                }
 
                 return {
                     url: `/hiring/assignment/submit/${applicationId}`,
@@ -451,6 +498,9 @@ export const {
     useGetJobsQuery,
     useGetPublicJobsQuery,
     useGetJobByIdQuery,
+    useGetApplicationFieldLibraryQuery,
+    useSaveApplicationFieldMutation,
+    useDeleteApplicationFieldMutation,
     useCreateJobMutation,
     useUpdateJobMutation,
     useToggleJobMutation,

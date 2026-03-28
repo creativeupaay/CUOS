@@ -30,10 +30,12 @@ export const createPublicApplicationSchema = z.object({
         github: z.string().trim().optional().or(z.literal('')),
         experience: z.string().trim().optional().or(z.literal('')),
         coverLetter: z.string().trim().optional().or(z.literal('')),
+        figmaUrl: z.string().trim().optional().or(z.literal('')),
         location: z.string().trim().min(1, 'Location is required').optional().or(z.literal('')),
         yearsOfExperience: z
             .union([z.number(), z.string().trim().regex(numericStringRegex, 'Must be a valid number').transform(Number)])
             .optional(),
+        customFieldValues: z.string().trim().optional().or(z.literal('')),
     }),
 });
 

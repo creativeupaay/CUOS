@@ -17,12 +17,15 @@ export const createPublicApplication = asyncHandler(async (req: Request, res: Re
     const { jobId } = req.params;
     const data: CreatePublicApplicationInput = req.body;
 
-    const resume = req.file;
+    const files = Array.isArray(req.files) ? req.files : [];
+    const resume =
+        req.file ||
+        files.find((file) => file.fieldname === 'resume');
     if (!resume) {
         throw new AppError('Resume file is required', 400);
     }
 
-    const application = await applicationService.createPublicApplication(jobId, data, resume);
+    const application = await applicationService.createPublicApplication(jobId, data, resume, files);
 
     res.status(201).json({
         status: 'success',

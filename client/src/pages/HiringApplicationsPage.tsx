@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Loader2, Search, LayoutList, Columns2, ChevronDown, MapPin, FileText, Globe, Linkedin, Github, Briefcase } from 'lucide-react';
+import { AlertCircle, Loader2, Search, LayoutList, Columns2, ChevronDown, MapPin, FileText, Globe, Linkedin, Github, Briefcase, ExternalLink, Paperclip } from 'lucide-react';
 import {
     useGetApplicationsQuery,
     useGetJobsQuery,
@@ -422,7 +422,7 @@ export default function HiringApplicationsPage() {
                                     className="absolute left-0 top-0 bottom-0 w-1.5"
                                     style={{ backgroundColor: meta.color }}
                                 />
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between w-full">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between w-full">
                                     <div className="w-full lg:w-[32%] pl-1">
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
@@ -472,31 +472,95 @@ export default function HiringApplicationsPage() {
                                             Candidate Links
                                         </p>
                                         <div className="flex flex-wrap gap-2.5">
-                                            {app.resumeUrl && (
-                                                <a href={app.resumeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:-translate-y-[1px]" style={{ backgroundColor: '#EEF7FF', color: '#0B4F88', borderColor: '#BFDBFE' }}>
-                                                    <FileText size={13} /> Resume
-                                                </a>
-                                            )}
-                                            {app.github && (
-                                                <a href={app.github} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:-translate-y-[1px]" style={{ backgroundColor: '#F3F4F6', color: '#111827', borderColor: '#D1D5DB' }}>
-                                                    <Github size={13} /> GitHub
-                                                </a>
-                                            )}
-                                            {app.portfolio && (
-                                                <a href={app.portfolio} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:-translate-y-[1px]" style={{ backgroundColor: '#F0FDF4', color: '#166534', borderColor: '#BBF7D0' }}>
-                                                    <Globe size={13} /> Portfolio
-                                                </a>
-                                            )}
-                                            {app.linkedin && (
-                                                <a href={app.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:-translate-y-[1px]" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }}>
-                                                    <Linkedin size={13} /> LinkedIn
-                                                </a>
-                                            )}
-                                            {!app.resumeUrl && !app.github && !app.portfolio && !app.linkedin && (
-                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                    No links shared by candidate.
-                                                </span>
-                                            )}
+                                            {(() => {
+                                                // Build dynamic list of all links and attachments
+                                                const allLinks: Array<{
+                                                    label: string;
+                                                    url: string;
+                                                    isResume?: boolean;
+                                                    isAttachment?: boolean;
+                                                    icon?: any;
+                                                    style?: any;
+                                                }> = [];
+
+                                                // Resume is always first (mandatory)
+                                                if (app.resumeUrl) {
+                                                    allLinks.push({
+                                                        label: 'Resume',
+                                                        url: app.resumeUrl,
+                                                        isResume: true,
+                                                        icon: FileText,
+                                                        style: { backgroundColor: '#EEF7FF', color: '#0B4F88', borderColor: '#BFDBFE' },
+                                                    });
+                                                }
+
+                                                // Standard URL fields
+                                                const standardFields: Array<{
+                                                    key: keyof typeof app;
+                                                    label: string;
+                                                    icon: any;
+                                                    style: any;
+                                                }> = [
+                                                    { key: 'portfolio', label: 'Portfolio', icon: Globe, style: { backgroundColor: '#F0FDF4', color: '#166534', borderColor: '#BBF7D0' } },
+                                                    { key: 'github', label: 'GitHub', icon: Github, style: { backgroundColor: '#F3F4F6', color: '#111827', borderColor: '#D1D5DB' } },
+                                                    { key: 'linkedin', label: 'LinkedIn', icon: Linkedin, style: { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' } },
+                                                    { key: 'figmaUrl', label: 'Figma', icon: ExternalLink, style: { backgroundColor: '#FEF3C7', color: '#92400E', borderColor: '#FDE68A' } },
+                                                ];
+
+                                                standardFields.forEach(({ key, label, icon, style }) => {
+                                                    const value = app[key];
+                                                    if (value && typeof value === 'string' && value.trim()) {
+                                                        allLinks.push({ label, url: value.trim(), icon, style });
+                                                    }
+                                                });
+
+                                                // Custom field responses (URLs and attachments)
+                                                if (app.customFieldResponses && Array.isArray(app.customFieldResponses)) {
+                                                    app.customFieldResponses.forEach((response: any) => {
+                                                        if (response.type === 'url' && response.value && response.value.trim()) {
+                                                            allLinks.push({
+                                                                label: response.label || 'Custom Link',
+                                                                url: response.value.trim(),
+                                                                icon: ExternalLink,
+                                                                style: { backgroundColor: '#F3F4F6', color: '#374151', borderColor: '#D1D5DB' },
+                                                            });
+                                                        } else if (response.type === 'attachment' && response.fileUrl && response.fileUrl.trim()) {
+                                                            allLinks.push({
+                                                                label: response.label || response.fileName || 'Attachment',
+                                                                url: response.fileUrl.trim(),
+                                                                isAttachment: true,
+                                                                icon: Paperclip,
+                                                                style: { backgroundColor: '#FEF3C7', color: '#92400E', borderColor: '#FDE68A' },
+                                                            });
+                                                        }
+                                                    });
+                                                }
+
+                                                return (
+                                                    <>
+                                                        {allLinks.map((link, index) => {
+                                                            const Icon = link.icon || ExternalLink;
+                                                            return (
+                                                                <a
+                                                                    key={index}
+                                                                    href={link.url}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all hover:-translate-y-[1px]"
+                                                                    style={link.style}
+                                                                >
+                                                                    <Icon size={13} /> {link.label}
+                                                                </a>
+                                                            );
+                                                        })}
+                                                        {allLinks.length === 0 && (
+                                                            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                                No links shared by candidate.
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 

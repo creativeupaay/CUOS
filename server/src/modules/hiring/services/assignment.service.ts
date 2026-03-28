@@ -5,6 +5,7 @@ import { Assignment, IAssignment } from '../models/Assignment.model';
 import {
     AssignmentSubmission,
     IAssignmentSubmissionAttachment,
+    IAssignmentSubmissionCustomFieldResponse,
     IAssignmentSubmission,
 } from '../models/AssignmentSubmission.model';
 import { Job } from '../models/Job.model';
@@ -21,6 +22,23 @@ function normalizeOptionalUrl(value?: string) {
     return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
 }
 
+const BUILTIN_ASSIGNMENT_SUBMISSION_FIELD_KEYS = [
+    'githubLink',
+    'demoLink',
+    'videoLink',
+    'figmaLink',
+    'attachments',
+    'notes',
+] as const;
+
+function hasAtLeastOneConfiguredSubmissionField(fields: any): boolean {
+    const hasBuiltinFieldEnabled = BUILTIN_ASSIGNMENT_SUBMISSION_FIELD_KEYS.some(
+        (key) => Boolean(fields?.[key])
+    );
+    const hasCustomFields = Array.isArray(fields?.customFields) && fields.customFields.length > 0;
+    return hasBuiltinFieldEnabled || hasCustomFields;
+}
+
 export class AssignmentService {
     async createAssignment(data: CreateAssignmentInput): Promise<IAssignment> {
         const job = await Job.findById(data.jobId).select('_id');
@@ -28,7 +46,7 @@ export class AssignmentService {
             throw new AppError('Job not found', 404);
         }
 
-        const hasAtLeastOneSubmissionField = Object.values(data.submissionFields).some(Boolean);
+        const hasAtLeastOneSubmissionField = hasAtLeastOneConfiguredSubmissionField(data.submissionFields);
         if (!hasAtLeastOneSubmissionField) {
             throw new AppError('Enable at least one submission field for candidates', 400);
         }
@@ -78,7 +96,9 @@ export class AssignmentService {
             };
         }
 
-        const hasAtLeastOneSubmissionField = Object.values(assignment.submissionFields).some(Boolean);
+        const hasAtLeastOneSubmissionField = hasAtLeastOneConfiguredSubmissionField(
+            assignment.submissionFields
+        );
         if (!hasAtLeastOneSubmissionField) {
             throw new AppError('Enable at least one submission field for candidates', 400);
         }
@@ -156,7 +176,8 @@ export class AssignmentService {
     async submitAssignment(
         applicationId: string,
         data: SubmitAssignmentInput,
-        files: Express.Multer.File[] = []
+        files: Express.Multer.File[] = [],
+        customFieldFiles: Record<string, Express.Multer.File> = {}
     ): Promise<IAssignmentSubmission> {
         const application = await Application.findById(applicationId).select(
             'jobId assignmentWindowStartedAt assignmentWindowExpiresAt status'
@@ -195,7 +216,50 @@ export class AssignmentService {
             videoLink: normalizeOptionalUrl(data.videoLink),
             figmaLink: normalizeOptionalUrl(data.figmaLink),
             notes: String(data.notes || '').trim(),
+            customFieldValues: data.customFieldValues || {},
         };
+
+        const configuredCustomFields = Array.isArray(assignment.submissionFields.customFields)
+            ? assignment.submissionFields.customFields
+            : [];
+
+        const customFieldResponses: IAssignmentSubmissionCustomFieldResponse[] = configuredCustomFields
+            .map((field) => {
+                if (field.type === 'attachment') {
+                    const file = customFieldFiles[`custom_${field.key}`];
+                    if (!file) return null;
+
+                    return {
+                        key: field.key,
+                        label: field.label,
+                        type: field.type,
+                        value: '',
+                        fileName: file.originalname,
+                        mimeType: file.mimetype,
+                        size: file.size,
+                    } as IAssignmentSubmissionCustomFieldResponse;
+                }
+
+                const rawValue = normalizedData.customFieldValues?.[field.key];
+                if (typeof rawValue !== 'string') return null;
+
+                const trimmedValue = rawValue.trim();
+                if (!trimmedValue) return null;
+
+                const normalizedValue = field.type === 'url'
+                    ? normalizeOptionalUrl(trimmedValue)
+                    : trimmedValue;
+
+                if (!normalizedValue) return null;
+
+                return {
+                    key: field.key,
+                    label: field.label,
+                    type: field.type,
+                    value: normalizedValue,
+                };
+            })
+            .filter(Boolean) as IAssignmentSubmissionCustomFieldResponse[];
 
         const uploadedAttachments: IAssignmentSubmissionAttachment[] = assignment.submissionFields.attachments
             ? await Promise.all(
@@ -218,13 +282,38 @@ export class AssignmentService {
               )
             : [];
 
+        const customAttachmentResponses = await Promise.all(
+            customFieldResponses.map(async (fieldResponse) => {
+                if (fieldResponse.type !== 'attachment') return fieldResponse;
+
+                const file = customFieldFiles[`custom_${fieldResponse.key}`];
+                if (!file) return null;
+
+                const uploadResult = await uploadDocument(
+                    file.buffer,
+                    `hiring/assignments/${application._id}/custom-fields`,
+                    `${fieldResponse.key}-${Date.now()}-${file.originalname}`,
+                    false
+                );
+
+                return {
+                    ...fieldResponse,
+                    value: uploadResult.url,
+                    cloudinaryId: uploadResult.cloudinaryId,
+                } as IAssignmentSubmissionCustomFieldResponse;
+            })
+        );
+
+        const normalizedCustomFieldResponses = customAttachmentResponses.filter(Boolean) as IAssignmentSubmissionCustomFieldResponse[];
+
         const hasAllowedSubmissionContent =
             (assignment.submissionFields.githubLink && Boolean(normalizedData.githubLink)) ||
             (assignment.submissionFields.demoLink && Boolean(normalizedData.demoLink)) ||
             (assignment.submissionFields.videoLink && Boolean(normalizedData.videoLink)) ||
             (assignment.submissionFields.figmaLink && Boolean(normalizedData.figmaLink)) ||
             (assignment.submissionFields.attachments && uploadedAttachments.length > 0) ||
-            (assignment.submissionFields.notes && Boolean(normalizedData.notes));
+            (assignment.submissionFields.notes && Boolean(normalizedData.notes)) ||
+            normalizedCustomFieldResponses.length > 0;
 
         if (!hasAllowedSubmissionContent) {
             throw new AppError('Please provide at least one valid assignment submission input', 400);
@@ -264,6 +353,7 @@ export class AssignmentService {
                 : undefined,
             attachments: assignment.submissionFields.attachments ? uploadedAttachments : [],
             notes: assignment.submissionFields.notes ? normalizedData.notes || undefined : undefined,
+            customFieldResponses: normalizedCustomFieldResponses,
             submittedAt,
             deadlineAt: expiresAt,
             submittedAfterDeadline,

@@ -84,7 +84,6 @@ PartnerEmployeeSchema.methods.comparePassword = async function (
 
 // Index for performance
 PartnerEmployeeSchema.index({ partnerId: 1, email: 1 });
-PartnerEmployeeSchema.index({ email: 1 }, { unique: true });
 
 export const PartnerEmployee = mongoose.model<IPartnerEmployee>(
     'PartnerEmployee',

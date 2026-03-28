@@ -43,6 +43,35 @@ export interface IInterviewSchedulingConfig {
     externalUpdatedAt?: Date;
 }
 
+export type JobApplicationFieldType =
+    | 'text'
+    | 'url'
+    | 'number'
+    | 'note'
+    | 'date'
+    | 'attachment';
+
+export interface IJobApplicationCustomField {
+    key: string;
+    label: string;
+    type: JobApplicationFieldType;
+    placeholder?: string;
+    helpText?: string;
+}
+
+export interface IJobApplicationStandardFieldSetting {
+    key: string;
+    label: string;
+    placeholder?: string;
+    helpText?: string;
+}
+
+export interface IJobApplicationFormConfig {
+    selectedStandardFields: string[];
+    standardFieldSettings: IJobApplicationStandardFieldSetting[];
+    customFields: IJobApplicationCustomField[];
+}
+
 // ============================================
 // JOB SCHEMA
 // ============================================
@@ -57,6 +86,7 @@ export interface IJob extends Document {
     employmentType: 'full-time' | 'part-time' | 'contract' | 'internship';
     isHiring: boolean;
     assignmentRequired: boolean;
+    applicationForm: IJobApplicationFormConfig;
     interviewScheduling: IInterviewSchedulingConfig;
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -141,6 +171,49 @@ const InterviewSchedulingConfigSchema = new Schema<IInterviewSchedulingConfig>(
     { _id: false }
 );
 
+const JobApplicationCustomFieldSchema = new Schema<IJobApplicationCustomField>(
+    {
+        key: { type: String, required: true, trim: true },
+        label: { type: String, required: true, trim: true },
+        type: {
+            type: String,
+            enum: ['text', 'url', 'number', 'note', 'date', 'attachment'],
+            required: true,
+        },
+        placeholder: { type: String, trim: true },
+        helpText: { type: String, trim: true },
+    },
+    { _id: false }
+);
+
+const JobApplicationStandardFieldSettingSchema = new Schema<IJobApplicationStandardFieldSetting>(
+    {
+        key: { type: String, required: true, trim: true },
+        label: { type: String, required: true, trim: true },
+        placeholder: { type: String, trim: true },
+        helpText: { type: String, trim: true },
+    },
+    { _id: false }
+);
+
+const JobApplicationFormConfigSchema = new Schema<IJobApplicationFormConfig>(
+    {
+        selectedStandardFields: {
+            type: [String],
+            default: [],
+        },
+        standardFieldSettings: {
+            type: [JobApplicationStandardFieldSettingSchema],
+            default: [],
+        },
+        customFields: {
+            type: [JobApplicationCustomFieldSchema],
+            default: [],
+        },
+    },
+    { _id: false }
+);
+
 const JobSchema = new Schema<IJob>(
     {
         title: { type: String, required: true, trim: true },
@@ -160,6 +233,19 @@ const JobSchema = new Schema<IJob>(
         },
         isHiring: { type: Boolean, default: false },
         assignmentRequired: { type: Boolean, default: false },
+        applicationForm: {
+            type: JobApplicationFormConfigSchema,
+            default: () => ({
+                selectedStandardFields: [
+                    'portfolio',
+                    'linkedin',
+                    'experience',
+                    'coverLetter',
+                ],
+                standardFieldSettings: [],
+                customFields: [],
+            }),
+        },
         interviewScheduling: {
             type: InterviewSchedulingConfigSchema,
             default: () => ({

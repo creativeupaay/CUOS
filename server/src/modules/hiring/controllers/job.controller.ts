@@ -120,3 +120,36 @@ export const getActiveJobs = asyncHandler(
         });
     }
 );
+
+export const getApplicationFieldLibrary = asyncHandler(
+    async (_req: Request, res: Response, _next: NextFunction) => {
+        const fields = await jobService.getApplicationFieldLibrary();
+
+        res.status(200).json({
+            status: 'success',
+            data: { fields },
+        });
+    }
+);
+
+export const saveApplicationField = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction) => {
+        const fields = await jobService.saveApplicationField(req.body);
+
+        res.status(200).json({
+            status: 'success',
+            data: { fields },
+        });
+    }
+);
+
+export const deleteApplicationField = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction) => {
+        const fields = await jobService.deleteApplicationField(req.params.key);
+
+        res.status(200).json({
+            status: 'success',
+            data: { fields },
+        });
+    }
+);

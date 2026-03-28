@@ -26,6 +26,7 @@ import {
     logApplicationActivity,
 } from './activity.service';
 import { InterviewService } from './interview.service';
+import type { IJobApplicationCustomField, JobApplicationFieldType } from '../models/Job.model';
 
 async function runEmailSafely(label: string, fn: () => Promise<void>) {
     try {
@@ -43,19 +44,159 @@ function normalizeOptionalUrl(value?: string) {
     return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue}`;
 }
 
+function isValidUrl(value?: string) {
+    const trimmedValue = String(value || '').trim();
+    if (!trimmedValue) return true;
+
+    try {
+        const normalizedValue = /^https?:\/\//i.test(trimmedValue)
+            ? trimmedValue
+            : `https://${trimmedValue}`;
+        const url = new URL(normalizedValue);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function parseCustomFieldValues(raw: unknown): Record<string, string> {
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+        return raw as Record<string, string>;
+    }
+    if (typeof raw !== 'string') {
+        return {};
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed
+            : {};
+    } catch {
+        return {};
+    }
+}
+
+function getFieldTypeLabel(type: JobApplicationFieldType) {
+    switch (type) {
+        case 'url':
+            return 'a valid URL';
+        case 'number':
+            return 'a valid number';
+        case 'date':
+            return 'a valid date';
+        case 'attachment':
+            return 'an attachment';
+        default:
+            return 'a value';
+    }
+}
+
+const RESUME_ALLOWED_TYPES = new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+
 export class ApplicationService {
     async createPublicApplication(
         jobId: string,
         data: CreatePublicApplicationInput,
-        resumeFile: Express.Multer.File
+        resumeFile: Express.Multer.File,
+        uploadedFiles: Express.Multer.File[] = []
     ): Promise<IApplication> {
-        const job = await Job.findById(jobId).select('title isHiring');
+        const job = await Job.findById(jobId).select('title isHiring applicationForm');
         if (!job) {
             throw new AppError('Job not found', 404);
         }
 
         if (!job.isHiring) {
             throw new AppError('This job is currently not accepting applications', 400);
+        }
+
+        if (!RESUME_ALLOWED_TYPES.has(resumeFile.mimetype)) {
+            throw new AppError('Resume must be a PDF, DOC, or DOCX file', 400);
+        }
+
+        const selectedStandardFields = new Set(
+            Array.isArray((job as any).applicationForm?.selectedStandardFields)
+                ? (job as any).applicationForm.selectedStandardFields
+                : []
+        );
+        const customFields = (Array.isArray((job as any).applicationForm?.customFields)
+            ? (job as any).applicationForm.customFields
+            : []) as IJobApplicationCustomField[];
+        const customFieldValues = parseCustomFieldValues((data as any).customFieldValues);
+        const filesByField = new Map(
+            uploadedFiles
+                .filter((file) => file.fieldname && file.fieldname !== 'resume')
+                .map((file) => [file.fieldname, file])
+        );
+
+        if (selectedStandardFields.has('portfolio') && data.portfolio && !isValidUrl(data.portfolio)) {
+            throw new AppError('Portfolio URL must be a valid link', 400);
+        }
+        if (selectedStandardFields.has('github') && data.github && !isValidUrl(data.github)) {
+            throw new AppError('GitHub URL must be a valid link', 400);
+        }
+        if (selectedStandardFields.has('linkedin') && data.linkedin && !isValidUrl(data.linkedin)) {
+            throw new AppError('LinkedIn URL must be a valid link', 400);
+        }
+        if (
+            selectedStandardFields.has('figmaUrl') &&
+            (data as any).figmaUrl &&
+            !isValidUrl((data as any).figmaUrl)
+        ) {
+            throw new AppError('Figma URL must be a valid link', 400);
+        }
+
+        const customFieldResponses: IApplication['customFieldResponses'] = [];
+        for (const field of customFields) {
+            const rawValue = String(customFieldValues[field.key] || '').trim();
+
+            if (field.type === 'attachment') {
+                const file = filesByField.get(`custom_${field.key}`);
+                if (!file) continue;
+
+                const fieldUpload = await uploadDocument(
+                    file.buffer,
+                    `hiring/jobs/${jobId}/applications/custom-fields`,
+                    `${field.key}-${Date.now()}-${file.originalname}`,
+                    true
+                );
+
+                customFieldResponses.push({
+                    key: field.key,
+                    label: field.label,
+                    type: field.type,
+                    fileUrl: fieldUpload.url,
+                    fileCloudinaryId: fieldUpload.cloudinaryId,
+                    fileName: file.originalname,
+                    mimeType: file.mimetype,
+                    size: file.size,
+                });
+                continue;
+            }
+
+            if (!rawValue) continue;
+
+            if (field.type === 'url' && !isValidUrl(rawValue)) {
+                throw new AppError(`${field.label} must be ${getFieldTypeLabel(field.type)}`, 400);
+            }
+            if (field.type === 'number' && Number.isNaN(Number(rawValue))) {
+                throw new AppError(`${field.label} must be ${getFieldTypeLabel(field.type)}`, 400);
+            }
+            if (field.type === 'date' && Number.isNaN(new Date(rawValue).getTime())) {
+                throw new AppError(`${field.label} must be ${getFieldTypeLabel(field.type)}`, 400);
+            }
+
+            customFieldResponses.push({
+                key: field.key,
+                label: field.label,
+                type: field.type,
+                value: field.type === 'url' ? normalizeOptionalUrl(rawValue) : rawValue,
+            });
         }
 
         const ext = path.extname(resumeFile.originalname) || '.pdf';
@@ -72,8 +213,10 @@ export class ApplicationService {
             portfolio: normalizeOptionalUrl(data.portfolio),
             linkedin: normalizeOptionalUrl(data.linkedin),
             github: normalizeOptionalUrl(data.github),
+            figmaUrl: normalizeOptionalUrl((data as any).figmaUrl),
             resumeUrl: uploadResult.url,
             resumeCloudinaryId: uploadResult.cloudinaryId,
+            customFieldResponses,
             status: 'new',
             tags: [],
         });

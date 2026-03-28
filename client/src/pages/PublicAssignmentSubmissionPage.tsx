@@ -23,6 +23,8 @@ import {
     useSubmitAssignmentMutation,
 } from '@/features/hiring/hiringApi';
 
+const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
+
 function normalizeOptionalUrl(value: string): string | undefined {
     const trimmedValue = value.trim();
     if (!trimmedValue) return undefined;
@@ -44,6 +46,8 @@ export default function PublicAssignmentSubmissionPage() {
     const [attachments, setAttachments] = useState<File[]>([]);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [notes, setNotes] = useState('');
+    const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+    const [customFieldFiles, setCustomFieldFiles] = useState<Record<string, File | null>>({});
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [expiresAtIso, setExpiresAtIso] = useState<string | null>(null);
@@ -51,6 +55,22 @@ export default function PublicAssignmentSubmissionPage() {
 
     const assignment = data?.data.assignment;
     const hasSubmitted = data?.data.hasSubmitted || submitted;
+
+    useEffect(() => {
+        if (!assignment?.submissionFields?.customFields) {
+            setCustomFieldValues({});
+            return;
+        }
+
+        const initialValues: Record<string, string> = {};
+        const initialFiles: Record<string, File | null> = {};
+        assignment.submissionFields.customFields.forEach((field) => {
+            initialValues[field.key] = '';
+            initialFiles[field.key] = null;
+        });
+        setCustomFieldValues(initialValues);
+        setCustomFieldFiles(initialFiles);
+    }, [assignment?._id, assignment?.submissionFields?.customFields]);
 
     useEffect(() => {
         setExpiresAtIso(data?.data.expiresAt || null);
@@ -97,6 +117,16 @@ export default function PublicAssignmentSubmissionPage() {
 
         setSubmitError('');
 
+        const filteredCustomFieldFiles = Object.entries(customFieldFiles).reduce<Record<string, File>>(
+            (acc, [key, file]) => {
+                if (file) {
+                    acc[key] = file;
+                }
+                return acc;
+            },
+            {}
+        );
+
         try {
             await submitAssignment({
                 applicationId,
@@ -107,6 +137,8 @@ export default function PublicAssignmentSubmissionPage() {
                     figmaLink: normalizeOptionalUrl(figmaLink),
                     attachments,
                     notes: notes || undefined,
+                    customFieldValues,
+                    customFieldFiles: filteredCustomFieldFiles,
                 },
             }).unwrap();
 
@@ -146,6 +178,13 @@ export default function PublicAssignmentSubmissionPage() {
         const files = Array.from(event.target.files || []);
         if (files.length === 0) return;
 
+        const oversized = files.find((file) => file.size > MAX_ATTACHMENT_SIZE_BYTES);
+        if (oversized) {
+            setSubmitError('Each attachment must be smaller than 25MB.');
+            event.target.value = '';
+            return;
+        }
+
         setAttachments((prev) => {
             const merged = [...prev];
             files.forEach((file) => {
@@ -160,6 +199,25 @@ export default function PublicAssignmentSubmissionPage() {
 
     function removeAttachment(index: number) {
         setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    }
+
+    function handleCustomFieldValueChange(key: string, value: string) {
+        setCustomFieldValues((prev) => ({
+            ...prev,
+            [key]: value,
+        }));
+    }
+
+    function handleCustomAttachmentFieldChange(key: string, file: File | null) {
+        if (file && file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+            setSubmitError('Each attachment must be smaller than 25MB.');
+            return;
+        }
+
+        setCustomFieldFiles((prev) => ({
+            ...prev,
+            [key]: file,
+        }));
     }
 
     const statusPillStyle: React.CSSProperties = hasSubmitted
@@ -475,6 +533,92 @@ export default function PublicAssignmentSubmissionPage() {
                                     </div>
                                 )}
 
+                                {assignment.submissionFields.customFields?.map((field) => {
+                                    const value = customFieldValues[field.key] || '';
+                                    const label = field.label || 'Custom Field';
+                                    const placeholder = field.placeholder || `Enter ${label.toLowerCase()}`;
+
+                                    if (field.type === 'attachment') {
+                                        const file = customFieldFiles[field.key];
+
+                                        return (
+                                            <div key={field.key}>
+                                                <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                                    {label}
+                                                </label>
+                                                <label
+                                                    className="mt-1.5 flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-3"
+                                                    style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
+                                                >
+                                                    <span className="inline-flex items-center gap-2 text-sm" style={{ color: '#0F172A' }}>
+                                                        <Paperclip size={14} />
+                                                        {file ? file.name : placeholder}
+                                                    </span>
+                                                    <span className="text-xs font-semibold" style={{ color: '#1D4ED8' }}>
+                                                        {file ? 'Change' : 'Upload'}
+                                                    </span>
+                                                    <input
+                                                        type="file"
+                                                        className="hidden"
+                                                        onChange={(e) =>
+                                                            handleCustomAttachmentFieldChange(
+                                                                field.key,
+                                                                e.target.files?.[0] || null
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <p className="mt-1 text-xs" style={{ color: '#64748B' }}>
+                                                    Max file size: 25MB
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+
+                                    if (field.type === 'note') {
+                                        return (
+                                            <div key={field.key}>
+                                                <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                                    {label}
+                                                </label>
+                                                <textarea
+                                                    value={value}
+                                                    onChange={(e) => handleCustomFieldValueChange(field.key, e.target.value)}
+                                                    placeholder={placeholder}
+                                                    rows={4}
+                                                    className="mt-1.5 w-full px-3 py-2.5 text-sm rounded-xl border outline-none resize-y"
+                                                    style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    const inputType =
+                                        field.type === 'url'
+                                            ? 'url'
+                                            : field.type === 'number'
+                                              ? 'number'
+                                              : field.type === 'date'
+                                                ? 'date'
+                                                : 'text';
+
+                                    return (
+                                        <div key={field.key}>
+                                            <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
+                                                {label}
+                                            </label>
+                                            <input
+                                                type={inputType}
+                                                value={value}
+                                                onChange={(e) => handleCustomFieldValueChange(field.key, e.target.value)}
+                                                placeholder={inputType === 'date' ? undefined : placeholder}
+                                                className="mt-1.5 w-full h-11 px-3 text-sm rounded-xl border outline-none"
+                                                style={{ borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A' }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+
                                 <button
                                     type="submit"
                                     disabled={isSubmitDisabled}
@@ -559,7 +703,7 @@ export default function PublicAssignmentSubmissionPage() {
                                     Upload Submission Attachments
                                 </p>
                                 <p className="text-xs mt-1" style={{ color: '#64748B' }}>
-                                    You can add up to 8 files. Supported formats include images, videos, PDFs, docs, sheets, and zip files.
+                                    You can add up to 8 files. Supported formats include images, videos, PDFs, docs, sheets, and zip files (max 25MB per file).
                                 </p>
                             </div>
                             <button
