@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileText, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { useGetMyPayrollsQuery } from '@/features/hrms/hrmsApi';
 import type { Payroll } from '@/features/hrms/types/types';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -33,7 +34,7 @@ function PayslipModal({ payroll, onClose }: { payroll: Payroll; onClose: () => v
     const totalDeductions = Object.values(payroll.deductions || {}).reduce((s: number, v: any) => s + (v || 0), 0);
 
     return (
-        <div className="modal-overlay overflow-y-auto">
+        <ModalPortal className="overflow-y-auto">
             <div className="w-full max-w-lg rounded-2xl border shadow-2xl"
                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                 {/* Payslip header */}
@@ -143,7 +144,7 @@ function PayslipModal({ payroll, onClose }: { payroll: Payroll; onClose: () => v
                     </div>
                 </div>
             </div>
-        </div >
+        </ModalPortal>
     );
 }
 

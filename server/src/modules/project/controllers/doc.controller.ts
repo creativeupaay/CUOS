@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as docService from '../services/doc.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
+import { DocFolder } from '../models/DocFolder.model';
 
 // ─── Folders ─────────────────────────────────────────────────────────────────
 
@@ -11,8 +12,9 @@ export const getFolders = asyncHandler(
         const userId = req.user?.id!;
         const userRole = req.user?.role;
         const parentId = (req.query.parentId as string) || null;
+        const isPartnerRequest = !!req.partnerId;
 
-        const folders = await docService.getFolders(projectId, parentId, userId, userRole);
+        const folders = await docService.getFolders(projectId, parentId, userId, userRole, isPartnerRequest);
 
         res.status(200).json({ success: true, data: folders });
     }
@@ -92,8 +94,9 @@ export const getDocItems = asyncHandler(
         const userId = req.user?.id!;
         const userRole = req.user?.role;
         const folderId = (req.query.folderId as string) || null;
+        const isPartnerRequest = !!req.partnerId;
 
-        const items = await docService.getDocItems(projectId, folderId, userId, userRole);
+        const items = await docService.getDocItems(projectId, folderId, userId, userRole, isPartnerRequest);
 
         res.status(200).json({ success: true, data: items });
     }
@@ -105,9 +108,20 @@ export const uploadDocItem = asyncHandler(
         const userId = req.user?.id!;
         const userRole = req.user?.role;
         const folderId = (req.body.folderId as string) || null;
+        const isPartnerRequest = !!req.partnerId;
 
         const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to upload files', 403));
+        let allowUpload = admin;
+
+        // Partner-side project tab can upload only inside unified shared folder.
+        if (!allowUpload && isPartnerRequest && folderId) {
+            const folder = await DocFolder.findOne({ _id: folderId, projectId }).lean();
+            if (folder && folder.isSystem && folder.isClientShared && folder.isPartnerShared) {
+                allowUpload = true;
+            }
+        }
+
+        if (!allowUpload) return next(new AppError('You do not have permission to upload files', 403));
 
         if (!req.file) return next(new AppError('No file uploaded', 400));
 

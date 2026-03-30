@@ -2,6 +2,7 @@ import { Leave, ILeave } from '../models/Leave.model';
 import { LeaveBalance } from '../models/LeaveBalance.model';
 import { CreateLeaveInput, UpdateLeaveStatusInput } from '../validators/leave.validator';
 import { Employee } from '../models/Employee.model';
+import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
 
 class LeaveService {
@@ -128,25 +129,87 @@ class LeaveService {
             leave.rejectionReason = data.rejectionReason;
         }
 
-        await leave.save();
-
-        // Auto-update LeaveBalance if approved
-        if (data.status === 'approved' && leave.type !== 'unpaid') {
-            const year = leave.startDate.getFullYear();
+        if (data.status === 'approved') {
+            const year = leave.startDate.getUTCFullYear();
             await this.ensureLeaveBalance(leave.employeeId.toString(), year);
 
-            await LeaveBalance.updateOne(
-                { employeeId: leave.employeeId, year, 'balances.type': leave.type },
-                {
-                    $inc: {
-                        'balances.$.used': leave.days,
-                        'balances.$.pending': -leave.days
-                    }
-                }
-            );
+            const shouldConsumePaidLeave = leave.type !== 'unpaid' && leave.isPaid;
+            if (shouldConsumePaidLeave) {
+                await this.consumePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
+            }
+        }
+
+        await leave.save();
+
+        if (data.status === 'approved') {
+            await this.applyApprovedLeaveAttendance(leave);
         }
 
         return leave;
+    }
+
+    private async consumePaidLeaveBalance(employeeId: string, year: number, leaveDays: number) {
+        const balance = await this.ensureLeaveBalance(employeeId, year);
+        const earned = balance.balances.find((b) => b.type === 'earned');
+
+        if (!earned) {
+            throw new AppError('Paid leave balance is not configured for this employee', 400);
+        }
+
+        const remainingPaidLeaves = Math.max(0, earned.quota - earned.used);
+        if (remainingPaidLeaves < leaveDays) {
+            throw new AppError(
+                `Insufficient paid leave balance. Remaining ${remainingPaidLeaves} day(s), requested ${leaveDays} day(s)`,
+                400
+            );
+        }
+
+        earned.used += leaveDays;
+        earned.pending = Math.max(0, earned.quota - earned.used);
+        await balance.save();
+    }
+
+    private async applyApprovedLeaveAttendance(leave: ILeave) {
+        const leaveDates: Date[] = [];
+        const cursor = new Date(leave.startDate);
+        cursor.setUTCHours(0, 0, 0, 0);
+
+        const end = new Date(leave.endDate);
+        end.setUTCHours(0, 0, 0, 0);
+
+        while (cursor.getTime() <= end.getTime()) {
+            leaveDates.push(new Date(cursor));
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        if (leaveDates.length === 0) {
+            return;
+        }
+
+        const operations = leaveDates.map((date) => ({
+            updateOne: {
+                filter: {
+                    employeeId: leave.employeeId,
+                    date,
+                },
+                update: {
+                    $set: {
+                        status: 'absent',
+                        totalHours: 0,
+                        notes: 'Auto-marked absent due to approved leave',
+                    },
+                    $unset: {
+                        checkIn: '',
+                        checkOut: '',
+                        projectId: '',
+                        taskId: '',
+                    },
+                },
+                upsert: true,
+            },
+        }));
+
+        await Attendance.bulkWrite(operations);
     }
 
     private async ensureLeaveBalance(employeeId: string, year: number) {

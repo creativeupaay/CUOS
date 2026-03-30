@@ -27,6 +27,41 @@ export interface AuthResponse {
     refreshToken: string;
 }
 
+const buildPartnerEmployeeModulePermissions = (modulePermissions?: {
+    projectManagement?: boolean;
+    crm?: boolean;
+    teamManagement?: boolean;
+}) => ({
+    projectManagement: {
+        enabled: modulePermissions?.projectManagement ?? true,
+        projectPermissions: [],
+    },
+    crm: {
+        enabled: modulePermissions?.crm ?? false,
+        subModules: {
+            pipeline: false,
+            leads: false,
+            proposals: false,
+            clients: true,
+        },
+    },
+    teamManagement: {
+        enabled: modulePermissions?.teamManagement ?? false,
+    },
+    finance: {
+        enabled: false,
+        subModules: {} as any,
+    },
+    hrms: {
+        enabled: false,
+        subModules: {} as any,
+    },
+    overallAdmin: {
+        enabled: false,
+        subModules: {} as any,
+    },
+});
+
 /**
  * Register a new user
  */
@@ -153,6 +188,11 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
 
     let isPartnerEmployee = false;
     let partnerIdForEmployee: string | null = null;
+    let partnerEmployeeModulePermissions: {
+        projectManagement?: boolean;
+        crm?: boolean;
+        teamManagement?: boolean;
+    } | undefined;
     let belongsToThisPortal = false;
 
     const normalizeEntityId = (value: any): string | null => {
@@ -230,6 +270,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
         // Mark as partner employee and store parent partnerId
         isPartnerEmployee = true;
         partnerIdForEmployee = normalizeEntityId(partnerEmployee.partnerId);
+        partnerEmployeeModulePermissions = partnerEmployee.modulePermissions;
 
         // Create a user-like object for partner employee
         user = {
@@ -250,13 +291,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
                     isActive: this.isActive,
                     partnerId: this.partnerId,
                     isPartnerEmployee: true,
-                    modulePermissions: {
-                        projectManagement: { enabled: true, projectPermissions: [] },
-                        crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
-                        finance: { enabled: false, subModules: {} },
-                        hrms: { enabled: false, subModules: {} },
-                        overallAdmin: { enabled: false, subModules: {} },
-                    },
+                    modulePermissions: buildPartnerEmployeeModulePermissions(partnerEmployee.modulePermissions),
                 };
             },
         } as any;
@@ -302,13 +337,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     if (isPartnerEmployee) {
         (userObj as any).partnerId = partnerIdForEmployee;
         (userObj as any).isPartnerEmployee = true;
-        (userObj as any).modulePermissions = {
-            projectManagement: { enabled: true, projectPermissions: [] },
-            crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
-            finance: { enabled: false, subModules: {} },
-            hrms: { enabled: false, subModules: {} },
-            overallAdmin: { enabled: false, subModules: {} },
-        };
+        (userObj as any).modulePermissions = buildPartnerEmployeeModulePermissions(partnerEmployeeModulePermissions);
     }
 
     return {
@@ -383,13 +412,7 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
             companyName: partnerPortal?.companyName,
             companyLogo: partnerPortal?.companyLogo,
             isPartnerEmployee: true,
-            modulePermissions: {
-                projectManagement: { enabled: true, projectPermissions: [] },
-                crm: { enabled: true, subModules: { pipeline: false, leads: false, proposals: false, clients: true } },
-                finance: { enabled: false, subModules: {} as any },
-                hrms: { enabled: false, subModules: {} as any },
-                overallAdmin: { enabled: false, subModules: {} as any },
-            },
+            modulePermissions: buildPartnerEmployeeModulePermissions(partnerEmployee.modulePermissions),
         } as any;
     }
 

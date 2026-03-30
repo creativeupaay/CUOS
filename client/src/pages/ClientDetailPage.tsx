@@ -437,6 +437,10 @@ export default function ClientDetailPage() {
                                 <button
                                     onClick={async () => {
                                         if (!id) return;
+                                        if (!client.portalEnabled) {
+                                            const confirmEnabled = window.confirm("A client portal will be generated and will be sent to the client's registered mail id. Are you sure you want to proceed?");
+                                            if (!confirmEnabled) return;
+                                        }
                                         try { await togglePortal({ clientId: id, enabled: !client.portalEnabled }).unwrap(); } catch { }
                                     }}
                                     disabled={isTogglingPortal}

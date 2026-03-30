@@ -162,6 +162,14 @@ export const partnersApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, id) => [{ type: 'Partners', id }, 'Partners'],
         }),
 
+        deletePartner: builder.mutation<ApiResponse, string>({
+            query: (id) => ({
+                url: `/partners/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Partners'],
+        }),
+
         regeneratePartnerToken: builder.mutation<ApiResponse<{ token: string; expiresAt: string; registrationLink: string }>, string>({
             query: (id) => ({
                 url: `/partners/${id}/regenerate-token`,
@@ -211,6 +219,7 @@ export const {
     useUpdatePartnerMutation,
     useDeactivatePartnerMutation,
     useActivatePartnerMutation,
+    useDeletePartnerMutation,
     useRegeneratePartnerTokenMutation,
     useGetPartnerClientsQuery,
     useGetPartnerProjectsQuery,

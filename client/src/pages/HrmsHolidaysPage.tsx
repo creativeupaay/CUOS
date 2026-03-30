@@ -6,6 +6,7 @@ import {
     type Holiday,
 } from '@/features/hrms/hrmsApi';
 import { Plus, X, Trash2, CalendarDays, Loader2 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 const TYPE_CFG = {
     holiday: { label: 'Holiday', bg: '#FEE2E2', color: '#991B1B', emoji: '🎉' },
@@ -52,9 +53,7 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div
-            className="modal-overlay"
-        >
+        <ModalPortal>
 
             <div
                 className="w-full max-w-md rounded-xl border p-6 shadow-xl"
@@ -178,7 +177,7 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalPortal>
     );
 }
 
@@ -500,11 +499,7 @@ export default function HrmsHolidaysPage() {
 
             {/* View/Delete Holiday Modal */}
             {selectedHoliday && (
-                <div
-                    className="modal-overlay"
-
-                    style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-                >
+                <ModalPortal style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
                     <div
                         className="w-full max-w-sm rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
@@ -572,7 +567,7 @@ export default function HrmsHolidaysPage() {
                             )}
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

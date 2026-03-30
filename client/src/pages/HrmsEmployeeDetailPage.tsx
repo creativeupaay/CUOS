@@ -16,6 +16,7 @@ import {
     CheckCircle2, Clock, ShieldCheck, Shirt, Save, Mail, Copy, Camera,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── Status badge helper ──────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -232,6 +233,10 @@ export default function HrmsEmployeeDetailPage() {
     }, [salary, isSalaryModalOpen]);
 
     const hasOpenModal = isSalaryModalOpen || editModal !== null;
+    const renderModal = (content: React.ReactNode) => {
+        if (typeof document === 'undefined') return null;
+        return createPortal(content, document.body);
+    };
 
     useEffect(() => {
         if (!hasOpenModal) return;
@@ -781,7 +786,7 @@ export default function HrmsEmployeeDetailPage() {
             </div>
 
             {/* ── Salary Modal ────────────────────────────────────── */}
-            {isSalaryModalOpen && (
+            {isSalaryModalOpen && renderModal(
                 <div className="modal-overlay">
 
                     <div
@@ -893,7 +898,7 @@ export default function HrmsEmployeeDetailPage() {
             )}
 
             {/* ── Personal Info Edit Modal ─────────────────────────── */}
-            {editModal === 'personal' && (
+            {editModal === 'personal' && renderModal(
                 <div className="modal-overlay">
                     <div className="w-full max-w-4xl rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
@@ -962,7 +967,7 @@ export default function HrmsEmployeeDetailPage() {
             )}
 
             {/* ── Bank Details Edit Modal ──────────────────────────── */}
-            {editModal === 'bank' && (
+            {editModal === 'bank' && renderModal(
                 <div className="modal-overlay">
                     <div className="w-full max-w-lg rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
@@ -1013,7 +1018,7 @@ export default function HrmsEmployeeDetailPage() {
             )}
 
             {/* ── Identity Verification Edit Modal ─────────────────── */}
-            {editModal === 'identity' && (
+            {editModal === 'identity' && renderModal(
                 <div className="modal-overlay">
                     <div className="w-full max-w-sm rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>

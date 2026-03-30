@@ -13,6 +13,7 @@ import hiringRoutes from '../../modules/hiring/routes/hiring.routes';
 import partnerRoutes from '../../modules/partners/routes/partner.routes';
 import partnerAuthRoutes from '../../modules/partners/routes/partnerAuth.routes';
 import partnerEmployeeRoutes from '../../modules/partners/routes/partnerEmployee.routes';
+import partnerPortalRoutes from '../../modules/partners/routes/partnerPortal.routes';
 
 const router = Router();
 
@@ -45,5 +46,7 @@ router.use('/partners', partnerRoutes);
 router.use('/partner', partnerAuthRoutes);
 // Partner Employee Management (Partner's own employee management)
 router.use('/partner-employees', partnerEmployeeRoutes);
+// Partner Portal (Partner's own portal - projects, documents, etc.)
+router.use('/partner-portal', partnerPortalRoutes);
 
 export default router;

@@ -117,6 +117,9 @@ export class PartnerAuthService {
 
         const partnerRole = await this.ensurePartnerRole();
 
+        // Store password before hashing (for email only)
+        const plainPassword = formData.password;
+
         // Create User with Partner role
         const user = await User.create({
             name: formData.name,
@@ -176,6 +179,22 @@ export class PartnerAuthService {
 
         const { env } = await import('../../../config/env.config');
         const loginUrl = `${env.FRONTEND_URL}/partner/${updatedPartner.slug}/login`;
+
+        // Send credentials email to partner
+        try {
+            const { sendPartnerCredentialsEmail } = await import('../../../services/email.service');
+            await sendPartnerCredentialsEmail({
+                to: updatedPartner.email!,
+                partnerName: formData.name,
+                companyName: formData.companyName,
+                email: updatedPartner.email!,
+                password: plainPassword,
+                loginUrl,
+            });
+        } catch (emailError: any) {
+            console.error('Failed to send partner credentials email:', emailError.message);
+            // Don't fail onboarding if email fails
+        }
 
         return {
             partner: updatedPartner,

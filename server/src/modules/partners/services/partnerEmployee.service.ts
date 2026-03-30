@@ -9,6 +9,11 @@ export interface CreatePartnerEmployeeInput {
     password: string;
     phone?: string;
     designation?: string;
+    modulePermissions?: {
+        projectManagement?: boolean;
+        crm?: boolean;
+        teamManagement?: boolean;
+    };
 }
 
 export interface UpdatePartnerEmployeeInput {
@@ -17,6 +22,11 @@ export interface UpdatePartnerEmployeeInput {
     phone?: string;
     designation?: string;
     isActive?: boolean;
+    modulePermissions?: {
+        projectManagement?: boolean;
+        crm?: boolean;
+        teamManagement?: boolean;
+    };
 }
 
 export interface ListPartnerEmployeesFilters {

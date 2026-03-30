@@ -1,5 +1,4 @@
 import { Payroll, IPayroll } from '../models/Payroll.model';
-import { Incentive } from '../models/Incentive.model';
 import { Leave } from '../models/Leave.model';
 import { Employee } from '../models/Employee.model';
 import { SalaryStructure } from '../models/SalaryStructure.model';
@@ -64,21 +63,9 @@ class PayrollService {
         const expectedHours = workingDays * employee.workSchedule.hoursPerDay;
         const overtime = Math.max(0, totalHoursWorked - expectedHours);
 
-        // ── Incentive scoring from Tasks ────────────────────────────
-        const { incentiveAmount, penaltyAmount, incentiveRecords } = await this.calculateIncentives(
-            employee.userId.toString(),
-            employeeId,
-            month,
-            year,
-            startDate,
-            endDate,
-            salary.basic
-        );
-
-        // Save incentive records
-        if (incentiveRecords.length > 0) {
-            await Incentive.insertMany(incentiveRecords);
-        }
+        // Incentives/penalties are intentionally excluded from payslip net salary.
+        const incentiveAmount = 0;
+        const penaltyAmount = 0;
 
         // ── Leave deductions ────────────────────────────────────────
         const unpaidLeaves = await Leave.aggregate([
@@ -121,7 +108,7 @@ class PayrollService {
         const esiDeduction = 0;
         const taxDeduction = salary.deductions.tax || 0;
 
-        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + leaveDeduction + penaltyAmount;
+        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + leaveDeduction;
 
         const netSalary = grossSalary + incentiveAmount - totalDeductions;
 

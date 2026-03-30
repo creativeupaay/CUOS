@@ -26,6 +26,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
                 'user_updated',
                 'user_deactivated',
                 'user_activated',
+                'user_deleted',
                 'password_reset',
                 'role_created',
                 'role_updated',

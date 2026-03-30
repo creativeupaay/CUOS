@@ -26,11 +26,13 @@ import * as noteValidators from '../validators/note.validator';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { filterPartnerData } from '../../partners/middlewares/filterPartnerData.middleware';
 import { isPartnerOrAdmin } from '../../partners/middlewares/isPartner.middleware';
+import { requirePartnerEmployeeModuleAccess } from '../../partners/middlewares/partnerEmployeeModuleAccess.middleware';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requirePartnerEmployeeModuleAccess('projectManagement'));
 router.use(filterPartnerData);
 
 // Configure multer for file uploads (memory storage)

@@ -10,6 +10,7 @@ import {
     Plus, DollarSign, Check, CreditCard, X, Loader2,
     Users, Sparkles, AlertTriangle, CheckCircle2, ChevronDown,
 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -241,7 +242,7 @@ export default function HrmsPayrollPage() {
                 BULK GENERATE MODAL
                 ══════════════════════════════════════════════════════ */}
             {showBulkModal && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div
                         className="animate-scale-in w-full rounded-2xl border p-6"
@@ -380,14 +381,14 @@ export default function HrmsPayrollPage() {
                             </div>
                         )}
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
             {/* ════════════════════════════════════════════════════════
                 SINGLE EMPLOYEE MODAL
                 ══════════════════════════════════════════════════════ */}
             {showSingleModal && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div
                         className="animate-scale-in w-full rounded-2xl border p-6"
@@ -454,7 +455,7 @@ export default function HrmsPayrollPage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import * as partnerEmployeeController from '../controllers/partnerEmployee.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
+import { requirePartnerEmployeeModuleAccess } from '../middlewares/partnerEmployeeModuleAccess.middleware';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requirePartnerEmployeeModuleAccess('teamManagement'));
 
 // Partner employee CRUD
 router.post('/', partnerEmployeeController.createEmployee);

@@ -820,6 +820,7 @@ const ProjectDocumentsTab: React.FC = () => {
     const { id: projectId } = useParams<{ id: string }>();
     const { project } = useOutletContext<{ project: Project }>();
     const currentUser = useSelector((state: RootState) => state.auth.user);
+    const isPartnerSession = typeof window !== 'undefined' && !!window.sessionStorage.getItem('partnerPortalSlug');
 
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
     const [breadcrumb, setBreadcrumb] = useState<{ id: string; name: string }[]>([]);
@@ -840,12 +841,20 @@ const ProjectDocumentsTab: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const autoOpenedSharedFolderRef = useRef(false);
 
+    const shouldSkipFolderListingQuery = !projectId || (isPartnerSession && currentFolderId === null);
     const { data: foldersData, isLoading: foldersLoading } = useGetDocFoldersQuery(
-        { projectId: projectId!, parentId: currentFolderId }, { skip: !projectId }
+        { projectId: projectId!, parentId: currentFolderId },
+        { skip: shouldSkipFolderListingQuery }
     );
+    const { data: rootFoldersForSharedData } = useGetDocFoldersQuery(
+        { projectId: projectId!, parentId: null }, { skip: !projectId }
+    );
+    const shouldSkipItemsQuery = !projectId || (isPartnerSession && currentFolderId === null);
     const { data: itemsData, isLoading: itemsLoading } = useGetDocItemsQuery(
-        { projectId: projectId!, folderId: currentFolderId }, { skip: !projectId }
+        { projectId: projectId!, folderId: currentFolderId },
+        { skip: shouldSkipItemsQuery }
     );
     const { data: adminsData } = useGetDocAdminsQuery(
         { projectId: projectId! }, { skip: !projectId }
@@ -864,16 +873,63 @@ const ProjectDocumentsTab: React.FC = () => {
 
     const getRoleName = (role: any): string => { if (!role) return ''; if (typeof role === 'string') return role; return role?.name ?? ''; };
     const isSuperAdmin = ['super-admin', 'admin'].includes(getRoleName(currentUser?.role));
+    const isPartnerUser = getRoleName(currentUser?.role).toLowerCase() === 'partner';
     const docAdminIds: string[] = (adminsData?.data ?? []).map((u: any) => u._id);
     const isDocAdmin = isSuperAdmin || docAdminIds.includes(currentUser?._id ?? '');
+    const rootFoldersForShared: DocFolder[] = rootFoldersForSharedData?.data ?? [];
+    const sharedFolderId = useMemo(() => {
+        const shared = rootFoldersForShared.find(
+            (f) => f.isSystem && f.isClientShared && f.isPartnerShared
+        );
+        return shared?._id ?? null;
+    }, [rootFoldersForShared]);
+    const sharedFolderName = useMemo(() => {
+        const shared = rootFoldersForShared.find(
+            (f) => f.isSystem && f.isClientShared && f.isPartnerShared
+        );
+        return shared?.name || 'Shared Files';
+    }, [rootFoldersForShared]);
+
+    const shouldDeferPartnerRootView = useMemo(() => {
+        // Prevent root-folder flash on refresh before partner/shared-folder context is fully ready.
+        if (!currentUser) return true;
+        if (!isPartnerSession && !isPartnerUser) return false;
+        if (currentFolderId !== null) return false;
+        return !sharedFolderId;
+    }, [currentUser, isPartnerSession, isPartnerUser, currentFolderId, sharedFolderId]);
+
+    const canPartnerUploadInCurrentFolder = isPartnerUser && !!sharedFolderId && currentFolderId === sharedFolderId;
     const folders: DocFolder[] = foldersData?.data ?? [];
+    const visibleFolders: DocFolder[] = useMemo(() => {
+        if (shouldDeferPartnerRootView) return [];
+        if (!isPartnerUser || currentFolderId !== null) return folders;
+        return folders.filter((f) => !(f.isSystem && f.isClientShared && f.isPartnerShared));
+    }, [folders, isPartnerUser, currentFolderId, shouldDeferPartnerRootView]);
+    const displayBreadcrumb = useMemo(() => {
+        const withIndex = breadcrumb.map((crumb, idx) => ({ ...crumb, idx }));
+        if (!isPartnerUser || !sharedFolderId) return withIndex;
+        return withIndex.filter((crumb) => crumb.id !== sharedFolderId);
+    }, [breadcrumb, isPartnerUser, sharedFolderId]);
     const items: DocItem[] = itemsData?.data ?? [];
     const members = useMemo(() => getProjectMembers(project), [project]);
-    const isLoading = foldersLoading || itemsLoading;
+    const isLoading = foldersLoading || itemsLoading || shouldDeferPartnerRootView;
 
     useEffect(() => { if (showNewFolderInput) setTimeout(() => newFolderInputRef.current?.focus(), 50); }, [showNewFolderInput]);
     useEffect(() => { if (renameFolderId) setTimeout(() => renameInputRef.current?.focus(), 50); }, [renameFolderId]);
     useEffect(() => { if (renameItemId) setTimeout(() => renameItemInputRef.current?.focus(), 50); }, [renameItemId]);
+    useEffect(() => {
+        autoOpenedSharedFolderRef.current = false;
+    }, [projectId]);
+
+    // Partner-side users (partner + partner employees) only work in Shared Files by default.
+    useEffect(() => {
+        if (!isPartnerUser || !sharedFolderId || autoOpenedSharedFolderRef.current) return;
+        if (currentFolderId !== null) return;
+
+        autoOpenedSharedFolderRef.current = true;
+        setCurrentFolderId(sharedFolderId);
+        setBreadcrumb([{ id: sharedFolderId, name: sharedFolderName }]);
+    }, [isPartnerUser, sharedFolderId, sharedFolderName, currentFolderId]);
 
     const navigateToFolder = useCallback((folder: DocFolder) => {
         setCurrentFolderId(folder._id); setBreadcrumb((p) => [...p, { id: folder._id, name: folder.name }]); setOpenMenuId(null);
@@ -949,7 +1005,7 @@ const ProjectDocumentsTab: React.FC = () => {
         await deleteItem({ projectId, itemId }).unwrap().catch(() => { });
     }, [projectId, deleteItem]);
 
-    const isEmpty = !isLoading && folders.length === 0 && items.length === 0 && !showNewFolderInput;
+    const isEmpty = !isLoading && visibleFolders.length === 0 && items.length === 0 && !showNewFolderInput;
 
     // ─── Folder Card ─────────────────────────────────────────────────────────
     const renderFolderCard = (folder: DocFolder) => (
@@ -1074,30 +1130,43 @@ const ProjectDocumentsTab: React.FC = () => {
             {/* Toolbar */}
             <div className="flex items-center gap-2 px-5 py-4 border-b flex-wrap gap-y-2 rounded-t-xl" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                 <nav className="flex items-center gap-1 flex-1 min-w-0 text-sm overflow-hidden">
-                    <button onClick={() => navigateToBreadcrumb(-1)}
+                    <button onClick={() => {
+                        if (isPartnerUser && sharedFolderId) {
+                            setCurrentFolderId(sharedFolderId);
+                            setBreadcrumb([{ id: sharedFolderId, name: sharedFolderName }]);
+                            return;
+                        }
+                        navigateToBreadcrumb(-1);
+                    }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors`}
                         style={{
-                            color: currentFolderId === null ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                            backgroundColor: currentFolderId === null ? 'var(--color-primary-soft)' : 'transparent',
-                            fontWeight: currentFolderId === null ? 500 : 400
+                            color: (isPartnerUser ? currentFolderId === sharedFolderId : currentFolderId === null) ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                            backgroundColor: (isPartnerUser ? currentFolderId === sharedFolderId : currentFolderId === null) ? 'var(--color-primary-soft)' : 'transparent',
+                            fontWeight: (isPartnerUser ? currentFolderId === sharedFolderId : currentFolderId === null) ? 500 : 400
                         }}
-                        onMouseEnter={(e) => { if (currentFolderId !== null) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)' }}
-                        onMouseLeave={(e) => { if (currentFolderId !== null) e.currentTarget.style.backgroundColor = 'transparent' }}
+                        onMouseEnter={(e) => {
+                            const isActive = isPartnerUser ? currentFolderId === sharedFolderId : currentFolderId === null;
+                            if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                        }}
+                        onMouseLeave={(e) => {
+                            const isActive = isPartnerUser ? currentFolderId === sharedFolderId : currentFolderId === null;
+                            if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
                     >
                         <Home size={14} /><span>Documents</span>
                     </button>
-                    {breadcrumb.map((crumb, idx) => (
+                    {displayBreadcrumb.map((crumb, idx) => (
                         <span key={crumb.id} className="flex items-center gap-1 min-w-0">
                             <ChevronRight size={13} style={{ color: 'var(--color-text-muted)' }} className="flex-shrink-0" />
-                            <button onClick={() => navigateToBreadcrumb(idx)}
+                            <button onClick={() => navigateToBreadcrumb(crumb.idx)}
                                 className={`px-3 py-1.5 rounded-full min-w-0 truncate max-w-[160px] transition-colors`}
                                 style={{
-                                    color: idx === breadcrumb.length - 1 ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                    backgroundColor: idx === breadcrumb.length - 1 ? 'var(--color-primary-soft)' : 'transparent',
-                                    fontWeight: idx === breadcrumb.length - 1 ? 500 : 400
+                                    color: idx === displayBreadcrumb.length - 1 ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                    backgroundColor: idx === displayBreadcrumb.length - 1 ? 'var(--color-primary-soft)' : 'transparent',
+                                    fontWeight: idx === displayBreadcrumb.length - 1 ? 500 : 400
                                 }}
-                                onMouseEnter={(e) => { if (idx !== breadcrumb.length - 1) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)' }}
-                                onMouseLeave={(e) => { if (idx !== breadcrumb.length - 1) e.currentTarget.style.backgroundColor = 'transparent' }}
+                                onMouseEnter={(e) => { if (idx !== displayBreadcrumb.length - 1) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)' }}
+                                onMouseLeave={(e) => { if (idx !== displayBreadcrumb.length - 1) e.currentTarget.style.backgroundColor = 'transparent' }}
                                 title={crumb.name}>{crumb.name}
                             </button>
                         </span>
@@ -1105,24 +1174,28 @@ const ProjectDocumentsTab: React.FC = () => {
                 </nav>
 
                 <div className="flex items-center gap-3 flex-shrink-0">
-                    {isDocAdmin && (
+                    {(isDocAdmin || canPartnerUploadInCurrentFolder) && (
                         <>
-                            <button onClick={() => { setShowNewFolderInput(true); setOpenMenuId(null); }}
-                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-lg border transition-colors btn-ghost"
-                                style={{ borderColor: 'var(--color-border-default)' }}>
-                                <FolderPlus size={15} />New Folder
-                            </button>
+                            {isDocAdmin && (
+                                <button onClick={() => { setShowNewFolderInput(true); setOpenMenuId(null); }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-lg border transition-colors btn-ghost"
+                                    style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <FolderPlus size={15} />New Folder
+                                </button>
+                            )}
                             <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg text-white font-medium transition-colors disabled:opacity-60 btn-primary">
                                 {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                                 {uploading ? 'Uploading…' : 'Upload'}
                             </button>
                             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileInputChange} />
-                            <button onClick={() => setShowAccessControl(true)}
-                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-lg border transition-colors btn-ghost"
-                                style={{ borderColor: 'var(--color-border-default)' }}>
-                                <Lock size={15} />Access Control
-                            </button>
+                            {isDocAdmin && (
+                                <button onClick={() => setShowAccessControl(true)}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-lg border transition-colors btn-ghost"
+                                    style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <Lock size={15} />Access Control
+                                </button>
+                            )}
                         </>
                     )}
                     <div className="flex items-center border rounded-lg p-0.5" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
@@ -1157,11 +1230,19 @@ const ProjectDocumentsTab: React.FC = () => {
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-subtle)' }}><FolderOpen size={30} style={{ color: 'var(--color-text-muted)' }} /></div>
                         <div>
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{currentFolderId ? 'This folder is empty' : 'No documents yet'}</p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>{isDocAdmin ? 'Create a folder or upload files to get started.' : 'Files shared with you will appear here.'}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                {isDocAdmin
+                                    ? 'Create a folder or upload files to get started.'
+                                    : canPartnerUploadInCurrentFolder
+                                        ? 'Upload files here to share with CUOS and your client.'
+                                        : 'Files shared with you will appear here.'}
+                            </p>
                         </div>
-                        {isDocAdmin && (
+                        {(isDocAdmin || canPartnerUploadInCurrentFolder) && (
                             <div className="flex gap-2 mt-1">
-                                <button onClick={() => setShowNewFolderInput(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors btn-ghost" style={{ borderColor: 'var(--color-border-default)' }}><FolderPlus size={14} />New Folder</button>
+                                {isDocAdmin && (
+                                    <button onClick={() => setShowNewFolderInput(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors btn-ghost" style={{ borderColor: 'var(--color-border-default)' }}><FolderPlus size={14} />New Folder</button>
+                                )}
                                 <button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg text-white transition-colors btn-primary"><Upload size={14} />Upload File</button>
                             </div>
                         )}
@@ -1169,7 +1250,7 @@ const ProjectDocumentsTab: React.FC = () => {
                 )}
 
                 {/* Grid view */}
-                {!isLoading && viewMode === 'grid' && (folders.length > 0 || items.length > 0 || showNewFolderInput) && (
+                {!isLoading && viewMode === 'grid' && (visibleFolders.length > 0 || items.length > 0 || showNewFolderInput) && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                         {showNewFolderInput && (
                             <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-dashed hover:shadow-sm" style={{ borderColor: 'var(--color-primary)', backgroundColor: 'var(--color-primary-soft)' }}>
@@ -1186,13 +1267,13 @@ const ProjectDocumentsTab: React.FC = () => {
                                 </div>
                             </div>
                         )}
-                        {folders.map(renderFolderCard)}
+                        {visibleFolders.map(renderFolderCard)}
                         {items.map(renderFileCard)}
                     </div>
                 )}
 
                 {/* List view */}
-                {!isLoading && viewMode === 'list' && (folders.length > 0 || items.length > 0 || showNewFolderInput) && (
+                {!isLoading && viewMode === 'list' && (visibleFolders.length > 0 || items.length > 0 || showNewFolderInput) && (
                     <div className="rounded-xl border divide-y divide-[var(--color-border-default)]" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
                         {showNewFolderInput && (
                             <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: 'var(--color-primary-soft)' }}>
@@ -1205,7 +1286,7 @@ const ProjectDocumentsTab: React.FC = () => {
                                 <button onClick={() => { setShowNewFolderInput(false); setNewFolderName(''); }} className="p-1 rounded hover:bg-black/5" style={{ color: 'var(--color-text-muted)' }}><X size={15} /></button>
                             </div>
                         )}
-                        {folders.map((folder) => (
+                        {visibleFolders.map((folder) => (
                             <div key={folder._id} className="group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-black/5 border-b"
                                 style={{ borderColor: 'var(--color-border-default)' }}
                                 onDoubleClick={() => navigateToFolder(folder)}>

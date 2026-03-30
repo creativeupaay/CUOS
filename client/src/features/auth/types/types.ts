@@ -21,6 +21,7 @@ export interface User {
         };
         finance?: { enabled: boolean; subModules?: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean } };
         crm?: { enabled: boolean; subModules?: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
+        teamManagement?: { enabled: boolean };
         hrms?: { enabled: boolean; subModules?: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean } };
         overallAdmin?: { enabled: boolean; subModules?: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
     };

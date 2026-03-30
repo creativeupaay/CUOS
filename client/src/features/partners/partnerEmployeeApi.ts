@@ -8,6 +8,11 @@ export interface PartnerEmployee {
     phone?: string;
     designation?: string;
     isActive: boolean;
+    modulePermissions: {
+        projectManagement: boolean;
+        crm: boolean;
+        teamManagement: boolean;
+    };
     createdBy: string;
     createdAt: string;
     updatedAt: string;
@@ -19,6 +24,11 @@ export interface CreatePartnerEmployeeRequest {
     password: string;
     phone?: string;
     designation?: string;
+    modulePermissions?: {
+        projectManagement?: boolean;
+        crm?: boolean;
+        teamManagement?: boolean;
+    };
 }
 
 export interface UpdatePartnerEmployeeRequest {
@@ -27,6 +37,11 @@ export interface UpdatePartnerEmployeeRequest {
     phone?: string;
     designation?: string;
     isActive?: boolean;
+    modulePermissions?: {
+        projectManagement?: boolean;
+        crm?: boolean;
+        teamManagement?: boolean;
+    };
 }
 
 export interface PartnerEmployeeListResponse {

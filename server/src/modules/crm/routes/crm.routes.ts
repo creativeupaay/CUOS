@@ -24,14 +24,24 @@ import {
 // Import client controller for CRM client routes
 import * as clientController from '../../client/controllers/client.controller';
 import { listClientsSchema, getClientSchema } from '../../client/validators/client.validator';
+import { requirePartnerEmployeeModuleAccess } from '../../partners/middlewares/partnerEmployeeModuleAccess.middleware';
+import AppError from '../../../utils/appError';
 
 const router = Router();
 
 // All CRM routes require authentication
 router.use(authenticate);
+router.use(requirePartnerEmployeeModuleAccess('crm'));
+
+router.use((req, _res, next) => {
+    if (req.user?.role === 'partner' && !req.path.startsWith('/clients')) {
+        return next(new AppError('Partners can only access CRM clients', 403));
+    }
+    return next();
+});
 
 // CRM access: super-admin, admin, manager, employee (with dept=crm)
-const crmRoles = ['super-admin', 'admin', 'manager', 'employee'];
+const crmRoles = ['super-admin', 'admin', 'manager', 'employee', 'partner'];
 const crmManagers = ['super-admin', 'admin', 'manager'];
 
 // ============================================

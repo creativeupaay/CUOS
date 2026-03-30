@@ -8,6 +8,7 @@ import {
     User, Briefcase, ShieldCheck, Eye, EyeOff,
     Edit, X, Loader2, Save, Camera,
 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -462,7 +463,7 @@ export default function MyProfilePage() {
 
             {/* ── Personal Info Modal ──────────────────────────────── */}
             {activeModal === 'personal' && (
-                <div className="modal-overlay">
+                <ModalPortal>
                     <div className="w-full max-w-4xl rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
@@ -543,12 +544,12 @@ export default function MyProfilePage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
             {/* ── Bank Details Modal ────────────────────────────────── */}
             {activeModal === 'bank' && (
-                <div className="modal-overlay">
+                <ModalPortal>
                     <div className="w-full max-w-lg rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                         <div className="flex justify-between items-center mb-5">
@@ -600,7 +601,7 @@ export default function MyProfilePage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

@@ -965,3 +965,185 @@ export async function sendPartnerOnboardingEmail(opts: {
 </html>`,
     });
 }
+
+/**
+ * Send partner login credentials email after successful onboarding
+ */
+export async function sendPartnerCredentialsEmail(opts: {
+    to: string;
+    partnerName: string;
+    companyName: string;
+    email: string;
+    password: string;
+    loginUrl: string;
+}): Promise<void> {
+    const { to, partnerName, companyName, email, password, loginUrl } = opts;
+    const client = getResend();
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: 'Welcome to CUOS — Your Login Credentials',
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <!-- Header with gradient -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #10B981, #059669);padding:32px;">
+              <p style="margin:0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:-0.5px;">🎉 Welcome to CUOS</p>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Your Partner Portal is Ready</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#111827;font-weight:600;">Hello ${partnerName},</p>
+              <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7;">
+                Thank you for completing your registration! Your account has been successfully created and you now have access to your personalized partner portal.
+              </p>
+
+              <div style="background:#F3F4F6;border-radius:8px;padding:20px;margin:0 0 26px;">
+                <p style="margin:0 0 12px;font-size:13px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Login Credentials</p>
+                <table cellpadding="0" cellspacing="0" style="width:100%;">
+                  <tr>
+                    <td style="padding:8px 0;font-size:14px;color:#6B7280;font-weight:500;">Company:</td>
+                    <td style="padding:8px 0;font-size:14px;color:#111827;font-weight:600;">${companyName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0;font-size:14px;color:#6B7280;font-weight:500;">Email:</td>
+                    <td style="padding:8px 0;font-size:14px;color:#111827;font-weight:600;">${email}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0;font-size:14px;color:#6B7280;font-weight:500;">Password:</td>
+                    <td style="padding:8px 0;font-size:14px;color:#111827;font-weight:600;font-family:monospace;background:#E5E7EB;padding:6px 12px;border-radius:4px;display:inline-block;">${password}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0;font-size:14px;color:#6B7280;font-weight:500;">Portal URL:</td>
+                    <td style="padding:8px 0;">
+                      <a href="${loginUrl}" style="color:#10B981;text-decoration:none;font-weight:600;font-size:14px;word-break:break-all;">${loginUrl}</a>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="background:#DBEAFE;border-left:3px solid #3B82F6;padding:12px 16px;border-radius:4px;margin:0 0 24px;">
+                <p style="margin:0;font-size:13px;color:#1E40AF;line-height:1.5;">
+                  <strong>🔒 Security Tip:</strong> We recommend changing your password after your first login. You can do this from your account settings.
+                </p>
+              </div>
+
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:linear-gradient(135deg, #10B981, #059669);border-radius:8px;box-shadow:0 4px 12px rgba(16, 185, 129, 0.3);">
+                    <a href="${loginUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:15px;font-weight:600;text-decoration:none;letter-spacing:0.3px;">
+                      Access Partner Portal →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <hr style="margin:28px 0;border:none;border-top:1px solid #E5E7EB;"/>
+
+              <div style="background:#FEF3C7;border-left:3px solid #F59E0B;padding:12px 16px;border-radius:4px;">
+                <p style="margin:0;font-size:13px;color:#92400E;line-height:1.5;">
+                  <strong>⚠️ Important:</strong> Please save these credentials in a secure location.
+                </p>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#F9FAFB;padding:20px 32px;border-top:1px solid #E5E7EB;text-align:center;">
+              <p style="margin:0 0 6px;font-size:12px;color:#9CA3AF;line-height:1.5;">
+                Need help? Contact us or visit our support center
+              </p>
+              <p style="margin:0;font-size:11px;color:#D1D5DB;">
+                &copy; ${new Date().getFullYear()} Creative Upaay. This is an automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}
+
+// ============================================================
+// Send client portal access credentials
+// ============================================================
+export async function sendClientPortalAccessEmail(opts: {
+    to: string;
+    clientName: string;
+    portalUrl: string;
+}): Promise<void> {
+    const { to, clientName, portalUrl } = opts;
+    const client = getResend();
+
+    await sendEmailOrThrow(client, {
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        subject: 'Welcome to your Client Portal — Creative Upaay',
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background:#111827;padding:24px 32px;">
+              <p style="margin:0;color:#FFFFFF;font-size:18px;font-weight:600;letter-spacing:-0.3px;">Creative Upaay</p>
+              <p style="margin:4px 0 0;color:#9CA3AF;font-size:13px;">Client Portal</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:15px;color:#111827;font-weight:500;">Hello ${clientName},</p>
+              <p style="margin:0 0 24px;font-size:14px;color:#374151;line-height:1.6;">
+                We have generated a personalized Client Portal for you. You can use this portal to access your projects, tasks, documents, and communicate with our team.
+              </p>
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#2563EB;border-radius:6px;">
+                    <a href="${portalUrl}" style="display:inline-block;padding:12px 28px;color:#FFFFFF;font-size:14px;font-weight:500;text-decoration:none;">
+                      Access Client Portal
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:24px 0 0;font-size:13px;color:#6B7280;">
+                Or copy this link into your browser:<br/>
+                <a href="${portalUrl}" style="color:#2563EB;word-break:break-all;">${portalUrl}</a>
+              </p>
+              <hr style="margin:24px 0;border:none;border-top:1px solid #E5E7EB;"/>
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">
+                Please do not share this link with anyone, as it provides direct access to your confidential information.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">
+                &copy; Creative Upaay. This is an automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    });
+}

@@ -10,6 +10,12 @@ export interface IPartnerEmployee extends Document {
     phone?: string;
     designation?: string;
     isActive: boolean;
+    statusBeforePartnerDeactivation?: boolean; // Track original status when partner is deactivated
+    modulePermissions: {
+        projectManagement: boolean; // Only assigned projects
+        crm: boolean;
+        teamManagement: boolean;
+    };
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -52,6 +58,14 @@ const PartnerEmployeeSchema = new Schema<IPartnerEmployee>(
         isActive: {
             type: Boolean,
             default: true,
+        },
+        statusBeforePartnerDeactivation: {
+            type: Boolean,
+        },
+        modulePermissions: {
+            projectManagement: { type: Boolean, default: true },
+            crm: { type: Boolean, default: false },
+            teamManagement: { type: Boolean, default: false },
         },
         createdBy: {
             type: Schema.Types.ObjectId,

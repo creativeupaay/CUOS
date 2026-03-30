@@ -5,12 +5,12 @@ import { Project } from '../../project/models/Project.model';
 import { Task } from '../../project/models/Task.model';
 import { Meeting } from '../../project/models/Meeting.model';
 import { Credential } from '../../project/models/Credential.model';
-import { DocFolder } from '../../project/models/DocFolder.model';
 import { DocItem } from '../../project/models/DocItem.model';
 import { Comment } from '../../project/models/Comment.model';
 import { env } from '../../../config/env.config';
 import AppError from '../../../utils/appError';
 import { uploadDocument, getSignedUrl } from '../../../utils/cloudinary.util';
+import { ensureUnifiedSharedFolder } from '../../project/services/sharedFolder.service';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -241,27 +241,5 @@ async function assertProjectOwnership(clientId: string, projectId: string): Prom
 }
 
 async function getSharedFolder(projectId: string) {
-    const existing = await DocFolder.findOne({
-        projectId: new Types.ObjectId(projectId),
-        isClientShared: true,
-        isSystem: true,
-    }).lean();
-
-    if (existing) return existing;
-
-    // Auto-create for projects that pre-date the Shared Files feature
-    const project = await Project.findById(projectId).select('createdBy').lean();
-    if (!project) throw new AppError('Project not found', 404);
-
-    const created = await DocFolder.create({
-        projectId: new Types.ObjectId(projectId),
-        name: 'Shared Files',
-        parentId: null,
-        createdBy: project.createdBy,
-        viewAccess: [],
-        isSystem: true,
-        isClientShared: true,
-    });
-
-    return created.toObject() as typeof existing & NonNullable<typeof existing>;
+    return ensureUnifiedSharedFolder(projectId);
 }

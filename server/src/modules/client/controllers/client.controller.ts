@@ -4,6 +4,8 @@ import { ClientService } from '../services/client.service';
 import { Client } from '../models/Client.model';
 import asyncHandler from '../../../utils/asyncHandler';
 import type { CreateClientInput, UpdateClientInput, GetClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
+import { env } from '../../../config/env.config';
+import { sendClientPortalAccessEmail } from '../../../services/email.service';
 
 const clientService = new ClientService();
 
@@ -198,15 +200,40 @@ export const togglePortal = asyncHandler(async (req: Request, res: Response) => 
         return;
     }
 
+    const updateData: any = { portalEnabled: enabled };
+    let generatedToken = null;
+
+    if (enabled) {
+        const currentClient = await Client.findById(id).select('portalToken').lean();
+        if (!currentClient) {
+            res.status(404).json({ status: 'fail', message: 'Client not found.' });
+            return;
+        }
+        if (!currentClient.portalToken) {
+            generatedToken = crypto.randomBytes(32).toString('hex');
+            updateData.portalToken = generatedToken;
+        }
+    }
+
     const client = await Client.findByIdAndUpdate(
         id,
-        { portalEnabled: enabled },
+        updateData,
         { new: true, select: 'portalEnabled portalToken name email' }
     ).lean();
 
     if (!client) {
         res.status(404).json({ status: 'fail', message: 'Client not found.' });
         return;
+    }
+
+    // Send email ONLY when enabling
+    if (enabled && client.email && client.portalToken) {
+        const portalUrl = `${env.FRONTEND_URL}/portal/${client._id}/${client.portalToken}`;
+        await sendClientPortalAccessEmail({
+            to: client.email,
+            clientName: client.name,
+            portalUrl
+        });
     }
 
     res.status(200).json({

@@ -38,6 +38,7 @@ function getModuleConfig(
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
+    const isPartnerEmployee = !!user?.isPartnerEmployee;
 
     if (pathname.startsWith('/projects')) {
         const pmPerms = mp?.projectManagement;
@@ -63,6 +64,9 @@ function getModuleConfig(
         return { title: 'Finance', items: isAdmin || !finSubs ? allItems : allItems.filter(i => (finSubs as any)[i.key] === true) };
     }
     if (pathname.startsWith('/crm')) {
+        if (isPartnerEmployee && mp?.crm?.enabled !== true) {
+            return null;
+        }
         const crmSubs = mp?.crm?.subModules;
         const allItems = [
             { key: 'pipeline', label: 'Pipeline', path: '/crm/pipeline', icon: <BarChart3 size={18} />, matchPrefix: '/crm/pipeline' },
@@ -70,6 +74,9 @@ function getModuleConfig(
             { key: 'proposals', label: 'Proposals', path: '/crm/proposals', icon: <FileText size={18} />, matchPrefix: '/crm/proposals' },
             { key: 'clients', label: 'Clients', path: '/crm/clients', icon: <Users2 size={18} />, matchPrefix: '/crm/clients' },
         ];
+        if (isPartner && !crmSubs) {
+            return { title: 'CRM', items: allItems.filter(i => i.key === 'clients') };
+        }
         return { title: 'CRM', items: isAdmin || !crmSubs ? allItems : allItems.filter(i => (crmSubs as any)[i.key] === true) };
     }
     if (pathname.startsWith('/hrms') && !pathname.startsWith('/my-hrms')) {
@@ -178,6 +185,7 @@ function getModuleConfig(
     // Partner Admin Module (for partners to manage their team)
     if (pathname.startsWith('/partner-admin')) {
         if (!isPartner) return null; // Only partners can access this module
+        if (isPartnerEmployee && user?.modulePermissions?.teamManagement?.enabled !== true) return null;
         return {
             title: 'Team Management',
             items: [

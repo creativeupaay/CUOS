@@ -6,6 +6,7 @@ import {
     useCreateLeaveMutation,
 } from '@/features/hrms/hrmsApi';
 import type { Leave } from '@/features/hrms/types/types';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ── Status badge ──────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> = {
@@ -90,7 +91,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
     const TYPES = ['casual', 'sick', 'earned', 'maternity', 'paternity'];
 
     return (
-        <div className="modal-overlay items-end sm:items-center">
+        <ModalPortal className="items-end sm:items-center">
             <div className="w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden"
                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                 {/* Header */}
@@ -245,7 +246,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalPortal>
     );
 }
 

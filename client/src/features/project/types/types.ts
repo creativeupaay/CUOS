@@ -246,6 +246,7 @@ export interface DocFolder {
     createdBy: string | User;
     viewAccess: (string | User)[];
     isClientShared?: boolean;
+    isPartnerShared?: boolean;
     isSystem?: boolean;
     createdAt: string;
     updatedAt: string;

@@ -40,6 +40,11 @@ export default function PartnerEmployeesPage() {
         password: '',
         phone: '',
         designation: '',
+        modulePermissions: {
+            projectManagement: true,
+            crm: false,
+            teamManagement: false,
+        },
     });
 
     const { data: employeesResponse, isLoading, isFetching } = useGetPartnerEmployeesQuery({
@@ -71,6 +76,11 @@ export default function PartnerEmployeesPage() {
                 password: '',
                 phone: employee.phone || '',
                 designation: employee.designation || '',
+                modulePermissions: employee.modulePermissions || {
+                    projectManagement: true,
+                    crm: false,
+                    teamManagement: false,
+                },
             });
         } else {
             setEditingEmployee(null);
@@ -80,6 +90,11 @@ export default function PartnerEmployeesPage() {
                 password: '',
                 phone: '',
                 designation: '',
+                modulePermissions: {
+                    projectManagement: true,
+                    crm: false,
+                    teamManagement: false,
+                },
             });
         }
         setShowModal(true);
@@ -94,6 +109,11 @@ export default function PartnerEmployeesPage() {
             password: '',
             phone: '',
             designation: '',
+            modulePermissions: {
+                projectManagement: true,
+                crm: false,
+                teamManagement: false,
+            },
         });
     };
 
@@ -108,6 +128,7 @@ export default function PartnerEmployeesPage() {
                         email: formData.email,
                         phone: formData.phone || undefined,
                         designation: formData.designation || undefined,
+                        modulePermissions: formData.modulePermissions,
                     },
                 }).unwrap();
             } else {
@@ -117,6 +138,7 @@ export default function PartnerEmployeesPage() {
                     password: formData.password,
                     phone: formData.phone || undefined,
                     designation: formData.designation || undefined,
+                    modulePermissions: formData.modulePermissions,
                 }).unwrap();
             }
             handleCloseModal();
@@ -495,6 +517,89 @@ export default function PartnerEmployeesPage() {
                                     style={{ borderColor: '#E5E7EB' }}
                                     placeholder="Sales Manager"
                                 />
+                            </div>
+
+                            {/* Module Permissions */}
+                            <div className="pt-4 border-t" style={{ borderColor: '#E5E7EB' }}>
+                                <label className="block text-sm font-semibold mb-3" style={{ color: '#374151' }}>
+                                    Module Access Permissions
+                                </label>
+                                <div className="space-y-3">
+                                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.modulePermissions.projectManagement}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    modulePermissions: {
+                                                        ...formData.modulePermissions,
+                                                        projectManagement: e.target.checked,
+                                                    },
+                                                })
+                                            }
+                                            className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium" style={{ color: '#374151' }}>
+                                                Project Management
+                                            </div>
+                                            <div className="text-xs" style={{ color: '#6B7280' }}>
+                                                Access to assigned projects only
+                                            </div>
+                                        </div>
+                                    </label>
+
+                                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.modulePermissions.crm}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    modulePermissions: {
+                                                        ...formData.modulePermissions,
+                                                        crm: e.target.checked,
+                                                    },
+                                                })
+                                            }
+                                            className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium" style={{ color: '#374151' }}>
+                                                CRM
+                                            </div>
+                                            <div className="text-xs" style={{ color: '#6B7280' }}>
+                                                Access to customer relationship management
+                                            </div>
+                                        </div>
+                                    </label>
+
+                                    <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.modulePermissions.teamManagement}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    modulePermissions: {
+                                                        ...formData.modulePermissions,
+                                                        teamManagement: e.target.checked,
+                                                    },
+                                                })
+                                            }
+                                            className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium" style={{ color: '#374151' }}>
+                                                Team Management
+                                            </div>
+                                            <div className="text-xs" style={{ color: '#6B7280' }}>
+                                                Manage team members and their permissions
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
 
                             <div className="flex gap-3 pt-4">

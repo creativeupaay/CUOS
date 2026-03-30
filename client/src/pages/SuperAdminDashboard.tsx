@@ -240,17 +240,19 @@ export default function SuperAdminDashboard() {
     ];
 
     const partnerDepartments = [
-        // Team Management — always available for partners
-        {
-            key: 'teamManagement',
-            title: 'Team Management',
-            description: 'Manage your team members, access and credentials',
-            icon: <Users size={22} />,
-            path: '/partner-admin/team',
-            isActive: true,
-            accentFrom: MODULE_ACCENTS.teamManagement.from,
-            accentTo: MODULE_ACCENTS.teamManagement.to,
-        },
+        // Team Management is optional for partner employees, always available for main partner account.
+        ...(user?.isPartnerEmployee && mp?.teamManagement?.enabled !== true
+            ? []
+            : [{
+                key: 'teamManagement',
+                title: 'Team Management',
+                description: 'Manage your team members, access and credentials',
+                icon: <Users size={22} />,
+                path: '/partner-admin/team',
+                isActive: true,
+                accentFrom: MODULE_ACCENTS.teamManagement.from,
+                accentTo: MODULE_ACCENTS.teamManagement.to,
+            }]),
         // Project Management and CRM based on permissions
         ...allDepartments
             .filter(d => d.key === 'projectManagement' || d.key === 'crm')

@@ -172,6 +172,7 @@ export const createProject = async (
         viewAccess: [],
         isSystem: true,
         isClientShared: true,
+        isPartnerShared: true,
     });
 
     // Auto-populate projectPermissions for all initial assignees

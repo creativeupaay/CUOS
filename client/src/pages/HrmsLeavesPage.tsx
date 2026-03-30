@@ -9,6 +9,7 @@ import {
     Plus, X, Check, XCircle, Clock, Calendar, ChevronRight,
     ArrowLeft, AlertCircle, User, Loader2, FileText,
 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ── Types ────────────────────────────────────────────────────────────
 const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity'] as const;
@@ -76,7 +77,7 @@ function RejectModal({
 }: { leaveId: string; onClose: () => void; onConfirm: (id: string, reason: string) => void }) {
     const [reason, setReason] = useState('');
     return (
-        <div className="modal-overlay">
+        <ModalPortal>
 
             <div
                 className="w-full max-w-sm rounded-xl border p-6 shadow-xl"
@@ -115,7 +116,7 @@ function RejectModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </ModalPortal>
     );
 }
 
@@ -157,7 +158,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div className="modal-overlay">
+        <ModalPortal>
 
             <div
                 className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
@@ -325,7 +326,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalPortal>
     );
 }
 

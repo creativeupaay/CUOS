@@ -8,6 +8,7 @@ import {
     getSignedUrl,
 } from '../../../utils/cloudinary.util';
 import AppError from '../../../utils/appError';
+import { ensureUnifiedSharedFolder } from './sharedFolder.service';
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
 
@@ -35,31 +36,14 @@ export const getFolders = async (
     projectId: string,
     parentId: string | null,
     userId: string,
-    userRole?: string
+    userRole?: string,
+    isPartnerRequest: boolean = false
 ): Promise<IDocFolder[]> => {
     const admin = await isDocAdmin(projectId, userId, userRole);
 
-    // Auto-create the Shared Files system folder for projects that pre-date this feature
+    // Normalize legacy data so only one shared folder exists across CUOS/partner/client.
     if (!parentId) {
-        const exists = await DocFolder.exists({
-            projectId: new Types.ObjectId(projectId),
-            isClientShared: true,
-            isSystem: true,
-        });
-        if (!exists) {
-            const project = await Project.findById(projectId).select('createdBy').lean();
-            if (project) {
-                await DocFolder.create({
-                    projectId: new Types.ObjectId(projectId),
-                    name: 'Shared Files',
-                    parentId: null,
-                    createdBy: project.createdBy,
-                    viewAccess: [],
-                    isSystem: true,
-                    isClientShared: true,
-                });
-            }
-        }
+        await ensureUnifiedSharedFolder(projectId);
     }
 
     const query: Record<string, unknown> = {
@@ -68,7 +52,15 @@ export const getFolders = async (
     };
 
     if (!admin) {
-        query.viewAccess = new Types.ObjectId(userId);
+        if (isPartnerRequest && !parentId) {
+            const sharedFolder = await ensureUnifiedSharedFolder(projectId);
+            query.$or = [
+                { viewAccess: new Types.ObjectId(userId) },
+                { _id: sharedFolder._id },
+            ];
+        } else {
+            query.viewAccess = new Types.ObjectId(userId);
+        }
     }
 
     return DocFolder.find(query)
@@ -189,7 +181,8 @@ export const getDocItems = async (
     projectId: string,
     folderId: string | null,
     userId: string,
-    userRole?: string
+    userRole?: string,
+    isPartnerRequest: boolean = false
 ): Promise<IDocItem[]> => {
     const admin = await isDocAdmin(projectId, userId, userRole);
 
@@ -205,7 +198,10 @@ export const getDocItems = async (
             const folder = await DocFolder.findById(folderId).lean();
             if (
                 folder &&
-                folder.viewAccess.some((id) => id.toString() === userId)
+                (
+                    (isPartnerRequest && folder.isSystem && folder.isClientShared && folder.isPartnerShared) ||
+                    folder.viewAccess.some((id) => id.toString() === userId)
+                )
             ) {
                 hasFolderAccess = true;
             }

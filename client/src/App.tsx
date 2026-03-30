@@ -101,12 +101,40 @@ function getAuthenticatedHome(_user: any): string {
   return '/dashboard';
 }
 
+function hasPartnerEmployeeModuleAccess(
+  user: any,
+  moduleKey: 'projectManagement' | 'crm' | 'teamManagement'
+): boolean {
+  if (!user?.isPartnerEmployee) return true;
+  return user?.modulePermissions?.[moduleKey]?.enabled === true;
+}
+
 function CrmRootRedirect() {
   const user = useAppSelector((state) => state.auth.user);
   const roleName = getRoleNameFromUser(user);
   const isPartner = roleName === 'partner';
 
+  if (!hasPartnerEmployeeModuleAccess(user, 'crm')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return <Navigate to={isPartner ? '/crm/clients' : '/crm/pipeline'} replace />;
+}
+
+function PartnerEmployeeModuleRoute({
+  moduleKey,
+  children,
+}: {
+  moduleKey: 'projectManagement' | 'crm' | 'teamManagement';
+  children: React.ReactNode;
+}) {
+  const user = useAppSelector((state) => state.auth.user);
+
+  if (!hasPartnerEmployeeModuleAccess(user, moduleKey)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 }
 
 function PartnerRestrictedRoute({ children }: { children: React.ReactNode }) {
@@ -203,10 +231,10 @@ function App() {
         >
           {/* Project Management Module */}
           {/* Projects */}
-          <Route path="/projects" element={loadable(<ProjectsPage />)} />
-          <Route path="/projects/new" element={loadable(<ProjectFormPage />)} />
-          <Route path="/projects/:id/edit" element={loadable(<ProjectFormPage />)} />
-          <Route path="/projects/:id" element={loadable(<ProjectDetailPage />)}>
+          <Route path="/projects" element={<PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectsPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/projects/new" element={<PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/projects/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/projects/:id" element={<PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectDetailPage />)}</PartnerEmployeeModuleRoute>}>
             <Route index element={loadable(<ProjectOverviewTab />)} />
             <Route path="tasks" element={loadable(<ProjectTasksTab />)} />
             <Route path="timelogs" element={loadable(<ProjectTimeLogsTab />)} />
@@ -217,20 +245,20 @@ function App() {
           </Route>
 
           {/* CRM Module */}
-          <Route path="/crm" element={<CrmRootRedirect />} />
-          <Route path="/crm/pipeline" element={loadable(<CrmPipelinePage />)} />
-          <Route path="/crm/leads" element={loadable(<CrmLeadsPage />)} />
-          <Route path="/crm/leads/new" element={loadable(<CrmLeadFormPage />)} />
-          <Route path="/crm/leads/:id" element={loadable(<CrmLeadDetailPage />)} />
-          <Route path="/crm/leads/:id/edit" element={loadable(<CrmLeadFormPage />)} />
-          <Route path="/crm/proposals" element={loadable(<CrmProposalsPage />)} />
-          <Route path="/crm/proposals/new" element={loadable(<CrmProposalFormPage />)} />
-          <Route path="/crm/proposals/:id/edit" element={loadable(<CrmProposalFormPage />)} />
+          <Route path="/crm" element={<PartnerEmployeeModuleRoute moduleKey="crm"><CrmRootRedirect /></PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/pipeline" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmPipelinePage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/leads" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadsPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/leads/new" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/leads/:id" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadDetailPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/leads/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/proposals" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmProposalsPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/proposals/new" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmProposalFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/proposals/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmProposalFormPage />)}</PartnerEmployeeModuleRoute>} />
           {/* CRM Clients (moved from Project Management) */}
-          <Route path="/crm/clients" element={loadable(<ClientsPage />)} />
-          <Route path="/crm/clients/new" element={loadable(<ClientFormPage />)} />
-          <Route path="/crm/clients/:id" element={loadable(<ClientDetailPage />)} />
-          <Route path="/crm/clients/:id/edit" element={loadable(<ClientFormPage />)} />
+          <Route path="/crm/clients" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientsPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/clients/new" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/clients/:id" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientDetailPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/clients/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientFormPage />)}</PartnerEmployeeModuleRoute>} />
 
           {/* Finance Module */}
           <Route path="/finance" element={<PartnerRestrictedRoute>{loadable(<FinanceDashboardPage />)}</PartnerRestrictedRoute>} />
@@ -271,8 +299,8 @@ function App() {
           <Route path="/admin/partners/manage/:id/edit" element={<PartnerRestrictedRoute>{loadable(<PartnerFormPage />)}</PartnerRestrictedRoute>} />
 
           {/* Partner Admin Module (for Partners to manage their own team) */}
-          <Route path="/partner-admin" element={<Navigate to="/partner-admin/team" replace />} />
-          <Route path="/partner-admin/team" element={loadable(<PartnerEmployeesPage />)} />
+          <Route path="/partner-admin" element={<PartnerEmployeeModuleRoute moduleKey="teamManagement"><Navigate to="/partner-admin/team" replace /></PartnerEmployeeModuleRoute>} />
+          <Route path="/partner-admin/team" element={<PartnerEmployeeModuleRoute moduleKey="teamManagement">{loadable(<PartnerEmployeesPage />)}</PartnerEmployeeModuleRoute>} />
 
           {/* Hiring Module */}
           <Route path="/hiring" element={<PartnerRestrictedRoute><Navigate to="/hiring/jobs" replace /></PartnerRestrictedRoute>} />

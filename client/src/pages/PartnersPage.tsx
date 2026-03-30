@@ -1,9 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart3, Handshake, Plus, Search, ExternalLink, ToggleLeft, ToggleRight } from 'lucide-react';
+import { BarChart3, Handshake, Plus, Search, ExternalLink, Trash2 } from 'lucide-react';
 import {
-    useActivatePartnerMutation,
-    useDeactivatePartnerMutation,
+    useDeletePartnerMutation,
     useGetPartnersQuery,
     type Partner,
 } from '@/features/partners/partnersApi';
@@ -35,8 +34,7 @@ export default function PartnersPage() {
         }
     }, [error]);
 
-    const [activatePartner, { isLoading: isActivating }] = useActivatePartnerMutation();
-    const [deactivatePartner, { isLoading: isDeactivating }] = useDeactivatePartnerMutation();
+    const [deletePartner, { isLoading: isDeleting }] = useDeletePartnerMutation();
 
     const partners = data?.data?.partners || [];
     const totalPages = data?.data?.totalPages || 1;
@@ -55,15 +53,21 @@ export default function PartnersPage() {
         return { active, inactive, clients, projects };
     }, [partners]);
 
-    const handleToggle = async (partner: Partner) => {
-        try {
-            if (partner.isActive) {
-                await deactivatePartner(partner._id).unwrap();
-            } else {
-                await activatePartner(partner._id).unwrap();
+    const handleDelete = async (partner: Partner) => {
+        const companyName = partner.companyName || partner.contactPerson || 'this partner';
+        const confirmMessage = `Are you sure you want to delete ${companyName}?\n\nThis action will:\n• Delete the partner record\n• Delete the associated user account\n• This action cannot be undone\n\nType "DELETE" to confirm:`;
+
+        const userInput = prompt(confirmMessage);
+
+        if (userInput === 'DELETE') {
+            try {
+                await deletePartner(partner._id).unwrap();
+                alert('Partner deleted successfully');
+            } catch (error: any) {
+                alert(error?.data?.message || 'Failed to delete partner');
             }
-        } catch (error: any) {
-            alert(error?.data?.message || 'Failed to update partner status');
+        } else if (userInput !== null) {
+            alert('Deletion cancelled - you must type "DELETE" to confirm');
         }
     };
 
@@ -285,16 +289,12 @@ export default function PartnersPage() {
                                                     <ExternalLink size={16} style={{ color: 'var(--color-text-muted)' }} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleToggle(partner)}
-                                                    disabled={isActivating || isDeactivating}
-                                                    className="p-2 rounded-lg hover:bg-neutral-100 disabled:opacity-50 transition-colors"
-                                                    title={partner.isActive ? 'Deactivate partner' : 'Activate partner'}
+                                                    onClick={() => handleDelete(partner)}
+                                                    disabled={isDeleting}
+                                                    className="p-2 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                                                    title="Delete partner"
                                                 >
-                                                    {partner.isActive ? (
-                                                        <ToggleRight size={18} style={{ color: '#10B981' }} />
-                                                    ) : (
-                                                        <ToggleLeft size={18} style={{ color: '#EF4444' }} />
-                                                    )}
+                                                    <Trash2 size={16} style={{ color: '#EF4444' }} />
                                                 </button>
                                             </div>
                                         </td>

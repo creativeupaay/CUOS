@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ShieldCheck, Search, ChevronDown, ChevronRight, Check, Save, User, Info, Plus, X, Trash2, FolderKanban } from 'lucide-react';
 import { useGetAdminUsersQuery, useUpdateAdminUserMutation } from '@/features/overall-admin/api/adminApi';
 import { useGetProjectsQuery } from '@/features/project';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ function AddProjectsModal({ existingIds, onAdd, onClose }: {
         setSelected(allSelected ? [] : filtered.map((p: any) => p._id));
 
     return (
-        <div className="modal-overlay">
+        <ModalPortal>
 
             <div className="w-full max-w-md rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
@@ -193,7 +194,7 @@ function AddProjectsModal({ existingIds, onAdd, onClose }: {
                     </div>
                 </div>
             </div>
-        </div>
+        </ModalPortal>
     );
 }
 

@@ -11,6 +11,7 @@ import {
     useGetAdminRolesQuery,
     useGetOrgSettingsQuery,
 } from '@/features/overall-admin/api/adminApi';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ─── Form data ────────────────────────────────────────────────────────────────
 
@@ -316,7 +317,7 @@ export default function AdminUsersPage() {
 
             {/* Create User Modal */}
             {showCreate && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div className="w-full max-w-lg rounded-[1rem] shadow-premium m-4" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
@@ -393,7 +394,7 @@ export default function AdminUsersPage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
             {/* Edit User Details Modal */}
@@ -410,7 +411,7 @@ export default function AdminUsersPage() {
 
             {/* Delete Confirmation */}
             {deleteConfirm && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center gap-3 mb-4">
@@ -430,12 +431,12 @@ export default function AdminUsersPage() {
                             <button onClick={handleDelete} disabled={isDeleting} className="px-4 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50" style={{ backgroundColor: '#EF4444' }}>{isDeleting ? 'Deleting...' : 'Delete User'}</button>
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
             {/* Reset Password Modal */}
             {resetPwdUser && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                         <div className="flex items-center justify-between mb-4">
@@ -464,7 +465,7 @@ export default function AdminUsersPage() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

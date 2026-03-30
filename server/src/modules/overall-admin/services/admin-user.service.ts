@@ -3,7 +3,8 @@ import { Role } from '../../auth/models/Role.model';
 import AppError from '../../../utils/appError';
 import { AuditLog } from '../models/AuditLog.model';
 import { Employee } from '../../hrms/models/Employee.model';
-import bcrypt from 'bcryptjs';
+import { Partner } from '../../partners/models/Partner.model';
+import { PartnerService } from '../../partners/services/partner.service';
 
 export interface UserFilters {
     search?: string;
@@ -158,7 +159,34 @@ export const updateUser = async (id: string, data: UpdateUserData, adminId: stri
         }
     }
 
-    const updated = await User.findByIdAndUpdate(id, data, { new: true })
+    const shouldToggleActive =
+        typeof data.isActive === 'boolean' && data.isActive !== user.isActive;
+
+    const updatePayload: UpdateUserData = { ...data };
+    if (shouldToggleActive) {
+        delete updatePayload.isActive;
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+        await User.findByIdAndUpdate(id, updatePayload, { new: true });
+    }
+
+    if (shouldToggleActive) {
+        const partner = await Partner.findOne({ userId: id }).select('_id').lean();
+
+        if (partner) {
+            const partnerService = new PartnerService();
+            if (data.isActive) {
+                await partnerService.activatePartner(partner._id.toString());
+            } else {
+                await partnerService.deactivatePartner(partner._id.toString());
+            }
+        } else {
+            await User.findByIdAndUpdate(id, { $set: { isActive: data.isActive } });
+        }
+    }
+
+    const updated = await User.findById(id)
         .populate('role', 'name level')
         .select('-password');
 
@@ -188,8 +216,15 @@ export const deactivateUser = async (id: string, adminId: string) => {
         throw new AppError('Cannot deactivate your own account', 400);
     }
 
-    user.isActive = false;
-    await user.save();
+    const partner = await Partner.findOne({ userId: id }).select('_id').lean();
+
+    if (partner) {
+        const partnerService = new PartnerService();
+        await partnerService.deactivatePartner(partner._id.toString());
+    } else {
+        user.isActive = false;
+        await user.save();
+    }
 
     await AuditLog.create({
         userId: adminId,
@@ -211,8 +246,15 @@ export const activateUser = async (id: string, adminId: string) => {
         throw new AppError('User not found', 404);
     }
 
-    user.isActive = true;
-    await user.save();
+    const partner = await Partner.findOne({ userId: id }).select('_id').lean();
+
+    if (partner) {
+        const partnerService = new PartnerService();
+        await partnerService.activatePartner(partner._id.toString());
+    } else {
+        user.isActive = true;
+        await user.save();
+    }
 
     await AuditLog.create({
         userId: adminId,

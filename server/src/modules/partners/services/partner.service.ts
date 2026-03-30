@@ -365,6 +365,9 @@ export class PartnerService {
 
         const partnerRole = await this.ensurePartnerRole();
 
+        // Store password before hashing (for email only)
+        const plainPassword = data.password;
+
         // Create User with Partner role
         const user = await User.create({
             name: data.name,
@@ -413,6 +416,22 @@ export class PartnerService {
         const { env } = await import('../../../config/env.config');
         const loginUrl = `${env.FRONTEND_URL}/partner/${partner.slug}/login`;
 
+        // Send credentials email to partner
+        try {
+            const { sendPartnerCredentialsEmail } = await import('../../../services/email.service');
+            await sendPartnerCredentialsEmail({
+                to: partner.email!,
+                partnerName: data.name,
+                companyName: data.companyName,
+                email: partner.email!,
+                password: plainPassword,
+                loginUrl,
+            });
+        } catch (emailError: any) {
+            console.error('Failed to send partner credentials email:', emailError.message);
+            // Don't fail onboarding if email fails
+        }
+
         return {
             partner,
             loginUrl,
@@ -439,7 +458,7 @@ export class PartnerService {
     }
 
     /**
-     * Deactivate partner
+     * Deactivate partner and all associated team members
      */
     async deactivatePartner(id: string): Promise<void> {
         const partner = await Partner.findById(id);
@@ -448,15 +467,32 @@ export class PartnerService {
             throw new AppError('Partner not found', 404);
         }
 
-        // Deactivate both partner and associated user
+        // Get PartnerEmployee model
+        const { PartnerEmployee } = await import('../models/PartnerEmployee.model');
+
+        // Get all partner employees
+        const partnerEmployees = await PartnerEmployee.find({ partnerId: partner._id });
+
+        // Store current status and deactivate all partner employees
+        const employeeUpdates = partnerEmployees.map(employee => {
+            return PartnerEmployee.findByIdAndUpdate(employee._id, {
+                $set: {
+                    statusBeforePartnerDeactivation: employee.isActive,
+                    isActive: false,
+                },
+            });
+        });
+
+        // Deactivate partner, partner user, and all partner employees in parallel
         await Promise.all([
             Partner.findByIdAndUpdate(id, { $set: { isActive: false } }),
             ...(partner.userId ? [User.findByIdAndUpdate(partner.userId, { $set: { isActive: false } })] : []),
+            ...employeeUpdates,
         ]);
     }
 
     /**
-     * Activate partner
+     * Activate partner and restore team members to their previous status
      */
     async activatePartner(id: string): Promise<void> {
         const partner = await Partner.findById(id);
@@ -465,10 +501,34 @@ export class PartnerService {
             throw new AppError('Partner not found', 404);
         }
 
-        // Activate both partner and associated user
+        // Get PartnerEmployee model
+        const { PartnerEmployee } = await import('../models/PartnerEmployee.model');
+
+        // Get all partner employees
+        const partnerEmployees = await PartnerEmployee.find({ partnerId: partner._id });
+
+        // Restore partner employees to their previous status
+        const employeeUpdates = partnerEmployees.map(employee => {
+            // If statusBeforePartnerDeactivation is set, restore it; otherwise activate by default
+            const restoredStatus = employee.statusBeforePartnerDeactivation !== undefined
+                ? employee.statusBeforePartnerDeactivation
+                : true;
+
+            return PartnerEmployee.findByIdAndUpdate(employee._id, {
+                $set: {
+                    isActive: restoredStatus,
+                },
+                $unset: {
+                    statusBeforePartnerDeactivation: 1,
+                },
+            });
+        });
+
+        // Activate partner, partner user, and restore all partner employees in parallel
         await Promise.all([
             Partner.findByIdAndUpdate(id, { $set: { isActive: true } }),
             ...(partner.userId ? [User.findByIdAndUpdate(partner.userId, { $set: { isActive: true } })] : []),
+            ...employeeUpdates,
         ]);
     }
 

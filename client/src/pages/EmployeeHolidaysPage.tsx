@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useGetHolidaysQuery, type Holiday } from '@/features/hrms/hrmsApi';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 const TYPE_CFG: Record<string, { label: string; bg: string; color: string; emoji: string }> = {
     holiday: { label: 'Holiday', bg: '#FEE2E2', color: '#991B1B', emoji: '🎉' },
@@ -201,7 +202,7 @@ export default function EmployeeHolidaysPage() {
 
             {/* Read-only preview modal */}
             {previewHoliday && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div className="w-full max-w-sm rounded-xl border p-5 shadow-xl"
                         style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
@@ -227,7 +228,7 @@ export default function EmployeeHolidaysPage() {
                             <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{previewHoliday.description}</p>
                         )}
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

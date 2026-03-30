@@ -16,6 +16,7 @@ import {
     useCloneAdminRoleMutation,
     useGetAdminPermissionsQuery,
 } from '@/features/overall-admin/api/adminApi';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 interface RoleFormData {
     name: string;
@@ -316,7 +317,7 @@ export default function AdminRolesPage() {
 
             {/* Clone Modal */}
             {cloningRoleId && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div
                         className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium"
@@ -361,12 +362,12 @@ export default function AdminRolesPage() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
             {/* Create/Edit Role Modal */}
             {showModal && (
-                <div className="modal-overlay">
+                <ModalPortal>
 
                     <div
                         className="w-full max-w-2xl rounded-[1rem] shadow-premium p-6 m-4 max-h-[85vh] overflow-y-auto"
@@ -504,7 +505,7 @@ export default function AdminRolesPage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );
