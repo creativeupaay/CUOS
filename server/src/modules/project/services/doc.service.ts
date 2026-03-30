@@ -105,8 +105,12 @@ export const getFolders = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocFolder[]> => {
+    console.log('[getFolders] Starting with params:', { projectId, parentId, userId, userRole, isPartnerRequest });
+
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
+
+    console.log('[getFolders] Admin check result:', admin);
 
     // Normalize legacy data so only one shared folder exists across CUOS/partner/client.
     if (!parentId) {
@@ -117,6 +121,8 @@ export const getFolders = async (
         projectId: new Types.ObjectId(projectId),
         parentId: parentId ? new Types.ObjectId(parentId) : null,
     };
+
+    console.log('[getFolders] Base query:', query);
 
     if (!admin) {
         if (isPartnerRequest && !parentId) {
@@ -132,13 +138,21 @@ export const getFolders = async (
                 { createdBy: userObjectId },
             ];
         }
+        console.log('[getFolders] Non-admin query with filters:', query);
+    } else {
+        console.log('[getFolders] Admin query - NO FILTERS (should see all)');
     }
 
-    return DocFolder.find(query)
+    const results = await DocFolder.find(query)
         .populate('createdBy', 'name email')
         .populate('viewAccess', 'name email')
         .sort({ name: 1 })
         .lean();
+
+    console.log('[getFolders] Final results count:', results.length);
+    console.log('[getFolders] Folder names:', results.map(f => f.name));
+
+    return results;
 };
 
 /**
@@ -259,13 +273,19 @@ export const getDocItems = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocItem[]> => {
+    console.log('[getDocItems] Starting with params:', { projectId, folderId, userId, userRole, isPartnerRequest });
+
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
+
+    console.log('[getDocItems] Admin check result:', admin);
 
     const query: Record<string, unknown> = {
         projectId: new Types.ObjectId(projectId),
         folderId: folderId ? new Types.ObjectId(folderId) : null,
     };
+
+    console.log('[getDocItems] Base query:', query);
 
     if (!admin) {
         // Check if user has folder-level access
@@ -290,13 +310,21 @@ export const getDocItems = async (
                 { uploadedBy: userObjectId },      // Files they uploaded
             ];
         }
+        console.log('[getDocItems] Non-admin query with filters:', { hasFolderAccess, query });
+    } else {
+        console.log('[getDocItems] Admin query - NO FILTERS (should see all)');
     }
 
-    return DocItem.find(query)
+    const results = await DocItem.find(query)
         .populate('uploadedBy', 'name email')
         .populate('viewAccess', 'name email')
         .sort({ name: 1 })
         .lean();
+
+    console.log('[getDocItems] Final results count:', results.length);
+    console.log('[getDocItems] File names:', results.map(f => f.name));
+
+    return results;
 };
 
 /**
