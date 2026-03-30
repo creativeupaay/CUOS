@@ -1,7 +1,9 @@
 import { Holiday, IHoliday } from '../models/Holiday.model';
 import { Employee } from '../models/Employee.model';
 import { Attendance } from '../models/Attendance.model';
+import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
+import { notificationService } from '../../notification/services/notification.service';
 
 class HolidayService {
     /**
@@ -40,6 +42,28 @@ class HolidayService {
 
         // Auto-mark attendance for all active employees
         await this.applyHolidayAttendance(holiday);
+
+        // Notify all active users about the holiday
+        const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+        const userIds = activeUsers.map((u) => u._id as any);
+
+        if (userIds.length > 0) {
+            const dateStr = holiday.date.toISOString().split('T')[0];
+            const typeText = data.type === 'holiday' ? 'holiday' : data.type === 'wfh' ? 'WFH day' : 'half-day';
+
+            notificationService.createBulkNotifications(userIds, {
+                type: 'holiday_declared',
+                title: 'Holiday Declared',
+                message: `${holiday.name} on ${dateStr} has been declared as a ${typeText}.`,
+                link: '/hrms/holidays',
+                metadata: {
+                    holidayId: holiday._id.toString(),
+                    holidayName: holiday.name,
+                    date: dateStr,
+                    type: data.type,
+                },
+            });
+        }
 
         return holiday;
     }
