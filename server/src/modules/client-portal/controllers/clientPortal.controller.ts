@@ -16,7 +16,7 @@ export const exchangeToken = asyncHandler(async (req, res) => {
     res.cookie('portal_jwt', result.jwt_token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
@@ -27,7 +27,7 @@ export const logoutPortal = asyncHandler(async (_req, res) => {
     res.clearCookie('portal_jwt', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
     });
     res.status(200).json({ status: 'success', message: 'Logged out.' });
 });
