@@ -9,6 +9,7 @@ import {
 } from '../../../utils/cloudinary.util';
 import AppError from '../../../utils/appError';
 import { ensureUnifiedSharedFolder } from './sharedFolder.service';
+import { notificationService } from '../../notification/services/notification.service';
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export const isDocAdmin = async (
 
 /**
  * Get folders at a given level. Admins see all; viewers see folders where
- * they are in viewAccess OR where an ancestor grants them access.
+ * they are in viewAccess OR created OR where an ancestor grants them access.
  */
 export const getFolders = async (
     projectId: string,
@@ -40,6 +41,7 @@ export const getFolders = async (
     isPartnerRequest: boolean = false
 ): Promise<IDocFolder[]> => {
     const admin = await isDocAdmin(projectId, userId, userRole);
+    const userObjectId = new Types.ObjectId(userId);
 
     // Normalize legacy data so only one shared folder exists across CUOS/partner/client.
     if (!parentId) {
@@ -55,11 +57,15 @@ export const getFolders = async (
         if (isPartnerRequest && !parentId) {
             const sharedFolder = await ensureUnifiedSharedFolder(projectId);
             query.$or = [
-                { viewAccess: new Types.ObjectId(userId) },
+                { viewAccess: userObjectId },
+                { createdBy: userObjectId },
                 { _id: sharedFolder._id },
             ];
         } else {
-            query.viewAccess = new Types.ObjectId(userId);
+            query.$or = [
+                { viewAccess: userObjectId },
+                { createdBy: userObjectId },
+            ];
         }
     }
 
@@ -175,7 +181,7 @@ export const updateFolderAccess = async (
 
 /**
  * Get files in a folder. Admins see all; others see files they have access to
- * either via folder.viewAccess or file.viewAccess.
+ * either via folder.viewAccess, file.viewAccess, or files they uploaded.
  */
 export const getDocItems = async (
     projectId: string,
@@ -185,6 +191,7 @@ export const getDocItems = async (
     isPartnerRequest: boolean = false
 ): Promise<IDocItem[]> => {
     const admin = await isDocAdmin(projectId, userId, userRole);
+    const userObjectId = new Types.ObjectId(userId);
 
     const query: Record<string, unknown> = {
         projectId: new Types.ObjectId(projectId),
@@ -208,8 +215,11 @@ export const getDocItems = async (
         }
 
         if (!hasFolderAccess) {
-            // Only files where user has direct view access
-            query.viewAccess = new Types.ObjectId(userId);
+            // Only files where user has direct view access OR files they uploaded
+            query.$or = [
+                { viewAccess: userObjectId },      // Files shared with them
+                { uploadedBy: userObjectId },      // Files they uploaded
+            ];
         }
     }
 
@@ -305,6 +315,13 @@ export const updateDocItemAccess = async (
     itemId: string,
     viewAccess: string[]
 ): Promise<IDocItem> => {
+    // Get the current item to compare access changes
+    const currentItem = await DocItem.findById(itemId).populate('projectId', 'name').lean();
+    if (!currentItem) throw new AppError('File not found', 404);
+
+    const previousAccess = currentItem.viewAccess.map((id) => id.toString());
+    const newUserIds = viewAccess.filter((id) => !previousAccess.includes(id));
+
     const item = await DocItem.findByIdAndUpdate(
         itemId,
         { viewAccess: viewAccess.map((id) => new Types.ObjectId(id)) },
@@ -315,6 +332,27 @@ export const updateDocItemAccess = async (
     ]);
 
     if (!item) throw new AppError('File not found', 404);
+
+    // Notify new users about document access
+    if (newUserIds.length > 0) {
+        const projectName = (currentItem.projectId as any)?.name || 'a project';
+
+        for (const userId of newUserIds) {
+            notificationService.createNotification({
+                userId,
+                type: 'document_access_granted',
+                title: 'Document Access Granted',
+                message: `You have been granted access to "${item.name}" in ${projectName}.`,
+                link: `/projects/${currentItem.projectId}?tab=documents`,
+                metadata: {
+                    projectId: currentItem.projectId.toString(),
+                    documentId: item._id.toString(),
+                    documentName: item.name,
+                },
+            });
+        }
+    }
+
     return item;
 };
 

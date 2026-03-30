@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Credential, ICredential } from '../models/Credential.model';
 import { Project } from '../models/Project.model';
 import AppError from '../../../utils/appError';
+import { notificationService } from '../../notification/services/notification.service';
 
 export interface CreateCredentialData {
     name: string;
@@ -56,9 +57,13 @@ export const getCredentials = async (
     const query: any = { projectId };
     if (filters?.type) query.type = filters.type;
 
-    // For non-admins, restrict at DB query level (much more efficient than JS filtering)
+    // For non-admins, show credentials they created OR have been granted access to
     if (!isAdmin) {
-        query.viewAccess = new Types.ObjectId(userId);
+        const userObjectId = new Types.ObjectId(userId);
+        query.$or = [
+            { createdBy: userObjectId },           // Credentials they created
+            { viewAccess: userObjectId },          // Credentials shared with them
+        ];
     }
 
     const credentials = await Credential.find(query)
@@ -138,6 +143,24 @@ export const shareViewAccess = async (
             $addToSet: { viewAccess: { $each: userObjectIds } },
         }
     );
+
+    // Notify users about credential access
+    const project = await Project.findById(projectId).select('name').lean();
+    const projectName = project?.name || 'a project';
+
+    for (const userId of userIds) {
+        notificationService.createNotification({
+            userId,
+            type: 'credential_access_granted',
+            title: 'Credential Access Granted',
+            message: `You have been granted access to ${credentialIds.length} credential(s) in ${projectName}.`,
+            link: `/projects/${projectId}?tab=credentials`,
+            metadata: {
+                projectId,
+                credentialIds,
+            },
+        });
+    }
 };
 
 /**
