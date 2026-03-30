@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { Notification, INotification, NotificationType } from '../models/Notification.model';
 import { User } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
+import { Partner } from '../../partners/models/Partner.model';
+import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 
 // Global socket.io reference - set from socket.config.ts
 let io: Server | null = null;
@@ -65,7 +67,7 @@ class NotificationService {
     }
 
     /**
-     * Send notification to all superadmins
+     * Send notification to all superadmins (excluding partners and partner employees)
      */
     async notifySuperadmins(data: Omit<CreateNotificationInput, 'userId'>): Promise<void> {
         // Find superadmin role(s)
@@ -86,10 +88,43 @@ class NotificationService {
             isActive: true,
         }).select('_id');
 
-        const superadminIds = superadmins.map((u) => u._id as any);
+        if (superadmins.length === 0) {
+            return;
+        }
 
-        if (superadminIds.length > 0) {
-            await this.createBulkNotifications(superadminIds, data);
+        const superadminIds = superadmins.map((u) => u._id as Types.ObjectId);
+
+        // Exclude partners and partner employees from onboarding notifications
+        const onboardingTypes = ['partner_onboarding', 'client_onboarding', 'employee_onboarding'];
+        if (onboardingTypes.includes(data.type)) {
+            // Get all partner user IDs (partners who have completed onboarding)
+            const partners = await Partner.find({
+                userId: { $exists: true, $ne: null },
+                isActive: true,
+            }).select('userId').lean();
+
+            const partnerUserIds = partners.map(p => p.userId!.toString());
+
+            // Get all partner employee IDs (partner employees are users themselves)
+            const partnerEmployees = await PartnerEmployee.find({
+                isActive: true,
+            }).select('_id').lean();
+
+            const partnerEmployeeIds = partnerEmployees.map(pe => pe._id.toString());
+
+            // Filter out partners and partner employees from superadmin list
+            const filteredSuperadminIds = superadminIds.filter(id => {
+                const idStr = id.toString();
+                return !partnerUserIds.includes(idStr) && !partnerEmployeeIds.includes(idStr);
+            });
+
+            if (filteredSuperadminIds.length > 0) {
+                await this.createBulkNotifications(filteredSuperadminIds as any, data);
+            }
+        } else {
+            // For non-onboarding notifications, send to all superadmins
+            const superadminIdsFixed = superadminIds.map((u) => u as any);
+            await this.createBulkNotifications(superadminIdsFixed, data);
         }
     }
 
