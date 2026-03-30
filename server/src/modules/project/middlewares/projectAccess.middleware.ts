@@ -401,6 +401,15 @@ export const checkDocAdmin = async (
             (id) => id.toString() === userId
         );
 
+        // Debug logging for admin check
+        console.log('[checkDocAdmin] Debug Info:', {
+            projectId,
+            userId,
+            userRole: req.user?.role,
+            docAdmins: project.docAdmins.map(id => id.toString()),
+            isDocAdmin,
+        });
+
         if (!isDocAdmin) {
             return next(
                 new AppError('Only document admins can perform this action', 403)

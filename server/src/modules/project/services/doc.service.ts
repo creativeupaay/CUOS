@@ -496,10 +496,16 @@ export const updateDocAdmins = async (
     projectId: string,
     userIds: string[]
 ): Promise<void> => {
+    console.log('[updateDocAdmins] Input:', { projectId, userIds });
+
     // Convert Employee IDs to User IDs if needed
     const actualUserIds = await convertToUserIds(userIds);
+
+    console.log('[updateDocAdmins] Converted User IDs:', actualUserIds);
 
     await Project.findByIdAndUpdate(projectId, {
         docAdmins: actualUserIds.map((id) => new Types.ObjectId(id)),
     });
+
+    console.log('[updateDocAdmins] Successfully updated doc admins for project:', projectId);
 };
