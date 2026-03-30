@@ -404,12 +404,16 @@ export const getDocAdmins = async (projectId: string) => {
 
 /**
  * Set doc admins for a project.
+ * Accepts both Employee IDs and User IDs, converts to User IDs before storing.
  */
 export const updateDocAdmins = async (
     projectId: string,
     userIds: string[]
 ): Promise<void> => {
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(userIds);
+
     await Project.findByIdAndUpdate(projectId, {
-        docAdmins: userIds.map((id) => new Types.ObjectId(id)),
+        docAdmins: actualUserIds.map((id) => new Types.ObjectId(id)),
     });
 };

@@ -218,12 +218,16 @@ export const revokeViewAccess = async (
 /**
  * Set the credentialAdmins on a project.
  * This replaces the entire list — super-admin only.
+ * Accepts both Employee IDs and User IDs, converts to User IDs before storing.
  */
 export const updateCredentialAdmins = async (
     projectId: string,
     userIds: string[]
 ): Promise<void> => {
-    const userObjectIds = userIds.map((id) => new Types.ObjectId(id));
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(userIds);
+    const userObjectIds = actualUserIds.map((id) => new Types.ObjectId(id));
+
     await Project.findByIdAndUpdate(
         projectId,
         { $set: { credentialAdmins: userObjectIds } },
