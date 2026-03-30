@@ -186,7 +186,13 @@ export const updateCredentialAdmins = asyncHandler(
 export const getCredentialAdmins = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { projectId } = req.params;
+        const userId = req.user?.id!;
+
+        console.log('[getCredentialAdmins] Request from user:', userId, 'for project:', projectId);
+
         const admins = await credentialService.getCredentialAdmins(projectId);
+
+        console.log('[getCredentialAdmins] Returning credential admins:', admins);
 
         res.status(200).json({
             success: true,

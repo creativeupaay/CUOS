@@ -166,7 +166,15 @@ export const updateDocItemAccess = asyncHandler(
 
 export const getDocAdmins = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const docAdmins = await docService.getDocAdmins(req.params.id);
+        const projectId = req.params.id;
+        const userId = req.user?.id!;
+
+        console.log('[getDocAdmins] Request from user:', userId, 'for project:', projectId);
+
+        const docAdmins = await docService.getDocAdmins(projectId);
+
+        console.log('[getDocAdmins] Returning doc admins:', docAdmins);
+
         res.status(200).json({ success: true, data: docAdmins });
     }
 );

@@ -43,6 +43,8 @@ const convertToUserIds = async (ids: string[]): Promise<string[]> => {
 const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
     if (userIds.length === 0) return [];
 
+    console.log('[convertToEmployeeData] Input User IDs:', userIds.map(id => id.toString()));
+
     // Find employees whose userId matches the stored User IDs
     const employees = await Employee.find({
         userId: { $in: userIds }
@@ -51,12 +53,22 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
     .select('_id userId')
     .lean();
 
+    console.log('[convertToEmployeeData] Found employees:', employees.length);
+    console.log('[convertToEmployeeData] Employee details:', employees.map(e => ({
+        employeeId: e._id.toString(),
+        userId: e.userId.toString(),
+        userDetails: (e.userId as any)
+    })));
+
     // Return employee data with Employee ID and user details
-    return employees.map(employee => ({
+    const result = employees.map(employee => ({
         _id: employee._id, // Employee ID for frontend selection
         name: (employee.userId as any)?.name,
         email: (employee.userId as any)?.email,
     }));
+
+    console.log('[convertToEmployeeData] Final result:', result);
+    return result;
 };
 
 /**
