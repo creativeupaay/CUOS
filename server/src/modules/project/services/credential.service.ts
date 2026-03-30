@@ -236,13 +236,41 @@ export const updateCredentialAdmins = async (
 };
 
 /**
+ * Convert User IDs back to Employee information for frontend display.
+ * This allows the frontend to show correct selections in admin management UI.
+ */
+const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
+    if (userIds.length === 0) return [];
+
+    // Find employees whose userId matches the stored User IDs
+    const employees = await Employee.find({
+        userId: { $in: userIds }
+    })
+    .populate('userId', 'name email')
+    .select('_id userId')
+    .lean();
+
+    // Return employee data with Employee ID and user details
+    return employees.map(employee => ({
+        _id: employee._id, // Employee ID for frontend selection
+        name: (employee.userId as any)?.name,
+        email: (employee.userId as any)?.email,
+    }));
+};
+
+/**
  * Get the credential admins of a project.
+ * Returns Employee data (not User data) so frontend can show correct selections.
  */
 export const getCredentialAdmins = async (
     projectId: string
 ): Promise<any[]> => {
     const project = await Project.findById(projectId)
         .select('credentialAdmins')
-        .populate('credentialAdmins', 'name email');
-    return project?.credentialAdmins ?? [];
+        .lean();
+
+    if (!project?.credentialAdmins?.length) return [];
+
+    // Convert stored User IDs back to Employee data for frontend
+    return await convertToEmployeeData(project.credentialAdmins);
 };

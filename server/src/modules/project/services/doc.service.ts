@@ -37,6 +37,29 @@ const convertToUserIds = async (ids: string[]): Promise<string[]> => {
 };
 
 /**
+ * Convert User IDs back to Employee information for frontend display.
+ * This allows the frontend to show correct selections in admin management UI.
+ */
+const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
+    if (userIds.length === 0) return [];
+
+    // Find employees whose userId matches the stored User IDs
+    const employees = await Employee.find({
+        userId: { $in: userIds }
+    })
+    .populate('userId', 'name email')
+    .select('_id userId')
+    .lean();
+
+    // Return employee data with Employee ID and user details
+    return employees.map(employee => ({
+        _id: employee._id, // Employee ID for frontend selection
+        name: (employee.userId as any)?.name,
+        email: (employee.userId as any)?.email,
+    }));
+};
+
+/**
  * Check if userId is a doc admin on this project (or super-admin / admin via role).
  */
 export const isDocAdmin = async (
@@ -390,16 +413,19 @@ export const updateDocItemAccess = async (
 // ─── Doc Admin Operations ────────────────────────────────────────────────────
 
 /**
- * Get doc admins for a project (populated).
+ * Get doc admins for a project.
+ * Returns Employee data (not User data) so frontend can show correct selections.
  */
 export const getDocAdmins = async (projectId: string) => {
     const project = await Project.findById(projectId)
         .select('docAdmins')
-        .populate('docAdmins', 'name email')
         .lean();
 
     if (!project) throw new AppError('Project not found', 404);
-    return project.docAdmins;
+    if (!project.docAdmins?.length) return [];
+
+    // Convert stored User IDs back to Employee data for frontend
+    return await convertToEmployeeData(project.docAdmins);
 };
 
 /**
