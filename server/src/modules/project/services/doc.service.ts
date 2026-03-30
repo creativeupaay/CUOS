@@ -67,10 +67,29 @@ export const isDocAdmin = async (
     userId: string,
     userRole?: string
 ): Promise<boolean> => {
-    if (userRole === 'super-admin' || userRole === 'admin') return true;
+    // Role-based access (super-admin/admin always have access)
+    if (userRole === 'super-admin' || userRole === 'admin' || userRole === 'super_admin') {
+        return true;
+    }
+
     const project = await Project.findById(projectId).select('docAdmins').lean();
     if (!project) return false;
-    return (project.docAdmins ?? []).some((id) => id.toString() === userId);
+
+    const docAdmins = project.docAdmins ?? [];
+    const normalizedUserId = userId.toString().trim();
+
+    const isAdmin = docAdmins.some((id) => id.toString().trim() === normalizedUserId);
+
+    // Debug logging (remove in production if needed)
+    console.log('[isDocAdmin] Debug Info:', {
+        projectId,
+        userId: normalizedUserId,
+        userRole,
+        docAdmins: docAdmins.map(id => id.toString()),
+        isAdmin,
+    });
+
+    return isAdmin;
 };
 
 // ─── Folder Operations ───────────────────────────────────────────────────────

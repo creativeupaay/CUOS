@@ -29,12 +29,29 @@ export const isCredentialAdmin = async (
     userId: string,
     userRole: string
 ): Promise<boolean> => {
+    // Role-based access (super-admin/admin always have access)
     if (userRole === 'admin' || userRole === 'super-admin' || userRole === 'super_admin') {
         return true;
     }
+
     const project = await Project.findById(projectId).select('credentialAdmins');
     if (!project) return false;
-    return project.credentialAdmins.some((id) => id.toString() === userId);
+
+    const credentialAdmins = project.credentialAdmins ?? [];
+    const normalizedUserId = userId.toString().trim();
+
+    const isAdmin = credentialAdmins.some((id) => id.toString().trim() === normalizedUserId);
+
+    // Debug logging (remove in production if needed)
+    console.log('[isCredentialAdmin] Debug Info:', {
+        projectId,
+        userId: normalizedUserId,
+        userRole,
+        credentialAdmins: credentialAdmins.map(id => id.toString()),
+        isAdmin,
+    });
+
+    return isAdmin;
 };
 
 /**
