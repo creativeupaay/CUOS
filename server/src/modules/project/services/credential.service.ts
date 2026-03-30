@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { Credential, ICredential } from '../models/Credential.model';
 import { Project } from '../models/Project.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
 
@@ -34,6 +35,28 @@ export const isCredentialAdmin = async (
     const project = await Project.findById(projectId).select('credentialAdmins');
     if (!project) return false;
     return project.credentialAdmins.some((id) => id.toString() === userId);
+};
+
+/**
+ * Convert a mix of Employee IDs and User IDs to User IDs only.
+ * This handles cases where the frontend might send either type.
+ */
+const convertToUserIds = async (ids: string[]): Promise<string[]> => {
+    if (ids.length === 0) return [];
+
+    // Try to find employees with these IDs
+    const employees = await Employee.find({
+        _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).select('userId').lean();
+
+    const foundEmployeeIds = employees.map(e => e._id.toString());
+    const userIdsFromEmployees = employees.map(e => e.userId.toString());
+
+    // IDs that weren't found as employees are assumed to be User IDs already
+    const directUserIds = ids.filter(id => !foundEmployeeIds.includes(id));
+
+    // Combine both sets
+    return [...userIdsFromEmployees, ...directUserIds];
 };
 
 export const createCredential = async (
@@ -124,6 +147,7 @@ export const logCredentialAccess = async (
 /**
  * Share specific credentials with specific users (view access).
  * Adds userIds to viewAccess of each credential (idempotent — uses $addToSet).
+ * Accepts both Employee IDs and User IDs, converts to User IDs before storing.
  */
 export const shareViewAccess = async (
     projectId: string,
@@ -132,7 +156,9 @@ export const shareViewAccess = async (
 ): Promise<void> => {
     if (!credentialIds.length || !userIds.length) return;
 
-    const userObjectIds = userIds.map((id) => new Types.ObjectId(id));
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(userIds);
+    const userObjectIds = actualUserIds.map((id) => new Types.ObjectId(id));
 
     await Credential.updateMany(
         {
@@ -148,7 +174,7 @@ export const shareViewAccess = async (
     const project = await Project.findById(projectId).select('name').lean();
     const projectName = project?.name || 'a project';
 
-    for (const userId of userIds) {
+    for (const userId of actualUserIds) {
         notificationService.createNotification({
             userId,
             type: 'credential_access_granted',
@@ -165,6 +191,7 @@ export const shareViewAccess = async (
 
 /**
  * Revoke view access for specific users from specific credentials.
+ * Accepts both Employee IDs and User IDs, converts to User IDs before revoking.
  */
 export const revokeViewAccess = async (
     projectId: string,
@@ -173,7 +200,9 @@ export const revokeViewAccess = async (
 ): Promise<void> => {
     if (!credentialIds.length || !userIds.length) return;
 
-    const userObjectIds = userIds.map((id) => new Types.ObjectId(id));
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(userIds);
+    const userObjectIds = actualUserIds.map((id) => new Types.ObjectId(id));
 
     await Credential.updateMany(
         {

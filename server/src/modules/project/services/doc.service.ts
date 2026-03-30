@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { DocFolder, IDocFolder } from '../models/DocFolder.model';
 import { DocItem, IDocItem } from '../models/DocItem.model';
 import { Project } from '../models/Project.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import {
     uploadDocument,
     deleteDocument,
@@ -12,6 +13,28 @@ import { ensureUnifiedSharedFolder } from './sharedFolder.service';
 import { notificationService } from '../../notification/services/notification.service';
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Convert a mix of Employee IDs and User IDs to User IDs only.
+ * This handles cases where the frontend might send either type.
+ */
+const convertToUserIds = async (ids: string[]): Promise<string[]> => {
+    if (ids.length === 0) return [];
+
+    // Try to find employees with these IDs
+    const employees = await Employee.find({
+        _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).select('userId').lean();
+
+    const foundEmployeeIds = employees.map(e => e._id.toString());
+    const userIdsFromEmployees = employees.map(e => e.userId.toString());
+
+    // IDs that weren't found as employees are assumed to be User IDs already
+    const directUserIds = ids.filter(id => !foundEmployeeIds.includes(id));
+
+    // Combine both sets
+    return [...userIdsFromEmployees, ...directUserIds];
+};
 
 /**
  * Check if userId is a doc admin on this project (or super-admin / admin via role).
@@ -159,14 +182,18 @@ const _deleteFolderRecursive = async (folderId: string): Promise<void> => {
 
 /**
  * Update view access on a folder.
+ * Accepts both Employee IDs and User IDs, converts to User IDs before storing.
  */
 export const updateFolderAccess = async (
     folderId: string,
     viewAccess: string[]
 ): Promise<IDocFolder> => {
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(viewAccess);
+
     const folder = await DocFolder.findByIdAndUpdate(
         folderId,
-        { viewAccess: viewAccess.map((id) => new Types.ObjectId(id)) },
+        { viewAccess: actualUserIds.map((id) => new Types.ObjectId(id)) },
         { new: true }
     ).populate([
         { path: 'createdBy', select: 'name email' },
@@ -310,21 +337,25 @@ export const renameDocItem = async (
 
 /**
  * Update view access on a file.
+ * Accepts both Employee IDs and User IDs, converts to User IDs before storing.
  */
 export const updateDocItemAccess = async (
     itemId: string,
     viewAccess: string[]
 ): Promise<IDocItem> => {
+    // Convert Employee IDs to User IDs if needed
+    const actualUserIds = await convertToUserIds(viewAccess);
+
     // Get the current item to compare access changes
     const currentItem = await DocItem.findById(itemId).populate('projectId', 'name').lean();
     if (!currentItem) throw new AppError('File not found', 404);
 
     const previousAccess = currentItem.viewAccess.map((id) => id.toString());
-    const newUserIds = viewAccess.filter((id) => !previousAccess.includes(id));
+    const newUserIds = actualUserIds.filter((id) => !previousAccess.includes(id));
 
     const item = await DocItem.findByIdAndUpdate(
         itemId,
-        { viewAccess: viewAccess.map((id) => new Types.ObjectId(id)) },
+        { viewAccess: actualUserIds.map((id) => new Types.ObjectId(id)) },
         { new: true }
     ).populate([
         { path: 'uploadedBy', select: 'name email' },
