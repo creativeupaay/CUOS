@@ -289,7 +289,7 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
 
 /**
  * Get the credential admins of a project.
- * Returns Employee data (not User data) so frontend can show correct selections.
+ * Returns User IDs for frontend admin access checks.
  */
 export const getCredentialAdmins = async (
     projectId: string
@@ -300,6 +300,7 @@ export const getCredentialAdmins = async (
 
     if (!project?.credentialAdmins?.length) return [];
 
-    // Convert stored User IDs back to Employee data for frontend
-    return await convertToEmployeeData(project.credentialAdmins);
+    // Return User IDs directly for frontend admin checks
+    // Frontend expects User IDs to match currentUser._id
+    return project.credentialAdmins.map(id => ({ _id: id.toString() }));
 };

@@ -473,7 +473,7 @@ export const updateDocItemAccess = async (
 
 /**
  * Get doc admins for a project.
- * Returns Employee data (not User data) so frontend can show correct selections.
+ * Returns User IDs for frontend admin access checks.
  */
 export const getDocAdmins = async (projectId: string) => {
     const project = await Project.findById(projectId)
@@ -483,8 +483,9 @@ export const getDocAdmins = async (projectId: string) => {
     if (!project) throw new AppError('Project not found', 404);
     if (!project.docAdmins?.length) return [];
 
-    // Convert stored User IDs back to Employee data for frontend
-    return await convertToEmployeeData(project.docAdmins);
+    // Return User IDs directly for frontend admin checks
+    // Frontend expects User IDs to match currentUser._id
+    return project.docAdmins.map(id => ({ _id: id.toString() }));
 };
 
 /**
