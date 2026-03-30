@@ -14,6 +14,7 @@ import {
     checkTaskAccess,
     checkCredentialAccess,
     checkCredentialAdmin,
+    checkDocAdmin,
     checkMeetingAccess,
     checkAdmin,
 } from '../middlewares/projectAccess.middleware';
@@ -164,10 +165,10 @@ router.delete(
 // ============================================
 
 router.get('/:id/doc-folders', checkProjectAccess, docController.getFolders);
-router.post('/:id/doc-folders', checkProjectAccess, docController.createFolder);
-router.patch('/:id/doc-folders/:folderId', checkProjectAccess, docController.renameFolder);
-router.delete('/:id/doc-folders/:folderId', checkProjectAccess, docController.deleteFolder);
-router.patch('/:id/doc-folders/:folderId/access', checkProjectAccess, docController.updateFolderAccess);
+router.post('/:id/doc-folders', checkDocAdmin, docController.createFolder);
+router.patch('/:id/doc-folders/:folderId', checkDocAdmin, docController.renameFolder);
+router.delete('/:id/doc-folders/:folderId', checkDocAdmin, docController.deleteFolder);
+router.patch('/:id/doc-folders/:folderId/access', checkDocAdmin, docController.updateFolderAccess);
 
 // ============================================
 // DOC ITEMS ROUTES
@@ -176,9 +177,9 @@ router.patch('/:id/doc-folders/:folderId/access', checkProjectAccess, docControl
 router.get('/:id/doc-items', checkProjectAccess, docController.getDocItems);
 router.post('/:id/doc-items/upload', checkProjectAccess, upload.single('file'), docController.uploadDocItem);
 router.get('/:id/doc-items/:itemId/url', checkProjectAccess, docController.getDocItemUrl);
-router.patch('/:id/doc-items/:itemId', checkProjectAccess, docController.renameDocItem);
-router.delete('/:id/doc-items/:itemId', checkProjectAccess, docController.deleteDocItem);
-router.patch('/:id/doc-items/:itemId/access', checkProjectAccess, docController.updateDocItemAccess);
+router.patch('/:id/doc-items/:itemId', checkDocAdmin, docController.renameDocItem);
+router.delete('/:id/doc-items/:itemId', checkDocAdmin, docController.deleteDocItem);
+router.patch('/:id/doc-items/:itemId/access', checkDocAdmin, docController.updateDocItemAccess);
 
 // ============================================
 // DOC ADMINS ROUTES

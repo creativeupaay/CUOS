@@ -24,11 +24,7 @@ export const createFolder = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const projectId = req.params.id;
         const userId = req.user?.id!;
-        const userRole = req.user?.role;
         const { name, parentId } = req.body;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to create folders', 403));
 
         const folder = await docService.createFolder(projectId, name, parentId || null, userId);
 
@@ -38,14 +34,8 @@ export const createFolder = asyncHandler(
 
 export const renameFolder = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { folderId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
         const { name } = req.body;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to rename folders', 403));
 
         const folder = await docService.renameFolder(folderId, name);
 
@@ -55,13 +45,7 @@ export const renameFolder = asyncHandler(
 
 export const deleteFolder = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { folderId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to delete folders', 403));
 
         await docService.deleteFolder(folderId);
 
@@ -71,14 +55,8 @@ export const deleteFolder = asyncHandler(
 
 export const updateFolderAccess = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { folderId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
         const { viewAccess } = req.body;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to manage folder access', 403));
 
         const folder = await docService.updateFolderAccess(folderId, viewAccess || []);
 
@@ -110,10 +88,11 @@ export const uploadDocItem = asyncHandler(
         const folderId = (req.body.folderId as string) || null;
         const isPartnerRequest = !!req.partnerId;
 
+        // Check if user is document admin
         const admin = await docService.isDocAdmin(projectId, userId, userRole);
         let allowUpload = admin;
 
-        // Partner-side project tab can upload only inside unified shared folder.
+        // Special case: Partners can upload to unified shared folder only
         if (!allowUpload && isPartnerRequest && folderId) {
             const folder = await DocFolder.findOne({ _id: folderId, projectId }).lean();
             if (folder && folder.isSystem && folder.isClientShared && folder.isPartnerShared) {
@@ -121,7 +100,9 @@ export const uploadDocItem = asyncHandler(
             }
         }
 
-        if (!allowUpload) return next(new AppError('You do not have permission to upload files', 403));
+        if (!allowUpload) {
+            return next(new AppError('You do not have permission to upload files', 403));
+        }
 
         if (!req.file) return next(new AppError('No file uploaded', 400));
 
@@ -151,14 +132,8 @@ export const getDocItemUrl = asyncHandler(
 
 export const renameDocItem = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { itemId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
         const { name } = req.body;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to rename files', 403));
 
         const item = await docService.renameDocItem(itemId, name);
 
@@ -168,13 +143,7 @@ export const renameDocItem = asyncHandler(
 
 export const deleteDocItem = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { itemId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to delete files', 403));
 
         await docService.deleteDocItem(itemId);
 
@@ -184,14 +153,8 @@ export const deleteDocItem = asyncHandler(
 
 export const updateDocItemAccess = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const projectId = req.params.id;
         const { itemId } = req.params;
-        const userId = req.user?.id!;
-        const userRole = req.user?.role;
         const { viewAccess } = req.body;
-
-        const admin = await docService.isDocAdmin(projectId, userId, userRole);
-        if (!admin) return next(new AppError('You do not have permission to manage file access', 403));
 
         const item = await docService.updateDocItemAccess(itemId, viewAccess || []);
 

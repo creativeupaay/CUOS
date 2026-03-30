@@ -363,6 +363,57 @@ export const checkCredentialAdmin = async (
 };
 
 /**
+ * Check if user is a document admin on the project or super-admin.
+ * Used for document access management routes.
+ */
+export const checkDocAdmin = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const projectId = req.params.id || req.params.projectId;
+        const userId = req.user?.id;
+
+        if (!userId) {
+            return next(new AppError('Authentication required', 401));
+        }
+
+        // super-admins and admins bypass
+        if (
+            req.user?.role === 'super-admin' ||
+            req.user?.role === 'super_admin' ||
+            req.user?.role === 'admin'
+        ) {
+            return next();
+        }
+
+        if (!projectId) {
+            return next(new AppError('Project ID is required', 400));
+        }
+
+        const project = await Project.findById(projectId).select('docAdmins');
+        if (!project) {
+            return next(new AppError('Project not found', 404));
+        }
+
+        const isDocAdmin = project.docAdmins.some(
+            (id) => id.toString() === userId
+        );
+
+        if (!isDocAdmin) {
+            return next(
+                new AppError('Only document admins can perform this action', 403)
+            );
+        }
+
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Check if user has access to a meeting
  * Based on meeting.accessLevel
  */
