@@ -4,6 +4,7 @@ import { CreateLeaveInput, UpdateLeaveStatusInput } from '../validators/leave.va
 import { Employee } from '../models/Employee.model';
 import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
+import { notificationService } from '../../notification/services/notification.service';
 
 class LeaveService {
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
@@ -44,6 +45,25 @@ class LeaveService {
             startDate: startDateUtc,
             endDate: endDateUtc,
             days,
+        });
+
+        // Notify superadmins about new leave request
+        const populatedEmployee = await Employee.findById(employee._id)
+            .populate('userId', 'name')
+            .lean();
+        const employeeName = (populatedEmployee?.userId as any)?.name || 'An employee';
+
+        notificationService.notifySuperadmins({
+            type: 'leave_submitted',
+            title: 'New Leave Application',
+            message: `${employeeName} has applied for ${days} day(s) of ${data.type} leave.`,
+            link: '/hrms/leaves?status=pending',
+            metadata: {
+                leaveId: leave._id.toString(),
+                employeeId: employee._id.toString(),
+                leaveType: data.type,
+                days,
+            },
         });
 
         return leave;
@@ -143,6 +163,29 @@ class LeaveService {
 
         if (data.status === 'approved') {
             await this.applyApprovedLeaveAttendance(leave);
+        }
+
+        // Notify the employee about the status update
+        const employee = await Employee.findById(leave.employeeId).select('userId').lean();
+        if (employee?.userId) {
+            const statusText = data.status === 'approved' ? 'approved' : 'rejected';
+            const statusCapitalized = statusText.charAt(0).toUpperCase() + statusText.slice(1);
+
+            notificationService.createNotification({
+                userId: employee.userId.toString(),
+                type: 'leave_status_updated',
+                title: `Leave ${statusCapitalized}`,
+                message:
+                    data.status === 'approved'
+                        ? `Your ${leave.type} leave request for ${leave.days} day(s) has been approved.`
+                        : `Your ${leave.type} leave request has been rejected.${data.rejectionReason ? ' Reason: ' + data.rejectionReason : ''}`,
+                link: '/my-hrms/leaves',
+                metadata: {
+                    leaveId: leave._id.toString(),
+                    status: data.status,
+                    rejectionReason: data.rejectionReason,
+                },
+            });
         }
 
         return leave;

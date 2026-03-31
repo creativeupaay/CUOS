@@ -4,6 +4,7 @@ import authReducer from '@/features/auth/slices/authSlice';
 import { clientPortalApi } from '@/features/client-portal/clientPortalApi';
 import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
 import collaborationReducer from '@/features/collaboration/collaborationSlice';
+import notificationReducer from '@/features/notification/slices/notificationSlice';
 
 /**
  * Redux store configuration
@@ -23,6 +24,7 @@ export const store = configureStore({
     [clientPortalApi.reducerPath]: clientPortalApi.reducer,
     clientPortal: clientPortalReducer,
     collaboration: collaborationReducer,
+    notification: notificationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

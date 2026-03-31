@@ -2,6 +2,7 @@ import { Partner, IPartner } from '../models/Partner.model';
 import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
+import { notificationService } from '../../notification/services/notification.service';
 
 export interface PartnerOnboardingInput {
     name: string;
@@ -176,6 +177,20 @@ export class PartnerAuthService {
         if (!updatedPartner) {
             throw new AppError('Partner not found', 404);
         }
+
+        // Notify superadmins about partner onboarding completion
+        notificationService.notifySuperadmins({
+            type: 'partner_onboarding',
+            title: 'Partner Onboarding Completed',
+            message: `${formData.companyName} has completed their partner onboarding form.`,
+            link: '/admin/partners/manage',
+            metadata: {
+                partnerId: updatedPartner._id.toString(),
+                companyName: formData.companyName,
+                contactPerson: formData.contactPersonName,
+                submittedAt: updatedPartner.registrationSubmittedAt?.toISOString(),
+            },
+        });
 
         const { env } = await import('../../../config/env.config');
         const loginUrl = `${env.FRONTEND_URL}/partner/${updatedPartner.slug}/login`;

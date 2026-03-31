@@ -13,6 +13,7 @@ import notFoundMiddleware from "./middlewares/notFound";
 import cookieParser from "cookie-parser";
 import { initializeSocket } from "./config/socket.config";
 import otService from "./modules/collaboration/services/otService";
+import { initAttendanceReminderJob } from "./modules/notification/jobs/attendanceReminder.job";
 
 // Register models
 import "./modules/auth/models/Permission.model";
@@ -116,6 +117,9 @@ const httpServer = http.createServer(app);
 
 // Initialize Socket.io
 const io = initializeSocket(httpServer);
+
+// Initialize scheduled jobs
+initAttendanceReminderJob();
 
 // Start server
 httpServer.listen(PORT, () => {

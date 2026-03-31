@@ -4,6 +4,9 @@ import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { Settings, Menu, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import NotificationBell from '@/features/notification/components/NotificationBell';
+import NotificationPanel from '@/features/notification/components/NotificationPanel';
+import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
 
 /**
  * DashboardLayout
@@ -112,6 +115,9 @@ export default function DashboardLayout() {
     const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
+    // Initialize notification socket listeners
+    useNotificationSocket();
+
     useEffect(() => {
         setMobileSidebarOpen(false);
     }, [location.pathname]);
@@ -190,8 +196,11 @@ export default function DashboardLayout() {
                         </h1>
                     </div>
 
-                    {/* Right: name + avatar + settings */}
+                    {/* Right: notifications + name + avatar + settings */}
                     <div className="flex items-center gap-2.5">
+                        {/* Notification Bell */}
+                        <NotificationBell />
+
                         <div className="text-right hidden sm:block">
                             <div className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
                                 {user?.name || 'User'}
@@ -247,6 +256,9 @@ export default function DashboardLayout() {
                     </div>
                 </main>
             </div>
+
+            {/* Notification Panel */}
+            <NotificationPanel />
         </div>
     );
 }

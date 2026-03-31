@@ -45,6 +45,18 @@ const LeaveBalanceSchema = new Schema<ILeaveBalance>(
     }
 );
 
+// Pre-validate hook to sanitize negative balances before Mongoose validation
+LeaveBalanceSchema.pre('validate', function (next) {
+    if (this.balances && Array.isArray(this.balances)) {
+        this.balances.forEach((b) => {
+            if (b.pending < 0) b.pending = 0;
+            if (b.used < 0) b.used = 0;
+            if (b.quota < 0) b.quota = 0;
+        });
+    }
+    next();
+});
+
 // Indexes
 LeaveBalanceSchema.index({ employeeId: 1, year: 1 }, { unique: true });
 

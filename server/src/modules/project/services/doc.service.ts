@@ -104,11 +104,24 @@ export const isDocAdmin = async (
     return isAdmin;
 };
 
+// ─── Folder Access Count ──────────────────────────────────────────────────────
+
+/**
+ * Calculate total unique users who have access to this folder.
+ * This includes users in folder.viewAccess only (direct folder access).
+ * Files in the folder inherit from folder access, not counted separately.
+ */
+export const getFolderAccessCount = async (folderId: string): Promise<number> => {
+    const folder = await DocFolder.findById(folderId).select('viewAccess').lean();
+    if (!folder) return 0;
+    return folder.viewAccess?.length ?? 0;
+};
+
 // ─── Folder Operations ───────────────────────────────────────────────────────
 
 /**
  * Get folders at a given level. Admins see all; viewers see folders where
- * they are in viewAccess OR created OR where an ancestor grants them access.
+ * they are in viewAccess OR created OR where they have access to files inside.
  */
 export const getFolders = async (
     projectId: string,
@@ -155,16 +168,68 @@ export const getFolders = async (
         console.log('[getFolders] Admin query - NO FILTERS (should see all)');
     }
 
-    const results = await DocFolder.find(query)
+    let results = await DocFolder.find(query)
         .populate('createdBy', 'name email')
         .populate('viewAccess', 'name email')
         .sort({ name: 1 })
         .lean();
 
+    // For non-admins, also include folders that contain files they have access to
+    if (!admin) {
+        // Get all folders at this level
+        const allFoldersAtLevel = await DocFolder.find({
+            projectId: new Types.ObjectId(projectId),
+            parentId: parentId ? new Types.ObjectId(parentId) : null,
+        }).select('_id').lean();
+
+        const allFolderIds = allFoldersAtLevel.map(f => f._id);
+        const resultFolderIds = results.map(f => (f as any)._id.toString());
+
+        // Find folders not yet in results
+        const missingFolderIds = allFolderIds.filter(id => !resultFolderIds.includes(id.toString()));
+
+        if (missingFolderIds.length > 0) {
+            // Check if user has access to any files in these folders
+            const filesInMissingFolders = await DocItem.find({
+                folderId: { $in: missingFolderIds },
+                $or: [
+                    { viewAccess: userObjectId },
+                    { uploadedBy: userObjectId },
+                ],
+            }).select('folderId').lean();
+
+            const foldersWithAccessibleFiles = [...new Set(
+                filesInMissingFolders.filter(f => f.folderId).map(f => f.folderId!.toString())
+            )];
+
+            if (foldersWithAccessibleFiles.length > 0) {
+                const additionalFolders = await DocFolder.find({
+                    _id: { $in: foldersWithAccessibleFiles.map(id => new Types.ObjectId(id)) }
+                })
+                .populate('createdBy', 'name email')
+                .populate('viewAccess', 'name email')
+                .lean();
+
+                results = [...results, ...additionalFolders].sort((a, b) => a.name.localeCompare(b.name));
+            }
+        }
+    }
+
     console.log('[getFolders] Final results count:', results.length);
     console.log('[getFolders] Folder names:', results.map(f => f.name));
 
-    return results;
+    // Add access count to each folder
+    const resultsWithCount = await Promise.all(
+        results.map(async (folder) => {
+            const accessCount = await getFolderAccessCount(folder._id.toString());
+            return {
+                ...folder,
+                accessCount,
+            };
+        })
+    );
+
+    return resultsWithCount as any;
 };
 
 /**

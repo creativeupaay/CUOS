@@ -1,8 +1,10 @@
 import { Task, ITask } from '../models/Task.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { Project } from '../models/Project.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import * as timeLogService from './timeLog.service';
+import { notificationService } from '../../notification/services/notification.service';
 
 /**
  * Attaches profilePhoto (url) from the Employee collection to the assignee
@@ -94,6 +96,30 @@ export const createTask = async (data: CreateTaskData): Promise<ITask> => {
         const userIdObj = new Types.ObjectId(data.createdBy);
         task.activeTimers = [{ userId: userIdObj, startedAt: new Date() }];
         await task.save();
+    }
+
+    // ── Notify assignees about new task ──────────────────────────────────────
+    if (data.assignees && data.assignees.length > 0) {
+        const project = await Project.findById(data.projectId).select('name').lean();
+        const projectName = project?.name || 'a project';
+
+        for (const userId of data.assignees) {
+            // Don't notify the task creator
+            if (userId === data.createdBy) continue;
+
+            notificationService.createNotification({
+                userId,
+                type: 'task_assigned',
+                title: 'New Task Assigned',
+                message: `You have been assigned to "${task.title}" in ${projectName}.`,
+                link: `/projects/${data.projectId}?tab=tasks&task=${task._id}`,
+                metadata: {
+                    taskId: task._id.toString(),
+                    projectId: data.projectId,
+                    taskTitle: task.title,
+                },
+            });
+        }
     }
 
     return task;
@@ -249,8 +275,34 @@ export const updateTask = async (
     if (data.endDate !== undefined) task.endDate = data.endDate;
     if (data.deadline !== undefined) task.deadline = data.deadline;
     if (data.estimatedHours !== undefined) task.estimatedHours = data.estimatedHours;
-    if (data.assignees !== undefined)
+
+    // ── Notify new assignees when assignees are updated ──────────────────────
+    if (data.assignees !== undefined) {
+        const previousAssignees = task.assignees.map((a) => a.toString());
+        const newAssignees = data.assignees.filter((id) => !previousAssignees.includes(id));
+
+        if (newAssignees.length > 0) {
+            const project = await Project.findById(task.projectId).select('name').lean();
+            const projectName = project?.name || 'a project';
+
+            for (const userId of newAssignees) {
+                notificationService.createNotification({
+                    userId,
+                    type: 'task_assigned',
+                    title: 'New Task Assigned',
+                    message: `You have been assigned to "${task.title}" in ${projectName}.`,
+                    link: `/projects/${task.projectId}?tab=tasks&task=${task._id}`,
+                    metadata: {
+                        taskId: task._id.toString(),
+                        projectId: task.projectId.toString(),
+                        taskTitle: task.title,
+                    },
+                });
+            }
+        }
+
         task.assignees = data.assignees.map((id: string) => new Types.ObjectId(id));
+    }
 
     await task.save();
 

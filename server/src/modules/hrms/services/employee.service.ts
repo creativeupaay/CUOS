@@ -7,6 +7,7 @@ import { CreateEmployeeInput, UpdateEmployeeInput } from '../validators/employee
 import AppError from '../../../utils/appError';
 import { env } from '../../../config/env.config';
 import { sendEmployeeOnboardingEmail } from '../../../services/email.service';
+import { notificationService } from '../../notification/services/notification.service';
 
 class EmployeeService {
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
@@ -448,6 +449,20 @@ class EmployeeService {
 
         await employee.save();
         await employee.populate('userId', 'name email');
+
+        // Notify superadmins about employee onboarding form submission
+        const employeeName = (employee.userId as any)?.name || 'An employee';
+        notificationService.notifySuperadmins({
+            type: 'employee_onboarding',
+            title: 'Employee Onboarding Completed',
+            message: `${employeeName} has completed their employee onboarding form.`,
+            link: '/hrms/employees',
+            metadata: {
+                employeeId: employee._id.toString(),
+                employeeName,
+                submittedAt: employee.formSubmittedAt?.toISOString(),
+            },
+        });
 
         return employee;
     }

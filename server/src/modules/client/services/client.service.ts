@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import type { CreateClientInput, UpdateClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
 import { sendClientOnboardingEmail } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
+import { notificationService } from '../../notification/services/notification.service';
 
 export class ClientService {
     private isAdminRole(role?: string): boolean {
@@ -396,6 +397,19 @@ export class ClientService {
         if (!updated) {
             throw new AppError('Client not found', 404);
         }
+
+        // Notify superadmins about client onboarding form submission
+        notificationService.notifySuperadmins({
+            type: 'client_onboarding',
+            title: 'Client Onboarding Completed',
+            message: `${updated.name || updated.companyName || 'A client'} has completed their onboarding form.`,
+            link: '/crm/clients',
+            metadata: {
+                clientId: updated._id.toString(),
+                clientName: updated.name || updated.companyName,
+                submittedAt: updated.onboardingSubmittedAt?.toISOString(),
+            },
+        });
 
         // Notify all admins
         try {

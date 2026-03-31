@@ -14,6 +14,7 @@ import partnerRoutes from '../../modules/partners/routes/partner.routes';
 import partnerAuthRoutes from '../../modules/partners/routes/partnerAuth.routes';
 import partnerEmployeeRoutes from '../../modules/partners/routes/partnerEmployee.routes';
 import partnerPortalRoutes from '../../modules/partners/routes/partnerPortal.routes';
+import notificationRoutes from '../../modules/notification/routes/notification.routes';
 
 const router = Router();
 
@@ -48,5 +49,7 @@ router.use('/partner', partnerAuthRoutes);
 router.use('/partner-employees', partnerEmployeeRoutes);
 // Partner Portal (Partner's own portal - projects, documents, etc.)
 router.use('/partner-portal', partnerPortalRoutes);
+// Notifications
+router.use('/notifications', notificationRoutes);
 
 export default router;

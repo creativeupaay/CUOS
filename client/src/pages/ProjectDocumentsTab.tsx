@@ -61,18 +61,30 @@ function getProjectMembers(project: Project): { userId: string; name: string; em
     const seen = new Set<string>();
     const members: { userId: string; name: string; email: string }[] = [];
     project.assignees?.forEach((a: any) => {
-        const rawUser = typeof a.userId === 'object' ? a.userId : null;
-        const userId =
-            a.userId
-                ? (rawUser?._id ?? (typeof a.userId === 'string' ? a.userId : undefined))
-                : a.memberId;
-        const userData = rawUser;
+        // Extract User ID - try multiple sources in order of preference:
+        // 1. Direct userId field (if it's a string, it's the User/PartnerEmployee ID)
+        // 2. Populated userId object's _id
+        // 3. Populated employeeId.userId._id (for CU employees)
+        let userId: string | undefined;
+
+        if (typeof a.userId === 'string' && a.userId) {
+            userId = a.userId.trim();
+        } else if (a.userId && typeof a.userId === 'object' && a.userId._id) {
+            const id = typeof a.userId._id === 'string' ? a.userId._id : a.userId._id?.toString?.();
+            userId = id?.trim();
+        } else if (a.employeeId?.userId?._id) {
+            const id = typeof a.employeeId.userId._id === 'string'
+                ? a.employeeId.userId._id
+                : a.employeeId.userId._id?.toString?.();
+            userId = id?.trim();
+        }
+
         if (userId && !seen.has(userId)) {
             seen.add(userId);
             members.push({
                 userId,
-                name: a.displayName ?? userData?.name ?? 'Team Member',
-                email: a.displayEmail ?? userData?.email ?? '',
+                name: a.displayName ?? a.employeeId?.userId?.name ?? a.partnerEmployeeId?.name ?? 'Team Member',
+                email: a.displayEmail ?? a.employeeId?.userId?.email ?? a.partnerEmployeeId?.email ?? '',
             });
         }
     });
@@ -155,6 +167,7 @@ function FolderTreeNode({
     selectedItems,
     onAddItems,
     onRemoveItems,
+    parentFolderSelected = false,
 }: {
     projectId: string;
     folder: DocFolder;
@@ -162,6 +175,7 @@ function FolderTreeNode({
     selectedItems: Map<string, SelectedAccessItem>;
     onAddItems: (items: { id: string; type: 'folder' | 'file'; name: string; currentAccess: string[] }[]) => void;
     onRemoveItems: (ids: string[]) => void;
+    parentFolderSelected?: boolean;
 }) {
     const [expanded, setExpanded] = useState(false);
 
@@ -178,12 +192,33 @@ function FolderTreeNode({
     const isLoadingChildren = subFoldersLoading || subItemsLoading;
 
     const folderAccessIds = folder.viewAccess.map((u: any) => typeof u === 'string' ? u : u._id);
-    const isSelected = selectedItems.has(folder._id);
+    const isSelected = selectedItems.has(folder._id) || parentFolderSelected;
+    const isFolderDirectlySelected = selectedItems.has(folder._id);
+
+    // Calculate indeterminate state: some children selected individually (not via this folder)
+    const childFileIds = subItems.map(i => i._id);
+    const selectedChildFilesCount = useMemo(() => {
+        return childFileIds.filter(id => selectedItems.has(id)).length;
+    }, [childFileIds, selectedItems]);
+
+    const hasIndividualChildSelections = selectedChildFilesCount > 0 && !isFolderDirectlySelected && !parentFolderSelected;
+    const isIndeterminate = hasIndividualChildSelections && selectedChildFilesCount < childFileIds.length;
 
     const handleFolderToggle = () => {
-        if (isSelected) {
-            onRemoveItems([folder._id]);
+        if (isFolderDirectlySelected) {
+            // Deselect folder - also remove any individually selected children
+            const idsToRemove = [folder._id];
+            childFileIds.forEach(id => {
+                if (selectedItems.has(id)) idsToRemove.push(id);
+            });
+            onRemoveItems(idsToRemove);
         } else {
+            // Select folder (which grants access to ALL files in the folder via backend)
+            // Also remove any individually selected files since folder-level access covers them
+            const idsToRemove = childFileIds.filter(id => selectedItems.has(id));
+            if (idsToRemove.length > 0) {
+                onRemoveItems(idsToRemove);
+            }
             setExpanded(true);
             onAddItems([{ id: folder._id, type: 'folder', name: folder.name, currentAccess: folderAccessIds }]);
         }
@@ -210,12 +245,13 @@ function FolderTreeNode({
                 <div
                     className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer"
                     style={{
-                        borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border-default)',
-                        backgroundColor: isSelected ? 'var(--color-primary)' : 'transparent',
+                        borderColor: isSelected ? 'var(--color-primary)' : isIndeterminate ? 'var(--color-primary)' : 'var(--color-border-default)',
+                        backgroundColor: isSelected ? 'var(--color-primary)' : isIndeterminate ? 'var(--color-primary)' : 'transparent',
                     }}
                     onClick={handleFolderToggle}
                 >
                     {isSelected && <Check size={9} className="text-white" strokeWidth={3} />}
+                    {isIndeterminate && <div className="w-2 h-0.5 bg-white rounded-full" />}
                 </div>
                 <Folder size={15} className="text-[#fbbd23] flex-shrink-0" fill="currentColor" fillOpacity={0.2} />
                 <span
@@ -225,9 +261,9 @@ function FolderTreeNode({
                 >
                     {folder.name}
                 </span>
-                {folder.viewAccess.length > 0 && (
+                {(folder as any).accessCount > 0 && (
                     <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-                        {folder.viewAccess.length} member{folder.viewAccess.length !== 1 ? 's' : ''}
+                        {(folder as any).accessCount} member{(folder as any).accessCount !== 1 ? 's' : ''}
                     </span>
                 )}
             </div>
@@ -256,11 +292,14 @@ function FolderTreeNode({
                             selectedItems={selectedItems}
                             onAddItems={onAddItems}
                             onRemoveItems={onRemoveItems}
+                            parentFolderSelected={isSelected}
                         />
                     ))}
                     {subItems.map((item) => {
                         const itemAccessIds = item.viewAccess.map((u: any) => typeof u === 'string' ? u : u._id);
-                        const isItemSelected = selectedItems.has(item._id);
+                        // File is selected if directly selected OR parent folder is selected
+                        const isItemSelected = selectedItems.has(item._id) || isSelected;
+                        const isItemDirectlySelected = selectedItems.has(item._id);
                         return (
                             <div
                                 key={item._id}
@@ -272,7 +311,9 @@ function FolderTreeNode({
                                 onMouseEnter={(e) => { if (!isItemSelected) e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
                                 onMouseLeave={(e) => { if (!isItemSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                                 onClick={() => {
-                                    if (isItemSelected) onRemoveItems([item._id]);
+                                    // Don't allow individual file selection if parent folder is selected
+                                    if (isSelected) return;
+                                    if (isItemDirectlySelected) onRemoveItems([item._id]);
                                     else onAddItems([{ id: item._id, type: 'file', name: item.name, currentAccess: itemAccessIds }]);
                                 }}
                             >
@@ -325,10 +366,18 @@ function AccessControlPanel({
     const [tab, setTab] = useState<AcTab>('view');
 
     // ── Admins tab state ──
-    const [adminSel, setAdminSel] = useState<string[]>(() => (adminsData?.data ?? []).map((u: any) => u._id));
+    // Extract admin IDs from the backend response, ensuring they're trimmed strings
+    const extractAdminIds = (data: any[] | undefined): string[] => {
+        return (data ?? []).map((u: any) => {
+            const id = typeof u === 'string' ? u : u._id;
+            return typeof id === 'string' ? id.trim() : '';
+        }).filter(Boolean);
+    };
+
+    const [adminSel, setAdminSel] = useState<string[]>(() => extractAdminIds(adminsData?.data));
     const [adminSaving, setAdminSaving] = useState(false);
     const [adminSaved, setAdminSaved] = useState(false);
-    useEffect(() => { setAdminSel((adminsData?.data ?? []).map((u: any) => u._id)); }, [adminsData]);
+    useEffect(() => { setAdminSel(extractAdminIds(adminsData?.data)); }, [adminsData]);
 
     const saveAdmins = async () => {
         setAdminSaving(true);
@@ -468,7 +517,7 @@ function AccessControlPanel({
                             {step === 1 && (
                                 <div className="space-y-3">
                                     <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                        Select folders or files to share. Expand any folder to pick individual items inside it.
+                                        Select folders to share all files inside, or expand folders to pick specific files.
                                     </p>
                                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
                                         {rootLoading && (
@@ -874,8 +923,13 @@ const ProjectDocumentsTab: React.FC = () => {
     const getRoleName = (role: any): string => { if (!role) return ''; if (typeof role === 'string') return role; return role?.name ?? ''; };
     const isSuperAdmin = ['super-admin', 'admin'].includes(getRoleName(currentUser?.role));
     const isPartnerUser = getRoleName(currentUser?.role).toLowerCase() === 'partner';
-    const docAdminIds: string[] = (adminsData?.data ?? []).map((u: any) => u._id);
-    const isDocAdmin = isSuperAdmin || docAdminIds.includes(currentUser?._id ?? '');
+    // Extract doc admin IDs with proper trimming for consistent comparison
+    const docAdminIds: string[] = (adminsData?.data ?? []).map((u: any) => {
+        const id = typeof u === 'string' ? u : u._id;
+        return typeof id === 'string' ? id.trim() : '';
+    }).filter(Boolean);
+    const currentUserId = currentUser?._id?.trim?.() ?? currentUser?._id ?? '';
+    const isDocAdmin = isSuperAdmin || docAdminIds.includes(currentUserId);
     const rootFoldersForShared: DocFolder[] = rootFoldersForSharedData?.data ?? [];
     const sharedFolderId = useMemo(() => {
         const shared = rootFoldersForShared.find(
@@ -1034,7 +1088,7 @@ const ProjectDocumentsTab: React.FC = () => {
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#EFF6FF', color: '#3B82F6' }}>Shared</span>
                     )}
                     <div className="flex items-center gap-1">
-                        {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
+                        {isDocAdmin && <AccessBadge count={(folder as any).accessCount || 0} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
                         {isDocAdmin && (
                             <div className="relative">
                                 <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === folder._id ? null : folder._id); }}
@@ -1306,7 +1360,7 @@ const ProjectDocumentsTab: React.FC = () => {
                                     </div>
                                 )}
                                 <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Folder</span>
-                                {isDocAdmin && <AccessBadge count={folder.viewAccess.length} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
+                                {isDocAdmin && <AccessBadge count={(folder as any).accessCount || 0} onClick={() => setViewTarget({ id: folder._id, type: 'folder', name: folder.name, viewAccess: folder.viewAccess })} />}
                                 {isDocAdmin && (
                                     <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === folder._id ? null : folder._id); }}

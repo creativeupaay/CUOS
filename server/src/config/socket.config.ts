@@ -2,6 +2,8 @@ import { Server as HTTPServer } from 'http';
 import { Server, ServerOptions } from 'socket.io';
 import { socketAuthMiddleware } from '../modules/collaboration/middleware/socketAuth.middleware';
 import { setupNoteHandlers } from '../modules/collaboration/handlers/noteHandler';
+import { setupNotificationHandlers } from '../modules/notification/handlers/notificationHandler';
+import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
 
 /**
@@ -51,19 +53,35 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   // Create Socket.io server
   const io = new Server(httpServer, socketOptions);
 
+  // Set socket.io instance for notification service
+  setSocketIO(io);
+
   // Apply authentication middleware
   io.use(socketAuthMiddleware);
 
   // Handle connections
   io.on('connection', (socket: AuthenticatedSocket) => {
-    console.log(`[Socket.io] User ${socket.data.userId} connected (${socket.id})`);
+    const userId = socket.data.userId;
+    console.log(`[Socket.io] User ${userId} connected (${socket.id})`);
+
+    // Join user's personal room for notifications
+    socket.join(`user:${userId}`);
 
     // Setup note collaboration handlers
     setupNoteHandlers(socket, io);
 
+    // Setup notification handlers
+    setupNotificationHandlers(socket, io);
+
     // Handle connection errors
     socket.on('error', (error) => {
       console.error(`[Socket.io] Error for socket ${socket.id}:`, error);
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+      socket.leave(`user:${userId}`);
+      console.log(`[Socket.io] User ${userId} disconnected (${socket.id})`);
     });
   });
 

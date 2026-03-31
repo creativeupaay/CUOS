@@ -33,19 +33,32 @@ function getProjectMembers(project: Project): { userId: string; name: string; em
     const members: { userId: string; name: string; email: string }[] = [];
 
     project.assignees?.forEach((a: any) => {
-        const rawUser = typeof a.userId === 'object' ? a.userId : null;
-        const userId =
-            a.userId
-                ? (rawUser?._id ?? (typeof a.userId === 'string' ? a.userId : undefined))
-                : a.memberId;
-        const userData = rawUser;
+        // Extract User ID - try multiple sources in order of preference:
+        // 1. Direct userId field (if it's a string, it's the User ID)
+        // 2. Populated userId object's _id
+        // 3. Populated employeeId.userId._id (for CU employees)
+        // Note: Partner employees don't have User records, so we skip them for admin assignment
+        let userId: string | undefined;
 
+        if (typeof a.userId === 'string' && a.userId) {
+            userId = a.userId.trim();
+        } else if (a.userId && typeof a.userId === 'object' && a.userId._id) {
+            const id = typeof a.userId._id === 'string' ? a.userId._id : a.userId._id?.toString?.();
+            userId = id?.trim();
+        } else if (a.employeeId?.userId?._id) {
+            const id = typeof a.employeeId.userId._id === 'string'
+                ? a.employeeId.userId._id
+                : a.employeeId.userId._id?.toString?.();
+            userId = id?.trim();
+        }
+
+        // Only include members with valid User IDs (skip partner employees without User records)
         if (userId && !seen.has(userId)) {
             seen.add(userId);
             members.push({
                 userId,
-                name: a.displayName ?? userData?.name ?? 'Team Member',
-                email: a.displayEmail ?? userData?.email ?? '',
+                name: a.displayName ?? a.employeeId?.userId?.name ?? 'Team Member',
+                email: a.displayEmail ?? a.employeeId?.userId?.email ?? '',
             });
         }
     });
@@ -149,19 +162,25 @@ function EditAccessTab({ project, projectId }: { project: Project; projectId: st
     const [selectedAdminIds, setSelectedAdminIds] = useState<string[]>([]);
     const [saved, setSaved] = useState(false);
 
+    // Extract admin IDs from the backend response, ensuring they're trimmed strings
+    const extractAdminIds = (data: any[] | undefined): string[] => {
+        return (data ?? []).map((a: any) => {
+            const id = typeof a === 'string' ? a : a._id;
+            return typeof id === 'string' ? id.trim() : '';
+        }).filter(Boolean);
+    };
+
     // Sync selectedAdminIds once the admins data has loaded
     useEffect(() => {
         if (!adminsLoading && adminsData?.data) {
-            const ids = adminsData.data.map((a: any) =>
-                typeof a === 'string' ? a : a._id
-            );
-            setSelectedAdminIds(ids);
+            setSelectedAdminIds(extractAdminIds(adminsData.data));
         }
     }, [adminsLoading, adminsData]);
 
     const toggleAdmin = (uid: string) => {
+        const trimmedUid = uid.trim();
         setSelectedAdminIds((prev) =>
-            prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+            prev.includes(trimmedUid) ? prev.filter((id) => id !== trimmedUid) : [...prev, trimmedUid]
         );
         setSaved(false);
     };

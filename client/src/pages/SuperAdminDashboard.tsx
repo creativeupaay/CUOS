@@ -9,6 +9,10 @@ import {
     FolderKanban, DollarSign, Users, Building2, Shield,
     ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake
 } from 'lucide-react';
+import NotificationBell from '@/features/notification/components/NotificationBell';
+import NotificationPanel from '@/features/notification/components/NotificationPanel';
+import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
+
 
 /* ── Module definitions ──────────────────────────────────── */
 interface Department {
@@ -129,6 +133,9 @@ export default function SuperAdminDashboard() {
     const user = useAppSelector((state) => state.auth.user);
 
     const [logoutApi] = useLogoutMutation();
+
+    // Initialize notification socket listeners
+    useNotificationSocket();
 
     const handleLogout = async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
@@ -406,6 +413,12 @@ export default function SuperAdminDashboard() {
                                 <Settings size={15} />
                             </Link>
                         </div>
+
+                        {/* Notification Bell */}
+                        <div className="flex items-center pr-1">
+                            <NotificationBell />
+                        </div>
+
                         <button
                             onClick={handleLogout}
                             className="btn btn-ghost"
@@ -503,6 +516,9 @@ export default function SuperAdminDashboard() {
                     : `CUOS — Creative Upaay Operating System · © ${new Date().getFullYear()} Creative Upaay`
                 }
             </footer>
+
+            {/* Notification Panel */}
+            <NotificationPanel />
         </div>
     );
 }

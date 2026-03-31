@@ -159,13 +159,16 @@ export default function ProjectCredentialsTab() {
     };
 
     const { data: adminsData } = useGetCredentialAdminsQuery({ projectId: projectId! });
-    const credentialAdminIds: string[] = (adminsData?.data ?? []).map((a: any) =>
-        typeof a === 'string' ? a : a._id
-    );
+    // Extract credential admin IDs with proper trimming for consistent comparison
+    const credentialAdminIds: string[] = (adminsData?.data ?? []).map((a: any) => {
+        const id = typeof a === 'string' ? a : a._id;
+        return typeof id === 'string' ? id.trim() : '';
+    }).filter(Boolean);
     const userRoleName = getRoleName(currentUser?.role);
     const isSuperAdmin = userRoleName === 'super-admin' || userRoleName === 'super_admin' || userRoleName === 'admin';
+    const currentUserId = currentUser?._id?.trim?.() ?? currentUser?._id ?? '';
     // While adminsData is still loading, super-admins should still see full access
-    const isCredAdmin = isSuperAdmin || credentialAdminIds.includes(currentUser?._id ?? '');
+    const isCredAdmin = isSuperAdmin || credentialAdminIds.includes(currentUserId);
 
     const formRef = useRef<HTMLFormElement>(null);
 
