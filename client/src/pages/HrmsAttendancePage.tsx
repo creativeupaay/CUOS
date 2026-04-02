@@ -42,6 +42,11 @@ const STATUS_CFG: Record<string, {
         bg: '#FEE2E2', color: '#991B1B', border: '#FCA5A5',
         icon: XCircle,
     },
+    unmarked: {
+        label: 'Unmarked', short: '—',
+        bg: '#F8FAFC', color: '#64748B', border: '#CBD5E1',
+        icon: Clock3,
+    },
     'on-leave': {
         label: 'On Leave', short: 'L',
         bg: '#F3E8FF', color: '#6B21A8', border: '#C084FC',
@@ -253,6 +258,7 @@ export default function HrmsAttendancePage() {
     // ── Grid tab state ───────────────────────────────────────────────
     const [gridMonth, setGridMonth] = useState(today.getMonth() + 1);
     const [gridYear, setGridYear] = useState(today.getFullYear());
+    const todayIST = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
     // localEdits: employeeId → dayIndex → status
     const [localEdits, setLocalEdits] = useState<Record<string, Record<number, AttendanceStatus>>>({});
@@ -266,9 +272,8 @@ export default function HrmsAttendancePage() {
     // Use IST date string for the default so users in India see today's
     // date correctly even in the early-morning window where UTC is still
     // on the previous day.
-    const todayIST = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const [overviewDate, setOverviewDate] = useState(todayIST);
-    const { data: overviewData, isLoading: overviewLoading } =
+    const { data: overviewData, isLoading: overviewLoading, refetch: refetchOverview } =
         useGetDailyOverviewQuery({ date: overviewDate });
 
     // ── Grid helpers ─────────────────────────────────────────────────
@@ -333,6 +338,27 @@ export default function HrmsAttendancePage() {
     const grid = monthlyData?.data?.grid || [];
     const daysInMonth = monthlyData?.data?.daysInMonth || 31;
     const overview = overviewData?.data;
+
+    const handleMarkAllPresent = async () => {
+        const employees = grid.map((emp) => ({
+            employeeId: String(emp.employeeId),
+            status: 'present',
+        }));
+
+        if (employees.length === 0) {
+            return;
+        }
+
+        try {
+            await bulkMark({
+                date: todayIST,
+                records: employees,
+            }).unwrap();
+            await Promise.all([refetchGrid(), refetchOverview()]);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to mark everyone present');
+        }
+    };
 
     // Day-of-week for day 1 of the month
     const firstDayDow = new Date(gridYear, gridMonth - 1, 1).getDay();
@@ -426,6 +452,26 @@ export default function HrmsAttendancePage() {
                                         : <><Save size={15} /> Save{pendingEditCount > 0 ? ` (${pendingEditCount})` : ''}</>}
                             </button>
                         </div>
+                    </div>
+
+                    <div
+                        className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-2xl border p-3 shadow-xl"
+                        style={{
+                            borderColor: 'var(--color-border-default)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            boxShadow: '0 14px 34px rgba(15, 23, 42, 0.18)',
+                        }}
+                    >
+                        <button
+                            onClick={handleMarkAllPresent}
+                            disabled={isSaving || gridLoading || grid.length === 0}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-xl cursor-pointer disabled:opacity-50"
+                            style={{ backgroundColor: '#16A34A' }}
+                            title="Mark all employees present for today"
+                        >
+                            {isSaving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                            Mark Today's Present All
+                        </button>
                     </div>
 
                     {/* Grid */}
@@ -566,12 +612,13 @@ export default function HrmsAttendancePage() {
                     ) : overview ? (
                         <>
                             {/* Summary cards */}
-                            <div className="grid grid-cols-6 gap-4 mb-6">
+                            <div className="grid grid-cols-7 gap-4 mb-6">
                                 <SummaryCard label="Present" value={overview.summary.present} color="#16A34A" icon={CheckCircle2} />
                                 <SummaryCard label="Work From Home" value={overview.summary.wfh} color="#1D4ED8" icon={Home} />
                                 <SummaryCard label="Half Day" value={overview.summary.halfDay} color="#854D0E" icon={Sunset} />
                                 <SummaryCard label="On Leave" value={overview.summary.onLeave} color="#6B21A8" icon={Plane} />
                                 <SummaryCard label="Absent" value={overview.summary.absent} color="#991B1B" icon={XCircle} />
+                                <SummaryCard label="Unmarked" value={overview.summary.unmarked} color="#64748B" icon={Clock3} />
                                 <SummaryCard label="Total" value={overview.summary.total} color="#6B7280" icon={Users} />
                             </div>
 

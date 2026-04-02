@@ -30,9 +30,15 @@ export default function HrmsEmployeeFormPage() {
 
     const users = usersData?.data?.users || usersData?.data || [];
     const existingEmployees = employeesData?.data?.employees || [];
+    const internalUsers = Array.isArray(users)
+        ? users.filter((u: any) => {
+            const roleName = typeof u?.role === 'object' ? String(u.role?.name || '') : String(u?.role || '');
+            return roleName.toLowerCase() !== 'partner';
+        })
+        : [];
     // Users that don't already have an employee record
-    const availableUsers = Array.isArray(users)
-        ? users.filter((u: any) => !existingEmployees.some((e: any) => (e.userId?._id || e.userId) === u._id))
+    const availableUsers = Array.isArray(internalUsers)
+        ? internalUsers.filter((u: any) => !existingEmployees.some((e: any) => (e.userId?._id || e.userId) === u._id))
         : [];
     const [form, setForm] = useState({
         userId: '',

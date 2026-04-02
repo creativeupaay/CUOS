@@ -17,6 +17,7 @@ import {
     useUpdateDocAdminsMutation,
 } from '@/features/project';
 import type { Project, DocFolder, DocItem } from '@/features/project';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import {
     useState,
     useRef,
@@ -364,6 +365,8 @@ function AccessControlPanel({
     updateAdmins: any;
 }) {
     const [tab, setTab] = useState<AcTab>('view');
+
+    useBodyScrollLock(true);
 
     // ── Admins tab state ──
     // Extract admin IDs from the backend response, ensuring they're trimmed strings

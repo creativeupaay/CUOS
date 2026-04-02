@@ -11,6 +11,7 @@ import {
     useCreateSubtaskMutation,
 } from '@/features/project';
 import type { Task } from '@/features/project';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Pause, Pencil, Clock, Lock, Filter } from 'lucide-react';
@@ -132,6 +133,8 @@ export default function ProjectTasksTab() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'in-progress' | 'paused' | 'completed'>('all');
     const [showForm, setShowForm] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+    useBodyScrollLock(showForm);
 
     // Estimated time fields (Days : Hours : Minutes)
     const [estDays, setEstDays] = useState(0);
@@ -732,6 +735,8 @@ function TaskCard({
     // ── Subtask editing state ──────────────────────────────────────────────────
     const [editingSubtask, setEditingSubtask] = useState<Task | null>(null);
     const [subEditAssignees, setSubEditAssignees] = useState<string[]>([]);
+
+    useBodyScrollLock(Boolean(editingSubtask));
 
     const openSubtaskEdit = (sub: Task) => {
         setEditingSubtask(sub);
@@ -1680,4 +1685,3 @@ function BoardColumn({
         </div>
     );
 }
-

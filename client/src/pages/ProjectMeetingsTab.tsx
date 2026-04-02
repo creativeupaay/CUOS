@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useGetMeetingsQuery, useCreateMeetingMutation, useDeleteMeetingMutation } from '@/features/project';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink } from 'lucide-react';
@@ -11,6 +12,8 @@ export default function ProjectMeetingsTab() {
     const [showForm, setShowForm] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
     const [activeTab, setActiveTab] = useState<MeetingType>('internal');
+
+    useBodyScrollLock(showForm);
 
     const { data, isLoading } = useGetMeetingsQuery({ projectId: projectId! });
     const meetings = data?.data || [];

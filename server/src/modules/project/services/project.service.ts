@@ -2,7 +2,9 @@ import { Types } from 'mongoose';
 import { Project, IProject } from '../models/Project.model';
 import { DocFolder } from '../models/DocFolder.model';
 import { User } from '../../auth/models/User.model';
+import { Role } from '../../auth/models/Role.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { Partner } from '../../partners/models/Partner.model';
 import AppError from '../../../utils/appError';
 import {
     uploadDocument,
@@ -27,8 +29,10 @@ export interface CreateProjectData {
     assignees?: Array<{
         employeeId?: string;
         partnerEmployeeId?: string;
-        memberType: 'employee' | 'partner-employee';
-        role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+        partnerId?: string;
+        userId?: string;
+        memberType: 'employee' | 'partner-employee' | 'partner';
+        role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
         subModules?: {
             overview: boolean;
             tasks: boolean;
@@ -98,7 +102,27 @@ function serializeAssignee(assignee: any) {
     const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object'
         ? assignee.partnerEmployeeId
         : null;
+    const partner = assignee?.partnerId && typeof assignee.partnerId === 'object' ? assignee.partnerId : null;
     const employeeUser = employee?.userId && typeof employee.userId === 'object' ? employee.userId : null;
+    const plainUser = assignee?.userId && typeof assignee.userId === 'object' ? assignee.userId : null;
+    const normalizedUserRole = String((plainUser as any)?.role?.name || (plainUser as any)?.role || '').toLowerCase();
+    const isProtected = assignee?.memberType === 'partner' || ['super-admin', 'super_admin'].includes(normalizedUserRole);
+
+    if (assignee?.memberType === 'partner' || partner) {
+        const partnerUser = partner?.userId && typeof partner.userId === 'object' ? partner.userId : null;
+
+        return {
+            ...assignee,
+            memberId: partner?._id?.toString() || assignee?.partnerId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+            displayName: partnerUser?.name || partner?.contactPerson || partner?.companyName || 'Partner',
+            displayEmail: partnerUser?.email || partner?.email || '',
+            displayDesignation: 'Partner Admin',
+            displayCode: 'Partner',
+            sourceType: 'partner',
+            sourceLabel: 'Partner',
+            protectedFromRemoval: isProtected,
+        };
+    }
 
     if (assignee?.memberType === 'partner-employee' || partnerEmployee) {
         return {
@@ -110,18 +134,20 @@ function serializeAssignee(assignee: any) {
             displayCode: 'Partner',
             sourceType: 'partner',
             sourceLabel: 'Partner Team',
+            protectedFromRemoval: isProtected,
         };
     }
 
     return {
         ...assignee,
-        memberId: employee?._id?.toString() || assignee?.employeeId?.toString?.() || '',
-        displayName: employeeUser?.name || 'Creative Upaay Member',
-        displayEmail: employeeUser?.email || '',
+        memberId: employee?._id?.toString() || assignee?.employeeId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+        displayName: employeeUser?.name || plainUser?.name || 'Creative Upaay Member',
+        displayEmail: employeeUser?.email || plainUser?.email || '',
         displayDesignation: employee?.designation || '',
         displayCode: 'CU',
         sourceType: 'cu',
         sourceLabel: 'Creative Upaay',
+        protectedFromRemoval: isProtected,
     };
 }
 
@@ -139,10 +165,54 @@ function normalizeLegacyAssignees(project: any) {
 
     project.assignees.forEach((assignee: any) => {
         if (!assignee.memberType) {
-            assignee.memberType = assignee.partnerEmployeeId ? 'partner-employee' : 'employee';
+            assignee.memberType = assignee.partnerId ? 'partner' : assignee.partnerEmployeeId ? 'partner-employee' : 'employee';
         }
     });
 }
+
+const getSuperadminUserIds = async (): Promise<string[]> => {
+    const superadminRoles = await Role.find({
+        name: { $in: ['super-admin', 'super_admin', 'superadmin'] },
+    }).select('_id').lean();
+
+    if (!superadminRoles.length) {
+        return [];
+    }
+
+    const superadmins = await User.find({
+        role: { $in: superadminRoles.map((role) => role._id) },
+        isActive: true,
+    }).select('_id').lean();
+
+    if (!superadmins.length) {
+        return [];
+    }
+
+    const employeeBackedSuperadmins = await Employee.find({
+        userId: { $in: superadmins.map((user) => user._id) },
+    }).select('userId').lean();
+
+    return employeeBackedSuperadmins.map((employee) => employee.userId.toString());
+};
+
+const buildInternalAssignee = async (
+    userId: string,
+    assignedBy: string,
+    role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member',
+    isSystemManaged: boolean
+) => {
+    const employee = await Employee.findOne({ userId }).select('_id userId').lean();
+
+    return {
+        ...(employee?._id ? { employeeId: new Types.ObjectId(employee._id.toString()) } : {}),
+        memberType: 'employee' as const,
+        userId: new Types.ObjectId(userId),
+        role,
+        isSystemManaged,
+        assignedBy: new Types.ObjectId(assignedBy),
+        assignedAt: new Date(),
+    };
+};
 
 /**
  * Create a new project
@@ -150,15 +220,60 @@ function normalizeLegacyAssignees(project: any) {
 export const createProject = async (
     data: CreateProjectData
 ): Promise<IProject> => {
+    const initialAssignees = data.assignees?.map((a) => ({
+        ...a,
+        assignedBy: data.createdBy,
+        assignedAt: new Date(),
+    })) || [];
+
+    const seenUserIds = new Set(
+        initialAssignees
+            .map((assignee) => assignee.userId?.toString())
+            .filter(Boolean)
+    );
+
+    const pushUniqueAssignee = (assignee: any) => {
+        const assigneeUserId = assignee.userId?.toString();
+        if (assigneeUserId && seenUserIds.has(assigneeUserId)) {
+            return;
+        }
+
+        if (assigneeUserId) {
+            seenUserIds.add(assigneeUserId);
+        }
+
+        initialAssignees.push(assignee);
+    };
+
+    pushUniqueAssignee(await buildInternalAssignee(data.createdBy, data.createdBy, 'admin', false));
+
+    const superadminUserIds = await getSuperadminUserIds();
+    for (const superadminUserId of superadminUserIds) {
+        pushUniqueAssignee(await buildInternalAssignee(superadminUserId, data.createdBy, 'admin', true));
+    }
+
+    if (data.partnerId) {
+        const partner = await Partner.findById(data.partnerId).select('_id userId').lean();
+        const partnerUserId = partner?.userId?.toString();
+
+        if (partner && partnerUserId) {
+            pushUniqueAssignee({
+                partnerId: new Types.ObjectId(partner._id.toString()),
+                memberType: 'partner' as const,
+                userId: new Types.ObjectId(partnerUserId),
+                role: 'admin' as const,
+                isSystemManaged: true,
+                assignedBy: new Types.ObjectId(data.createdBy),
+                assignedAt: new Date(),
+            });
+        }
+    }
+
     const projectData: any = {
         ...data,
         // Automatically grant the creator full credential-admin access
         credentialAdmins: [new Types.ObjectId(data.createdBy)],
-        assignees: data.assignees?.map((a) => ({
-            ...a,
-            assignedBy: data.createdBy,
-            assignedAt: new Date(),
-        })),
+        assignees: initialAssignees,
     };
 
     const project = await Project.create(projectData);
@@ -266,7 +381,13 @@ export const getProjects = async (
         .populate({
             path: 'assignees.employeeId',
             select: 'designation department',
-            populate: { path: 'userId', select: 'name email' } // Get user info through employee
+            populate: { path: 'userId', select: 'name email role' } // Get user info through employee
+        })
+        .populate('assignees.userId', 'name email role')
+        .populate({
+            path: 'assignees.partnerId',
+            select: 'companyName contactPerson email userId',
+            populate: { path: 'userId', select: 'name email role' }
         })
         .populate('assignees.partnerEmployeeId', 'name email designation phone isActive')
         .populate('createdBy', 'name email')
@@ -292,6 +413,12 @@ export const getProjectById = async (
         .populate({
             path: 'assignees.employeeId',
             select: 'designation department',
+            populate: { path: 'userId', select: 'name email role' }
+        })
+        .populate('assignees.userId', 'name email role')
+        .populate({
+            path: 'assignees.partnerId',
+            select: 'companyName contactPerson email userId',
             populate: { path: 'userId', select: 'name email role' }
         })
         .populate('assignees.partnerEmployeeId', 'name email designation phone isActive')
@@ -339,8 +466,8 @@ export const deleteProject = async (
 export const addAssignee = async (
     projectId: string,
     memberId: string,
-    memberType: 'employee' | 'partner-employee',
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member',
+    memberType: 'employee' | 'partner-employee' | 'partner',
+    role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member',
     assignedBy: string,
     subModules?: any,
     requesterPartnerId?: string
@@ -357,6 +484,9 @@ export const addAssignee = async (
 
     // Check if employee is already assigned
     const existingAssignee = project.assignees.find((a) => {
+        if (memberType === 'partner') {
+            return a.partnerId?.toString() === memberId || a.userId?.toString() === memberId;
+        }
         if (memberType === 'partner-employee') {
             return a.partnerEmployeeId?.toString() === memberId;
         }
@@ -436,11 +566,23 @@ export const removeAssignee = async (
     normalizeLegacyAssignees(project);
 
     const assigneeToRemove = project.assignees.find(
-        (a) => a.employeeId?.toString() === memberId || a.partnerEmployeeId?.toString() === memberId
+        (a) =>
+            a.employeeId?.toString() === memberId ||
+            a.partnerEmployeeId?.toString() === memberId ||
+            a.partnerId?.toString() === memberId ||
+            a.userId?.toString() === memberId
     );
 
+    if (assigneeToRemove?.memberType === 'partner' || assigneeToRemove?.isSystemManaged) {
+        throw new AppError('This project admin is added automatically and cannot be removed', 403);
+    }
+
     project.assignees = project.assignees.filter(
-        (a) => a.employeeId?.toString() !== memberId && a.partnerEmployeeId?.toString() !== memberId
+        (a) =>
+            a.employeeId?.toString() !== memberId &&
+            a.partnerEmployeeId?.toString() !== memberId &&
+            a.partnerId?.toString() !== memberId &&
+            a.userId?.toString() !== memberId
     );
 
     await project.save();

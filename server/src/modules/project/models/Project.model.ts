@@ -20,9 +20,11 @@ export interface IProjectDocument {
 export interface IProjectAssignee {
     employeeId?: Types.ObjectId;
     partnerEmployeeId?: Types.ObjectId;
-    memberType: 'employee' | 'partner-employee';
+    partnerId?: Types.ObjectId;
+    memberType: 'employee' | 'partner-employee' | 'partner';
     userId?: Types.ObjectId;
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
+    role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
+    isSystemManaged?: boolean;
     assignedAt: Date;
     assignedBy: Types.ObjectId;
 }
@@ -104,17 +106,19 @@ const ProjectAssigneeSchema = new Schema<IProjectAssignee>(
     {
         employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
         partnerEmployeeId: { type: Schema.Types.ObjectId, ref: 'PartnerEmployee' },
+        partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
         memberType: {
             type: String,
-            enum: ['employee', 'partner-employee'],
+            enum: ['employee', 'partner-employee', 'partner'],
             required: true,
         },
         userId: { type: Schema.Types.ObjectId },
         role: {
             type: String,
-            enum: ['manager', 'developer', 'designer', 'qa', 'viewer', 'member'],
+            enum: ['admin', 'manager', 'developer', 'designer', 'qa', 'viewer', 'member'],
             required: true,
         },
+        isSystemManaged: { type: Boolean, default: false },
         assignedAt: { type: Date, default: Date.now },
         assignedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
@@ -207,6 +211,7 @@ ProjectSchema.index({ clientId: 1 });
 ProjectSchema.index({ status: 1 });
 ProjectSchema.index({ 'assignees.employeeId': 1 });
 ProjectSchema.index({ 'assignees.partnerEmployeeId': 1 });
+ProjectSchema.index({ 'assignees.partnerId': 1 });
 ProjectSchema.index({ 'assignees.userId': 1 });
 ProjectSchema.index({ partnerId: 1 });
 ProjectSchema.index({ createdAt: -1 });

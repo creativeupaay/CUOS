@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { X, Trash2, CheckCheck, Bell } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useNavigate } from 'react-router-dom';
 import {
     closeNotificationPanel,
@@ -28,6 +29,8 @@ export default function NotificationPanel() {
 
     const isOpen = useAppSelector((state) => state.notification.isOpen);
     const notifications = useAppSelector((state) => state.notification.notifications);
+
+    useBodyScrollLock(isOpen);
 
     const { data, isLoading } = useGetNotificationsQuery(undefined, { skip: !isOpen });
     const [markAsRead] = useMarkAsReadMutation();

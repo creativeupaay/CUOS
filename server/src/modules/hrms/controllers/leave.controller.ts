@@ -67,6 +67,15 @@ export const updateLeaveStatus = asyncHandler(async (req: Request, res: Response
     });
 });
 
+export const deleteLeave = asyncHandler(async (req: Request, res: Response) => {
+    await leaveService.deleteLeave(req.params.id);
+
+    res.json({
+        status: 'success',
+        message: 'Leave deleted successfully',
+    });
+});
+
 // ── Get Leave Balance ───────────────────────────────────────────────
 export const getLeaveBalance = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as any).id;

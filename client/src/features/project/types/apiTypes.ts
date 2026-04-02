@@ -33,7 +33,7 @@ export interface CreateProjectRequest {
     invoiceDetails?: InvoiceDetails;
     assignees?: Array<{
         userId: string;
-        role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer';
+        role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     }>;
     phases?: Array<Omit<ProjectPhase, '_id'>>;
 }
@@ -57,8 +57,8 @@ export interface UpdateProjectRequest {
 
 export interface AddAssigneeRequest {
     memberId: string;
-    memberType: 'employee' | 'partner-employee';
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
+    memberType: 'employee' | 'partner-employee' | 'partner';
+    role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     subModules?: {
         overview: boolean;
         tasks: boolean;

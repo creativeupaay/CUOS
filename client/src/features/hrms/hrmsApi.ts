@@ -240,6 +240,14 @@ export const hrmsApi = api.injectEndpoints({
             invalidatesTags: ['Leaves'],
         }),
 
+        deleteLeave: builder.mutation<ApiResponse, string>({
+            query: (id) => ({
+                url: `/hrms/leaves/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Leaves'],
+        }),
+
         // ══════════════════════════════════════════════════════════
         // PAYROLL ENDPOINTS
         // ══════════════════════════════════════════════════════════
@@ -396,7 +404,7 @@ export const hrmsApi = api.injectEndpoints({
         getDailyOverview: builder.query<
             ApiResponse<{
                 date: string;
-                summary: { present: number; wfh: number; halfDay: number; onLeave: number; absent: number; holiday: number; total: number };
+                summary: { present: number; wfh: number; halfDay: number; onLeave: number; absent: number; holiday: number; unmarked: number; total: number };
                 employees: Array<{
                     employeeId: string; employeeCode: string; name: string; email: string;
                     department: string; designation: string; status: string;
@@ -503,6 +511,7 @@ export const {
     useGetMyLeavesQuery,
     useGetLeaveBalanceQuery,
     useUpdateLeaveStatusMutation,
+    useDeleteLeaveMutation,
     // Payroll
     useGeneratePayrollMutation,
     useGenerateBulkPayrollMutation,

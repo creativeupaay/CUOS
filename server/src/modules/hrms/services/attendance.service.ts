@@ -189,7 +189,7 @@ export class AttendanceService {
                 email: (emp.userId as any)?.email || '',
                 department: resolveDepartmentValue(emp.department, departmentCatalog),
                 designation: emp.designation,
-                status: record?.status || 'absent',
+                status: record?.status || 'unmarked',
                 checkIn: record?.checkIn || null,
                 checkOut: record?.checkOut || null,
                 totalHours: record?.totalHours || 0,
@@ -204,6 +204,7 @@ export class AttendanceService {
             onLeave: overview.filter((e) => e.status === 'on-leave').length,
             absent: overview.filter((e) => e.status === 'absent').length,
             holiday: overview.filter((e) => e.status === 'holiday').length,
+            unmarked: overview.filter((e) => e.status === 'unmarked').length,
             total: overview.length,
         };
 

@@ -61,16 +61,19 @@ export interface ProjectDocument {
 export interface ProjectAssignee {
     employeeId?: string | any;
     partnerEmployeeId?: string | any;
+    partnerId?: string | any;
     userId?: string | User;
     memberId?: string;
-    memberType?: 'employee' | 'partner-employee';
+    memberType?: 'employee' | 'partner-employee' | 'partner';
     sourceType?: 'cu' | 'partner';
     sourceLabel?: string;
     displayCode?: string;
     displayName?: string;
     displayEmail?: string;
     displayDesignation?: string;
-    role: 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
+    protectedFromRemoval?: boolean;
+    isSystemManaged?: boolean;
+    role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     assignedAt: string;
     assignedBy: string | User;
 }

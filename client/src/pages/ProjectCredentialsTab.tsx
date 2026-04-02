@@ -10,6 +10,7 @@ import {
     useRevokeCredentialAccessMutation,
 } from '@/features/project';
 import type { Project } from '@/features/project';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import CredentialShareModal from '@/features/project/components/CredentialShareModal';
 import { useState, useRef, useMemo } from 'react';
 import {
@@ -810,6 +811,8 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
     const [viewersOpen, setViewersOpen] = useState(false);
     const [revokeAccess, { isLoading: isRevoking }] = useRevokeCredentialAccessMutation();
     const { copied, copy } = useCopy();
+
+    useBodyScrollLock(viewersOpen);
 
     const type: CredentialType = credential.type;
     const viewers: any[] = credential.viewAccess ?? [];

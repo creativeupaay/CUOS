@@ -8,6 +8,10 @@ import { notificationService } from '../../notification/services/notification.se
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 
 class LeaveService {
+    private shouldConsumePaidLeave(leave: ILeave): boolean {
+        return leave.type !== 'unpaid' && leave.isPaid;
+    }
+
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
         // Find the employee by userId
         const employee = await Employee.findOne({ userId });
@@ -150,38 +154,59 @@ class LeaveService {
             throw new AppError('Leave not found', 404);
         }
 
-        if (leave.status !== 'pending') {
-            throw new AppError(`Cannot ${data.status} a leave that is already ${leave.status}`, 400);
+        const previousStatus = leave.status;
+        const nextStatus = data.status;
+
+        if (previousStatus === nextStatus) {
+            if (nextStatus === 'rejected') {
+                leave.rejectionReason = data.rejectionReason;
+                leave.approvedBy = approvedBy as any;
+                await leave.save();
+            }
+
+            return leave;
         }
 
-        leave.status = data.status;
-        if (data.status === 'approved' || data.status === 'rejected') {
+        if (previousStatus === 'approved' && nextStatus !== 'approved') {
+            const year = leave.startDate.getUTCFullYear();
+            if (this.shouldConsumePaidLeave(leave)) {
+                await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
+            }
+            await this.rollbackApprovedLeaveAttendance(leave);
+        }
+
+        leave.status = nextStatus;
+        if (nextStatus === 'approved' || nextStatus === 'rejected') {
             leave.approvedBy = approvedBy as any;
-        }
-        if (data.rejectionReason) {
-            leave.rejectionReason = data.rejectionReason;
+        } else {
+            leave.approvedBy = undefined;
         }
 
-        if (data.status === 'approved') {
+        if (nextStatus === 'rejected' && data.rejectionReason) {
+            leave.rejectionReason = data.rejectionReason;
+        } else if (nextStatus !== 'rejected') {
+            leave.rejectionReason = undefined;
+        }
+
+        if (nextStatus === 'approved') {
             const year = leave.startDate.getUTCFullYear();
             await this.ensureLeaveBalance(leave.employeeId.toString(), year);
 
-            const shouldConsumePaidLeave = leave.type !== 'unpaid' && leave.isPaid;
-            if (shouldConsumePaidLeave) {
+            if (this.shouldConsumePaidLeave(leave)) {
                 await this.consumePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
             }
         }
 
         await leave.save();
 
-        if (data.status === 'approved') {
+        if (nextStatus === 'approved') {
             await this.applyApprovedLeaveAttendance(leave);
         }
 
         // Notify the employee about the status update
         const employee = await Employee.findById(leave.employeeId).select('userId').lean();
         if (employee?.userId) {
-            const statusText = data.status === 'approved' ? 'approved' : 'rejected';
+            const statusText = nextStatus;
             const statusCapitalized = statusText.charAt(0).toUpperCase() + statusText.slice(1);
 
             notificationService.createNotification({
@@ -189,19 +214,39 @@ class LeaveService {
                 type: 'leave_status_updated',
                 title: `Leave ${statusCapitalized}`,
                 message:
-                    data.status === 'approved'
+                    nextStatus === 'approved'
                         ? `Your ${leave.type} leave request for ${leave.days} day(s) has been approved.`
-                        : `Your ${leave.type} leave request has been rejected.${data.rejectionReason ? ' Reason: ' + data.rejectionReason : ''}`,
+                        : nextStatus === 'rejected'
+                            ? `Your ${leave.type} leave request has been rejected.${data.rejectionReason ? ' Reason: ' + data.rejectionReason : ''}`
+                            : `Your ${leave.type} leave request has been marked as cancelled.`,
                 link: '/my-hrms/leaves',
                 metadata: {
                     leaveId: leave._id.toString(),
-                    status: data.status,
+                    previousStatus,
+                    status: nextStatus,
                     rejectionReason: data.rejectionReason,
                 },
             });
         }
 
         return leave;
+    }
+
+    async deleteLeave(id: string): Promise<void> {
+        const leave = await Leave.findById(id);
+        if (!leave) {
+            throw new AppError('Leave not found', 404);
+        }
+
+        if (leave.status === 'approved') {
+            const year = leave.startDate.getUTCFullYear();
+            if (this.shouldConsumePaidLeave(leave)) {
+                await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
+            }
+            await this.rollbackApprovedLeaveAttendance(leave);
+        }
+
+        await leave.deleteOne();
     }
 
     private async consumePaidLeaveBalance(employeeId: string, year: number, leaveDays: number) {
@@ -221,6 +266,19 @@ class LeaveService {
         }
 
         earned.used += leaveDays;
+        earned.pending = Math.max(0, earned.quota - earned.used);
+        await balance.save();
+    }
+
+    private async restorePaidLeaveBalance(employeeId: string, year: number, leaveDays: number) {
+        const balance = await this.ensureLeaveBalance(employeeId, year);
+        const earned = balance.balances.find((b) => b.type === 'earned');
+
+        if (!earned) {
+            throw new AppError('Paid leave balance is not configured for this employee', 400);
+        }
+
+        earned.used = Math.max(0, earned.used - leaveDays);
         earned.pending = Math.max(0, earned.quota - earned.used);
         await balance.save();
     }
@@ -250,9 +308,9 @@ class LeaveService {
                 },
                 update: {
                     $set: {
-                        status: 'absent',
+                        status: 'on-leave',
                         totalHours: 0,
-                        notes: 'Auto-marked absent due to approved leave',
+                        notes: 'Auto-marked on leave due to approved leave',
                     },
                     $unset: {
                         checkIn: '',
@@ -266,6 +324,31 @@ class LeaveService {
         }));
 
         await Attendance.bulkWrite(operations);
+    }
+
+    private async rollbackApprovedLeaveAttendance(leave: ILeave) {
+        const leaveDates: Date[] = [];
+        const cursor = new Date(leave.startDate);
+        cursor.setUTCHours(0, 0, 0, 0);
+
+        const end = new Date(leave.endDate);
+        end.setUTCHours(0, 0, 0, 0);
+
+        while (cursor.getTime() <= end.getTime()) {
+            leaveDates.push(new Date(cursor));
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        if (leaveDates.length === 0) {
+            return;
+        }
+
+        await Attendance.deleteMany({
+            employeeId: leave.employeeId,
+            date: { $in: leaveDates },
+            status: 'on-leave',
+            notes: 'Auto-marked on leave due to approved leave',
+        });
     }
 
     private async ensureLeaveBalance(employeeId: string, year: number) {

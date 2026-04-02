@@ -4,7 +4,7 @@ import {
     useUpdateProjectMutation,
     useGetProjectByIdQuery,
 } from '@/features/project';
-import { useGetClientsQuery } from '@/features/client/clientApi';
+import { useCreateClientMutation, useGetClientsQuery } from '@/features/client/clientApi';
 import { useState, useEffect } from 'react';
 import { ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -12,7 +12,204 @@ import type { ProjectPhase } from '@/features/project/types/types';
 import CurrencyInput from 'react-currency-input-field';
 import SelectCurrency from '@/components/ui/CurrencySelect';
 import { useAppSelector } from '@/app/hooks';
-import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import ModalPortal from '@/components/ui/ModalPortal';
+import { useCreatePartnerMutation, useGetPartnersQuery } from '@/features/partners/partnersApi';
+
+function QuickAddPartnerModal({
+    onClose,
+    onCreated,
+}: {
+    onClose: () => void;
+    onCreated: (partnerId: string) => void;
+}) {
+    const [createPartner, { isLoading }] = useCreatePartnerMutation();
+    const [form, setForm] = useState({ name: '', email: '' });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const result = await createPartner(form).unwrap();
+            onCreated(result.data.partner._id);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to create partner');
+        }
+    };
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+            >
+                <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>Add New Partner</h3>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Partner Name *</label>
+                        <input
+                            value={form.name}
+                            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                            required
+                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Email *</label>
+                        <input
+                            type="email"
+                            value={form.email}
+                            onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                            required
+                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                        />
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="flex-1 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            {isLoading ? 'Creating...' : 'Add Partner'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2.5 text-sm rounded-lg border cursor-pointer"
+                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </ModalPortal>
+    );
+}
+
+function QuickAddClientModal({
+    partnerId,
+    lockPartner,
+    onClose,
+    onCreated,
+}: {
+    partnerId?: string;
+    lockPartner: boolean;
+    onClose: () => void;
+    onCreated: (clientId: string, currency?: string) => void;
+}) {
+    const [createClient, { isLoading }] = useCreateClientMutation();
+    const [form, setForm] = useState({
+        name: '',
+        companyName: '',
+        email: '',
+        phone: '',
+        currency: 'INR',
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const result = await createClient({
+                name: form.name,
+                companyName: form.companyName || undefined,
+                email: form.email || undefined,
+                phone: form.phone || undefined,
+                billingDetails: { currency: form.currency },
+                partnerId: partnerId || undefined,
+            }).unwrap();
+            onCreated(result.data.client._id, result.data.client.billingDetails?.currency || form.currency);
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to create client');
+        }
+    };
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+            >
+                <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>Add New Client</h3>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Client Name *</label>
+                            <input
+                                value={form.name}
+                                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                                required
+                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Company Name</label>
+                            <input
+                                value={form.companyName}
+                                onChange={(e) => setForm((prev) => ({ ...prev, companyName: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Email</label>
+                            <input
+                                type="email"
+                                value={form.email}
+                                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Phone</label>
+                            <input
+                                value={form.phone}
+                                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Currency</label>
+                        <SelectCurrency
+                            value={form.currency}
+                            onCurrencySelected={(val: string) => setForm((prev) => ({ ...prev, currency: val }))}
+                            className="w-full px-3 rounded-lg border text-sm outline-none bg-white cursor-pointer"
+                            style={{ height: '36px', borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                        />
+                    </div>
+                    {lockPartner && partnerId && (
+                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            This client will be linked to the currently selected partner.
+                        </p>
+                    )}
+                    <div className="flex gap-3">
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="flex-1 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            {isLoading ? 'Creating...' : 'Add Client'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2.5 text-sm rounded-lg border cursor-pointer"
+                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </ModalPortal>
+    );
+}
 
 export default function ProjectFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -32,13 +229,15 @@ export default function ProjectFormPage() {
 
     const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id });
     const project = projectData?.data;
+    const [showPartnerModal, setShowPartnerModal] = useState(false);
+    const [showClientModal, setShowClientModal] = useState(false);
 
     const [selectedPartnerId, setSelectedPartnerId] = useState<string>('');
-    const { data: clientsData } = useGetClientsQuery({
+    const { data: clientsData, refetch: refetchClients } = useGetClientsQuery({
         partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
         limit: 200,
     });
-    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
+    const { data: partnersData, refetch: refetchPartners } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
     const partners = partnersData?.data?.partners || [];
     const clients = (clientsData as any)?.data?.clients || clientsData?.data || [];
 
@@ -204,6 +403,23 @@ export default function ProjectFormPage() {
 
     const labelStyle = { color: 'var(--color-text-secondary)' };
 
+    const handlePartnerCreated = async (partnerId: string) => {
+        await refetchPartners();
+        setSelectedPartnerId(partnerId);
+        setForm((prev) => ({ ...prev, clientId: '' }));
+        setShowPartnerModal(false);
+    };
+
+    const handleClientCreated = async (clientId: string, currency?: string) => {
+        await refetchClients();
+        setForm((prev) => ({
+            ...prev,
+            clientId,
+            currency: currency || prev.currency,
+        }));
+        setShowClientModal(false);
+    };
+
     return (
         <div className="px-8 py-6" style={{ maxWidth: '800px' }}>
             {/* Breadcrumb */}
@@ -294,7 +510,17 @@ export default function ProjectFormPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 {isAdminUser && (
                                     <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Partner</label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="block text-xs font-medium" style={labelStyle}>Partner</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPartnerModal(true)}
+                                                className="text-xs font-medium cursor-pointer"
+                                                style={{ color: 'var(--color-primary)' }}
+                                            >
+                                                + Add New Partner
+                                            </button>
+                                        </div>
                                         <select
                                             value={selectedPartnerId}
                                             onChange={(e) => {
@@ -314,7 +540,17 @@ export default function ProjectFormPage() {
                                     </div>
                                 )}
                                 <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={labelStyle}>Client *</label>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="block text-xs font-medium" style={labelStyle}>Client *</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowClientModal(true)}
+                                            className="text-xs font-medium cursor-pointer"
+                                            style={{ color: 'var(--color-primary)' }}
+                                        >
+                                            + Add New Client
+                                        </button>
+                                    </div>
                                     <select
                                         name="clientId"
                                         value={form.clientId}
@@ -639,6 +875,21 @@ export default function ProjectFormPage() {
                     </button>
                 </div>
             </form>
+
+            {showPartnerModal && (
+                <QuickAddPartnerModal
+                    onClose={() => setShowPartnerModal(false)}
+                    onCreated={handlePartnerCreated}
+                />
+            )}
+            {showClientModal && (
+                <QuickAddClientModal
+                    partnerId={isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined}
+                    lockPartner={Boolean(isPartnerUser || selectedPartnerId)}
+                    onClose={() => setShowClientModal(false)}
+                    onCreated={handleClientCreated}
+                />
+            )}
         </div>
     );
 }

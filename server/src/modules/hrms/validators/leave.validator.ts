@@ -19,5 +19,9 @@ export const updateLeaveStatusSchema = z.object({
     params: z.object({ id: z.string() }),
 });
 
+export const deleteLeaveSchema = z.object({
+    params: z.object({ id: z.string() }),
+});
+
 export type CreateLeaveInput = z.infer<typeof createLeaveSchema>['body'];
 export type UpdateLeaveStatusInput = z.infer<typeof updateLeaveStatusSchema>['body'];

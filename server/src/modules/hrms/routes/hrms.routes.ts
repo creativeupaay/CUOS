@@ -8,7 +8,7 @@ import { checkHrmsAccess, hrAdminOnly, internalHrmsOnly } from '../middlewares/h
 import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
 import { createAnnouncementSchema, deleteAnnouncementSchema } from '../validators/announcement.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
-import { createLeaveSchema, updateLeaveStatusSchema } from '../validators/leave.validator';
+import { createLeaveSchema, updateLeaveStatusSchema, deleteLeaveSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
 
 import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
@@ -149,6 +149,12 @@ router.patch(
     hrAdminOnly,
     validateRequest(updateLeaveStatusSchema),
     leaveController.updateLeaveStatus
+);
+router.delete(
+    '/leaves/:id',
+    hrAdminOnly,
+    validateRequest(deleteLeaveSchema),
+    leaveController.deleteLeave
 );
 
 // ══════════════════════════════════════════════════════════════════════

@@ -4,6 +4,7 @@ import type { RootState } from '@/app/store';
 import type { Project, ProjectPhase } from '@/features/project';
 import { useAddAssigneeMutation, useRemoveAssigneeMutation, useUpdateAssigneePermissionsMutation, useLazyGetAssigneePermissionsQuery, useUpdateProjectMutation } from '@/features/project';
 import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle, Handshake } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,23 +14,35 @@ import { useGetPartnerEmployeesQuery } from '@/features/partners/partnerEmployee
 function getAssigneeMeta(assignee: any) {
     const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
     const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object' ? assignee.partnerEmployeeId : null;
+    const partner = assignee?.partnerId && typeof assignee.partnerId === 'object' ? assignee.partnerId : null;
     const employeeUser = employee?.userId && typeof employee.userId === 'object' ? employee.userId : null;
+    const plainUser = assignee?.userId && typeof assignee.userId === 'object' ? assignee.userId : null;
 
     const sourceType = assignee?.sourceType
-        || (assignee?.memberType === 'partner-employee' || partnerEmployee ? 'partner' : 'cu');
+        || (assignee?.memberType === 'partner' || assignee?.memberType === 'partner-employee' || partnerEmployee || partner ? 'partner' : 'cu');
     const memberId = assignee?.memberId
+        || partner?._id
         || partnerEmployee?._id
         || employee?._id
-        || (typeof assignee?.partnerEmployeeId === 'string' ? assignee.partnerEmployeeId : assignee?.employeeId);
+        || plainUser?._id
+        || (typeof assignee?.partnerId === 'string' ? assignee.partnerId : typeof assignee?.partnerEmployeeId === 'string' ? assignee.partnerEmployeeId : assignee?.employeeId || assignee?.userId);
     const displayName = assignee?.displayName
+        || (partner?.userId && typeof partner.userId === 'object' ? partner.userId.name : null)
+        || partner?.contactPerson
+        || partner?.companyName
         || partnerEmployee?.name
         || employeeUser?.name
+        || plainUser?.name
         || 'Team Member';
     const displayEmail = assignee?.displayEmail
+        || (partner?.userId && typeof partner.userId === 'object' ? partner.userId.email : null)
+        || partner?.email
         || partnerEmployee?.email
         || employeeUser?.email
+        || plainUser?.email
         || '';
     const displayDesignation = assignee?.displayDesignation
+        || (assignee?.memberType === 'partner' || partner ? 'Partner Admin' : '')
         || partnerEmployee?.designation
         || employee?.designation
         || '';
@@ -42,6 +55,7 @@ function getAssigneeMeta(assignee: any) {
         displayEmail,
         displayDesignation,
         displayCode,
+        protectedFromRemoval: Boolean(assignee?.protectedFromRemoval),
     };
 }
 
@@ -96,6 +110,8 @@ export default function ProjectOverviewTab() {
         documents: false,
         notes: false,
     });
+
+    useBodyScrollLock(Boolean(editingUserId));
 
     // Load all active employees — the employee list is the team pool for project assignment
     const { data: employeesData, isLoading: isLoadingEmployees } = useGetEmployeesQuery({ status: 'active', limit: 200 }, { skip: !isSuperAdmin });
@@ -300,11 +316,12 @@ export default function ProjectOverviewTab() {
                                     onChange={(e) => { setSelectedRole(e.target.value); setRoleError(false); }}
                                 >
                                     <option value="">Select role…</option>
-                                    <option value="manager">Manager</option>
-                                    <option value="developer">Developer</option>
-                                    <option value="designer">Designer</option>
-                                    <option value="qa">QA</option>
-                                    <option value="member">Member</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="manager">Manager</option>
+                                        <option value="developer">Developer</option>
+                                        <option value="designer">Designer</option>
+                                        <option value="qa">QA</option>
+                                        <option value="member">Member</option>
                                 </select>
                                 {roleError && (
                                     <p className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: 'var(--color-danger)' }}>
@@ -383,7 +400,7 @@ export default function ProjectOverviewTab() {
                     {project.assignees.map((assignee) => {
                         const meta = getAssigneeMeta(assignee);
                         const canEditPermissions = isSuperAdmin && meta.sourceType === 'cu' && !!meta.memberId;
-                        const canRemoveMember = isSuperAdmin || (isPartnerOwnedProject && meta.sourceType === 'partner');
+                        const canRemoveMember = (isSuperAdmin || (isPartnerOwnedProject && meta.sourceType === 'partner')) && !meta.protectedFromRemoval;
                         const sourceBadgeLabel = meta.sourceType === 'partner' ? 'Partner' : 'CU';
                         const sourceBadgeTitle = meta.sourceType === 'partner'
                             ? 'Partner team member'
@@ -675,6 +692,8 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
     const [showPhasePanel, setShowPhasePanel] = useState(false);
     const [localPhases, setLocalPhases] = useState<any[]>([]);
     const [updateProject, { isLoading: isSavingPhases }] = useUpdateProjectMutation();
+
+    useBodyScrollLock(showPhasePanel);
 
     useEffect(() => {
         if (showPhasePanel) {

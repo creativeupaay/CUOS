@@ -30,7 +30,7 @@ export const createProjectSchema = z.object({
 
         assignees: z.array(z.object({
             userId: z.string(),
-            role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer']),
+            role: z.enum(['admin', 'manager', 'developer', 'designer', 'qa', 'viewer', 'member']),
             subModules: z.object({
                 overview: z.boolean(),
                 tasks: z.boolean(),
@@ -95,8 +95,8 @@ export const addAssigneeSchema = z.object({
     body: z.object({
         memberId: z.string().min(1, 'Member ID is required').optional(),
         employeeId: z.string().min(1, 'Employee ID is required').optional(),
-        memberType: z.enum(['employee', 'partner-employee']).default('employee'),
-        role: z.enum(['manager', 'developer', 'designer', 'qa', 'viewer', 'member']),
+        memberType: z.enum(['employee', 'partner-employee', 'partner']).default('employee'),
+        role: z.enum(['admin', 'manager', 'developer', 'designer', 'qa', 'viewer', 'member']),
         subModules: z.object({
             overview: z.boolean(),
             tasks: z.boolean(),

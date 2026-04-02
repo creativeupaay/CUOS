@@ -4,10 +4,11 @@ import {
     useGetEmployeesQuery,
     useCreateLeaveMutation,
     useUpdateLeaveStatusMutation,
+    useDeleteLeaveMutation,
 } from '@/features/hrms/hrmsApi';
 import {
     Plus, X, Check, XCircle, Clock, Calendar, ChevronRight,
-    ArrowLeft, AlertCircle, User, Loader2, FileText,
+    ArrowLeft, AlertCircle, User, Loader2, FileText, Eye, Pencil, Trash2,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 
@@ -71,6 +72,19 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
+function formatLeaveDate(date: string) {
+    return new Date(date).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+    });
+}
+
+function getLeaveEmployee(leave: any) {
+    return leave.employeeId as any;
+}
+
 // ── Reject Reason Modal ───────────────────────────────────────────────
 function RejectModal({
     leaveId, onClose, onConfirm,
@@ -113,6 +127,269 @@ function RejectModal({
                         style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
                     >
                         Cancel
+                    </button>
+                </div>
+            </div>
+        </ModalPortal>
+    );
+}
+
+function DeleteLeaveModal({
+    leave,
+    onClose,
+    onConfirm,
+    isLoading,
+}: {
+    leave: any;
+    onClose: () => void;
+    onConfirm: (id: string) => void;
+    isLoading: boolean;
+}) {
+    const emp = getLeaveEmployee(leave);
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+            >
+                <div className="flex items-center gap-2 mb-3">
+                    <AlertCircle size={18} style={{ color: '#EF4444' }} />
+                    <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Delete Leave Request</h3>
+                </div>
+                <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                    Delete the leave request for <span className="font-medium">{emp?.userId?.name || 'this employee'}</span>?
+                    This will also reverse approved leave effects like attendance and paid leave balance where applicable.
+                </p>
+                <div
+                    className="rounded-lg px-4 py-3 mb-5"
+                    style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+                >
+                    <div className="text-sm font-medium capitalize" style={{ color: 'var(--color-text-primary)' }}>{leave.type} leave</div>
+                    <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                        {formatLeaveDate(leave.startDate)} to {formatLeaveDate(leave.endDate)} · {leave.days} day{leave.days !== 1 ? 's' : ''}
+                    </div>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => onConfirm(leave._id)}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                        style={{ backgroundColor: '#EF4444' }}
+                    >
+                        {isLoading ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2.5 text-sm rounded-lg border cursor-pointer"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </ModalPortal>
+    );
+}
+
+function EditLeaveStatusModal({
+    leave,
+    onClose,
+    onConfirm,
+    isLoading,
+}: {
+    leave: any;
+    onClose: () => void;
+    onConfirm: (id: string, status: 'approved' | 'rejected' | 'cancelled', reason: string) => void;
+    isLoading: boolean;
+}) {
+    const [status, setStatus] = useState<'approved' | 'rejected' | 'cancelled'>(
+        leave.status === 'pending' ? 'approved' : leave.status
+    );
+    const [reason, setReason] = useState(leave.rejectionReason || '');
+    const emp = getLeaveEmployee(leave);
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-lg rounded-xl border p-6 shadow-xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+            >
+                <div className="flex items-center gap-2 mb-5">
+                    <Pencil size={18} style={{ color: 'var(--color-primary)' }} />
+                    <div>
+                        <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Leave Status</h3>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                            {emp?.userId?.name || 'Employee'} · {leave.type} leave
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Status
+                        </label>
+                        <select
+                            value={status}
+                            onChange={(e) => setStatus(e.target.value as 'approved' | 'rejected' | 'cancelled')}
+                            className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                                color: 'var(--color-text-primary)',
+                            }}
+                        >
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Rejection Reason
+                        </label>
+                        <textarea
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            rows={3}
+                            placeholder={status === 'rejected' ? 'Add reason for rejection' : 'Optional note'}
+                            className="w-full px-3 py-2.5 text-sm rounded-lg border resize-none"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                                color: 'var(--color-text-primary)',
+                            }}
+                        />
+                    </div>
+
+                    <div
+                        className="rounded-lg px-4 py-3"
+                        style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+                    >
+                        <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                            {formatLeaveDate(leave.startDate)} to {formatLeaveDate(leave.endDate)}
+                        </div>
+                        <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                            Changing the status will also update leave-linked attendance and paid leave balance.
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 mt-5">
+                    <button
+                        onClick={() => onConfirm(leave._id, status, reason)}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                        {isLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2.5 text-sm rounded-lg border cursor-pointer"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </ModalPortal>
+    );
+}
+
+function ViewLeaveModal({ leave, onClose }: { leave: any; onClose: () => void }) {
+    const emp = getLeaveEmployee(leave);
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-xl rounded-xl border p-6 shadow-xl"
+                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+            >
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                        <Eye size={18} style={{ color: 'var(--color-primary)' }} />
+                        <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Leave Request Details</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded cursor-pointer hover:bg-gray-100">
+                        <X size={18} style={{ color: 'var(--color-text-muted)' }} />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Employee</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{emp?.userId?.name || '—'}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Status</p>
+                        <StatusBadge status={leave.status} />
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Leave Type</p>
+                        <LeaveBadge type={leave.type} />
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Payment</p>
+                        <span
+                            className="inline-flex text-xs font-medium px-2 py-0.5 rounded-full"
+                            style={{
+                                backgroundColor: leave.isPaid ? '#DCFCE7' : '#FEE2E2',
+                                color: leave.isPaid ? '#15803D' : '#991B1B',
+                            }}
+                        >
+                            {leave.isPaid ? 'Paid' : 'Unpaid'}
+                        </span>
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Start Date</p>
+                        <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{formatLeaveDate(leave.startDate)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>End Date</p>
+                        <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{formatLeaveDate(leave.endDate)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Days</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Processed By</p>
+                        <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{leave.approvedBy?.name || '—'}</p>
+                    </div>
+                </div>
+
+                <div className="mt-4">
+                    <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Reason</p>
+                    <div
+                        className="rounded-lg px-4 py-3 text-sm"
+                        style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}
+                    >
+                        {leave.reason}
+                    </div>
+                </div>
+
+                {leave.rejectionReason && (
+                    <div className="mt-4">
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Rejection Reason</p>
+                        <div
+                            className="rounded-lg px-4 py-3 text-sm"
+                            style={{ backgroundColor: '#FEF2F2', color: '#991B1B' }}
+                        >
+                            {leave.rejectionReason}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex justify-end mt-5">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2.5 text-sm rounded-lg border cursor-pointer"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    >
+                        Close
                     </button>
                 </div>
             </div>
@@ -452,35 +729,78 @@ export default function HrmsLeavesPage() {
     const [showApplyModal, setShowApplyModal] = useState(false);
     const [rejectingId, setRejectingId] = useState<string | null>(null);
     const [selectedEmp, setSelectedEmp] = useState<any>(null);
+    const [viewingLeave, setViewingLeave] = useState<any>(null);
+    const [editingLeave, setEditingLeave] = useState<any>(null);
+    const [deletingLeave, setDeletingLeave] = useState<any>(null);
 
     // Status filter for "All Requests" tab
     const [statusFilter, setStatusFilter] = useState('');
 
-    const { data: allLeavesData, isLoading: loadingAll, refetch } = useGetLeavesQuery({
+    const { data: allLeavesData, isLoading: loadingAll, refetch: refetchAll } = useGetLeavesQuery({
         status: statusFilter || undefined,
     });
-    const { data: pendingData, isLoading: loadingPending } = useGetLeavesQuery({ status: 'pending' });
+    const { data: pendingData, isLoading: loadingPending, refetch: refetchPending } = useGetLeavesQuery({ status: 'pending' });
     const { data: empsData, isLoading: loadingEmps } = useGetEmployeesQuery({ limit: 100 });
 
-    const [updateStatus] = useUpdateLeaveStatusMutation();
+    const [updateStatus, { isLoading: updatingStatus }] = useUpdateLeaveStatusMutation();
+    const [deleteLeave, { isLoading: deletingLeaveRequest }] = useDeleteLeaveMutation();
 
     const allLeaves = (allLeavesData?.data?.leaves || []) as any[];
     const pendingLeaves = (pendingData?.data?.leaves || []) as any[];
     const employees = (empsData?.data?.employees || []) as any[];
 
+    const refreshLeaveLists = async () => {
+        await Promise.all([refetchAll(), refetchPending()]);
+    };
+
     const handleApprove = async (id: string) => {
         try {
             await updateStatus({ id, data: { status: 'approved' } }).unwrap();
-            refetch();
-        } catch { /* noop */ }
+            await refreshLeaveLists();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to approve leave request');
+        }
     };
 
     const handleReject = async (id: string, reason: string) => {
         try {
             await updateStatus({ id, data: { status: 'rejected', rejectionReason: reason } }).unwrap();
             setRejectingId(null);
-            refetch();
-        } catch { /* noop */ }
+            await refreshLeaveLists();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to reject leave request');
+        }
+    };
+
+    const handleEditStatus = async (
+        id: string,
+        status: 'approved' | 'rejected' | 'cancelled',
+        reason: string
+    ) => {
+        try {
+            await updateStatus({
+                id,
+                data: {
+                    status,
+                    rejectionReason: status === 'rejected' ? reason : undefined,
+                },
+            }).unwrap();
+            setEditingLeave(null);
+            await refreshLeaveLists();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to update leave status');
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        try {
+            await deleteLeave(id).unwrap();
+            setDeletingLeave(null);
+            setViewingLeave(null);
+            await refreshLeaveLists();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to delete leave request');
+        }
     };
 
     // If employee detail view is open
@@ -717,9 +1037,9 @@ export default function HrmsLeavesPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
                                                     &nbsp;→&nbsp;
-                                                    {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                                 <td className="px-4 py-3 text-xs max-w-[160px] truncate" style={{ color: 'var(--color-text-muted)' }}>
@@ -727,24 +1047,50 @@ export default function HrmsLeavesPage() {
                                                 </td>
                                                 <td className="px-4 py-3"><StatusBadge status={leave.status} /></td>
                                                 <td className="px-4 py-3">
-                                                    {leave.status === 'pending' && (
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => handleApprove(leave._id)}
-                                                                className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer"
-                                                                style={{ backgroundColor: '#16A34A' }}
-                                                            >
-                                                                Approve
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setRejectingId(leave._id)}
-                                                                className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer"
-                                                                style={{ backgroundColor: '#EF4444' }}
-                                                            >
-                                                                Reject
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {leave.status === 'pending' && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleApprove(leave._id)}
+                                                                    className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer"
+                                                                    style={{ backgroundColor: '#16A34A' }}
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setRejectingId(leave._id)}
+                                                                    className="px-2 py-1 text-xs font-medium text-white rounded cursor-pointer"
+                                                                    style={{ backgroundColor: '#EF4444' }}
+                                                                >
+                                                                    Reject
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        <button
+                                                            onClick={() => setViewingLeave(leave)}
+                                                            className="p-1.5 rounded border cursor-pointer"
+                                                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                            title="View leave request"
+                                                        >
+                                                            <Eye size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditingLeave(leave)}
+                                                            className="p-1.5 rounded border cursor-pointer"
+                                                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-primary)' }}
+                                                            title="Edit leave status"
+                                                        >
+                                                            <Pencil size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setDeletingLeave(leave)}
+                                                            className="p-1.5 rounded border cursor-pointer"
+                                                            style={{ borderColor: '#FECACA', color: '#DC2626' }}
+                                                            title="Delete leave request"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -847,6 +1193,28 @@ export default function HrmsLeavesPage() {
                     leaveId={rejectingId}
                     onClose={() => setRejectingId(null)}
                     onConfirm={handleReject}
+                />
+            )}
+            {viewingLeave && (
+                <ViewLeaveModal
+                    leave={viewingLeave}
+                    onClose={() => setViewingLeave(null)}
+                />
+            )}
+            {editingLeave && (
+                <EditLeaveStatusModal
+                    leave={editingLeave}
+                    onClose={() => setEditingLeave(null)}
+                    onConfirm={handleEditStatus}
+                    isLoading={updatingStatus}
+                />
+            )}
+            {deletingLeave && (
+                <DeleteLeaveModal
+                    leave={deletingLeave}
+                    onClose={() => setDeletingLeave(null)}
+                    onConfirm={handleDelete}
+                    isLoading={deletingLeaveRequest}
                 />
             )}
         </div>

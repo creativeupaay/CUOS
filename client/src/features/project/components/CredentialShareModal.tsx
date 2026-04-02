@@ -7,6 +7,7 @@ import {
     useUpdateCredentialAdminsMutation,
 } from '@/features/project';
 import type { Project, Credential } from '@/features/project';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CredentialShareModalProps {
@@ -459,6 +460,8 @@ function ViewAccessTab({ project, projectId }: { project: Project; projectId: st
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function CredentialShareModal({ project, projectId, onClose }: CredentialShareModalProps) {
     const [activeTab, setActiveTab] = useState<ModalTab>('edit');
+
+    useBodyScrollLock(true);
 
     return (
         <>
