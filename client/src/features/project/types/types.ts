@@ -298,6 +298,12 @@ export interface Note {
     color: string;
     isPinned: boolean;
     blocks: NoteBlock[];
+    mentions?: Array<{
+        mentionId: string;
+        userId: string;
+        blockId: string;
+        displayName: string;
+    }>;
     createdBy: User;
     updatedBy?: User;
     lastEditedAt?: string;

@@ -129,6 +129,41 @@ class NotificationService {
     }
 
     /**
+     * Send notification to all active internal users.
+     * Excludes partner accounts and partner employees.
+     */
+    async notifyInternalUsers(data: Omit<CreateNotificationInput, 'userId'>): Promise<void> {
+        const partnerRole = await Role.findOne({
+            name: { $in: ['partner'] },
+        }).select('_id');
+
+        const partnerDocs = await Partner.find({
+            userId: { $exists: true, $ne: null },
+            isActive: true,
+        }).select('userId').lean();
+
+        const excludedPartnerUserIds = new Set(
+            partnerDocs.map((partner) => partner.userId?.toString()).filter(Boolean)
+        );
+
+        const query: any = { isActive: true };
+        if (partnerRole?._id) {
+            query.role = { $ne: partnerRole._id };
+        }
+
+        const users = await User.find(query).select('_id').lean();
+        const internalUserIds = users
+            .map((user) => user._id as Types.ObjectId)
+            .filter((userId) => !excludedPartnerUserIds.has(userId.toString()));
+
+        if (internalUserIds.length === 0) {
+            return;
+        }
+
+        await this.createBulkNotifications(internalUserIds, data);
+    }
+
+    /**
      * Get notifications for a user
      */
     async getNotifications(

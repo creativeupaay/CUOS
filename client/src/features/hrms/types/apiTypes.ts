@@ -116,3 +116,7 @@ export interface CheckInRequest {
 export interface CheckOutRequest {
     notes?: string;
 }
+
+export interface CreateAnnouncementRequest {
+    content: string;
+}

@@ -4,8 +4,7 @@ import { useCreateEmployeeMutation, useUpdateEmployeeMutation, useGetEmployeeQue
 import { useGetUsersQuery } from '@/features/auth/authApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { ArrowLeft, Save, Loader2, UserPlus } from 'lucide-react';
-
-const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Creative'];
+import { dedupeDepartments, resolveDepartmentValue, DEFAULT_DEPARTMENTS } from '@/utils/department';
 const EMPLOYMENT_TYPES = ['full-time', 'part-time', 'contract', 'intern'];
 
 const DEFAULT_ONBOARDING_CHECKLIST = [
@@ -52,7 +51,7 @@ export default function HrmsEmployeeFormPage() {
 const [autoFilledDept, setAutoFilledDept] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const configuredDepartments = orgSettingsData?.data?.departments?.length
-        ? orgSettingsData.data.departments
+        ? dedupeDepartments(orgSettingsData.data.departments)
         : DEFAULT_DEPARTMENTS;
     const departmentOptions = form.department && !configuredDepartments.includes(form.department)
         ? [form.department, ...configuredDepartments]
@@ -175,7 +174,7 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
                                             departmentOptions.find(
                                                 (department) =>
                                                     department.toLowerCase() === userDepartment.toLowerCase()
-                                            ) || '';
+                                            ) || resolveDepartmentValue(userDepartment, departmentOptions);
                                         setAutoFilledDept(!!matchedDept);
                                         setForm({ ...form, userId: e.target.value, ...(matchedDept ? { department: matchedDept } : {}) });
                                     }}

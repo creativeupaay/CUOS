@@ -165,6 +165,18 @@ export interface Payroll {
     updatedAt: string;
 }
 
+export interface Announcement {
+    _id: string;
+    content: string;
+    publishedBy?: {
+        _id: string;
+        name: string;
+        email?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+}
+
 // ── Incentive Types ─────────────────────────────────────────────────
 
 export interface Incentive {

@@ -3,14 +3,17 @@ import mongoose, { Document, Schema, Types } from 'mongoose';
 export type NotificationType =
     | 'leave_submitted'
     | 'attendance_reminder'
+    | 'employee_birthday'
     | 'employee_onboarding'
     | 'partner_onboarding'
     | 'client_onboarding'
     | 'holiday_declared'
+    | 'company_announcement'
     | 'task_assigned'
     | 'leave_status_updated'
     | 'credential_access_granted'
-    | 'document_access_granted';
+    | 'document_access_granted'
+    | 'note_mentioned';
 
 export interface INotification extends Document {
     _id: Types.ObjectId;
@@ -39,14 +42,17 @@ const NotificationSchema = new Schema<INotification>(
             enum: [
                 'leave_submitted',
                 'attendance_reminder',
+                'employee_birthday',
                 'employee_onboarding',
                 'partner_onboarding',
                 'client_onboarding',
                 'holiday_declared',
+                'company_announcement',
                 'task_assigned',
                 'leave_status_updated',
                 'credential_access_granted',
                 'document_access_granted',
+                'note_mentioned',
             ],
             index: true,
         },

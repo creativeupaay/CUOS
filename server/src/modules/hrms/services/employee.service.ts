@@ -8,6 +8,11 @@ import AppError from '../../../utils/appError';
 import { env } from '../../../config/env.config';
 import { sendEmployeeOnboardingEmail } from '../../../services/email.service';
 import { notificationService } from '../../notification/services/notification.service';
+import {
+    buildDepartmentFilter,
+    getDepartmentCatalog,
+    resolveDepartmentValue,
+} from '../../../utils/department.util';
 
 class EmployeeService {
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
@@ -23,8 +28,10 @@ class EmployeeService {
             throw new AppError('Employee ID already exists', 400);
         }
 
+        const departmentCatalog = await getDepartmentCatalog();
         const employee = await Employee.create({
             ...data,
+            department: resolveDepartmentValue(data.department, departmentCatalog),
             createdBy,
         });
 
@@ -43,7 +50,8 @@ class EmployeeService {
 
         // Build pre-lookup match (fast indexed fields)
         const preMatch: any = {};
-        if (department) preMatch.department = department;
+        const departmentCatalog = await getDepartmentCatalog();
+        if (department) preMatch.department = buildDepartmentFilter(department);
         if (status) preMatch.status = status;
 
         // Aggregation pipeline so we can search on joined user.name / user.email
@@ -103,9 +111,13 @@ class EmployeeService {
         ]);
 
         const total = countResult[0]?.total ?? 0;
+        const normalizedEmployees = employees.map((employee) => ({
+            ...employee,
+            department: resolveDepartmentValue(employee.department, departmentCatalog),
+        }));
 
         return {
-            employees,
+            employees: normalizedEmployees,
             pagination: {
                 page,
                 limit,
@@ -124,17 +136,30 @@ class EmployeeService {
             throw new AppError('Employee not found', 404);
         }
 
+        const departmentCatalog = await getDepartmentCatalog();
+        employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
         return employee;
     }
 
     async getEmployeeByUserId(userId: string): Promise<IEmployee | null> {
-        return Employee.findOne({ userId })
+        const employee = await Employee.findOne({ userId })
             .populate('userId', 'name email')
             .populate('reportingTo', 'employeeId designation');
+        if (!employee) return null;
+        const departmentCatalog = await getDepartmentCatalog();
+        employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
+        return employee;
     }
 
     async updateEmployee(id: string, data: UpdateEmployeeInput): Promise<IEmployee> {
-        const employee = await Employee.findByIdAndUpdate(id, data, {
+        const departmentCatalog = await getDepartmentCatalog();
+        const updatePayload = {
+            ...data,
+            ...('department' in data
+                ? { department: resolveDepartmentValue(data.department, departmentCatalog) }
+                : {}),
+        };
+        const employee = await Employee.findByIdAndUpdate(id, updatePayload, {
             new: true,
             runValidators: true,
         })
@@ -145,6 +170,7 @@ class EmployeeService {
             throw new AppError('Employee not found', 404);
         }
 
+        employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
         return employee;
     }
 
@@ -222,17 +248,27 @@ class EmployeeService {
     }
 
     async getTeamMembers(managerId: string) {
-        return Employee.find({ reportingTo: managerId })
+        const teamMembers = await Employee.find({ reportingTo: managerId })
             .populate('userId', 'name email')
             .sort({ employeeId: 1 });
+        const departmentCatalog = await getDepartmentCatalog();
+        teamMembers.forEach((employee) => {
+            employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
+        });
+        return teamMembers;
     }
 
     async getOnboardingEmployees() {
-        return Employee.find({
+        const employees = await Employee.find({
             'onboarding.status': { $in: ['not-started', 'in-progress'] },
         })
             .populate('userId', 'name email')
             .sort({ joiningDate: -1 });
+        const departmentCatalog = await getDepartmentCatalog();
+        employees.forEach((employee) => {
+            employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
+        });
+        return employees;
     }
 
     async updateOnboardingChecklist(
@@ -324,6 +360,8 @@ class EmployeeService {
             throw new AppError('Invalid or expired form link', 404);
         }
 
+        const departmentCatalog = await getDepartmentCatalog();
+        employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
         return employee;
     }
 

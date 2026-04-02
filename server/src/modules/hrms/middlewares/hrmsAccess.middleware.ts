@@ -73,3 +73,18 @@ export const hrAdminOnly = async (req: Request, res: Response, next: NextFunctio
 
     return next(new AppError('Access restricted to HR and admin roles', 403));
 };
+
+/**
+ * Allow internal HRMS users while excluding partners and partner employees.
+ */
+export const internalHrmsOnly = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+        return next(new AppError('Authentication required', 401));
+    }
+
+    if (req.user.role === 'partner' || req.user.isPartnerEmployee) {
+        return next(new AppError('Partners do not have access to HRMS', 403));
+    }
+
+    return next();
+};

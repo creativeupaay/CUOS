@@ -1,6 +1,6 @@
 import { OrgSettings, IOrgSettings } from '../models/OrgSettings.model';
 import { AuditLog } from '../models/AuditLog.model';
-import AppError from '../../../utils/appError';
+import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '../../../utils/department.util';
 
 /**
  * Get organization settings (or create default)
@@ -10,6 +10,15 @@ export const getSettings = async (): Promise<IOrgSettings> => {
 
     if (!settings) {
         settings = await OrgSettings.create({});
+    } else {
+        const normalizedDepartments = dedupeDepartments([
+            ...settings.departments,
+            ...DEFAULT_DEPARTMENTS.filter((department) => department === 'Creative'),
+        ]);
+        if (JSON.stringify(normalizedDepartments) !== JSON.stringify(settings.departments)) {
+            settings.departments = normalizedDepartments;
+            await settings.save();
+        }
     }
 
     return settings;
@@ -22,12 +31,17 @@ export const updateSettings = async (
     data: Partial<IOrgSettings>,
     adminId: string
 ): Promise<IOrgSettings> => {
+    const normalizedData = { ...data };
+    if (normalizedData.departments) {
+        normalizedData.departments = dedupeDepartments(normalizedData.departments);
+    }
+
     let settings = await OrgSettings.findOne();
 
     if (!settings) {
-        settings = await OrgSettings.create(data);
+        settings = await OrgSettings.create(normalizedData);
     } else {
-        Object.assign(settings, data);
+        Object.assign(settings, normalizedData);
         await settings.save();
     }
 
@@ -35,7 +49,7 @@ export const updateSettings = async (
         userId: adminId,
         action: 'settings_updated',
         resource: 'settings',
-        details: data,
+        details: normalizedData,
     });
 
     return settings;

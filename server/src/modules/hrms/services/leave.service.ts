@@ -5,6 +5,7 @@ import { Employee } from '../models/Employee.model';
 import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
+import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 
 class LeaveService {
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
@@ -96,6 +97,13 @@ class LeaveService {
                 .limit(limit),
             Leave.countDocuments(query),
         ]);
+        const departmentCatalog = await getDepartmentCatalog();
+        leaves.forEach((leave) => {
+            const employee = leave.employeeId as any;
+            if (employee?.department) {
+                employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
+            }
+        });
 
         return {
             leaves,
@@ -113,6 +121,11 @@ class LeaveService {
 
         if (!leave) {
             throw new AppError('Leave not found', 404);
+        }
+        const departmentCatalog = await getDepartmentCatalog();
+        const employee = leave.employeeId as any;
+        if (employee?.department) {
+            employee.department = resolveDepartmentValue(employee.department, departmentCatalog);
         }
 
         return leave;

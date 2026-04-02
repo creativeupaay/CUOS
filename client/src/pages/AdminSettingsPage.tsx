@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, Building2, Clock, DollarSign, Shield, Lock } from 'lucide-react';
+import { Settings, Save, Building2 } from 'lucide-react';
 import {
     useGetOrgSettingsQuery,
     useUpdateOrgSettingsMutation,
 } from '@/features/overall-admin/api/adminApi';
+import { dedupeDepartments } from '@/utils/department';
 
 const DEFAULT_ABOUT_COMPANY_TEXT =
     'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
@@ -29,33 +30,6 @@ export default function AdminSettingsPage() {
         country: '',
         zipCode: '',
     });
-    const [workingHours, setWorkingHours] = useState({
-        startTime: '09:00',
-        endTime: '18:00',
-        daysPerWeek: 5,
-        hoursPerDay: 8,
-    });
-    const [taxSettings, setTaxSettings] = useState({
-        gstEnabled: true,
-        gstRate: 18,
-        tdsEnabled: true,
-        tdsRate: 10,
-    });
-    const [featureToggles, setFeatureToggles] = useState({
-        projectManagement: true,
-        finance: false,
-        crm: true,
-        hrms: true,
-        leads: true,
-    });
-    const [passwordPolicy, setPasswordPolicy] = useState({
-        minLength: 8,
-        requireUppercase: true,
-        requireLowercase: true,
-        requireNumbers: true,
-        requireSpecialChars: false,
-    });
-    const [sessionExpiry, setSessionExpiry] = useState(15);
     const [departments, setDepartments] = useState<string[]>([]);
     const [departmentInput, setDepartmentInput] = useState('');
     const [hiringContent, setHiringContent] = useState({
@@ -72,18 +46,13 @@ export default function AdminSettingsPage() {
             });
             const addr = settings.address || {};
             setAddress({ street: addr.street || '', city: addr.city || '', state: addr.state || '', country: addr.country || '', zipCode: addr.zipCode || '' });
-            setDepartments(Array.isArray(settings.departments) ? settings.departments : []);
-            setWorkingHours(settings.workingHours || { startTime: '09:00', endTime: '18:00', daysPerWeek: 5, hoursPerDay: 8 });
-            setTaxSettings(settings.taxSettings || { gstEnabled: true, gstRate: 18, tdsEnabled: true, tdsRate: 10 });
-            setFeatureToggles(settings.featureToggles || { projectManagement: true, finance: false, crm: true, hrms: true, leads: true });
+            setDepartments(dedupeDepartments(Array.isArray(settings.departments) ? settings.departments : []));
             setHiringContent({
                 showAboutCompany:
                     settings.hiring?.publicJobPage?.showAboutCompany ?? true,
                 aboutCompanyText:
                     settings.hiring?.publicJobPage?.aboutCompanyText || DEFAULT_ABOUT_COMPANY_TEXT,
             });
-            setPasswordPolicy(settings.passwordPolicy || { minLength: 8, requireUppercase: true, requireLowercase: true, requireNumbers: true, requireSpecialChars: false });
-            setSessionExpiry(settings.sessionExpiryMinutes || 15);
         }
     }, [settings]);
 
@@ -113,7 +82,7 @@ export default function AdminSettingsPage() {
             return;
         }
 
-        setDepartments((prev) => [...prev, nextDepartment]);
+        setDepartments((prev) => dedupeDepartments([...prev, nextDepartment]));
         setDepartmentInput('');
     };
 
@@ -258,71 +227,7 @@ export default function AdminSettingsPage() {
                             Add
                         </button>
                     </div>
-                    <SaveButton section="departments" onClick={() => handleSaveSection('departments', { departments })} />
-                </div>
-
-                {/* Working Hours */}
-                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
-                    <SectionHeader icon={<Clock size={20} />} title="Working Hours" />
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Start Time</label>
-                            <input type="time" value={workingHours.startTime} onChange={(e) => setWorkingHours({ ...workingHours, startTime: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>End Time</label>
-                            <input type="time" value={workingHours.endTime} onChange={(e) => setWorkingHours({ ...workingHours, endTime: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Days/Week</label>
-                            <input type="number" min={1} max={7} value={workingHours.daysPerWeek} onChange={(e) => setWorkingHours({ ...workingHours, daysPerWeek: parseInt(e.target.value) || 5 })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Hours/Day</label>
-                            <input type="number" min={1} max={24} value={workingHours.hoursPerDay} onChange={(e) => setWorkingHours({ ...workingHours, hoursPerDay: parseInt(e.target.value) || 8 })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                    </div>
-                    <SaveButton section="working" onClick={() => handleSaveSection('working', { workingHours })} />
-                </div>
-
-                {/* Tax Settings */}
-                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
-                    <SectionHeader icon={<DollarSign size={20} />} title="Tax & Currency" />
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={taxSettings.gstEnabled} onChange={(e) => setTaxSettings({ ...taxSettings, gstEnabled: e.target.checked })} className="rounded" />
-                            <label className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Enable GST</label>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>GST Rate (%)</label>
-                            <input type="number" value={taxSettings.gstRate} onChange={(e) => setTaxSettings({ ...taxSettings, gstRate: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={taxSettings.tdsEnabled} onChange={(e) => setTaxSettings({ ...taxSettings, tdsEnabled: e.target.checked })} className="rounded" />
-                            <label className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Enable TDS</label>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>TDS Rate (%)</label>
-                            <input type="number" value={taxSettings.tdsRate} onChange={(e) => setTaxSettings({ ...taxSettings, tdsRate: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                    </div>
-                    <SaveButton section="tax" onClick={() => handleSaveSection('tax', { taxSettings })} />
-                </div>
-
-                {/* Feature Toggles */}
-                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
-                    <SectionHeader icon={<Shield size={20} />} title="Feature Toggles" />
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {Object.entries(featureToggles).map(([feature, enabled]) => (
-                            <label key={feature} className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--color-border-default)', backgroundColor: enabled ? '#F0FDF4' : 'var(--color-bg-subtle)' }}>
-                                <input type="checkbox" checked={enabled} onChange={(e) => setFeatureToggles({ ...featureToggles, [feature]: e.target.checked })} className="rounded" />
-                                <span className="text-sm font-medium capitalize" style={{ color: 'var(--color-text-primary)' }}>
-                                    {feature.replace(/([A-Z])/g, ' $1').trim()}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                    <SaveButton section="features" onClick={() => handleSaveSection('features', { featureToggles })} />
+                    <SaveButton section="departments" onClick={() => handleSaveSection('departments', { departments: dedupeDepartments(departments) })} />
                 </div>
 
                 <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
@@ -378,29 +283,6 @@ export default function AdminSettingsPage() {
                     />
                 </div>
 
-                {/* Password Policy */}
-                <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
-                    <SectionHeader icon={<Lock size={20} />} title="Password & Session Policy" />
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Min Password Length</label>
-                            <input type="number" min={6} max={32} value={passwordPolicy.minLength} onChange={(e) => setPasswordPolicy({ ...passwordPolicy, minLength: parseInt(e.target.value) || 8 })} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Session Expiry (minutes)</label>
-                            <input type="number" min={5} max={1440} value={sessionExpiry} onChange={(e) => setSessionExpiry(parseInt(e.target.value) || 15)} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }} />
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                        {['requireUppercase', 'requireLowercase', 'requireNumbers', 'requireSpecialChars'].map((key) => (
-                            <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
-                                <input type="checkbox" checked={(passwordPolicy as any)[key]} onChange={(e) => setPasswordPolicy({ ...passwordPolicy, [key]: e.target.checked })} className="rounded" />
-                                <span style={{ color: 'var(--color-text-primary)' }}>{key.replace('require', 'Require ').replace(/([A-Z])/g, ' $1').trim()}</span>
-                            </label>
-                        ))}
-                    </div>
-                    <SaveButton section="password" onClick={() => handleSaveSection('password', { passwordPolicy, sessionExpiryMinutes: sessionExpiry })} />
-                </div>
             </div>
         </div>
     );

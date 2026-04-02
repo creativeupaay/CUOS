@@ -14,6 +14,7 @@ import cookieParser from "cookie-parser";
 import { initializeSocket } from "./config/socket.config";
 import otService from "./modules/collaboration/services/otService";
 import { initAttendanceReminderJob } from "./modules/notification/jobs/attendanceReminder.job";
+import { initBirthdayNotificationJob } from "./modules/notification/jobs/birthdayNotification.job";
 
 // Register models
 import "./modules/auth/models/Permission.model";
@@ -120,6 +121,7 @@ const io = initializeSocket(httpServer);
 
 // Initialize scheduled jobs
 initAttendanceReminderJob();
+initBirthdayNotificationJob();
 
 // Start server
 httpServer.listen(PORT, () => {

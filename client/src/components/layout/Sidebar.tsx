@@ -10,7 +10,7 @@ import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, CreditCard,
-    TrendingUp, Clock, CalendarDays, Briefcase, CheckCircle,
+    TrendingUp, Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -93,8 +93,14 @@ function getModuleConfig(
             { key: 'leaves', label: 'Leaves', path: '/hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/hrms/leaves' },
             { key: 'holidays', label: 'Holidays', path: '/hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/hrms/holidays' },
             { key: 'payroll', label: 'Payroll', path: '/hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/hrms/payroll' },
+            { key: 'announcements', label: 'Company Announcements', path: '/hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/hrms/announcements' },
         ];
-        return { title: 'HRMS', items: isAdmin || !hrmsSubs ? allItems : allItems.filter(i => (hrmsSubs as any)[i.key] === true) };
+        return {
+            title: 'HRMS',
+            items: isAdmin || !hrmsSubs
+                ? allItems
+                : allItems.filter(i => i.key === 'announcements' || (hrmsSubs as any)[i.key] === true),
+        };
     }
     if (pathname.startsWith('/my-hrms')) {
         const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
@@ -106,7 +112,8 @@ function getModuleConfig(
         const isHrmsDataPath = pathname.startsWith('/my-hrms/attendance') ||
                                pathname.startsWith('/my-hrms/leaves') ||
                                pathname.startsWith('/my-hrms/holidays') ||
-                               pathname.startsWith('/my-hrms/payroll');
+                               pathname.startsWith('/my-hrms/payroll') ||
+                               pathname.startsWith('/my-hrms/announcements');
 
         // For regular employees
         if (!isSuperAdmin) {
@@ -130,6 +137,7 @@ function getModuleConfig(
                         { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
                         { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
                         { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+                        { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
                     ],
                 };
             }
@@ -145,6 +153,7 @@ function getModuleConfig(
                 { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
                 { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
                 { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+                { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
             ],
         };
     }

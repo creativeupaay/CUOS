@@ -568,9 +568,40 @@ export const updateDocAdmins = async (
 
     console.log('[updateDocAdmins] Converted User IDs:', actualUserIds);
 
+    const project = await Project.findById(projectId)
+        .select('name docAdmins')
+        .lean();
+
+    if (!project) {
+        throw new AppError('Project not found', 404);
+    }
+
+    const previousAdminIds = (project.docAdmins ?? []).map((id) => id.toString());
+    const newlyAddedUserIds = actualUserIds.filter((id) => !previousAdminIds.includes(id));
+
     await Project.findByIdAndUpdate(projectId, {
         docAdmins: actualUserIds.map((id) => new Types.ObjectId(id)),
     });
+
+    if (newlyAddedUserIds.length > 0) {
+        const projectName = project.name || 'a project';
+
+        await Promise.all(
+            newlyAddedUserIds.map((userId) =>
+                notificationService.createNotification({
+                    userId,
+                    type: 'document_access_granted',
+                    title: 'Document Admin Access Granted',
+                    message: `You have been granted admin access to documents in ${projectName}.`,
+                    link: `/projects/${projectId}?tab=documents`,
+                    metadata: {
+                        projectId,
+                        accessLevel: 'admin',
+                    },
+                })
+            )
+        );
+    }
 
     console.log('[updateDocAdmins] Successfully updated doc admins for project:', projectId);
 };

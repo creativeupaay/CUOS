@@ -4,12 +4,14 @@ import { Payroll } from '../models/Payroll.model';
 import { Incentive } from '../models/Incentive.model';
 import { TimeLog } from '../../project/models/TimeLog.model';
 import AppError from '../../../utils/appError';
+import { getDepartmentCatalog, mergeDepartmentCounts } from '../../../utils/department.util';
 
 class AnalyticsService {
     /**
      * Dashboard analytics for HRMS overview.
      */
     async getDashboardStats() {
+        const departmentCatalog = await getDepartmentCatalog();
         const [
             totalEmployees,
             activeEmployees,
@@ -34,7 +36,7 @@ class AnalyticsService {
             totalEmployees,
             activeEmployees,
             onNotice,
-            departments,
+            departments: mergeDepartmentCounts(departments, departmentCatalog),
             pendingLeaves,
             onboardingCount,
         };

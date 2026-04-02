@@ -5,10 +5,12 @@ export type NotificationType =
     | 'partner_onboarding'
     | 'client_onboarding'
     | 'holiday_declared'
+    | 'company_announcement'
     | 'task_assigned'
     | 'leave_status_updated'
     | 'credential_access_granted'
-    | 'document_access_granted';
+    | 'document_access_granted'
+    | 'note_mentioned';
 
 export interface INotification {
     _id: string;

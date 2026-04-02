@@ -5,6 +5,11 @@ import { AuditLog } from '../models/AuditLog.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerService } from '../../partners/services/partner.service';
+import {
+    buildDepartmentFilter,
+    getDepartmentCatalog,
+    resolveDepartmentValue,
+} from '../../../utils/department.util';
 
 export interface UserFilters {
     search?: string;
@@ -52,7 +57,7 @@ export const getAllUsers = async (filters: UserFilters) => {
     }
 
     if (department) {
-        query.department = department;
+        query.department = buildDepartmentFilter(department);
     }
 
     if (isActive !== undefined) {
@@ -114,12 +119,13 @@ export const createUser = async (data: CreateUserData, adminId: string) => {
         throw new AppError('Invalid role specified', 400);
     }
 
+    const departmentCatalog = await getDepartmentCatalog();
     const user = await User.create({
         name: data.name,
         email: data.email,
         password: data.password,
         role: role._id,
-        department: data.department,
+        department: resolveDepartmentValue(data.department, departmentCatalog) || undefined,
     });
 
     await user.populate('role', 'name level');
@@ -163,6 +169,11 @@ export const updateUser = async (id: string, data: UpdateUserData, adminId: stri
         typeof data.isActive === 'boolean' && data.isActive !== user.isActive;
 
     const updatePayload: UpdateUserData = { ...data };
+    if ('department' in updatePayload) {
+        const departmentCatalog = await getDepartmentCatalog();
+        updatePayload.department =
+            resolveDepartmentValue(updatePayload.department, departmentCatalog) || undefined;
+    }
     if (shouldToggleActive) {
         delete updatePayload.isActive;
     }

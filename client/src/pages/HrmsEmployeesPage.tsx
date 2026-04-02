@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetEmployeesQuery, useDeleteEmployeeMutation } from '@/features/hrms/hrmsApi';
+import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import {
     Plus, Search, Trash2, Edit, Eye, Users, Building2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
-
-const DEPARTMENTS = ['engineering', 'design', 'marketing', 'finance', 'hr', 'admin'];
+import { dedupeDepartments, formatDepartmentLabel, normalizeDepartmentKey, DEFAULT_DEPARTMENTS } from '@/utils/department';
 const STATUSES = ['active', 'on-notice', 'relieved', 'terminated'];
 
 export default function HrmsEmployeesPage() {
@@ -15,6 +15,7 @@ export default function HrmsEmployeesPage() {
     const [department, setDepartment] = useState('');
     const [status, setStatus] = useState('');
     const [page, setPage] = useState(1);
+    const { data: orgSettingsData } = useGetOrgSettingsQuery();
 
     // Debounce: update `search` 350ms after the user stops typing
     useEffect(() => {
@@ -34,6 +35,9 @@ export default function HrmsEmployeesPage() {
 
     const employees = data?.data?.employees || [];
     const pagination = data?.data?.pagination;
+    const departmentOptions = orgSettingsData?.data?.departments?.length
+        ? dedupeDepartments(orgSettingsData.data.departments)
+        : DEFAULT_DEPARTMENTS;
 
     const handleDelete = async (id: string, name: string) => {
         if (window.confirm(`Are you sure you want to delete ${name}?`)) {
@@ -60,7 +64,7 @@ export default function HrmsEmployeesPage() {
             engineering: '#3B82F6', design: '#8B5CF6', marketing: '#F59E0B',
             finance: '#10B981', hr: '#EC4899', admin: '#6B7280',
         };
-        return colors[d] || '#6B7280';
+        return colors[normalizeDepartmentKey(d)] || '#6B7280';
     };
 
     return (
@@ -113,8 +117,8 @@ export default function HrmsEmployeesPage() {
                     }}
                 >
                     <option value="">All Departments</option>
-                    {DEPARTMENTS.map((d) => (
-                        <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                    {departmentOptions.map((d) => (
+                        <option key={d} value={d}>{d}</option>
                     ))}
                 </select>
                 <select
@@ -187,7 +191,7 @@ export default function HrmsEmployeesPage() {
                                                 style={{ backgroundColor: getDeptColor(emp.department) + '20', color: getDeptColor(emp.department) }}
                                             >
                                                 <Building2 size={12} />
-                                                {emp.department}
+                                                {formatDepartmentLabel(emp.department)}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{emp.designation}</td>

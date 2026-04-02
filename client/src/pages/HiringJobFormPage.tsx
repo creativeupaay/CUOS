@@ -18,6 +18,7 @@ import {
     Sparkles,
     Trash2,
 } from 'lucide-react';
+import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
 import {
     useCreateJobMutation,
     useDeleteApplicationFieldMutation,
@@ -37,16 +38,6 @@ import type {
     EmploymentType,
     StandardApplicationFieldId,
 } from '@/features/hiring/types/types';
-
-const DEFAULT_DEPARTMENTS = [
-    'Engineering',
-    'Design',
-    'Marketing',
-    'Finance',
-    'HR',
-    'Operations',
-    'Creative',
-];
 
 const MANDATORY_FIELDS = [
     { key: 'name', label: 'Full Name', description: 'Always required in every job form.' },
@@ -306,10 +297,10 @@ export default function HiringJobFormPage() {
 
     const configuredDepartments = useMemo(() => {
         const orgDepartments = orgSettingsData?.data?.departments?.length
-            ? orgSettingsData.data.departments
+            ? dedupeDepartments(orgSettingsData.data.departments)
             : DEFAULT_DEPARTMENTS;
 
-        return Array.from(new Set([...orgDepartments, 'Creative']));
+        return dedupeDepartments([...orgDepartments, 'Creative']);
     }, [orgSettingsData?.data?.departments]);
 
     const departmentOptions =

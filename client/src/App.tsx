@@ -45,6 +45,7 @@ const HrmsAttendancePage = lazy(() => import('./pages/HrmsAttendancePage'));
 const HrmsLeavesPage = lazy(() => import('./pages/HrmsLeavesPage'));
 const HrmsHolidaysPage = lazy(() => import('./pages/HrmsHolidaysPage'));
 const HrmsPayrollPage = lazy(() => import('./pages/HrmsPayrollPage'));
+const HrmsAnnouncementsPage = lazy(() => import('./pages/HrmsAnnouncementsPage'));
 const EmployeeAttendancePage = lazy(() => import('./pages/EmployeeAttendancePage'));
 const EmployeeLeavesPage = lazy(() => import('./pages/EmployeeLeavesPage'));
 const EmployeeHolidaysPage = lazy(() => import('./pages/EmployeeHolidaysPage'));
@@ -164,6 +165,19 @@ function HrmsRedirect({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AnnouncementRedirect() {
+  const user = useAppSelector((state) => state.auth.user);
+  const roleName = getRoleNameFromUser(user);
+
+  if (roleName === 'partner' || user?.isPartnerEmployee) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  const isAdminOrHr = ['super-admin', 'admin', 'super_admin', 'hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
+
+  return <Navigate to={isAdminOrHr ? '/hrms/announcements' : '/my-hrms/announcements'} replace />;
+}
+
 
 function App() {
   const dispatch = useAppDispatch();
@@ -276,6 +290,7 @@ function App() {
           <Route path="/hrms/leaves" element={<HrmsRedirect>{loadable(<HrmsLeavesPage />)}</HrmsRedirect>} />
           <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
           <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/announcements" element={<HrmsRedirect>{loadable(<HrmsAnnouncementsPage />)}</HrmsRedirect>} />
 
           {/* Employee HRMS Module - All employees can access their own data */}
           <Route path="/my-hrms/profile" element={loadable(<MyProfilePage />)} />
@@ -284,6 +299,8 @@ function App() {
           <Route path="/my-hrms/leaves" element={loadable(<EmployeeLeavesPage />)} />
           <Route path="/my-hrms/holidays" element={loadable(<EmployeeHolidaysPage />)} />
           <Route path="/my-hrms/payroll" element={loadable(<EmployeePayrollPage />)} />
+          <Route path="/my-hrms/announcements" element={loadable(<HrmsAnnouncementsPage />)} />
+          <Route path="/announcements" element={<AnnouncementRedirect />} />
 
           {/* Admin Module */}
           <Route path="/admin" element={<PartnerRestrictedRoute>{loadable(<AdminDashboardPage />)}</PartnerRestrictedRoute>} />

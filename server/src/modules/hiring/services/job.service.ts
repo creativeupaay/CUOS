@@ -7,6 +7,7 @@ import { Application } from '../models/Application.model';
 import { Assignment } from '../models/Assignment.model';
 import { OrgSettings } from '../../overall-admin/models/OrgSettings.model';
 import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
+import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 import type {
     CreateJobInput,
     UpdateJobInput,
@@ -326,11 +327,13 @@ export class JobService {
      * Create a new job posting
      */
     async createJob(data: CreateJobInput, createdBy: Types.ObjectId): Promise<IJob> {
+        const departmentCatalog = await getDepartmentCatalog();
         const scheduling = normalizeCreateScheduling(data.interviewScheduling);
         const applicationForm = normalizeApplicationForm(data.applicationForm);
 
         const job = await Job.create({
             ...data,
+            department: resolveDepartmentValue(data.department, departmentCatalog),
             applicationForm,
             interviewScheduling: scheduling,
             createdBy,
@@ -436,7 +439,11 @@ export class JobService {
             throw new AppError('Job not found', 404);
         }
 
+        const departmentCatalog = await getDepartmentCatalog();
         const updatePayload: any = { ...data };
+        if ('department' in data) {
+            updatePayload.department = resolveDepartmentValue(data.department, departmentCatalog);
+        }
 
         if (data.interviewScheduling) {
             updatePayload.interviewScheduling = mergeSchedulingUpdate(

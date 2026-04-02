@@ -2,6 +2,7 @@ import { Attendance } from '../models/Attendance.model';
 import { Employee } from '../models/Employee.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
+import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 
 export class AttendanceService {
     static async checkIn(userId: string, data: any) {
@@ -169,6 +170,7 @@ export class AttendanceService {
         }
         const dateEnd = new Date(dateObj.getTime() + 24 * 60 * 60 * 1000 - 1);
 
+        const departmentCatalog = await getDepartmentCatalog();
         const [employees, attendanceRecords] = await Promise.all([
             Employee.find({ status: { $ne: 'terminated' } }).populate('userId', 'name email').lean(),
             Attendance.find({ date: { $gte: dateObj, $lte: dateEnd } }).lean(),
@@ -185,7 +187,7 @@ export class AttendanceService {
                 employeeCode: emp.employeeId,
                 name: (emp.userId as any)?.name || 'Unknown',
                 email: (emp.userId as any)?.email || '',
-                department: emp.department,
+                department: resolveDepartmentValue(emp.department, departmentCatalog),
                 designation: emp.designation,
                 status: record?.status || 'absent',
                 checkIn: record?.checkIn || null,
@@ -217,6 +219,7 @@ export class AttendanceService {
         // which can be 1 more than the UTC date (e.g. March 31 23:59 UTC = April 1 IST)
         const daysInMonth = endDate.getUTCDate();
 
+        const departmentCatalog = await getDepartmentCatalog();
         const [employees, records] = await Promise.all([
             Employee.find({}).populate('userId', 'name email').lean(),
             Attendance.find({ date: { $gte: startDate, $lte: endDate } }).lean(),
@@ -248,7 +251,7 @@ export class AttendanceService {
                 employeeId: emp._id,
                 employeeCode: emp.employeeId,
                 name: (emp.userId as any)?.name || 'Unknown',
-                department: emp.department,
+                department: resolveDepartmentValue(emp.department, departmentCatalog),
                 days,
             };
         });

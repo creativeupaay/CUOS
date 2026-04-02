@@ -20,8 +20,10 @@ import {
     useDeleteJobMutation,
     useToggleJobMutation,
 } from '@/features/hiring/hiringApi';
+import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { useAppSelector } from '@/app/hooks';
 import type { Job, EmploymentType } from '@/features/hiring/types/types';
+import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
 
 type JobLocationType = 'Remote' | 'In-Office';
 
@@ -82,6 +84,7 @@ export default function HiringJobsPage() {
     const [deleteError, setDeleteError] = useState('');
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const { data: orgSettingsData } = useGetOrgSettingsQuery();
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -111,7 +114,9 @@ export default function HiringJobsPage() {
     const jobs: Job[] = data?.data.jobs || [];
 
     // Unique departments for filter
-    const departments = Array.from(new Set(jobs.map((j) => j.department))).sort();
+    const departments = orgSettingsData?.data?.departments?.length
+        ? dedupeDepartments(orgSettingsData.data.departments)
+        : dedupeDepartments([...DEFAULT_DEPARTMENTS, ...jobs.map((j) => j.department)]).sort();
 
     const handleDelete = async () => {
         if (!deleteConfirm) return;

@@ -1,7 +1,7 @@
 import { api } from '@/services/api';
 import type {
     Employee, SalaryStructure, Leave, Payroll, LeaveBalance,
-    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance
+    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance, Announcement
 } from './types/types';
 import type {
     ApiResponse, PaginatedResponse,
@@ -10,6 +10,7 @@ import type {
     CreateLeaveRequest, UpdateLeaveStatusRequest,
     GeneratePayrollRequest, UpdatePayrollStatusRequest,
     CheckInRequest, CheckOutRequest,
+    CreateAnnouncementRequest,
 } from './types/apiTypes';
 
 export const hrmsApi = api.injectEndpoints({
@@ -106,6 +107,34 @@ export const hrmsApi = api.injectEndpoints({
         getOnboardingEmployees: builder.query<ApiResponse<{ employees: Employee[] }>, void>({
             query: () => '/hrms/employees/onboarding',
             providesTags: ['Employees'],
+        }),
+
+        // ══════════════════════════════════════════════════════════
+        // ANNOUNCEMENT ENDPOINTS
+        // ══════════════════════════════════════════════════════════
+        getAnnouncements: builder.query<ApiResponse<{ announcements: Announcement[] }>, void>({
+            query: () => '/hrms/announcements',
+            providesTags: ['Announcements'],
+        }),
+
+        createAnnouncement: builder.mutation<
+            ApiResponse<{ announcement: Announcement }>,
+            CreateAnnouncementRequest
+        >({
+            query: (data) => ({
+                url: '/hrms/announcements',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Announcements', 'Notifications'],
+        }),
+
+        deleteAnnouncement: builder.mutation<ApiResponse, string>({
+            query: (id) => ({
+                url: `/hrms/announcements/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Announcements'],
         }),
 
         // Generate (or retrieve existing) self-onboarding form token
@@ -458,6 +487,9 @@ export const {
     useUpdateEmployeeProfilePhotoMutation,
     useDeleteEmployeeMutation,
     useGetOnboardingEmployeesQuery,
+    useGetAnnouncementsQuery,
+    useCreateAnnouncementMutation,
+    useDeleteAnnouncementMutation,
     useGenerateFormTokenMutation,
     useGetIdentityDocumentUrlQuery,
     // Salary

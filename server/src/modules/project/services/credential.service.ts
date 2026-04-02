@@ -245,10 +245,40 @@ export const updateCredentialAdmins = async (
     const actualUserIds = await convertToUserIds(userIds);
     const userObjectIds = actualUserIds.map((id) => new Types.ObjectId(id));
 
-    await Project.findByIdAndUpdate(
-        projectId,
-        { $set: { credentialAdmins: userObjectIds } },
-        { new: true }
+    const project = await Project.findById(projectId)
+        .select('name credentialAdmins')
+        .lean();
+
+    if (!project) {
+        throw new AppError('Project not found', 404);
+    }
+
+    const previousAdminIds = (project.credentialAdmins ?? []).map((id) => id.toString());
+    const newlyAddedUserIds = actualUserIds.filter((id) => !previousAdminIds.includes(id));
+
+    await Project.findByIdAndUpdate(projectId, {
+        $set: { credentialAdmins: userObjectIds },
+    });
+
+    if (newlyAddedUserIds.length === 0) {
+        return;
+    }
+
+    const projectName = project.name || 'a project';
+    await Promise.all(
+        newlyAddedUserIds.map((userId) =>
+            notificationService.createNotification({
+                userId,
+                type: 'credential_access_granted',
+                title: 'Project Edit Access Granted',
+                message: `You have been granted edit access to credentials in ${projectName}.`,
+                link: `/projects/${projectId}?tab=credentials`,
+                metadata: {
+                    projectId,
+                    accessLevel: 'edit',
+                },
+            })
+        )
     );
 };
 

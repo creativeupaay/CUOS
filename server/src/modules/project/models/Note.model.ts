@@ -26,6 +26,13 @@ export interface IContentBlock {
     caption?: string;
 }
 
+export interface INoteMention {
+    mentionId: string;
+    userId: Types.ObjectId;
+    blockId: string;
+    displayName: string;
+}
+
 // ── Main Note type ────────────────────────────────────────────────────────────
 
 export interface INote extends Document {
@@ -36,6 +43,7 @@ export interface INote extends Document {
     color: string;
     isPinned: boolean;
     blocks: IContentBlock[];
+    mentions: INoteMention[];
     createdBy: Types.ObjectId;
     updatedBy?: Types.ObjectId;
     lastEditedAt?: Date;
@@ -67,6 +75,16 @@ const ContentBlockSchema = new Schema<IContentBlock>(
     { _id: false }
 );
 
+const NoteMentionSchema = new Schema<INoteMention>(
+    {
+        mentionId: { type: String, required: true },
+        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        blockId: { type: String, required: true },
+        displayName: { type: String, required: true, trim: true },
+    },
+    { _id: false }
+);
+
 // ── Note schema ───────────────────────────────────────────────────────────────
 
 const NoteSchema = new Schema<INote>(
@@ -76,6 +94,7 @@ const NoteSchema = new Schema<INote>(
         color: { type: String, default: '#FFFFFF' },
         isPinned: { type: Boolean, default: false },
         blocks: { type: [ContentBlockSchema], default: [] },
+        mentions: { type: [NoteMentionSchema], default: [] },
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
         lastEditedAt: { type: Date },

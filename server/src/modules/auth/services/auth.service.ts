@@ -7,6 +7,7 @@ import {
     verifyRefreshToken,
     TokenPayload,
 } from '../utils/jwt.util';
+import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 
 export interface RegisterData {
     name?: string;
@@ -88,12 +89,13 @@ export const register = async (data: RegisterData): Promise<IUser> => {
     }
 
     // Create user
+    const departmentCatalog = await getDepartmentCatalog();
     const user = await User.create({
         name: data.name,
         email: data.email,
         password: data.password,
         role: role._id,
-        department: data.department,
+        department: resolveDepartmentValue(data.department, departmentCatalog) || undefined,
     });
 
     // Populate role

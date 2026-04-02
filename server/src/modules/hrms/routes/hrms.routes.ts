@@ -2,10 +2,11 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
-import { checkHrmsAccess, hrAdminOnly } from '../middlewares/hrmsAccess.middleware';
+import { checkHrmsAccess, hrAdminOnly, internalHrmsOnly } from '../middlewares/hrmsAccess.middleware';
 
 // Validators
 import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
+import { createAnnouncementSchema, deleteAnnouncementSchema } from '../validators/announcement.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
@@ -14,6 +15,7 @@ import { checkInSchema, checkOutSchema } from '../validators/attendance.validato
 
 // Controllers
 import * as employeeController from '../controllers/employee.controller';
+import * as announcementController from '../controllers/announcement.controller';
 import * as salaryController from '../controllers/salary.controller';
 import * as leaveController from '../controllers/leave.controller';
 import * as payrollController from '../controllers/payroll.controller';
@@ -69,6 +71,21 @@ router.patch(
     '/employees/:id/onboarding',
     hrAdminOnly,
     employeeController.updateOnboardingChecklist
+);
+
+// Company announcements
+router.get('/announcements', internalHrmsOnly, announcementController.getAnnouncements);
+router.post(
+    '/announcements',
+    hrAdminOnly,
+    validateRequest(createAnnouncementSchema),
+    announcementController.createAnnouncement
+);
+router.delete(
+    '/announcements/:id',
+    hrAdminOnly,
+    validateRequest(deleteAnnouncementSchema),
+    announcementController.deleteAnnouncement
 );
 
 // Self-onboarding form management

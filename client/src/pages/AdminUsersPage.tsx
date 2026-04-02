@@ -12,6 +12,7 @@ import {
     useGetOrgSettingsQuery,
 } from '@/features/overall-admin/api/adminApi';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
 
 // ─── Form data ────────────────────────────────────────────────────────────────
 
@@ -21,11 +22,9 @@ interface UserFormData {
     password: string;
     role: string;
     department: string;
-    customDepartment: string;
 }
 
-const initialForm: UserFormData = { name: '', email: '', password: '', role: '', department: '', customDepartment: '' };
-const DEFAULT_DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Finance', 'HR', 'Operations', 'Creative'];
+const initialForm: UserFormData = { name: '', email: '', password: '', role: '', department: '' };
 
 // ─── Edit User Details Modal ──────────────────────────────────────────────────
 
@@ -41,11 +40,8 @@ function EditCredentialsModal({ user, roles, departmentOptions, onClose, onSave,
     const [email, setEmail] = useState(user.email || '');
     const [role, setRole] = useState(typeof user.role === 'object' ? user.role?._id || '' : '');
     const [department, setDepartment] = useState(user.department || '');
-    const [customDepartment, setCustomDepartment] = useState('');
     const inputSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' };
     const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none';
-
-    const resolvedDepartment = department === '__custom__' ? customDepartment.trim() : department;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -79,22 +75,13 @@ function EditCredentialsModal({ user, roles, departmentOptions, onClose, onSave,
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Department</label>
-                            <select value={department} onChange={e => { setDepartment(e.target.value); if (e.target.value !== '__custom__') setCustomDepartment(''); }}
+                            <select value={department} onChange={e => setDepartment(e.target.value)}
                                 className={inputCls} style={inputSty}>
                                 <option value="">No Department</option>
                                 {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-                                <option value="__custom__">✏️ Custom…</option>
                             </select>
                         </div>
                     </div>
-                    {department === '__custom__' && (
-                        <div>
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Custom Department</label>
-                            <input type="text" value={customDepartment} onChange={e => setCustomDepartment(e.target.value)}
-                                placeholder="Type department name"
-                                className={inputCls} style={inputSty} />
-                        </div>
-                    )}
                     <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                         Use the Reset Password action to change this user&apos;s password.
                     </div>
@@ -102,8 +89,8 @@ function EditCredentialsModal({ user, roles, departmentOptions, onClose, onSave,
                 <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
                     <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50" style={{ borderColor: 'var(--color-border-default)' }}>Cancel</button>
                     <button
-                        onClick={() => onSave({ name: name.trim(), email: email.trim(), role, department: resolvedDepartment })}
-                        disabled={isSaving || !name.trim() || !email.trim() || !role || (department === '__custom__' && !customDepartment.trim())}
+                        onClick={() => onSave({ name: name.trim(), email: email.trim(), role, department })}
+                        disabled={isSaving || !name.trim() || !email.trim() || !role}
                         className="px-4 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50"
                         style={{ backgroundColor: 'var(--color-primary)' }}
                     >
@@ -143,11 +130,8 @@ export default function AdminUsersPage() {
     const users = data?.data?.users || [];
     const pagination = data?.data?.pagination;
     const departmentOptions = orgSettingsData?.data?.departments?.length
-        ? orgSettingsData.data.departments
+        ? dedupeDepartments(orgSettingsData.data.departments)
         : DEFAULT_DEPARTMENTS;
-
-    const resolvedDept = (fd: UserFormData) =>
-        fd.department === '__custom__' ? fd.customDepartment.trim() : fd.department;
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault(); setError('');
@@ -155,7 +139,7 @@ export default function AdminUsersPage() {
             await createUser({
                 name: formData.name, email: formData.email,
                 password: formData.password, role: formData.role,
-                department: resolvedDept(formData),
+                department: formData.department,
             } as any).unwrap();
             setShowCreate(false); setFormData(initialForm);
         } catch (err: any) { setError(err?.data?.message || 'Failed to create user'); }
@@ -371,17 +355,11 @@ export default function AdminUsersPage() {
                                     <div className="col-span-2">
                                         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Department</label>
                                         <select value={formData.department}
-                                            onChange={e => setFormData({ ...formData, department: e.target.value, customDepartment: '' })}
+                                            onChange={e => setFormData({ ...formData, department: e.target.value })}
                                             className={inputCls} style={inputSty}>
                                             <option value="">No Department</option>
                                             {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
-                                            <option value="__custom__">✏️ Custom…</option>
                                         </select>
-                                        {formData.department === '__custom__' && (
-                                            <input type="text" value={formData.customDepartment} placeholder="Type department name"
-                                                onChange={e => setFormData({ ...formData, customDepartment: e.target.value })}
-                                                className={`${inputCls} mt-2`} style={inputSty} required />
-                                        )}
                                     </div>
                                 </div>
                                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
