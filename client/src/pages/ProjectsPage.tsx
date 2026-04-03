@@ -208,11 +208,13 @@ export default function ProjectsPage() {
                                         e.currentTarget.style.transform = 'translateY(-2px)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-md)';
                                         e.currentTarget.style.borderColor = borderAccent + '60';
+                                        e.currentTarget.style.borderLeftColor = borderAccent;
                                     }}
                                     onMouseLeave={(e) => {
                                         e.currentTarget.style.transform = 'translateY(0)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
                                         e.currentTarget.style.borderColor = 'var(--color-border-default)';
+                                        e.currentTarget.style.borderLeftColor = borderAccent;
                                     }}
                                 >
                                     <div className="p-5 flex flex-col h-full flex-1">
