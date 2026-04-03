@@ -30,22 +30,7 @@ const PRIORITY_BORDER: Record<string, string> = {
     low: '#10B981',
 };
 
-/* ── Filter chips ─────────────────────────────────────────── */
-function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-    return (
-        <button
-            onClick={onClick}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-150"
-            style={
-                active
-                    ? { backgroundColor: 'var(--color-primary)', color: 'white', boxShadow: 'var(--shadow-brand)' }
-                    : { backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }
-            }
-        >
-            {label}
-        </button>
-    );
-}
+
 
 /* ── Main Page ───────────────────────────────────────────── */
 export default function ProjectsPage() {
@@ -142,7 +127,7 @@ export default function ProjectsPage() {
         <>
         <div className="px-6 py-6 page-enter" style={{ maxWidth: '1280px' }}>
             {/* ── Header ────────────────────────────────────────────── */}
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold mb-0.5" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
                         Projects
@@ -151,58 +136,39 @@ export default function ProjectsPage() {
                         {projects.length} project{projects.length !== 1 ? 's' : ''} {statusFilter ? `· ${statusFilter}` : ''}
                     </p>
                 </div>
-                {(isAdmin || isPartner) && (
-                    <Link
-                        to="/projects/new"
-                        className="btn btn-primary"
-                        style={{ gap: '7px' }}
-                    >
-                        <Plus size={15} />
-                        New Project
-                    </Link>
-                )}
-            </div>
 
-            {/* ── Filters ───────────────────────────────────────────── */}
-            <div className="mb-6 space-y-3">
-                <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)' }}>Status</p>
-                    <div className="flex flex-wrap gap-2">
-                        {statusOptions.map(s => (
-                            <FilterChip
-                                key={s || '__all'}
-                                label={s ? s.charAt(0).toUpperCase() + s.slice(1).replace('-', ' ') : 'All'}
-                                active={statusFilter === s}
-                                onClick={() => setStatusFilter(s)}
-                            />
+                {/* ── Filters ───────────────────────────────────────────── */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
+                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                    >
+                        <option value="">All Statuses</option>
+                        {statusOptions.filter(Boolean).map((s) => (
+                            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1).replace('-', ' ')}</option>
                         ))}
-                    </div>
-                </div>
-                <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)' }}>Priority</p>
-                    <div className="flex flex-wrap gap-2">
-                        {priorityOptions.map(p => (
-                            <FilterChip
-                                key={p || '__all'}
-                                label={p ? p.charAt(0).toUpperCase() + p.slice(1) : 'All'}
-                                active={priorityFilter === p}
-                                onClick={() => setPriorityFilter(p)}
-                            />
+                    </select>
+
+                    <select
+                        value={priorityFilter}
+                        onChange={(e) => setPriorityFilter(e.target.value)}
+                        className="rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
+                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                    >
+                        <option value="">All Priorities</option>
+                        {priorityOptions.filter(Boolean).map((p) => (
+                            <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
                         ))}
-                    </div>
-                </div>
-                {isAdmin && (
-                    <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)' }}>Partner</p>
+                    </select>
+
+                    {isAdmin && (
                         <select
                             value={partnerFilter}
                             onChange={(e) => setPartnerFilter(e.target.value)}
-                            className="w-full md:w-64 rounded-lg border px-3 py-2 text-sm"
-                            style={{
-                                borderColor: 'var(--color-border-default)',
-                                backgroundColor: 'var(--color-bg-surface)',
-                                color: 'var(--color-text-primary)',
-                            }}
+                            className="rounded-lg border px-3 py-2 text-sm outline-none transition-colors w-full md:w-auto"
+                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                         >
                             <option value="">All Partners</option>
                             {partners.map((partner: any) => (
@@ -211,8 +177,8 @@ export default function ProjectsPage() {
                                 </option>
                             ))}
                         </select>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* ── Grid ──────────────────────────────────────────────── */}
@@ -470,6 +436,25 @@ export default function ProjectsPage() {
                     </div>
                 </div>
             </div>
+        )}
+        {/* ── Floating Action Button (New Project) ────────────────── */}
+        {(isAdmin || isPartner) && (
+            <Link
+                to="/projects/new"
+                className="fixed bottom-6 right-6 btn btn-primary shadow-2xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                style={{ 
+                    zIndex: 60, 
+                    gap: '8px', 
+                    padding: '0 24px', 
+                    height: '48px', 
+                    borderRadius: '999px',
+                    fontSize: '14.5px',
+                    boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4), 0 8px 10px -6px rgba(16, 185, 129, 0.1)'
+                }}
+            >
+                <Plus size={18} />
+                New Project
+            </Link>
         )}
         </>)
 

@@ -296,7 +296,7 @@ function normalizeMentionableMembers(project?: Project | null): MentionableMembe
     return members.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-interface ChecklistItemData extends NoteChecklistItem {}
+interface ChecklistItemData extends NoteChecklistItem { }
 
 interface FormBlock {
     id: string;
@@ -1022,7 +1022,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
                     setSaveStatus('saved');
                     try {
                         localStorage.removeItem(OFFLINE_CACHE_KEY);
-                    } catch (error) {}
+                    } catch (error) { }
                     break;
                 }
             }

@@ -13,6 +13,7 @@ import {
     getDepartmentCatalog,
     resolveDepartmentValue,
 } from '../../../utils/department.util';
+import { generateNextEmployeeId } from '../utils/employeeId.util';
 
 class EmployeeService {
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
@@ -22,15 +23,12 @@ class EmployeeService {
             throw new AppError('Employee record already exists for this user', 400);
         }
 
-        // Check if employeeId is unique
-        const existingEmpId = await Employee.findOne({ employeeId: data.employeeId });
-        if (existingEmpId) {
-            throw new AppError('Employee ID already exists', 400);
-        }
-
         const departmentCatalog = await getDepartmentCatalog();
+        const generatedEmployeeId = await generateNextEmployeeId(new Date(data.joiningDate));
+        
         const employee = await Employee.create({
             ...data,
+            employeeId: generatedEmployeeId,
             department: resolveDepartmentValue(data.department, departmentCatalog),
             createdBy,
         });

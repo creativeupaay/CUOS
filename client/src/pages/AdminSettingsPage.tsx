@@ -87,6 +87,7 @@ export default function AdminSettingsPage() {
     };
 
     const removeDepartment = (departmentToRemove: string) => {
+        if (!window.confirm(`Are you sure you want to remove the department "${departmentToRemove}"?`)) return;
         setDepartments((prev) =>
             prev.filter((department) => department !== departmentToRemove)
         );

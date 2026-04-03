@@ -199,9 +199,9 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
                         )}
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Employee ID *</label>
-                            <input type="text" required value={form.employeeId} disabled={isEdit}
+                            <input type="text" value={isEdit ? form.employeeId : 'Auto-generated on Save'} disabled={true}
                                 onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-                                className="w-full px-3 py-2.5 text-sm rounded-lg border" style={inputStyle} placeholder="e.g. CU-0042" />
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border" style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }} placeholder="e.g. CU-0042" />
                         </div>
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Designation *</label>

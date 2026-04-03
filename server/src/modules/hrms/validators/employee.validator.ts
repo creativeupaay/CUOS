@@ -46,7 +46,7 @@ const onboardingChecklistItemSchema = z.object({
 export const createEmployeeSchema = z.object({
     body: z.object({
         userId: z.string().min(1, 'User ID is required'),
-        employeeId: z.string().min(1, 'Employee ID is required'),
+        employeeId: z.string().optional(),
         designation: z.string().min(1, 'Designation is required'),
         department: z.string().min(1, 'Department is required').trim(),
         employmentType: z.enum(['full-time', 'part-time', 'contract', 'intern']).default('full-time'),
