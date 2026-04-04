@@ -30,7 +30,8 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
     const [createHoliday, { isLoading }] = useCreateHolidayMutation();
     const [form, setForm] = useState({
         name: '',
-        date: '',
+        startDate: '',
+        endDate: '',
         type: 'holiday' as Holiday['type'],
         description: '',
         isPaid: true,
@@ -83,16 +84,42 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
                         />
                     </div>
 
-                    {/* Date */}
-                    <div>
-                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
-                        <input
-                            type="date" required value={form.date}
-                            onChange={(e) => setForm({ ...form, date: e.target.value })}
-                            className="w-full px-3 py-2.5 text-sm rounded-lg border"
-                            style={inputStyle}
-                        />
+                    {/* Dates */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Start Date *</label>
+                            <input
+                                type="date" required value={form.startDate}
+                                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                style={inputStyle}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>End Date (optional)</label>
+                            <input
+                                type="date" value={form.endDate}
+                                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                style={inputStyle}
+                            />
+                        </div>
                     </div>
+
+                    {form.startDate && (
+                        <div className="flex items-center gap-2 px-1">
+                            <div className="h-1 w-1 rounded-full bg-blue-400" />
+                            <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                                Duration: {(() => {
+                                    if (!form.endDate || form.endDate === form.startDate) return '1 day';
+                                    const s = new Date(form.startDate);
+                                    const e = new Date(form.endDate);
+                                    const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                    return diff > 0 ? `${diff} days` : '1 day';
+                                })()}
+                            </span>
+                        </div>
+                    )}
 
                     {/* Type pills */}
                     <div>
@@ -153,10 +180,10 @@ function AddHolidayModal({ onClose }: { onClose: () => void }) {
                         className="rounded-lg px-4 py-2.5 text-xs"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}
                     >
-                        📌 Adding this {TYPE_CFG[form.type].label.toLowerCase()} will automatically apply{' '}
+                        📌 This will automatically apply{' '}
                         <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>
-                            {form.type === 'holiday' ? '"On Leave"' : form.type === 'half-day' ? '"Half Day"' : '"WFH"'}
-                        </span> attendance status to all active employees for that day.
+                            {form.type === 'holiday' ? '"Holiday"' : form.type === 'half-day' ? '"Half Day"' : '"WFH"'}
+                        </span> attendance status to all active employees for the selected date(s).
                     </div>
 
                     <div className="flex gap-3 pt-1">

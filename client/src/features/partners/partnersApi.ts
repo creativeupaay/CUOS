@@ -146,6 +146,15 @@ export const partnersApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, { id }) => [{ type: 'Partners', id }, 'Partners'],
         }),
 
+        uploadPartnerImage: builder.mutation<ApiResponse<Partner>, { id: string; type: 'logo' | 'photo'; data: FormData }>({
+            query: ({ id, type, data }) => ({
+                url: `/partners/${id}/image/${type}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { id }) => [{ type: 'Partners', id }, 'Partners'],
+        }),
+
         deactivatePartner: builder.mutation<ApiResponse, string>({
             query: (id) => ({
                 url: `/partners/${id}/deactivate`,
@@ -217,6 +226,7 @@ export const {
     useGetPartnerByIdQuery,
     useCreatePartnerMutation,
     useUpdatePartnerMutation,
+    useUploadPartnerImageMutation,
     useDeactivatePartnerMutation,
     useActivatePartnerMutation,
     useDeletePartnerMutation,

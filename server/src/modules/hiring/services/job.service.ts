@@ -5,6 +5,7 @@ import { env } from '../../../config/env.config';
 import { calcomService } from './calcom.service';
 import { Application } from '../models/Application.model';
 import { Assignment } from '../models/Assignment.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import { OrgSettings } from '../../overall-admin/models/OrgSettings.model';
 import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
@@ -334,6 +335,7 @@ export class JobService {
         const job = await Job.create({
             ...data,
             department: resolveDepartmentValue(data.department, departmentCatalog),
+            managers: data.managers || [],
             applicationForm,
             interviewScheduling: scheduling,
             createdBy,
@@ -370,13 +372,16 @@ export class JobService {
             }
         }
 
-        return job.populate('createdBy', 'name email');
+        return job.populate([
+            { path: 'createdBy', select: 'name email' },
+            { path: 'managers', select: 'userId designation department', populate: { path: 'userId', select: 'name email' } },
+        ]);
     }
 
     /**
      * Get all jobs with optional filters
      */
-    async getJobs(filters: ListJobsInput): Promise<{
+    async getJobs(filters: ListJobsInput, managerUserId?: string): Promise<{
         jobs: IJob[];
         total: number;
         page: number;
@@ -385,6 +390,15 @@ export class JobService {
         const { department, locationType, employmentType, isHiring, search, page = 1, limit = 50 } = filters;
 
         const query: any = {};
+
+        // If managerUserId is provided, filter to only jobs managed by this user
+        if (managerUserId) {
+            const employee = await Employee.findOne({ userId: managerUserId }).select('_id');
+            if (!employee) {
+                return { jobs: [], total: 0, page, totalPages: 0 };
+            }
+            query.managers = employee._id;
+        }
 
         if (department) query.department = { $regex: department, $options: 'i' };
         if (locationType) query.locationType = locationType;
@@ -406,7 +420,8 @@ export class JobService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate('createdBy', 'name email'),
+                .populate('createdBy', 'name email')
+                .populate({ path: 'managers', select: 'userId designation department', populate: { path: 'userId', select: 'name email' } }),
             Job.countDocuments(query),
         ]);
 
@@ -422,7 +437,9 @@ export class JobService {
      * Get a single job by ID
      */
     async getJobById(id: string): Promise<IJob> {
-        const job = await Job.findById(id).populate('createdBy', 'name email');
+        const job = await Job.findById(id)
+            .populate('createdBy', 'name email')
+            .populate({ path: 'managers', select: 'userId designation department', populate: { path: 'userId', select: 'name email' } });
         if (!job) {
             throw new AppError('Job not found', 404);
         }
@@ -472,47 +489,53 @@ export class JobService {
             throw new AppError('Job not found', 404);
         }
 
-        if (job.interviewScheduling?.enabled) {
-            job.interviewScheduling.syncStatus = 'pending';
-            job.interviewScheduling.syncError = undefined;
-            await job.save();
-
-            try {
-                const synced = await calcomService.syncJobEventType({
-                    jobId: String(job._id),
-                    jobTitle: job.title,
-                    jobDepartment: job.department,
-                    scheduling: job.interviewScheduling as any,
-                });
-
-                job.interviewScheduling.scheduleId = synced.scheduleId;
-                job.interviewScheduling.eventTypeId = synced.eventTypeId;
-                job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
-                job.interviewScheduling.bookingUrl = synced.bookingUrl;
-                job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
-                job.interviewScheduling.lastSyncedAt = new Date();
-                job.interviewScheduling.syncStatus = 'synced';
-                job.interviewScheduling.syncConfigHash = buildInterviewSchedulingSyncHash(
-                    job.interviewScheduling as any
-                );
+        // Only sync with Cal.com if interview scheduling configuration was actually updated
+        if (data.interviewScheduling) {
+            if (job.interviewScheduling?.enabled) {
+                job.interviewScheduling.syncStatus = 'pending';
                 job.interviewScheduling.syncError = undefined;
-                job.interviewScheduling.active = true;
                 await job.save();
-            } catch (error: any) {
-                job.interviewScheduling.syncStatus = 'failed';
-                job.interviewScheduling.syncError =
-                    error?.message || 'Failed to sync interview scheduling with Cal.com';
+
+                try {
+                    const synced = await calcomService.syncJobEventType({
+                        jobId: String(job._id),
+                        jobTitle: job.title,
+                        jobDepartment: job.department,
+                        scheduling: job.interviewScheduling as any,
+                    });
+
+                    job.interviewScheduling.scheduleId = synced.scheduleId;
+                    job.interviewScheduling.eventTypeId = synced.eventTypeId;
+                    job.interviewScheduling.eventTypeSlug = synced.eventTypeSlug;
+                    job.interviewScheduling.bookingUrl = synced.bookingUrl;
+                    job.interviewScheduling.externalUpdatedAt = synced.externalUpdatedAt;
+                    job.interviewScheduling.lastSyncedAt = new Date();
+                    job.interviewScheduling.syncStatus = 'synced';
+                    job.interviewScheduling.syncConfigHash = buildInterviewSchedulingSyncHash(
+                        job.interviewScheduling as any
+                    );
+                    job.interviewScheduling.syncError = undefined;
+                    job.interviewScheduling.active = true;
+                    await job.save();
+                } catch (error: any) {
+                    job.interviewScheduling.syncStatus = 'failed';
+                    job.interviewScheduling.syncError =
+                        error?.message || 'Failed to sync interview scheduling with Cal.com';
+                    job.interviewScheduling.active = false;
+                    await job.save();
+                }
+            } else if (job.interviewScheduling) {
                 job.interviewScheduling.active = false;
+                job.interviewScheduling.syncStatus = 'not_configured';
+                job.interviewScheduling.syncError = undefined;
                 await job.save();
             }
-        } else if (job.interviewScheduling) {
-            job.interviewScheduling.active = false;
-            job.interviewScheduling.syncStatus = 'not_configured';
-            job.interviewScheduling.syncError = undefined;
-            await job.save();
         }
 
-        return job.populate('createdBy', 'name email');
+        return job.populate([
+            { path: 'createdBy', select: 'name email' },
+            { path: 'managers', select: 'userId designation department', populate: { path: 'userId', select: 'name email' } },
+        ]);
     }
 
     /**
@@ -645,5 +668,37 @@ export class JobService {
         };
         await settings.save();
         return settings.hiring.applicationFieldLibrary;
+    }
+
+    /**
+     * Check if a user is a job manager for any job
+     */
+    async isUserJobManager(userId: string): Promise<boolean> {
+        const employee = await Employee.findOne({ userId }).select('_id');
+        if (!employee) return false;
+        const count = await Job.countDocuments({ managers: employee._id });
+        return count > 0;
+    }
+
+    /**
+     * Check if a user is a manager for a specific job
+     */
+    async isUserManagerForJob(userId: string, jobId: string): Promise<boolean> {
+        const employee = await Employee.findOne({ userId }).select('_id');
+        if (!employee) return false;
+        const count = await Job.countDocuments({ _id: jobId, managers: employee._id });
+        return count > 0;
+    }
+
+    /**
+     * Get active employees list for manager picker
+     */
+    async getEmployeesList(): Promise<any[]> {
+        const employees = await Employee.find({ status: 'active' })
+            .select('userId designation department profilePhoto')
+            .populate('userId', 'name email')
+            .sort({ department: 1 })
+            .lean();
+        return employees;
     }
 }

@@ -77,6 +77,7 @@ export interface CreateJobRequest {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    managers?: string[];
     applicationForm?: JobApplicationFormConfig;
     interviewScheduling?: {
         enabled: boolean;
@@ -103,6 +104,7 @@ export interface UpdateJobRequest {
     employmentType?: EmploymentType;
     isHiring?: boolean;
     assignmentRequired?: boolean;
+    managers?: string[];
     applicationForm?: Partial<JobApplicationFormConfig>;
     interviewScheduling?: {
         enabled?: boolean;

@@ -17,6 +17,7 @@ import {
     Plus,
     Sparkles,
     Trash2,
+    X,
 } from 'lucide-react';
 import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
 import {
@@ -29,6 +30,7 @@ import {
     useSaveApplicationFieldMutation,
     useUpdateJobMutation,
     useCreateJobTemplateMutation,
+    useGetHiringEmployeesListQuery,
 } from '@/features/hiring/hiringApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import type {
@@ -106,6 +108,7 @@ interface FormState {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    managers: string[];
     applicationForm: {
         selectedStandardFields: StandardApplicationFieldId[];
         standardFieldSettings: ApplicationStandardFieldSetting[];
@@ -154,6 +157,7 @@ const EMPTY_FORM: FormState = {
     employmentType: 'full-time',
     isHiring: false,
     assignmentRequired: false,
+    managers: [],
     applicationForm: {
         selectedStandardFields: DEFAULT_SELECTED_STANDARD_FIELDS,
         standardFieldSettings: DEFAULT_SELECTED_STANDARD_FIELDS.map((key) => ({
@@ -270,6 +274,7 @@ export default function HiringJobFormPage() {
     const { data: orgSettingsData } = useGetOrgSettingsQuery();
     const { data: templatesData } = useGetJobTemplatesQuery();
     const { data: fieldLibraryData } = useGetApplicationFieldLibraryQuery();
+    const { data: employeesData } = useGetHiringEmployeesListQuery();
 
     const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
     const [updateJob, { isLoading: isUpdating }] = useUpdateJobMutation();
@@ -282,6 +287,7 @@ export default function HiringJobFormPage() {
     const isSubmitting = isCreating || isUpdating;
     const templates = templatesData?.data?.templates || [];
     const fieldLibrary = fieldLibraryData?.data?.fields || [];
+    const employees = employeesData?.data?.employees || [];
 
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
     const [errors, setErrors] = useState<FormErrors>({});
@@ -327,6 +333,7 @@ export default function HiringJobFormPage() {
             employmentType: job.employmentType,
             isHiring: job.isHiring,
             assignmentRequired: job.assignmentRequired,
+            managers: job.managers?.map((m: any) => m._id) || [],
             applicationForm: {
                 selectedStandardFields:
                     job.applicationForm?.selectedStandardFields?.length
@@ -360,12 +367,14 @@ export default function HiringJobFormPage() {
     const set =
         (key: keyof FormState) =>
         (
-            e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+            e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> | any
         ) => {
             const value =
-                e.target.type === 'checkbox'
-                    ? (e.target as HTMLInputElement).checked
-                    : e.target.value;
+                e && e.target
+                    ? e.target.type === 'checkbox'
+                        ? (e.target as HTMLInputElement).checked
+                        : e.target.value
+                    : e;
 
             setForm((prev) => {
                 const next = { ...prev, [key]: value };
@@ -685,6 +694,7 @@ export default function HiringJobFormPage() {
             employmentType: form.employmentType,
             isHiring: form.isHiring,
             assignmentRequired: form.assignmentRequired,
+            managers: form.managers,
             applicationForm: {
                 selectedStandardFields: form.applicationForm.selectedStandardFields,
                 standardFieldSettings: form.applicationForm.standardFieldSettings,
@@ -1293,6 +1303,69 @@ export default function HiringJobFormPage() {
                                 </div>
                             </label>
                         ))}
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <Field label="Job Managers (Optional)">
+                            <div className="relative">
+                                <select
+                                    className="w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:border-blue-500"
+                                    style={inputStyle}
+                                    value=""
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val && !form.managers.includes(val)) {
+                                            set('managers')([...form.managers, val]);
+                                        }
+                                    }}
+                                >
+                                    <option value="">Select Managers...</option>
+                                    {employees
+                                        .filter((emp) => !form.managers.includes(emp._id))
+                                        .map((emp) => (
+                                            <option key={emp._id} value={emp._id}>
+                                                {emp.userId.name} ({emp.designation})
+                                            </option>
+                                        ))}
+                                </select>
+                            </div>
+
+                            {form.managers.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {form.managers.map((managerId) => {
+                                        const manager = employees.find((e) => e._id === managerId);
+                                        if (!manager) return null;
+                                        return (
+                                            <div
+                                                key={managerId}
+                                                className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
+                                                style={{
+                                                    backgroundColor: 'var(--color-bg-surface-elevated)',
+                                                    borderColor: 'var(--color-border-default)',
+                                                    color: 'var(--color-text-primary)',
+                                                }}
+                                            >
+                                                <span>{manager.userId.name}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        set('managers')(
+                                                            form.managers.filter((id) => id !== managerId)
+                                                        )
+                                                    }
+                                                    className="rounded-full p-0.5 hover:bg-black/10"
+                                                >
+                                                    <X className="size-3" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Job Managers can manage postings, applications, and interviews for this specific job.
+                            </p>
+                        </Field>
                     </div>
                 </div>
 

@@ -28,7 +28,10 @@ export const requirePartnerEmployeeModuleAccess = (moduleKey: PartnerEmployeeMod
                 return next(new AppError('User account is deactivated', 403));
             }
 
-            if (!partnerEmployee.modulePermissions?.[moduleKey]) {
+            // Explicitly verify if permissions is 'false'.
+            // Undefined defaults to allowing access for backwards compatibility
+            // with partner employees created prior to modulePermissions field addition.
+            if (partnerEmployee.modulePermissions && partnerEmployee.modulePermissions[moduleKey] === false) {
                 return next(new AppError(`Access denied for ${moduleKey} module`, 403));
             }
 

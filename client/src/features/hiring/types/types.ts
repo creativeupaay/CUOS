@@ -86,6 +86,14 @@ export interface InterviewSchedulingConfig {
     externalUpdatedAt?: string;
 }
 
+export interface JobManager {
+    _id: string;
+    userId: { _id: string; name: string; email: string };
+    designation: string;
+    department: string;
+    profilePhoto?: { url?: string };
+}
+
 export interface Job {
     _id: string;
     title: string;
@@ -97,6 +105,7 @@ export interface Job {
     employmentType: EmploymentType;
     isHiring: boolean;
     assignmentRequired: boolean;
+    managers?: JobManager[];
     applicationForm: JobApplicationFormConfig;
     interviewScheduling: InterviewSchedulingConfig;
     createdBy: string | { _id: string; name: string; email: string };

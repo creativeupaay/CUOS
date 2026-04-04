@@ -491,6 +491,31 @@ export const hiringApi = api.injectEndpoints({
                 'Interviews',
             ],
         }),
+
+        // ============================================
+        // JOB MANAGER ENDPOINTS
+        // ============================================
+        getHiringEmployeesList: builder.query<
+            ApiResponse<{
+                employees: Array<{
+                    _id: string;
+                    userId: { _id: string; name: string; email: string };
+                    designation: string;
+                    department: string;
+                    profilePhoto?: { url?: string };
+                }>;
+            }>,
+            void
+        >({
+            query: () => '/hiring/employees-list',
+        }),
+
+        checkJobManagerStatus: builder.query<
+            ApiResponse<{ isJobManager: boolean }>,
+            void
+        >({
+            query: () => '/hiring/job-manager-status',
+        }),
     }),
 });
 
@@ -532,4 +557,6 @@ export const {
     useRequestInterviewRescheduleMutation,
     useGetInterviewDetailsQuery,
     useSaveInterviewNoteMutation,
+    useGetHiringEmployeesListQuery,
+    useCheckJobManagerStatusQuery,
 } = hiringApi;

@@ -6,6 +6,7 @@ import { useLogoutMutation } from '@/features/auth/authApi';
 import { api } from '@/services/api';
 import { useGetProjectsQuery } from '@/features/project/projectApi';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
+import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
@@ -29,7 +30,8 @@ function getModuleConfig(
     user: any,
     isAdmin: boolean,
     projects?: { _id: string; name: string }[],
-    isHrAdmin?: boolean
+    isHrAdmin?: boolean,
+    isJobManager?: boolean
 ): ModuleConfig | null {
     const mp = user?.modulePermissions;
     const roleName = user?.role
@@ -110,10 +112,10 @@ function getModuleConfig(
 
         // Check if accessing HRMS data pages (attendance, leaves, holidays, payroll)
         const isHrmsDataPath = pathname.startsWith('/my-hrms/attendance') ||
-                               pathname.startsWith('/my-hrms/leaves') ||
-                               pathname.startsWith('/my-hrms/holidays') ||
-                               pathname.startsWith('/my-hrms/payroll') ||
-                               pathname.startsWith('/my-hrms/announcements');
+            pathname.startsWith('/my-hrms/leaves') ||
+            pathname.startsWith('/my-hrms/holidays') ||
+            pathname.startsWith('/my-hrms/payroll') ||
+            pathname.startsWith('/my-hrms/announcements');
 
         // For regular employees
         if (!isSuperAdmin) {
@@ -183,13 +185,16 @@ function getModuleConfig(
         return { title: 'Admin Panel', items: filteredItems };
     }
     if (pathname.startsWith('/hiring')) {
+        const hasAccess = isAdmin || isHrAdmin || isJobManager;
+        if (!hasAccess) return null;
+
         const allItems = [
             { key: 'jobs', label: 'Job Postings', path: '/hiring/jobs', icon: <Briefcase size={18} />, matchPrefix: '/hiring/jobs' },
             { key: 'applications', label: 'Applications', path: '/hiring/applications', icon: <FileText size={18} />, matchPrefix: '/hiring/applications' },
             { key: 'assignments', label: 'Assignment', path: '/hiring/assignments', icon: <CheckCircle size={18} />, matchPrefix: '/hiring/assignments' },
             { key: 'interviews', label: 'Interviews', path: '/hiring/interviews', icon: <CalendarDays size={18} />, matchPrefix: '/hiring/interviews' },
         ];
-        return { title: 'Hiring', items: isAdmin ? allItems : allItems };
+        return { title: 'Hiring', items: allItems };
     }
     // Partner Admin Module (for partners to manage their team)
     if (pathname.startsWith('/partner-admin')) {
@@ -322,13 +327,13 @@ const NavItemComponent = ({
                                         ? { color: 'var(--color-primary-dark)', fontWeight: 600, backgroundColor: 'var(--color-primary-soft)' }
                                         : { color: 'var(--color-text-secondary)', fontWeight: 500 }
                                 }
-                                onMouseEnter={(e) => { 
+                                onMouseEnter={(e) => {
                                     if (!isSubActive) {
-                                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; 
+                                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
                                         e.currentTarget.style.color = 'var(--color-text-primary)';
                                     }
                                 }}
-                                onMouseLeave={(e) => { 
+                                onMouseLeave={(e) => {
                                     if (!isSubActive) {
                                         e.currentTarget.style.backgroundColor = 'transparent';
                                         e.currentTarget.style.color = 'var(--color-text-secondary)';
@@ -409,8 +414,11 @@ export default function Sidebar({
 
     const isPMRoute = location.pathname.startsWith('/projects');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
+    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
+    const isJobManager = !!jobManagerStatus?.data?.isJobManager;
+
     const projects = projectsResponse?.data || [];
-    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects, isHrAdmin);
+    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects, isHrAdmin, isJobManager);
 
     if (!moduleConfig) return null;
 

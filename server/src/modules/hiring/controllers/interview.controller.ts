@@ -36,7 +36,11 @@ export const handleCalcomWebhook = asyncHandler(async (req: Request, res: Respon
 
 export const getInterviews = asyncHandler(async (req: Request, res: Response) => {
     const filters: ListInterviewsInput = req.query as any;
-    const result = await interviewService.listInterviews(filters);
+
+    // If user is a job manager (not admin/HR), filter to only interviews for their managed jobs
+    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+
+    const result = await interviewService.listInterviews(filters, managerUserId);
 
     res.status(200).json({
         status: 'success',

@@ -20,7 +20,10 @@ export const createAssignment = asyncHandler(async (req: Request, res: Response)
 });
 
 export const getAssignmentsByJob = asyncHandler(async (req: Request, res: Response) => {
-    const assignments = await assignmentService.getAssignmentsByJob(req.params.jobId);
+    // If user is a job manager (not admin/HR), filter to only assignments for their managed jobs
+    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+
+    const assignments = await assignmentService.getAssignmentsByJob(req.params.jobId, managerUserId);
 
     res.status(200).json({
         status: 'success',

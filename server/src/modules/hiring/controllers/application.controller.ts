@@ -39,13 +39,16 @@ export const createPublicApplication = asyncHandler(async (req: Request, res: Re
 
 export const getApplications = asyncHandler(async (req: Request, res: Response) => {
     const filters: ListApplicationsInput = { ...req.query } as any;
-    
+
     // The frontend sends `minExperience` as a string, make sure to convert it
     if (filters.minExperience && typeof filters.minExperience === 'string') {
         filters.minExperience = Number(filters.minExperience);
     }
 
-    const result = await applicationService.getApplications(filters);
+    // If user is a job manager (not admin/HR), filter to only applications for their managed jobs
+    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+
+    const result = await applicationService.getApplications(filters, managerUserId);
 
     res.status(200).json({
         status: 'success',

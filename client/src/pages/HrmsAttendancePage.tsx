@@ -164,12 +164,16 @@ const AttendanceRow = memo(function AttendanceRow({
     firstDayDow,
     empLocalEdits,
     onCycle,
+    holidaysMap,
+    gridLength,
 }: {
     emp: GridEmployee;
     rowIdx: number;
     firstDayDow: number;
     empLocalEdits: Record<number, AttendanceStatus> | undefined;
     onCycle: (empId: string, dayIdx: number, current: AttendanceStatus) => void;
+    holidaysMap: Record<string, string>;
+    gridLength: number;
 }) {
     return (
         <tr
@@ -177,11 +181,12 @@ const AttendanceRow = memo(function AttendanceRow({
             style={{
                 borderColor: 'var(--color-border-default)',
                 backgroundColor: rowIdx % 2 === 0 ? 'var(--color-bg-surface)' : 'rgba(0,0,0,0.012)',
+                position: 'relative'
             }}
         >
             {/* Employee name cell */}
             <td
-                className="px-4 py-2.5 sticky left-0"
+                className="px-4 py-2.5 sticky left-0 z-[5]"
                 style={{
                     backgroundColor: rowIdx % 2 === 0 ? 'var(--color-bg-surface)' : '#fafafa',
                     borderRight: '2px solid var(--color-border-default)',
@@ -211,6 +216,47 @@ const AttendanceRow = memo(function AttendanceRow({
             {emp.days.map((day, dayIdx) => {
                 const dow = (firstDayDow + dayIdx) % 7;
                 const isWeekend = dow === 0;
+                const holidayName = holidaysMap[day.date];
+                const isHoliday = !!holidayName;
+
+                if (isHoliday) {
+                    if (rowIdx === 0) {
+                        return (
+                            <td
+                                key={dayIdx}
+                                rowSpan={gridLength}
+                                className="text-center align-middle"
+                                style={{
+                                    backgroundColor: '#FFEDD5',
+                                    borderLeft: '1px solid #FDBA74',
+                                    borderRight: '1px solid #FDBA74',
+                                    padding: '0',
+                                    width: '40px',
+                                    minWidth: '40px',
+                                    height: '100%',
+                                }}
+                            >
+                                <div
+                                    className="text-[11px] font-bold uppercase tracking-widest whitespace-nowrap"
+                                    style={{
+                                        writingMode: 'vertical-rl',
+                                        transform: 'rotate(180deg)',
+                                        margin: 'auto',
+                                        color: '#9A3412',
+                                        height: '200px', // Fallback
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    {holidayName}
+                                </div>
+                            </td>
+                        );
+                    }
+                    return null; // Merge with rowSpan above
+                }
+
                 const effectiveStatus: AttendanceStatus =
                     empLocalEdits && dayIdx in empLocalEdits
                         ? empLocalEdits[dayIdx]
@@ -337,7 +383,17 @@ export default function HrmsAttendancePage() {
 
     const grid = monthlyData?.data?.grid || [];
     const daysInMonth = monthlyData?.data?.daysInMonth || 31;
+    const holidays = (monthlyData as any)?.data?.holidays || [];
     const overview = overviewData?.data;
+
+    // Create holidays map: dateStr -> holidayName
+    const holidaysMap: Record<string, string> = {};
+    if (Array.isArray(holidays)) {
+        holidays.forEach((h: any) => {
+            const dateStr = h.date.split('T')[0];
+            holidaysMap[dateStr] = h.name;
+        });
+    }
 
     const handleMarkAllPresent = async () => {
         const employees = grid.map((emp) => ({
@@ -513,12 +569,15 @@ export default function HrmsAttendancePage() {
                                         </th>
                                         {/* Day columns */}
                                         {Array.from({ length: daysInMonth }, (_, i) => {
-                                            const dayNum = i + 1;
+                                             const dayNum = i + 1;
                                             const dow = (firstDayDow + i) % 7;
-                                            const isWeekend = dow === 0; // Only Sunday is off (6-day work week)
+                                            const isWeekend = dow === 0;
                                             const isToday = gridYear === today.getFullYear() &&
                                                 gridMonth === today.getMonth() + 1 &&
                                                 dayNum === today.getDate();
+                                            const dateStr = `${gridYear}-${String(gridMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                            const isHoliday = !!holidaysMap[dateStr];
+
                                             return (
                                                 <th
                                                     key={i}
@@ -526,9 +585,11 @@ export default function HrmsAttendancePage() {
                                                     style={{
                                                         width: '40px',
                                                         minWidth: '40px',
-                                                        backgroundColor: isWeekend
-                                                            ? 'var(--color-bg-subtle)'
-                                                            : 'var(--color-bg-surface)',
+                                                        backgroundColor: isHoliday
+                                                            ? '#FFEDD5'
+                                                            : isWeekend
+                                                                ? 'var(--color-bg-subtle)'
+                                                                : 'var(--color-bg-surface)',
                                                         borderBottom: '1px solid var(--color-border-default)',
                                                         padding: '6px 4px',
                                                     }}
@@ -543,9 +604,9 @@ export default function HrmsAttendancePage() {
                                                     </div>
                                                     <div
                                                         className="text-[9px] font-medium"
-                                                        style={{ color: isWeekend ? '#EF4444' : 'var(--color-text-muted)' }}
+                                                        style={{ color: isHoliday ? '#9A3412' : isWeekend ? '#EF4444' : 'var(--color-text-muted)' }}
                                                     >
-                                                        {DAY_LABELS[dow]}
+                                                        {isHoliday ? 'HOL' : DAY_LABELS[dow]}
                                                     </div>
                                                     {isToday && (
                                                         <div
@@ -567,6 +628,8 @@ export default function HrmsAttendancePage() {
                                             firstDayDow={firstDayDow}
                                             empLocalEdits={localEdits[emp.employeeId]}
                                             onCycle={cycleStatus}
+                                            holidaysMap={holidaysMap}
+                                            gridLength={grid.length}
                                         />
                                     ))}
                                 </tbody>

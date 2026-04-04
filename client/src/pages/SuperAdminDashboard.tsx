@@ -12,6 +12,7 @@ import {
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
+import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -137,31 +138,8 @@ export default function SuperAdminDashboard() {
     // Initialize notification socket listeners
     useNotificationSocket();
 
-    const handleLogout = async () => {
-        try { await logoutApi().unwrap(); } catch { /* ignore */ }
-
-        // Determine logout redirect based on user role and partner status
-        const isPartnerRole = roleName === 'partner';
-        const partnerSlug = (user as any)?.partnerSlug || (
-            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
-        );
-
-        // Redirect to partner's personalized login page if they have a slug
-        const logoutPath = isPartnerRole && partnerSlug
-            ? `/partner/${partnerSlug}/login`
-            : isPartnerRole
-                ? '/partner/login'
-                : '/login';
-
-        if (typeof window !== 'undefined') {
-            window.location.replace(logoutPath);
-            return;
-        }
-
-        dispatch(logout());
-        dispatch(api.util.resetApiState());
-        navigate(logoutPath);
-    };
+    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
+    const isJobManager = !!jobManagerStatus?.data?.isJobManager;
 
     const roleName = user?.role
         ? typeof user.role === 'object'
@@ -175,6 +153,32 @@ export default function SuperAdminDashboard() {
             ? (user.role as any).name
             : String(user.role)
         : 'User';
+
+    const handleLogout = async () => {
+        try { await logoutApi().unwrap(); } catch { /* ignore */ }
+
+        // Determine logout redirect based on user role and partner status
+        const partnerSlug = (user as any)?.partnerSlug || (
+            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
+        );
+
+        // Redirect to partner's personalized login page if they have a slug
+        const logoutPath = isPartner && partnerSlug
+            ? `/partner/${partnerSlug}/login`
+            : isPartner
+                ? '/partner/login'
+                : '/login';
+
+        if (typeof window !== 'undefined') {
+            window.location.replace(logoutPath);
+            return;
+        }
+
+        dispatch(logout());
+        dispatch(api.util.resetApiState());
+        navigate(logoutPath);
+    };
+
 
     const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
@@ -279,6 +283,7 @@ export default function SuperAdminDashboard() {
         .filter(d => {
             if (d.key === 'partners') return false;
             const perm = mp?.[d.key as keyof typeof mp] as any;
+            if (d.key === 'hiring' && isJobManager) return true;
             if (!perm?.enabled) return false;
             if (d.key === 'projectManagement') {
                 return Array.isArray(perm.projectPermissions) && perm.projectPermissions.length > 0;

@@ -1,5 +1,6 @@
 import { Attendance } from '../models/Attendance.model';
 import { Employee } from '../models/Employee.model';
+import { Holiday } from '../models/Holiday.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
@@ -221,9 +222,13 @@ export class AttendanceService {
         const daysInMonth = endDate.getUTCDate();
 
         const departmentCatalog = await getDepartmentCatalog();
-        const [employees, records] = await Promise.all([
+        const [employees, records, holidays] = await Promise.all([
             Employee.find({}).populate('userId', 'name email').lean(),
             Attendance.find({ date: { $gte: startDate, $lte: endDate } }).lean(),
+            Holiday.find({ 
+                date: { $gte: startDate, $lte: endDate },
+                type: 'holiday' 
+            }).lean(),
         ]);
 
         // Build lookup: employeeId → { dateStr → record }
@@ -257,6 +262,6 @@ export class AttendanceService {
             };
         });
 
-        return { month, year, daysInMonth, grid };
+        return { month, year, daysInMonth, grid, holidays };
     }
 }

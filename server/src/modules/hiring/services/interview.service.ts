@@ -1300,7 +1300,10 @@ export class InterviewService {
         }
     }
 
-    async listInterviews(filters: ListInterviewsInput): Promise<{
+    async listInterviews(
+        filters: ListInterviewsInput,
+        managerUserId?: string
+    ): Promise<{
         interviews: IInterview[];
         total: number;
         page: number;
@@ -1309,7 +1312,44 @@ export class InterviewService {
         const { applicationId, status, search, from, to, page = 1, limit = 50 } = filters;
 
         const query: any = {};
-        if (applicationId) query.applicationId = applicationId;
+
+        // If managerUserId is provided, filter to only interviews for jobs managed by this user
+        if (managerUserId) {
+            const { Employee } = await import('../../hrms/models/Employee.model');
+            const { Job } = await import('../models/Job.model');
+            const { Application } = await import('../models/Application.model');
+
+            const employee = await Employee.findOne({ userId: managerUserId }).select('_id');
+            if (!employee) {
+                return { interviews: [], total: 0, page, totalPages: 0 };
+            }
+
+            const managedJobs = await Job.find({ managers: employee._id }).select('_id');
+            const managedJobIds = managedJobs.map((job) => job._id);
+            if (managedJobIds.length === 0) {
+                return { interviews: [], total: 0, page, totalPages: 0 };
+            }
+
+            // Get applications for managed jobs
+            const applications = await Application.find({ jobId: { $in: managedJobIds } }).select('_id');
+            const applicationIds = applications.map((app) => app._id);
+            if (applicationIds.length === 0) {
+                return { interviews: [], total: 0, page, totalPages: 0 };
+            }
+
+            query.applicationId = { $in: applicationIds };
+        }
+
+        if (applicationId) {
+            // If manager filter is already applied, ensure requested applicationId is in the allowed list
+            if (query.applicationId && query.applicationId.$in) {
+                const allowedIds = query.applicationId.$in.map((id: any) => id.toString());
+                if (!allowedIds.includes(applicationId.toString())) {
+                    return { interviews: [], total: 0, page, totalPages: 0 };
+                }
+            }
+            query.applicationId = applicationId;
+        }
         if (status) query.status = status;
         if (from || to) {
             query.scheduledTime = {};

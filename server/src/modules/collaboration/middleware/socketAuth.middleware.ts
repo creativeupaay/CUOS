@@ -45,19 +45,40 @@ export const socketAuthMiddleware = async (
       .select('_id email isActive')
       .lean();
 
-    if (!user) {
+    if (user) {
+      if (!user.isActive) {
+        return next(new Error('User account is inactive'));
+      }
+      
+      // Attach user data to socket
+      (socket as AuthenticatedSocket).data = {
+        userId: payload.userId,
+        email: payload.email,
+        role: payload.role,
+      };
+      
+      return next();
+    }
+
+    // Fallback to PartnerEmployee
+    const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+    const partnerEmployee = await PartnerEmployee.findById(payload.userId)
+      .select('_id email isActive')
+      .lean();
+
+    if (!partnerEmployee) {
       return next(new Error('User not found'));
     }
 
-    if (!user.isActive) {
+    if (!partnerEmployee.isActive) {
       return next(new Error('User account is inactive'));
     }
 
-    // Attach user data to socket
+    // Attach user data to socket for partner employee
     (socket as AuthenticatedSocket).data = {
       userId: payload.userId,
-      email: payload.email,
-      role: payload.role,
+      email: partnerEmployee.email, // using partnerEmployee email explicitly
+      role: 'partner',
     };
 
     next();

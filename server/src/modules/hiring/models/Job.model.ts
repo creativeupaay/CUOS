@@ -94,6 +94,7 @@ export interface IJob extends Document {
     employmentType: 'full-time' | 'part-time' | 'contract' | 'internship';
     isHiring: boolean;
     assignmentRequired: boolean;
+    managers: Types.ObjectId[];
     applicationForm: IJobApplicationFormConfig;
     interviewScheduling: IInterviewSchedulingConfig;
     createdBy: Types.ObjectId;
@@ -254,6 +255,12 @@ const JobSchema = new Schema<IJob>(
         },
         isHiring: { type: Boolean, default: false },
         assignmentRequired: { type: Boolean, default: false },
+        managers: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: 'Employee',
+            },
+        ],
         applicationForm: {
             type: JobApplicationFormConfigSchema,
             default: () => ({
@@ -306,6 +313,7 @@ JobSchema.index({ isHiring: 1 });
 JobSchema.index({ department: 1 });
 JobSchema.index({ employmentType: 1 });
 JobSchema.index({ createdAt: -1 });
+JobSchema.index({ managers: 1 });
 JobSchema.index({ 'interviewScheduling.eventTypeId': 1 });
 JobSchema.index({ 'interviewScheduling.enabled': 1, 'interviewScheduling.syncStatus': 1 });
 

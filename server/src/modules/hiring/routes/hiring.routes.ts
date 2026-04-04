@@ -8,6 +8,11 @@ import * as reportController from '../controllers/report.controller';
 import * as jobTemplateController from '../controllers/jobTemplate.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { authorize } from '../../auth/middlewares/authorize.middleware';
+import {
+    authorizeHiringView,
+    authorizeHiringManage,
+    authorizeJobAccess,
+} from '../middlewares/authorizeJobManager.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     createJobSchema,
@@ -162,51 +167,64 @@ const viewRoles = ['super-admin', 'admin', 'hr', 'hr-admin', 'hr-manager', 'mana
 // Roles allowed to create/update/delete jobs
 const manageRoles = ['super-admin', 'admin', 'hr', 'hr-admin', 'hr-manager'];
 
+// ── Job Manager status check (must be before other hiring routes)
+router.get(
+    '/job-manager-status',
+    jobController.checkJobManagerStatus
+);
+
+// ── Employees list for manager picker
+router.get(
+    '/employees-list',
+    authorize(manageRoles),
+    jobController.getEmployeesList
+);
+
 router.post(
     '/',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(createJobSchema),
     jobController.createJob
 );
 
 router.get(
     '/',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(listJobsSchema),
     jobController.getJobs
 );
 
 router.post(
     '/interview/invite/:applicationId',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(interviewApplicationParamSchema),
     interviewController.sendInterviewInvite
 );
 
 router.get(
     '/interviews',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(listInterviewsSchema),
     interviewController.getInterviews
 );
 
 router.get(
     '/interview/calcom/webhook-debug',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(webhookDebugQuerySchema),
     interviewController.getWebhookDebug
 );
 
 router.get(
     '/reports/summary',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(hiringReportSummarySchema),
     reportController.getHiringReportSummary
 );
 
 router.patch(
     '/interviews/:id/status',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(interviewIdParamSchema),
     validateRequest(updateInterviewStatusSchema),
     interviewController.updateInterviewStatus
@@ -214,7 +232,7 @@ router.patch(
 
 router.post(
     '/interviews/:id/reschedule',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(interviewIdParamSchema),
     validateRequest(requestInterviewRescheduleSchema),
     interviewController.requestInterviewReschedule
@@ -222,14 +240,14 @@ router.post(
 
 router.get(
     '/interviews/:id/details',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(interviewIdParamSchema),
     interviewController.getInterviewDetails
 );
 
 router.post(
     '/interviews/:id/notes',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(interviewIdParamSchema),
     validateRequest(saveInterviewNoteSchema),
     interviewController.saveInterviewNote
@@ -240,27 +258,27 @@ router.post(
 // ============================================
 router.post(
     '/templates',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(createJobTemplateSchema),
     jobTemplateController.createTemplate
 );
 
 router.get(
     '/templates',
-    authorize(viewRoles),
+    authorizeHiringView,
     jobTemplateController.getTemplates
 );
 
 router.get(
     '/templates/:id',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(getJobTemplateSchema),
     jobTemplateController.getTemplate
 );
 
 router.patch(
     '/templates/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(getJobTemplateSchema),
     validateRequest(updateJobTemplateSchema),
     jobTemplateController.updateTemplate
@@ -268,26 +286,26 @@ router.patch(
 
 router.delete(
     '/templates/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(getJobTemplateSchema),
     jobTemplateController.deleteTemplate
 );
 
 router.get(
     '/application-fields',
-    authorize(viewRoles),
+    authorizeHiringView,
     jobController.getApplicationFieldLibrary
 );
 
 router.post(
     '/application-fields',
-    authorize(manageRoles),
+    authorizeHiringManage,
     jobController.saveApplicationField
 );
 
 router.delete(
     '/application-fields/:key',
-    authorize(manageRoles),
+    authorizeHiringManage,
     jobController.deleteApplicationField
 );
 
@@ -298,35 +316,35 @@ router.delete(
 // ============================================
 router.get(
     '/applications',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(listApplicationsSchema),
     applicationController.getApplications
 );
 
 router.get(
     '/applications/:id',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(getApplicationSchema),
     applicationController.getApplication
 );
 
 router.get(
     '/applications/:id/timeline',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(getApplicationSchema),
     applicationController.getApplicationTimeline
 );
 
 router.patch(
     '/applications/:id/status',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(updateStatusSchema),
     applicationController.updateApplicationStatus
 );
 
 router.patch(
     '/applications/:id/decision',
-    authorize(manageRoles),
+    authorizeHiringManage,
     upload.single('offerLetter'),
     validateRequest(applicationDecisionSchema),
     applicationController.applyFinalDecision
@@ -334,56 +352,56 @@ router.patch(
 
 router.post(
     '/applications/:id/tag',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(tagSchema),
     applicationController.addApplicationTag
 );
 
 router.delete(
     '/applications/:id/tag',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(tagSchema),
     applicationController.removeApplicationTag
 );
 
 router.patch(
     '/applications/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(updateApplicationSchema),
     applicationController.updateApplication
 );
 
 router.post(
     '/assignments',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(createAssignmentSchema),
     assignmentController.createAssignment
 );
 
 router.get(
     '/assignments/job/:jobId',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(getAssignmentsByJobSchema),
     assignmentController.getAssignmentsByJob
 );
 
 router.patch(
     '/assignments/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(updateAssignmentSchema),
     assignmentController.updateAssignment
 );
 
 router.delete(
     '/assignments/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(assignmentIdParamSchema),
     assignmentController.deleteAssignment
 );
 
 router.get(
     '/assignments/:id/submissions',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(assignmentIdParamSchema),
     assignmentController.getAssignmentSubmissions
 );
@@ -393,30 +411,34 @@ router.get(
 // ============================================
 router.get(
     '/:id',
-    authorize(viewRoles),
+    authorizeHiringView,
     validateRequest(getJobSchema),
+    authorizeJobAccess,
     jobController.getJob
 );
 
 router.patch(
     '/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(getJobSchema),
+    authorizeJobAccess,
     validateRequest(updateJobSchema),
     jobController.updateJob
 );
 
 router.patch(
     '/:id/toggle',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(getJobSchema),
+    authorizeJobAccess,
     jobController.toggleJobHiring
 );
 
 router.delete(
     '/:id',
-    authorize(manageRoles),
+    authorizeHiringManage,
     validateRequest(getJobSchema),
+    authorizeJobAccess,
     jobController.deleteJob
 );
 

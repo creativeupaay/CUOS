@@ -8,64 +8,94 @@ import { notificationService } from '../../notification/services/notification.se
 class HolidayService {
     /**
      * Create a holiday and (optionally) auto-mark attendance for all active employees.
+     * Supports single dates or date ranges.
      */
     async createHoliday(
         data: {
             name: string;
-            date: string;
+            date?: string; // Legacy/single date
+            startDate?: string;
+            endDate?: string;
             type: 'holiday' | 'half-day' | 'wfh';
             description?: string;
             isPaid: boolean;
         },
         createdByUserId: string
-    ): Promise<IHoliday> {
-        // Always store as UTC midnight to avoid IST server timezone shift
-        const [y, m, d] = data.date.split('-').map(Number);
-        const targetDate = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+    ): Promise<IHoliday | IHoliday[]> {
+        const startStr = data.startDate || data.date;
+        if (!startStr) throw new AppError('Date or Start Date is required', 400);
 
+        const endStr = data.endDate || startStr;
 
-        // Prevent duplicate holiday on same date + type
-        const existing = await Holiday.findOne({
-            date: targetDate,
-            type: data.type,
-            name: data.name,
-        });
-        if (existing) {
-            throw new AppError('A holiday with that name and type already exists on this date', 409);
+        const [sy, sm, sd] = startStr.split('-').map(Number);
+        const [ey, em, ed] = endStr.split('-').map(Number);
+
+        const startDate = new Date(Date.UTC(sy, sm - 1, sd, 0, 0, 0, 0));
+        const endDate = new Date(Date.UTC(ey, em - 1, ed, 0, 0, 0, 0));
+
+        if (endDate < startDate) {
+            throw new AppError('End date cannot be before start date', 400);
         }
 
-        const holiday = await Holiday.create({
-            ...data,
-            date: targetDate,
-            createdBy: createdByUserId,
-        });
+        const dates: Date[] = [];
+        let current = new Date(startDate);
+        while (current <= endDate) {
+            dates.push(new Date(current));
+            current.setUTCDate(current.getUTCDate() + 1);
+        }
 
-        // Auto-mark attendance for all active employees
-        await this.applyHolidayAttendance(holiday);
+        const createdHolidays: IHoliday[] = [];
 
-        // Notify all active users about the holiday
+        for (const targetDate of dates) {
+            // Prevent duplicate holiday on same date + type + name
+            const existing = await Holiday.findOne({
+                date: targetDate,
+                type: data.type,
+                name: data.name,
+            });
+            
+            if (existing) continue; // Skip duplicates in a range or existing ones
+
+            const holiday = await Holiday.create({
+                ...data,
+                date: targetDate,
+                createdBy: createdByUserId,
+            });
+
+            // Auto-mark attendance for all active employees
+            await this.applyHolidayAttendance(holiday);
+            createdHolidays.push(holiday);
+        }
+
+        if (createdHolidays.length === 0) {
+            throw new AppError('All dates in the range already have this holiday declared.', 409);
+        }
+
+        // Notify all active users about the holiday (send one notification for the range)
         const activeUsers = await User.find({ isActive: true }).select('_id').lean();
         const userIds = activeUsers.map((u) => u._id as any);
 
         if (userIds.length > 0) {
-            const dateStr = holiday.date.toISOString().split('T')[0];
+            const rangeStr = dates.length > 1 
+                ? `${startStr} to ${endStr}` 
+                : startStr;
             const typeText = data.type === 'holiday' ? 'holiday' : data.type === 'wfh' ? 'WFH day' : 'half-day';
 
             notificationService.createBulkNotifications(userIds, {
                 type: 'holiday_declared',
                 title: 'Holiday Declared',
-                message: `${holiday.name} on ${dateStr} has been declared as a ${typeText}.`,
+                message: `${data.name} on ${rangeStr} has been declared as a ${typeText}.`,
                 link: '/hrms/holidays',
                 metadata: {
-                    holidayId: holiday._id.toString(),
-                    holidayName: holiday.name,
-                    date: dateStr,
+                    holidayName: data.name,
+                    startDate: startStr,
+                    endDate: endStr,
                     type: data.type,
                 },
             });
         }
 
-        return holiday;
+        return createdHolidays.length === 1 ? createdHolidays[0] : createdHolidays;
     }
 
     /**
@@ -77,11 +107,11 @@ class HolidayService {
 
         // Map holiday type to attendance status
         const statusMap: Record<string, string> = {
-            holiday: 'on-leave',
+            holiday: 'holiday',
             'half-day': 'half-day',
             wfh: 'wfh',
         };
-        const attendanceStatus = statusMap[holiday.type] || 'on-leave';
+        const attendanceStatus = statusMap[holiday.type] || 'holiday';
 
         const dateStr = holiday.date.toISOString().slice(0, 10);
 

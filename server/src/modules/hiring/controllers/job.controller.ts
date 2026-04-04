@@ -33,7 +33,10 @@ export const getJobs = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
         const filters: ListJobsInput = req.query as any;
 
-        const result = await jobService.getJobs(filters);
+        // If user is a job manager (not admin/HR), filter to only their managed jobs
+        const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+
+        const result = await jobService.getJobs(filters, managerUserId);
 
         res.status(200).json({
             status: 'success',
@@ -150,6 +153,35 @@ export const deleteApplicationField = asyncHandler(
         res.status(200).json({
             status: 'success',
             data: { fields },
+        });
+    }
+);
+
+/**
+ * Get employees list for job manager picker
+ */
+export const getEmployeesList = asyncHandler(
+    async (_req: Request, res: Response, _next: NextFunction) => {
+        const employees = await jobService.getEmployeesList();
+
+        res.status(200).json({
+            status: 'success',
+            data: { employees },
+        });
+    }
+);
+
+/**
+ * Check if current user is a job manager for any job
+ */
+export const checkJobManagerStatus = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction) => {
+        const userId = (req.user as any).id;
+        const isJobManager = await jobService.isUserJobManager(userId);
+
+        res.status(200).json({
+            status: 'success',
+            data: { isJobManager },
         });
     }
 );

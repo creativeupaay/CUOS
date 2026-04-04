@@ -229,25 +229,37 @@ export class CalcomService {
         const scheduleId = await this.upsertSchedule(input);
         const payload = this.buildEventPayload(input, scheduleId);
 
+        // If we have an existing event type ID, try to update it
         if (existingEventTypeId) {
-            const response = await this.client.patch(`/v2/event-types/${existingEventTypeId}`, payload, {
-                headers: { 'cal-api-version': CALCOM_EVENT_TYPES_API_VERSION },
-            });
-            const data = normalizeApiData(response.data);
-            const bookingUrl = String(data?.bookingUrl || input.scheduling.bookingUrl || '').trim();
-            if (!bookingUrl) {
-                throw new AppError('Cal.com event type update succeeded but booking URL is missing', 502);
-            }
+            try {
+                const response = await this.client.patch(`/v2/event-types/${existingEventTypeId}`, payload, {
+                    headers: { 'cal-api-version': CALCOM_EVENT_TYPES_API_VERSION },
+                });
+                const data = normalizeApiData(response.data);
+                const bookingUrl = String(data?.bookingUrl || input.scheduling.bookingUrl || '').trim();
+                if (!bookingUrl) {
+                    throw new AppError('Cal.com event type update succeeded but booking URL is missing', 502);
+                }
 
-            return {
-                scheduleId,
-                eventTypeId: Number(data?.id || existingEventTypeId),
-                eventTypeSlug: String(data?.slug || input.scheduling.eventTypeSlug || ''),
-                bookingUrl,
-                externalUpdatedAt: data?.updatedAt ? new Date(String(data.updatedAt)) : undefined,
-            };
+                return {
+                    scheduleId,
+                    eventTypeId: Number(data?.id || existingEventTypeId),
+                    eventTypeSlug: String(data?.slug || input.scheduling.eventTypeSlug || ''),
+                    bookingUrl,
+                    externalUpdatedAt: data?.updatedAt ? new Date(String(data.updatedAt)) : undefined,
+                };
+            } catch (error: any) {
+                // If the event type no longer exists (404), create a new one instead
+                const is404 = error?.response?.status === 404 || error?.status === 404;
+                if (!is404) {
+                    throw error;
+                }
+                // Fall through to create a new event type
+                console.log(`[Cal.com] Event type ${existingEventTypeId} not found (404), creating new one`);
+            }
         }
 
+        // Create a new event type
         const response = await this.client.post('/v2/event-types', payload, {
             headers: { 'cal-api-version': CALCOM_EVENT_TYPES_API_VERSION },
         });

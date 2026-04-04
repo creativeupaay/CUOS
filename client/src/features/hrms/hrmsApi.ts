@@ -464,7 +464,7 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
 
         createHoliday: builder.mutation<
             { status: string; data: { holiday: Holiday } },
-            { name: string; date: string; type: string; description?: string; isPaid: boolean }
+            { name: string; date?: string; startDate?: string; endDate?: string; type: string; description?: string; isPaid: boolean }
         >({
             query: (body) => ({ url: '/hrms/holidays', method: 'POST', body }),
         }),

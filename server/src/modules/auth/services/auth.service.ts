@@ -464,10 +464,15 @@ export const changePassword = async (
     oldPassword: string,
     newPassword: string
 ): Promise<void> => {
-    const user = await User.findById(userId).select('+password');
+    let user: any = await User.findById(userId).select('+password');
 
     if (!user) {
-        throw new AppError('User not found', 404);
+        const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+        user = await PartnerEmployee.findById(userId).select('+password');
+
+        if (!user) {
+            throw new AppError('User not found', 404);
+        }
     }
 
     const isOldPasswordValid = await user.comparePassword(oldPassword);

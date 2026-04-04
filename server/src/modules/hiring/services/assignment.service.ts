@@ -70,7 +70,21 @@ export class AssignmentService {
         return assignment;
     }
 
-    async getAssignmentsByJob(jobId: string): Promise<IAssignment[]> {
+    async getAssignmentsByJob(jobId: string, managerUserId?: string): Promise<IAssignment[]> {
+        // If managerUserId is provided, verify they manage this job
+        if (managerUserId) {
+            const { Employee } = await import('../../hrms/models/Employee.model');
+            const employee = await Employee.findOne({ userId: managerUserId }).select('_id');
+            if (!employee) {
+                return [];
+            }
+
+            const job = await Job.findOne({ _id: jobId, managers: employee._id }).select('_id');
+            if (!job) {
+                return [];
+            }
+        }
+
         const assignment = await Assignment.findOne({ jobId }).sort({ updatedAt: -1, createdAt: -1 });
         return assignment ? [assignment] : [];
     }

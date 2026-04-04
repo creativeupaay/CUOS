@@ -244,7 +244,10 @@ export class ApplicationService {
         return application;
     }
 
-    async getApplications(filters: ListApplicationsInput): Promise<{
+    async getApplications(
+        filters: ListApplicationsInput,
+        managerUserId?: string
+    ): Promise<{
         applications: IApplication[];
         total: number;
         page: number;
@@ -253,9 +256,33 @@ export class ApplicationService {
         const { jobId, status, tags, search, location, minExperience, page = 1, limit = 50 } = filters as any;
 
         const query: any = {};
+
+        // If managerUserId is provided, filter to only applications for jobs managed by this user
+        if (managerUserId) {
+            const { Employee } = await import('../../hrms/models/Employee.model');
+            const employee = await Employee.findOne({ userId: managerUserId }).select('_id');
+            if (!employee) {
+                return { applications: [], total: 0, page, totalPages: 0 };
+            }
+            const managedJobs = await Job.find({ managers: employee._id }).select('_id');
+            const managedJobIds = managedJobs.map((job) => job._id);
+            if (managedJobIds.length === 0) {
+                return { applications: [], total: 0, page, totalPages: 0 };
+            }
+            query.jobId = { $in: managedJobIds };
+        }
+
         if (jobId) {
             try {
-                query.jobId = new Types.ObjectId(jobId);
+                const requestedJobId = new Types.ObjectId(jobId);
+                // If manager filter is already applied, ensure requested jobId is in the allowed list
+                if (query.jobId && query.jobId.$in) {
+                    const allowedIds = query.jobId.$in.map((id: Types.ObjectId) => id.toString());
+                    if (!allowedIds.includes(requestedJobId.toString())) {
+                        return { applications: [], total: 0, page, totalPages: 0 };
+                    }
+                }
+                query.jobId = requestedJobId;
             } catch {
                 // If jobId is not a valid ObjectId, just use it as is (shouldn't happen but safe guard)
                 query.jobId = jobId;

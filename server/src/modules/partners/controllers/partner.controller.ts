@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { PartnerService } from '../services/partner.service';
 import asyncHandler from '../../../utils/asyncHandler';
+import { uploadDocument } from '../../../utils/cloudinary.util';
 
 const partnerService = new PartnerService();
 
@@ -63,6 +64,37 @@ export const updatePartner = asyncHandler(async (req: Request, res: Response) =>
         success: true,
         message: 'Partner updated successfully',
         data: partner,
+    });
+});
+
+/**
+ * Upload partner image (Logo or Photo)
+ */
+export const uploadPartnerImage = asyncHandler(async (req: Request, res: Response) => {
+    const file = req.file;
+    const { type } = req.params; // 'logo' or 'photo'
+    
+    if (!file) {
+        return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    
+    if (type !== 'logo' && type !== 'photo') {
+         return res.status(400).json({ success: false, message: 'Invalid image type requested' });
+    }
+
+    // Determine target folder in cloudinary
+    const folder = `partners/${req.params.id}/${type === 'logo' ? 'logos' : 'photos'}`;
+    
+    // Upload publicly accessible document (isPrivate=false for partner logos since loginURL serves them publically)
+    const result = await uploadDocument(file.buffer, folder, file.originalname, false);
+    
+    const updateData = type === 'logo' ? { companyLogo: result.url } : { photo: result.url };
+    const updatedPartner = await partnerService.updatePartner(req.params.id, updateData);
+
+    res.json({
+        success: true,
+        message: `${type === 'logo' ? 'Company logo' : 'Profile photo'} uploaded successfully`,
+        data: updatedPartner,
     });
 });
 
