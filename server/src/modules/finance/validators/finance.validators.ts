@@ -12,6 +12,8 @@ export const createExpenseSchema = z.object({
             'salary', 'fixed', 'cac', 'project', 'overhead',
             'tax', 'transaction-fee', 'currency-loss',
         ]),
+        costType: z.enum(['fixed', 'variable']).default('variable'),
+        expenseLevel: z.enum(['company', 'project']).default('company'),
         projectId: z.string().optional(),
         employeeId: z.string().optional(),
         date: z.string().min(1, 'Date is required'),
@@ -36,6 +38,8 @@ export const updateExpenseSchema = z.object({
             'salary', 'fixed', 'cac', 'project', 'overhead',
             'tax', 'transaction-fee', 'currency-loss',
         ]).optional(),
+        costType: z.enum(['fixed', 'variable']).optional(),
+        expenseLevel: z.enum(['company', 'project']).optional(),
         projectId: z.string().optional(),
         employeeId: z.string().optional(),
         date: z.string().optional(),
@@ -124,5 +128,53 @@ export const setCurrencyRateSchema = z.object({
         toCurrency: z.string().min(1),
         rate: z.number().min(0),
         date: z.string().min(1),
+    }),
+});
+
+// ── Revenue Validators ─────────────────────────────────────────────
+export const createRevenueSchema = z.object({
+    body: z.object({
+        title: z.string().min(1, 'Title is required'),
+        description: z.string().optional(),
+        source: z.enum(['project', 'manual', 'interest', 'refund', 'other']).default('manual'),
+        amount: z.number().min(0, 'Amount must be positive'),
+        currency: z.string().default('INR'),
+        exchangeRate: z.number().min(0).default(1),
+        gstApplicable: z.boolean().default(true),
+        gstRate: z.number().min(0).default(18),
+        tdsApplicable: z.boolean().default(false),
+        tdsRate: z.number().min(0).default(0),
+        projectId: z.string().optional(),
+        clientId: z.string().optional(),
+        accrualMonth: z.number().min(1).max(12),
+        accrualYear: z.number().min(2000).max(2100),
+        notes: z.string().optional(),
+    }),
+});
+
+export const updateRevenueSchema = z.object({
+    body: z.object({
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        source: z.enum(['project', 'manual', 'interest', 'refund', 'other']).optional(),
+        amount: z.number().min(0).optional(),
+        currency: z.string().optional(),
+        exchangeRate: z.number().min(0).optional(),
+        gstApplicable: z.boolean().optional(),
+        gstRate: z.number().min(0).optional(),
+        tdsApplicable: z.boolean().optional(),
+        tdsRate: z.number().min(0).optional(),
+        projectId: z.string().optional(),
+        clientId: z.string().optional(),
+        accrualMonth: z.number().min(1).max(12).optional(),
+        accrualYear: z.number().min(2000).max(2100).optional(),
+        notes: z.string().optional(),
+    }),
+});
+
+export const recordRevenuePaymentSchema = z.object({
+    body: z.object({
+        amount: z.number().min(0.01, 'Payment amount must be positive'),
+        receivedDate: z.string().optional(),
     }),
 });

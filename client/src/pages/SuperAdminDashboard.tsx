@@ -317,9 +317,9 @@ export default function SuperAdminDashboard() {
     // Determine branding
     const brandName = isPartner && partnerCompanyName ? partnerCompanyName : 'CUOS';
     const brandSubtitle = isPartner && partnerCompanyName ? 'Partner Portal' : 'Creative Upaay';
-    const brandInitials = isPartner && partnerCompanyName
-        ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-        : 'CU';
+    // const brandInitials = isPartner && partnerCompanyName
+    //     ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+    //     : 'CU';
 
     return (
         <div className="min-h-screen flex flex-col" style={{
@@ -348,17 +348,11 @@ export default function SuperAdminDashboard() {
                                 className="h-8 w-auto object-contain"
                             />
                         ) : (
-                            <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                                style={{
-                                    background: isPartner
-                                        ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
-                                        : 'linear-gradient(135deg, #059669, #0EA5E9)',
-                                    boxShadow: 'var(--shadow-brand)'
-                                }}
-                            >
-                                {brandInitials}
-                            </div>
+                            <img
+                                src="/company-logo2.png"
+                                alt="Company Logo"
+                                className="h-8 w-auto object-contain"
+                            />
                         )}
                         <div>
                             <div

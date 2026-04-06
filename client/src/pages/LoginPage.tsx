@@ -40,32 +40,23 @@ export default function LoginPage() {
             >
                 {/* Top brand row */}
                 <div className="flex items-center gap-3">
-                    <div
+                    {/* <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg"
                         style={{ background: 'rgba(255,255,255,0.18)', color: 'white' }}
                     >
                         CU
-                    </div>
+                    </div> */}
                     <div>
-                        <div className="font-bold text-white text-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>CUOS</div>
-                        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Creative Upaay</div>
+                        {/* <div className="font-bold text-white text-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>CUOS</div> */}
+                        {/* <div className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Creative Upaay</div> */}
                     </div>
                 </div>
 
                 {/* Centred brand hero */}
                 <div className="flex flex-col items-center text-center">
                     {/* Large logo mark */}
-                    <div
-                        className="w-24 h-24 rounded-3xl flex items-center justify-center font-bold text-4xl mb-8"
-                        style={{
-                            background: 'rgba(255,255,255,0.12)',
-                            border: '1px solid rgba(255,255,255,0.18)',
-                            color: 'white',
-                            fontFamily: 'Outfit, sans-serif',
-                            letterSpacing: '-0.04em',
-                        }}
-                    >
-                        CU
+                    <div className="w-24 h-24 mb-8 flex items-center justify-center">
+                        <img src="/company-logo1.png" alt="Company Logo" className="w-full h-full object-contain" />
                     </div>
 
                     <h1
@@ -100,12 +91,7 @@ export default function LoginPage() {
             >
                 {/* Mobile logo */}
                 <div className="flex items-center gap-2 mb-10 lg:hidden">
-                    <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-sm"
-                        style={{ backgroundColor: 'var(--color-primary)' }}
-                    >
-                        CU
-                    </div>
+                    <img src="/company-logo1.png" alt="Company Logo" className="w-9 h-9 object-contain" />
                     <span className="font-bold text-lg" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>CUOS</span>
                 </div>
 

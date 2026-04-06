@@ -8,6 +8,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "seed": "ts-node src/scripts/seedRoles.ts",
     "seed:safe": "ts-node src/scripts/seedRolesSafe.ts",
+    "seed:finance": "node seed-finance.js",
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit"
   },

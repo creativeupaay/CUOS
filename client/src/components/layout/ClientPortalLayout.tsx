@@ -204,12 +204,7 @@ export default function ClientPortalLayout() {
                 className="flex items-center gap-3 px-5 h-14 border-b flex-shrink-0"
                 style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
             >
-                <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}
-                >
-                    <Building2 size={16} className="text-white" />
-                </div>
+                <img src="/company-logo2.png" alt="Company Logo" className="h-8 w-auto object-contain" />
                 <div className="min-w-0">
                     <p className="text-sm font-bold truncate" style={{ color: '#0F172A' }}>Creative Upaay</p>
                     <p className="text-[11px]" style={{ color: '#94A3B8' }}>Client Portal</p>

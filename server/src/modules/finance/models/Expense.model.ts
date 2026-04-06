@@ -13,6 +13,12 @@ export type ExpenseCategory =
 
 export type ExpenseStatus = 'pending' | 'approved' | 'paid' | 'rejected';
 
+// ── Cost Type (for analysis) ────────────────────────────────────────
+export type CostType = 'fixed' | 'variable';
+
+// ── Expense Level ───────────────────────────────────────────────────
+export type ExpenseLevel = 'company' | 'project';
+
 // ── Interface ───────────────────────────────────────────────────────
 export interface IExpense extends Document {
     _id: Types.ObjectId;
@@ -23,6 +29,8 @@ export interface IExpense extends Document {
     exchangeRate: number;
     amountInBaseCurrency: number;
     category: ExpenseCategory;
+    costType: CostType;
+    expenseLevel: ExpenseLevel;
     projectId?: Types.ObjectId;
     employeeId?: Types.ObjectId;
     date: Date;
@@ -65,6 +73,16 @@ const ExpenseSchema = new Schema<IExpense>(
                 'currency-loss',
             ],
         },
+        costType: {
+            type: String,
+            enum: ['fixed', 'variable'],
+            default: 'variable',
+        },
+        expenseLevel: {
+            type: String,
+            enum: ['company', 'project'],
+            default: 'company',
+        },
         projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
         employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
         date: { type: Date, required: true },
@@ -93,10 +111,13 @@ const ExpenseSchema = new Schema<IExpense>(
 
 // ── Indexes ─────────────────────────────────────────────────────────
 ExpenseSchema.index({ category: 1 });
+ExpenseSchema.index({ costType: 1 });
+ExpenseSchema.index({ expenseLevel: 1 });
 ExpenseSchema.index({ projectId: 1 });
 ExpenseSchema.index({ date: -1 });
 ExpenseSchema.index({ status: 1 });
 ExpenseSchema.index({ category: 1, date: -1 }); // For monthly expense reports
+ExpenseSchema.index({ expenseLevel: 1, costType: 1 }); // For filtered views
 ExpenseSchema.index({ createdBy: 1 });
 
 // Auto-compute amountInBaseCurrency before save

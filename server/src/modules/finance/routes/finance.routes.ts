@@ -16,6 +16,9 @@ import {
     createMilestoneSchema,
     updateMilestoneSchema,
     setCurrencyRateSchema,
+    createRevenueSchema,
+    updateRevenueSchema,
+    recordRevenuePaymentSchema,
 } from '../validators/finance.validators';
 
 const router = Router();
@@ -27,6 +30,8 @@ router.use(authenticate);
 // COMPANY DASHBOARD & REPORTS
 // ══════════════════════════════════════════════════════════════════════
 router.get('/dashboard', isAdmin, fc.getDashboardStats);
+router.get('/dashboard/salaries/:fiscalYear', isAdmin, fc.getMonthlySalaries);
+router.get('/dashboard/project-profitability', isAdmin, fc.getProjectProfitability);
 router.get('/reports/monthly/:year', isAdmin, fc.getMonthlyReport);
 router.get('/reports/accrual-vs-cash', isAdmin, fc.getAccrualVsCashflow);
 router.get('/reports/revenue/:year', isAdmin, fc.getRevenueByMonth);
@@ -79,6 +84,23 @@ router.patch(
 router.patch('/milestones/:id/complete', isAdmin, fc.completeMilestone);
 router.patch('/milestones/:id/paid', isAdmin, fc.markMilestonePaid);
 router.delete('/milestones/:id', isAdmin, fc.deleteMilestone);
+
+// ══════════════════════════════════════════════════════════════════════
+// REVENUE
+// ══════════════════════════════════════════════════════════════════════
+router.get('/revenue', isAdmin, fc.getRevenues);
+router.get('/revenue/summary', isAdmin, fc.getRevenueSummary);
+router.get('/revenue/monthly/:year', isAdmin, fc.getMonthlyRevenueReport);
+router.get('/revenue/:id', isAdmin, fc.getRevenueById);
+router.post('/revenue', isAdmin, validateRequest(createRevenueSchema), fc.createRevenue);
+router.patch('/revenue/:id', isAdmin, validateRequest(updateRevenueSchema), fc.updateRevenue);
+router.delete('/revenue/:id', isAdmin, fc.deleteRevenue);
+router.post(
+    '/revenue/:id/payment',
+    isAdmin,
+    validateRequest(recordRevenuePaymentSchema),
+    fc.recordRevenuePayment
+);
 
 // ══════════════════════════════════════════════════════════════════════
 // CURRENCY RATES

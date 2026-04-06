@@ -6,6 +6,7 @@ import * as milestoneService from '../services/milestone.service';
 import * as currencyService from '../services/currency.service';
 import * as projectFinanceService from '../services/project-finance.service';
 import * as companyFinanceService from '../services/company-finance.service';
+import * as revenueService from '../services/revenue.service';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPENSE CONTROLLERS
@@ -200,5 +201,74 @@ export const getRevenueByMonth = asyncHandler(async (req: Request, res: Response
 export const getExpensesByMonth = asyncHandler(async (req: Request, res: Response) => {
     const year = parseInt(req.params.year, 10) || new Date().getFullYear();
     const result = await expenseService.getMonthlyExpenses(year);
+    res.json({ success: true, data: result });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// REVENUE CONTROLLERS
+// ═══════════════════════════════════════════════════════════════════
+
+export const createRevenue = asyncHandler(async (req: Request, res: Response) => {
+    const revenue = await revenueService.createRevenue(req.body, req.user!.id);
+    res.status(201).json({ success: true, data: revenue });
+});
+
+export const getRevenues = asyncHandler(async (req: Request, res: Response) => {
+    const result = await revenueService.getRevenues(req.query as any);
+    res.json({ success: true, data: result.revenues, pagination: result.pagination });
+});
+
+export const getRevenueById = asyncHandler(async (req: Request, res: Response) => {
+    const revenue = await revenueService.getRevenueById(req.params.id);
+    res.json({ success: true, data: revenue });
+});
+
+export const updateRevenue = asyncHandler(async (req: Request, res: Response) => {
+    const revenue = await revenueService.updateRevenue(req.params.id, req.body);
+    res.json({ success: true, data: revenue });
+});
+
+export const deleteRevenue = asyncHandler(async (req: Request, res: Response) => {
+    await revenueService.deleteRevenue(req.params.id);
+    res.json({ success: true, message: 'Revenue entry deleted' });
+});
+
+export const recordRevenuePayment = asyncHandler(async (req: Request, res: Response) => {
+    const { amount, receivedDate } = req.body;
+    const revenue = await revenueService.recordRevenuePayment(
+        req.params.id,
+        amount,
+        receivedDate ? new Date(receivedDate) : undefined
+    );
+    res.json({ success: true, data: revenue });
+});
+
+export const getMonthlyRevenueReport = asyncHandler(async (req: Request, res: Response) => {
+    const year = parseInt(req.params.year, 10) || new Date().getFullYear();
+    const result = await revenueService.getMonthlyRevenue(year);
+    res.json({ success: true, data: result });
+});
+
+export const getRevenueSummary = asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query;
+    const result = await revenueService.getRevenueSummary(
+        startDate as string,
+        endDate as string
+    );
+    res.json({ success: true, data: result });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// ADDITIONAL DASHBOARD CONTROLLERS
+// ═══════════════════════════════════════════════════════════════════
+
+export const getMonthlySalaries = asyncHandler(async (req: Request, res: Response) => {
+    const fiscalYear = parseInt(req.params.fiscalYear, 10) || new Date().getFullYear();
+    const result = await companyFinanceService.getMonthlySalaries(fiscalYear);
+    res.json({ success: true, data: result });
+});
+
+export const getProjectProfitability = asyncHandler(async (_req: Request, res: Response) => {
+    const result = await companyFinanceService.getProjectProfitability();
     res.json({ success: true, data: result });
 });

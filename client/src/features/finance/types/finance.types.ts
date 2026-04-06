@@ -1,3 +1,58 @@
+// ── Revenue Types ───────────────────────────────────────────────────
+export type RevenueSource = 'project' | 'manual' | 'interest' | 'refund' | 'other';
+export type RevenueStatus = 'pending' | 'received' | 'partially_received';
+
+export interface Revenue {
+    _id: string;
+    title: string;
+    description?: string;
+    source: RevenueSource;
+    amount: number;
+    currency: string;
+    exchangeRate: number;
+    amountInBaseCurrency: number;
+    gstApplicable: boolean;
+    gstAmount: number;
+    gstRate: number;
+    amountWithoutGst: number;
+    tdsApplicable: boolean;
+    tdsAmount: number;
+    tdsRate: number;
+    amountReceived: number;
+    receivedDate?: string;
+    projectId?: { _id: string; name: string } | string;
+    clientId?: { _id: string; name: string; companyName?: string } | string;
+    invoiceId?: { _id: string; invoiceNumber: string } | string;
+    accrualMonth: number;
+    accrualYear: number;
+    cashMonth?: number;
+    cashYear?: number;
+    status: RevenueStatus;
+    notes?: string;
+    attachments?: string[];
+    createdBy: { _id: string; name: string } | string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateRevenuePayload {
+    title: string;
+    description?: string;
+    source: RevenueSource;
+    amount: number;
+    currency?: string;
+    exchangeRate?: number;
+    gstApplicable?: boolean;
+    gstRate?: number;
+    tdsApplicable?: boolean;
+    tdsRate?: number;
+    projectId?: string;
+    clientId?: string;
+    accrualMonth: number;
+    accrualYear: number;
+    notes?: string;
+}
+
 // ── Expense Types ───────────────────────────────────────────────────
 export type ExpenseCategory =
     | 'salary'
@@ -9,6 +64,8 @@ export type ExpenseCategory =
     | 'transaction-fee'
     | 'currency-loss';
 
+export type CostType = 'fixed' | 'variable';
+export type ExpenseLevel = 'company' | 'project';
 export type ExpenseStatus = 'pending' | 'approved' | 'paid' | 'rejected';
 
 export interface Expense {
@@ -20,6 +77,8 @@ export interface Expense {
     exchangeRate: number;
     amountInBaseCurrency: number;
     category: ExpenseCategory;
+    costType: CostType;
+    expenseLevel: ExpenseLevel;
     projectId?: { _id: string; name: string } | string;
     employeeId?: { _id: string; employeeId: string; designation: string } | string;
     date: string;
@@ -46,6 +105,8 @@ export interface CreateExpensePayload {
     currency?: string;
     exchangeRate?: number;
     category: ExpenseCategory;
+    costType?: CostType;
+    expenseLevel?: ExpenseLevel;
     projectId?: string;
     employeeId?: string;
     date: string;
@@ -150,19 +211,43 @@ export interface CreateMilestonePayload {
 
 // ── Dashboard / Report Types ────────────────────────────────────────
 export interface CompanyDashboardStats {
+    // Revenue
     totalRevenue: number;
     revenueWithoutGst: number;
     totalGstCollected: number;
     totalPaid: number;
     totalPending: number;
+
+    // Expenses
     payrollCost: number;
     fixedCosts: number;
+    variableCosts: number;
     cac: number;
     projectCosts: number;
     overheadCosts: number;
     totalExpenses: number;
+    depreciation: number;
+    interestExpense: number;
+    taxExpense: number;
+
+    // Profitability
+    grossProfit: number;
+    grossMargin: number;
+    ebitda: number;
+    ebitdaMargin: number;
     netProfit: number;
     netMargin: number;
+
+    // Cash Position
+    cashInBank: number;
+    receivables: number;
+    payables: number;
+
+    // Runway
+    runwayMonths: number;
+    avgMonthlyExpenses: number;
+
+    // Counts
     totalProjects: number;
     activeProjects: number;
     totalInvoices: number;
@@ -171,6 +256,8 @@ export interface CompanyDashboardStats {
 
 export interface MonthlyReportEntry {
     month: number;
+    fiscalMonthIndex?: number;
+    calendarYear?: number;
     revenue: number;
     gst: number;
     revenueWithoutGst: number;
@@ -180,6 +267,52 @@ export interface MonthlyReportEntry {
     totalExpenses: number;
     netProfit: number;
     netMargin: number;
+}
+
+export interface MonthlySalaryEntry {
+    month: number;
+    fiscalMonthIndex: number;
+    calendarYear: number;
+    totalSalary: number;
+    employeeCount: number;
+}
+
+export interface ProjectProfitabilityEntry {
+    projectId: string;
+    projectName: string;
+    clientName: string;
+    status: string;
+    startDate?: string;
+    endDate?: string;
+    budget: number;
+    totalRevenue: number;
+    totalExpenses: number;
+    profit: number;
+    profitMargin: number;
+    isProfitable: boolean;
+    monthlyBurnRate: number;
+    monthlyRevenueRate: number;
+    profitableUntil: string | null;
+}
+
+export interface MonthlyRevenueEntry {
+    month: number;
+    totalRevenue: number;
+    revenueWithoutGst: number;
+    gst: number;
+    received: number;
+    manualRevenue: number;
+    invoiceRevenue: number;
+}
+
+export interface RevenueSummary {
+    totalRevenue: number;
+    revenueWithoutGst: number;
+    gstCollected: number;
+    received: number;
+    pending: number;
+    manualRevenue: number;
+    invoiceRevenue: number;
 }
 
 export interface ProjectFinanceSummary {

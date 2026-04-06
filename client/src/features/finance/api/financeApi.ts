@@ -8,11 +8,17 @@ import type {
     CreateMilestonePayload,
     CompanyDashboardStats,
     MonthlyReportEntry,
+    MonthlyRevenueEntry,
+    RevenueSummary,
     ProjectFinanceSummary,
     ProjectFinanceOverview,
     AccrualVsCashEntry,
     CurrencyRateEntry,
     Pagination,
+    Revenue,
+    CreateRevenuePayload,
+    MonthlySalaryEntry,
+    ProjectProfitabilityEntry,
 } from '../types/finance.types';
 
 // ── Helper Types ────────────────────────────────────────────────────
@@ -50,6 +56,18 @@ export const financeApi = api.injectEndpoints({
             providesTags: ['FinanceDashboard'],
         }),
 
+        getMonthlySalaries: builder.query<MonthlySalaryEntry[], number>({
+            query: (fiscalYear) => `/finance/dashboard/salaries/${fiscalYear}`,
+            transformResponse: (res: { success: boolean; data: MonthlySalaryEntry[] }) => res.data,
+            providesTags: ['FinanceDashboard'],
+        }),
+
+        getProjectProfitability: builder.query<ProjectProfitabilityEntry[], void>({
+            query: () => '/finance/dashboard/project-profitability',
+            transformResponse: (res: { success: boolean; data: ProjectProfitabilityEntry[] }) => res.data,
+            providesTags: ['FinanceDashboard'],
+        }),
+
         // ═══════════════════════════════════════════════════════════
         // PROJECT FINANCE
         // ═══════════════════════════════════════════════════════════
@@ -63,6 +81,72 @@ export const financeApi = api.injectEndpoints({
             query: (projectId) => `/finance/projects/${projectId}`,
             transformResponse: (res: SingleResponse<ProjectFinanceSummary>) => res.data,
             providesTags: ['FinanceDashboard'],
+        }),
+
+        // ═══════════════════════════════════════════════════════════
+        // REVENUE
+        // ═══════════════════════════════════════════════════════════
+        getRevenues: builder.query<
+            { revenues: Revenue[]; pagination: Pagination },
+            Record<string, string | number | undefined>
+        >({
+            query: (params) => {
+                const searchParams = new URLSearchParams();
+                Object.entries(params).forEach(([key, val]) => {
+                    if (val !== undefined) searchParams.set(key, String(val));
+                });
+                return `/finance/revenue?${searchParams.toString()}`;
+            },
+            transformResponse: (res: any) => ({
+                revenues: res.data || [],
+                pagination: res.pagination || { total: 0, page: 1, limit: 15, pages: 1 },
+            }),
+            providesTags: ['Revenues'],
+        }),
+
+        getRevenueById: builder.query<Revenue, string>({
+            query: (id) => `/finance/revenue/${id}`,
+            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+            providesTags: ['Revenues'],
+        }),
+
+        getRevenueSummary: builder.query<RevenueSummary, { startDate: string; endDate: string }>({
+            query: ({ startDate, endDate }) => `/finance/revenue/summary?startDate=${startDate}&endDate=${endDate}`,
+            transformResponse: (res: SingleResponse<RevenueSummary>) => res.data,
+            providesTags: ['Revenues', 'FinanceDashboard'],
+        }),
+
+        getMonthlyRevenue: builder.query<MonthlyRevenueEntry[], number>({
+            query: (year) => `/finance/revenue/monthly/${year}`,
+            transformResponse: (res: { success: boolean; data: MonthlyRevenueEntry[] }) => res.data,
+            providesTags: ['Revenues', 'FinanceDashboard'],
+        }),
+
+        createRevenue: builder.mutation<Revenue, CreateRevenuePayload>({
+            query: (body) => ({ url: '/finance/revenue', method: 'POST', body }),
+            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+            invalidatesTags: ['Revenues', 'FinanceDashboard'],
+        }),
+
+        updateRevenue: builder.mutation<Revenue, { id: string; data: Partial<CreateRevenuePayload> }>({
+            query: ({ id, data }) => ({ url: `/finance/revenue/${id}`, method: 'PATCH', body: data }),
+            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+            invalidatesTags: ['Revenues', 'FinanceDashboard'],
+        }),
+
+        deleteRevenue: builder.mutation<void, string>({
+            query: (id) => ({ url: `/finance/revenue/${id}`, method: 'DELETE' }),
+            invalidatesTags: ['Revenues', 'FinanceDashboard'],
+        }),
+
+        recordRevenuePayment: builder.mutation<Revenue, { id: string; amount: number; receivedDate?: string }>({
+            query: ({ id, amount, receivedDate }) => ({
+                url: `/finance/revenue/${id}/payment`,
+                method: 'POST',
+                body: { amount, receivedDate },
+            }),
+            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+            invalidatesTags: ['Revenues', 'FinanceDashboard'],
         }),
 
         // ═══════════════════════════════════════════════════════════
@@ -237,9 +321,20 @@ export const {
     useGetFinanceDashboardQuery,
     useGetMonthlyReportQuery,
     useGetAccrualVsCashflowQuery,
+    useGetMonthlySalariesQuery,
+    useGetProjectProfitabilityQuery,
     // Project Finance
     useGetAllProjectsFinanceQuery,
     useGetProjectFinanceSummaryQuery,
+    // Revenue
+    useGetRevenuesQuery,
+    useGetRevenueByIdQuery,
+    useGetRevenueSummaryQuery,
+    useGetMonthlyRevenueQuery,
+    useCreateRevenueMutation,
+    useUpdateRevenueMutation,
+    useDeleteRevenueMutation,
+    useRecordRevenuePaymentMutation,
     // Expenses
     useGetExpensesQuery,
     useGetExpenseByIdQuery,

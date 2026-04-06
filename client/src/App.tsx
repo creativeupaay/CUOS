@@ -33,9 +33,8 @@ const CrmLeadDetailPage = lazy(() => import('./pages/CrmLeadDetailPage'));
 const CrmProposalsPage = lazy(() => import('./pages/CrmProposalsPage'));
 const CrmProposalFormPage = lazy(() => import('./pages/CrmProposalFormPage'));
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
+const FinanceRevenuePage = lazy(() => import('./pages/FinanceRevenuePage'));
 const FinanceExpensesPage = lazy(() => import('./pages/FinanceExpensesPage'));
-const FinanceInvoicesPage = lazy(() => import('./pages/FinanceInvoicesPage'));
-const FinanceReportsPage = lazy(() => import('./pages/FinanceReportsPage'));
 const ProjectFinancePage = lazy(() => import('./pages/ProjectFinancePage'));
 const HrmsDashboardPage = lazy(() => import('./pages/HrmsDashboardPage'));
 const HrmsEmployeesPage = lazy(() => import('./pages/HrmsEmployeesPage'));
@@ -276,9 +275,8 @@ function App() {
 
           {/* Finance Module */}
           <Route path="/finance" element={<PartnerRestrictedRoute>{loadable(<FinanceDashboardPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/revenue" element={<PartnerRestrictedRoute>{loadable(<FinanceRevenuePage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/expenses" element={<PartnerRestrictedRoute>{loadable(<FinanceExpensesPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/finance/invoices" element={<PartnerRestrictedRoute>{loadable(<FinanceInvoicesPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/finance/reports" element={<PartnerRestrictedRoute>{loadable(<FinanceReportsPage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/projects/:id" element={<PartnerRestrictedRoute>{loadable(<ProjectFinancePage />)}</PartnerRestrictedRoute>} />
           {/* HRMS Module — Admin/HR only */}
           <Route path="/hrms" element={<HrmsRedirect>{loadable(<HrmsDashboardPage />)}</HrmsRedirect>} />

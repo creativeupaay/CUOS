@@ -10,7 +10,7 @@ import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
-    ScrollText, Settings, DollarSign, Receipt, CreditCard,
+    ScrollText, Settings, DollarSign, Receipt,
     TrendingUp, Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
 } from 'lucide-react';
 
@@ -59,9 +59,8 @@ function getModuleConfig(
         const finSubs = mp?.finance?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/finance', icon: <DollarSign size={18} />, matchPrefix: '/finance' },
+            { key: 'revenue', label: 'Revenue', path: '/finance/revenue', icon: <TrendingUp size={18} />, matchPrefix: '/finance/revenue' },
             { key: 'expenses', label: 'Expenses', path: '/finance/expenses', icon: <Receipt size={18} />, matchPrefix: '/finance/expenses' },
-            { key: 'invoices', label: 'Invoices', path: '/finance/invoices', icon: <CreditCard size={18} />, matchPrefix: '/finance/invoices' },
-            { key: 'reports', label: 'Reports', path: '/finance/reports', icon: <TrendingUp size={18} />, matchPrefix: '/finance/reports' },
         ];
         return { title: 'Finance', items: isAdmin || !finSubs ? allItems : allItems.filter(i => (finSubs as any)[i.key] === true) };
     }
@@ -405,9 +404,9 @@ export default function Sidebar({
     const partnerCompanyLogo = (user as any)?.companyLogo;
     const brandName = isPartner && partnerCompanyName ? partnerCompanyName : 'CUOS';
     const brandSubtitle = isPartner && partnerCompanyName ? 'Partner Portal' : 'Creative Upaay';
-    const brandInitials = isPartner && partnerCompanyName
-        ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-        : 'CU';
+    // const brandInitials = isPartner && partnerCompanyName
+    //     ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+    //     : 'CU';
 
     const { data: employeeProfile } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
@@ -445,15 +444,7 @@ export default function Sidebar({
                         />
                     ) : (
                         <>
-                            <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
-                                style={{
-                                    background: isPartner ? 'linear-gradient(135deg, #6366F1, #8B5CF6)' : 'linear-gradient(135deg,#059669,#0EA5E9)',
-                                    boxShadow: 'var(--shadow-brand)'
-                                }}
-                            >
-                                {brandInitials}
-                            </div>
+                            <img src="/company-logo2.png" alt="Company Logo" className="h-8 max-w-[120px] object-contain shrink-0" />
                             <div>
                                 <div className="font-bold text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
                                 <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
