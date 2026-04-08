@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, CookieOptions } from 'express';
 import * as authService from '../services/auth.service';
 import asyncHandler from '../../../utils/asyncHandler';
+import { env } from '../../../config/env.config';
 
 const ACCESS_TOKEN_COOKIE_MAX_AGE = 15 * 60 * 1000; // 15 minutes
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -24,8 +25,8 @@ export const login = asyncHandler(
         // Set refresh token in HTTP-only cookie
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+             secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
             path: '/',
             maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
         });
@@ -33,8 +34,8 @@ export const login = asyncHandler(
         // Set access token in HTTP-only cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
             path: '/',
             maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
@@ -57,8 +58,8 @@ export const partnerLogin = asyncHandler(
         // Set refresh token in HTTP-only cookie
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+             secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
             path: '/',
             maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
         });
@@ -66,8 +67,8 @@ export const partnerLogin = asyncHandler(
         // Set access token in HTTP-only cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+             secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
             path: '/',
             maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
@@ -99,8 +100,8 @@ export const refreshToken = asyncHandler(
         // Set access token in HTTP-only cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
             path: '/',
             maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
@@ -114,10 +115,10 @@ export const refreshToken = asyncHandler(
 
 export const logout = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const cookieOptions = {
+        const cookieOptions: CookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
+            secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: (env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax') as 'strict' | 'none' | 'lax',
             path: '/',
         };
         res.clearCookie('refreshToken', cookieOptions);

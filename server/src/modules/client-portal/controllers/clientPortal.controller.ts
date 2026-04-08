@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { ClientPortalRequest } from '../middleware/clientPortalAuth';
 import * as portalService from '../services/clientPortal.service';
 import asyncHandler from '../../../utils/asyncHandler';
+import { env } from '../../../config/env.config';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -15,8 +16,8 @@ export const exchangeToken = asyncHandler(async (req, res) => {
 
     res.cookie('portal_jwt', result.jwt_token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+          secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
         maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
@@ -26,8 +27,8 @@ export const exchangeToken = asyncHandler(async (req, res) => {
 export const logoutPortal = asyncHandler(async (_req, res) => {
     res.clearCookie('portal_jwt', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+            sameSite: env.NODE_ENV === 'production' ? 'strict' : env.NODE_ENV === 'staging' ? 'none' : 'lax',
     });
     res.status(200).json({ status: 'success', message: 'Logged out.' });
 });
