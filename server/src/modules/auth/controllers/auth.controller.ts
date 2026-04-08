@@ -113,6 +113,8 @@ export const refreshToken = asyncHandler(
     }
 );
 
+
+
 export const logout = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const cookieOptions: CookieOptions = {
