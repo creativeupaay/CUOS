@@ -32,10 +32,6 @@ const CrmPipelinePage = lazy(() => import('./pages/CrmPipelinePage'));
 const CrmLeadDetailPage = lazy(() => import('./pages/CrmLeadDetailPage'));
 const CrmProposalsPage = lazy(() => import('./pages/CrmProposalsPage'));
 const CrmProposalFormPage = lazy(() => import('./pages/CrmProposalFormPage'));
-const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
-const FinanceRevenuePage = lazy(() => import('./pages/FinanceRevenuePage'));
-const FinanceExpensesPage = lazy(() => import('./pages/FinanceExpensesPage'));
-const ProjectFinancePage = lazy(() => import('./pages/ProjectFinancePage'));
 const HrmsDashboardPage = lazy(() => import('./pages/HrmsDashboardPage'));
 const HrmsEmployeesPage = lazy(() => import('./pages/HrmsEmployeesPage'));
 const HrmsEmployeeFormPage = lazy(() => import('./pages/HrmsEmployeeFormPage'));
@@ -76,6 +72,9 @@ const AssignmentReviewPage = lazy(() => import('./pages/AssignmentReviewPage'));
 const PublicAssignmentSubmissionPage = lazy(() => import('./pages/PublicAssignmentSubmissionPage'));
 const HiringInterviewsPage = lazy(() => import('./pages/HiringInterviewsPage'));
 const HiringInterviewSchedulePage = lazy(() => import('./pages/HiringInterviewSchedulePage'));
+const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
+const FinanceRevenuePage = lazy(() => import('./pages/FinanceRevenuePage'));
+const FinanceExpensesPage = lazy(() => import('./pages/FinanceExpensesPage'));
 
 function RouteFallback() {
   return (
@@ -277,7 +276,7 @@ function App() {
           <Route path="/finance" element={<PartnerRestrictedRoute>{loadable(<FinanceDashboardPage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/revenue" element={<PartnerRestrictedRoute>{loadable(<FinanceRevenuePage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/expenses" element={<PartnerRestrictedRoute>{loadable(<FinanceExpensesPage />)}</PartnerRestrictedRoute>} />
-          <Route path="/finance/projects/:id" element={<PartnerRestrictedRoute>{loadable(<ProjectFinancePage />)}</PartnerRestrictedRoute>} />
+
           {/* HRMS Module — Admin/HR only */}
           <Route path="/hrms" element={<HrmsRedirect>{loadable(<HrmsDashboardPage />)}</HrmsRedirect>} />
           <Route path="/hrms/employees" element={<HrmsRedirect>{loadable(<HrmsEmployeesPage />)}</HrmsRedirect>} />

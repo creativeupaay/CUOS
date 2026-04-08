@@ -23,6 +23,9 @@ const envSchema = z.object({
     .string()
     .min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
 
+  JWT_ACCESS_EXPIRY: z.string().default("8h"),
+  JWT_REFRESH_EXPIRY: z.string().default("7d"),
+
   FRONTEND_URL: z
     .string()
     .url("FRONTEND_URL must be a valid URL")

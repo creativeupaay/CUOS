@@ -1,363 +1,225 @@
-import api from '@/services/api';
-import type {
-    Expense,
-    CreateExpensePayload,
-    Invoice,
-    CreateInvoicePayload,
-    PaymentMilestone,
-    CreateMilestonePayload,
-    CompanyDashboardStats,
-    MonthlyReportEntry,
-    MonthlyRevenueEntry,
-    RevenueSummary,
-    ProjectFinanceSummary,
-    ProjectFinanceOverview,
-    AccrualVsCashEntry,
-    CurrencyRateEntry,
-    Pagination,
-    Revenue,
-    CreateRevenuePayload,
-    MonthlySalaryEntry,
-    ProjectProfitabilityEntry,
-} from '../types/finance.types';
+import { api } from '@/services/api';
 
-// ── Helper Types ────────────────────────────────────────────────────
-interface ListResponse<T> {
-    success: boolean;
-    data: T[];
-    pagination?: Pagination;
+// ── Types ─────────────────────────────────────────────────────────────────
+export interface Revenue {
+    _id: string;
+    date: string;
+    description: string;
+    client: string;
+    project?: string;
+    amount: number;
+    currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+    exchangeRate: number;
+    amountINR: number;
+    gstApplicable: boolean;
+    gstRate: number;
+    gst: number;
+    tdsDeducted: number;
+    totalAmount: number;
+    receivedAmount: number;
+    source: 'manual' | 'invoice' | 'project';
+    status: 'received' | 'pending' | 'partial' | 'overdue';
+    invoiceNumber?: string;
+    dueDate?: string;
+    notes?: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
-interface SingleResponse<T> {
-    success: boolean;
-    data: T;
+export interface Expense {
+    _id: string;
+    date: string;
+    description: string;
+    category: string;
+    level: 'company' | 'project';
+    type: 'fixed' | 'variable';
+    amount: number;
+    projectId?: string;
+    projectName?: string;
+    vendor?: string;
+    paidBy?: string;
+    notes?: string;
+    isRecurring: boolean;
+    recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    createdAt: string;
+    updatedAt: string;
 }
 
+export interface DashboardMetrics {
+    totalRevenue: number;
+    totalExpense: number;
+    ebidta: number;
+    runwayLeft: number;
+    cashInBank: number;
+    receivables: number;
+}
+
+export interface MonthlyData {
+    month: string;
+    revenue: number;
+    expense: number;
+    profit: number;
+}
+
+export interface BreakdownData {
+    month: string;
+    revenue: number;
+    expense: number;
+    ebidta: number;
+    salaries: number;
+    projectCosts: number;
+    fixedCosts: number;
+}
+
+export interface DashboardResponse {
+    metrics: DashboardMetrics;
+    monthlyData: MonthlyData[];
+    breakdownData: BreakdownData[];
+}
+
+// ── API Slice ─────────────────────────────────────────────────────────────
 export const financeApi = api.injectEndpoints({
     endpoints: (builder) => ({
-        // ═══════════════════════════════════════════════════════════
-        // COMPANY DASHBOARD & REPORTS
-        // ═══════════════════════════════════════════════════════════
-        getFinanceDashboard: builder.query<CompanyDashboardStats, { startDate: string; endDate: string }>({
-            query: ({ startDate, endDate }) => `/finance/dashboard?startDate=${startDate}&endDate=${endDate}`,
-            transformResponse: (res: SingleResponse<CompanyDashboardStats>) => res.data,
+        // Dashboard
+        getFinanceDashboard: builder.query<{ data: DashboardResponse }, { startDate?: string; endDate?: string }>({
+            query: (params) => ({
+                url: '/finance/dashboard',
+                params,
+            }),
             providesTags: ['FinanceDashboard'],
         }),
 
-        getMonthlyReport: builder.query<MonthlyReportEntry[], number>({
-            query: (year) => `/finance/reports/monthly/${year}`,
-            transformResponse: (res: ListResponse<MonthlyReportEntry>) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        getAccrualVsCashflow: builder.query<AccrualVsCashEntry[], { startDate: string; endDate: string }>({
-            query: ({ startDate, endDate }) => `/finance/reports/accrual-vs-cash?startDate=${startDate}&endDate=${endDate}`,
-            transformResponse: (res: { success: boolean; data: AccrualVsCashEntry[] }) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        getMonthlySalaries: builder.query<MonthlySalaryEntry[], number>({
-            query: (fiscalYear) => `/finance/dashboard/salaries/${fiscalYear}`,
-            transformResponse: (res: { success: boolean; data: MonthlySalaryEntry[] }) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        getProjectProfitability: builder.query<ProjectProfitabilityEntry[], void>({
-            query: () => '/finance/dashboard/project-profitability',
-            transformResponse: (res: { success: boolean; data: ProjectProfitabilityEntry[] }) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        // ═══════════════════════════════════════════════════════════
-        // PROJECT FINANCE
-        // ═══════════════════════════════════════════════════════════
-        getAllProjectsFinance: builder.query<ProjectFinanceOverview[], void>({
-            query: () => '/finance/projects',
-            transformResponse: (res: ListResponse<ProjectFinanceOverview>) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        getProjectFinanceSummary: builder.query<ProjectFinanceSummary, string>({
-            query: (projectId) => `/finance/projects/${projectId}`,
-            transformResponse: (res: SingleResponse<ProjectFinanceSummary>) => res.data,
-            providesTags: ['FinanceDashboard'],
-        }),
-
-        // ═══════════════════════════════════════════════════════════
-        // REVENUE
-        // ═══════════════════════════════════════════════════════════
-        getRevenues: builder.query<
-            { revenues: Revenue[]; pagination: Pagination },
-            Record<string, string | number | undefined>
-        >({
-            query: (params) => {
-                const searchParams = new URLSearchParams();
-                Object.entries(params).forEach(([key, val]) => {
-                    if (val !== undefined) searchParams.set(key, String(val));
-                });
-                return `/finance/revenue?${searchParams.toString()}`;
-            },
-            transformResponse: (res: any) => ({
-                revenues: res.data || [],
-                pagination: res.pagination || { total: 0, page: 1, limit: 15, pages: 1 },
+        // Revenue CRUD
+        getRevenues: builder.query<{ data: { revenues: Revenue[]; total: number } }, {
+            status?: string;
+            source?: string;
+            search?: string;
+            startDate?: string;
+            endDate?: string;
+            page?: number;
+            limit?: number;
+        }>({
+            query: (params) => ({
+                url: '/finance/revenues',
+                params,
             }),
             providesTags: ['Revenues'],
         }),
 
-        getRevenueById: builder.query<Revenue, string>({
-            query: (id) => `/finance/revenue/${id}`,
-            transformResponse: (res: SingleResponse<Revenue>) => res.data,
-            providesTags: ['Revenues'],
+        getRevenueById: builder.query<{ data: Revenue }, string>({
+            query: (id) => `/finance/revenues/${id}`,
+            providesTags: (_result, _error, id) => [{ type: 'Revenues', id }],
         }),
 
-        getRevenueSummary: builder.query<RevenueSummary, { startDate: string; endDate: string }>({
-            query: ({ startDate, endDate }) => `/finance/revenue/summary?startDate=${startDate}&endDate=${endDate}`,
-            transformResponse: (res: SingleResponse<RevenueSummary>) => res.data,
-            providesTags: ['Revenues', 'FinanceDashboard'],
-        }),
-
-        getMonthlyRevenue: builder.query<MonthlyRevenueEntry[], number>({
-            query: (year) => `/finance/revenue/monthly/${year}`,
-            transformResponse: (res: { success: boolean; data: MonthlyRevenueEntry[] }) => res.data,
-            providesTags: ['Revenues', 'FinanceDashboard'],
-        }),
-
-        createRevenue: builder.mutation<Revenue, CreateRevenuePayload>({
-            query: (body) => ({ url: '/finance/revenue', method: 'POST', body }),
-            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+        createRevenue: builder.mutation<{ data: Revenue }, Partial<Revenue>>({
+            query: (body) => ({
+                url: '/finance/revenues',
+                method: 'POST',
+                body,
+            }),
             invalidatesTags: ['Revenues', 'FinanceDashboard'],
         }),
 
-        updateRevenue: builder.mutation<Revenue, { id: string; data: Partial<CreateRevenuePayload> }>({
-            query: ({ id, data }) => ({ url: `/finance/revenue/${id}`, method: 'PATCH', body: data }),
-            transformResponse: (res: SingleResponse<Revenue>) => res.data,
+        updateRevenue: builder.mutation<{ data: Revenue }, { id: string } & Partial<Revenue>>({
+            query: ({ id, ...body }) => ({
+                url: `/finance/revenues/${id}`,
+                method: 'PUT',
+                body,
+            }),
             invalidatesTags: ['Revenues', 'FinanceDashboard'],
         }),
 
         deleteRevenue: builder.mutation<void, string>({
-            query: (id) => ({ url: `/finance/revenue/${id}`, method: 'DELETE' }),
-            invalidatesTags: ['Revenues', 'FinanceDashboard'],
-        }),
-
-        recordRevenuePayment: builder.mutation<Revenue, { id: string; amount: number; receivedDate?: string }>({
-            query: ({ id, amount, receivedDate }) => ({
-                url: `/finance/revenue/${id}/payment`,
-                method: 'POST',
-                body: { amount, receivedDate },
+            query: (id) => ({
+                url: `/finance/revenues/${id}`,
+                method: 'DELETE',
             }),
-            transformResponse: (res: SingleResponse<Revenue>) => res.data,
             invalidatesTags: ['Revenues', 'FinanceDashboard'],
         }),
 
-        // ═══════════════════════════════════════════════════════════
-        // EXPENSES
-        // ═══════════════════════════════════════════════════════════
-        getExpenses: builder.query<
-            { expenses: Expense[]; pagination: Pagination },
-            Record<string, string | number | undefined>
-        >({
-            query: (params) => {
-                const searchParams = new URLSearchParams();
-                Object.entries(params).forEach(([key, val]) => {
-                    if (val !== undefined) searchParams.set(key, String(val));
-                });
-                return `/finance/expenses?${searchParams.toString()}`;
-            },
-            transformResponse: (res: any) => ({
-                expenses: res.data,
-                pagination: res.pagination,
+        // Expense CRUD
+        getExpenses: builder.query<{ data: { expenses: Expense[]; total: number } }, {
+            level?: string;
+            type?: string;
+            category?: string;
+            search?: string;
+            startDate?: string;
+            endDate?: string;
+            projectId?: string;
+            page?: number;
+            limit?: number;
+        }>({
+            query: (params) => ({
+                url: '/finance/expenses',
+                params,
             }),
             providesTags: ['Expenses'],
         }),
 
-        getExpenseById: builder.query<Expense, string>({
+        getExpenseById: builder.query<{ data: Expense }, string>({
             query: (id) => `/finance/expenses/${id}`,
-            transformResponse: (res: SingleResponse<Expense>) => res.data,
-            providesTags: ['Expenses'],
+            providesTags: (_result, _error, id) => [{ type: 'Expenses', id }],
         }),
 
-        createExpense: builder.mutation<Expense, CreateExpensePayload>({
-            query: (body) => ({ url: '/finance/expenses', method: 'POST', body }),
-            transformResponse: (res: SingleResponse<Expense>) => res.data,
+        createExpense: builder.mutation<{ data: Expense }, Partial<Expense>>({
+            query: (body) => ({
+                url: '/finance/expenses',
+                method: 'POST',
+                body,
+            }),
             invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
-        updateExpense: builder.mutation<Expense, { id: string; data: Partial<CreateExpensePayload> }>({
-            query: ({ id, data }) => ({ url: `/finance/expenses/${id}`, method: 'PATCH', body: data }),
-            transformResponse: (res: SingleResponse<Expense>) => res.data,
+        updateExpense: builder.mutation<{ data: Expense }, { id: string } & Partial<Expense>>({
+            query: ({ id, ...body }) => ({
+                url: `/finance/expenses/${id}`,
+                method: 'PUT',
+                body,
+            }),
             invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
         deleteExpense: builder.mutation<void, string>({
-            query: (id) => ({ url: `/finance/expenses/${id}`, method: 'DELETE' }),
-            invalidatesTags: ['Expenses', 'FinanceDashboard'],
-        }),
-
-        approveExpense: builder.mutation<Expense, string>({
-            query: (id) => ({ url: `/finance/expenses/${id}/approve`, method: 'PATCH' }),
-            transformResponse: (res: SingleResponse<Expense>) => res.data,
-            invalidatesTags: ['Expenses', 'FinanceDashboard'],
-        }),
-
-        // ═══════════════════════════════════════════════════════════
-        // INVOICES
-        // ═══════════════════════════════════════════════════════════
-        getInvoices: builder.query<
-            { invoices: Invoice[]; pagination: Pagination },
-            Record<string, string | number | undefined>
-        >({
-            query: (params) => {
-                const searchParams = new URLSearchParams();
-                Object.entries(params).forEach(([key, val]) => {
-                    if (val !== undefined) searchParams.set(key, String(val));
-                });
-                return `/finance/invoices?${searchParams.toString()}`;
-            },
-            transformResponse: (res: any) => ({
-                invoices: res.data,
-                pagination: res.pagination,
+            query: (id) => ({
+                url: `/finance/expenses/${id}`,
+                method: 'DELETE',
             }),
-            providesTags: ['Invoices'],
+            invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
-        getInvoiceById: builder.query<Invoice, string>({
-            query: (id) => `/finance/invoices/${id}`,
-            transformResponse: (res: SingleResponse<Invoice>) => res.data,
-            providesTags: ['Invoices'],
-        }),
-
-        getOverdueInvoices: builder.query<Invoice[], void>({
-            query: () => '/finance/invoices/overdue',
-            transformResponse: (res: ListResponse<Invoice>) => res.data,
-            providesTags: ['Invoices'],
-        }),
-
-        createInvoice: builder.mutation<Invoice, CreateInvoicePayload>({
-            query: (body) => ({ url: '/finance/invoices', method: 'POST', body }),
-            transformResponse: (res: SingleResponse<Invoice>) => res.data,
-            invalidatesTags: ['Invoices', 'FinanceDashboard'],
-        }),
-
-        updateInvoice: builder.mutation<Invoice, { id: string; data: Partial<CreateInvoicePayload> }>({
-            query: ({ id, data }) => ({ url: `/finance/invoices/${id}`, method: 'PATCH', body: data }),
-            transformResponse: (res: SingleResponse<Invoice>) => res.data,
-            invalidatesTags: ['Invoices', 'FinanceDashboard'],
-        }),
-
-        deleteInvoice: builder.mutation<void, string>({
-            query: (id) => ({ url: `/finance/invoices/${id}`, method: 'DELETE' }),
-            invalidatesTags: ['Invoices', 'FinanceDashboard'],
-        }),
-
-        recordPayment: builder.mutation<Invoice, { id: string; amount: number }>({
-            query: ({ id, amount }) => ({
-                url: `/finance/invoices/${id}/payment`,
+        // Salary Expense Sync (from HRMS)
+        syncSalaryExpenses: builder.mutation<{ data: { synced: number } }, { month: number; year: number }>({
+            query: (body) => ({
+                url: '/finance/sync-salaries',
                 method: 'POST',
-                body: { amount },
+                body,
             }),
-            transformResponse: (res: SingleResponse<Invoice>) => res.data,
-            invalidatesTags: ['Invoices', 'FinanceDashboard'],
+            invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
-        // ═══════════════════════════════════════════════════════════
-        // MILESTONES
-        // ═══════════════════════════════════════════════════════════
-        getProjectMilestones: builder.query<PaymentMilestone[], string>({
-            query: (projectId) => `/finance/milestones/${projectId}`,
-            transformResponse: (res: ListResponse<PaymentMilestone>) => res.data,
-            providesTags: ['Milestones'],
-        }),
-
-        createMilestone: builder.mutation<PaymentMilestone, CreateMilestonePayload>({
-            query: (body) => ({ url: '/finance/milestones', method: 'POST', body }),
-            transformResponse: (res: SingleResponse<PaymentMilestone>) => res.data,
-            invalidatesTags: ['Milestones', 'FinanceDashboard'],
-        }),
-
-        updateMilestone: builder.mutation<PaymentMilestone, { id: string; data: Partial<CreateMilestonePayload> }>({
-            query: ({ id, data }) => ({ url: `/finance/milestones/${id}`, method: 'PATCH', body: data }),
-            transformResponse: (res: SingleResponse<PaymentMilestone>) => res.data,
-            invalidatesTags: ['Milestones', 'FinanceDashboard'],
-        }),
-
-        completeMilestone: builder.mutation<PaymentMilestone, string>({
-            query: (id) => ({ url: `/finance/milestones/${id}/complete`, method: 'PATCH' }),
-            transformResponse: (res: SingleResponse<PaymentMilestone>) => res.data,
-            invalidatesTags: ['Milestones', 'FinanceDashboard'],
-        }),
-
-        markMilestonePaid: builder.mutation<PaymentMilestone, string>({
-            query: (id) => ({ url: `/finance/milestones/${id}/paid`, method: 'PATCH' }),
-            transformResponse: (res: SingleResponse<PaymentMilestone>) => res.data,
-            invalidatesTags: ['Milestones', 'FinanceDashboard'],
-        }),
-
-        deleteMilestone: builder.mutation<void, string>({
-            query: (id) => ({ url: `/finance/milestones/${id}`, method: 'DELETE' }),
-            invalidatesTags: ['Milestones', 'FinanceDashboard'],
-        }),
-
-        // ═══════════════════════════════════════════════════════════
-        // CURRENCY RATES
-        // ═══════════════════════════════════════════════════════════
-        getLatestRates: builder.query<CurrencyRateEntry[], string | void>({
-            query: (base) => `/finance/currency/rates${base ? `?base=${base}` : ''}`,
-            transformResponse: (res: ListResponse<CurrencyRateEntry>) => res.data,
-            providesTags: ['CurrencyRates'],
-        }),
-
-        setCurrencyRate: builder.mutation<
-            CurrencyRateEntry,
-            { fromCurrency: string; toCurrency: string; rate: number; date: string }
-        >({
-            query: (body) => ({ url: '/finance/currency/rates', method: 'POST', body }),
-            invalidatesTags: ['CurrencyRates'],
+        // Project Expense Summary
+        getProjectExpenseSummary: builder.query<{ data: { projectId: string; projectName: string; totalExpense: number; salaryExpense: number; otherExpense: number }[] }, { startDate?: string; endDate?: string }>({
+            query: (params) => ({
+                url: '/finance/project-expenses',
+                params,
+            }),
+            providesTags: ['Expenses'],
         }),
     }),
 });
 
 export const {
-    // Dashboard & Reports
     useGetFinanceDashboardQuery,
-    useGetMonthlyReportQuery,
-    useGetAccrualVsCashflowQuery,
-    useGetMonthlySalariesQuery,
-    useGetProjectProfitabilityQuery,
-    // Project Finance
-    useGetAllProjectsFinanceQuery,
-    useGetProjectFinanceSummaryQuery,
-    // Revenue
     useGetRevenuesQuery,
     useGetRevenueByIdQuery,
-    useGetRevenueSummaryQuery,
-    useGetMonthlyRevenueQuery,
     useCreateRevenueMutation,
     useUpdateRevenueMutation,
     useDeleteRevenueMutation,
-    useRecordRevenuePaymentMutation,
-    // Expenses
     useGetExpensesQuery,
     useGetExpenseByIdQuery,
     useCreateExpenseMutation,
     useUpdateExpenseMutation,
     useDeleteExpenseMutation,
-    useApproveExpenseMutation,
-    // Invoices
-    useGetInvoicesQuery,
-    useGetInvoiceByIdQuery,
-    useGetOverdueInvoicesQuery,
-    useCreateInvoiceMutation,
-    useUpdateInvoiceMutation,
-    useDeleteInvoiceMutation,
-    useRecordPaymentMutation,
-    // Milestones
-    useGetProjectMilestonesQuery,
-    useCreateMilestoneMutation,
-    useUpdateMilestoneMutation,
-    useCompleteMilestoneMutation,
-    useMarkMilestonePaidMutation,
-    useDeleteMilestoneMutation,
-    // Currency
-    useGetLatestRatesQuery,
-    useSetCurrencyRateMutation,
+    useSyncSalaryExpensesMutation,
+    useGetProjectExpenseSummaryQuery,
 } = financeApi;

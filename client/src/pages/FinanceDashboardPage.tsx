@@ -1,1220 +1,666 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    TrendingDown,
-    DollarSign,
-    Wallet,
-    CreditCard,
-    BarChart3,
-    Calendar,
-    ChevronDown,
-    ArrowUpRight,
-    ArrowDownRight,
-    Clock,
-    AlertTriangle,
-    CheckCircle,
+    TrendingUp, TrendingDown, IndianRupee, Wallet,
+    Receipt, Calendar, ChevronDown, Filter, Loader2,
 } from 'lucide-react';
 import {
-    useGetFinanceDashboardQuery,
-    useGetMonthlyReportQuery,
-    useGetMonthlySalariesQuery,
-    useGetProjectProfitabilityQuery,
-} from '@/features/finance/api/financeApi';
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+    ResponsiveContainer, LineChart, Line, ReferenceLine, Cell,
+} from 'recharts';
+import { useGetFinanceDashboardQuery } from '@/features/finance/api/financeApi';
 
-// ── Utilities ───────────────────────────────────────────────────────
-function formatCurrency(amount: number, compact = false): string {
-    if (compact && Math.abs(amount) >= 100000) {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            notation: 'compact',
-            maximumFractionDigits: 1,
-        }).format(amount);
+// ── Types ─────────────────────────────────────────────────────────────────
+type FilterType = 'fiscal-year' | 'quarter' | 'month' | 'custom';
+
+interface FiscalYear {
+    label: string;
+    value: string;
+    startDate: Date;
+    endDate: Date;
+}
+
+// ── Fiscal Year Utilities ─────────────────────────────────────────────────
+const generateFiscalYears = (): FiscalYear[] => {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const fiscalYears: FiscalYear[] = [];
+
+    // Generate last 5 fiscal years
+    for (let i = 0; i < 5; i++) {
+        const startYear = currentMonth >= 3 ? currentYear - i : currentYear - i - 1;
+        const endYear = startYear + 1;
+        fiscalYears.push({
+            label: `FY ${startYear}-${endYear.toString().slice(-2)}`,
+            value: `${startYear}-${endYear}`,
+            startDate: new Date(startYear, 3, 1), // April 1st
+            endDate: new Date(endYear, 2, 31), // March 31st
+        });
     }
+    return fiscalYears;
+};
+
+const FISCAL_YEARS = generateFiscalYears();
+const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+const QUARTERS = ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)'];
+
+// ── Format Currency ───────────────────────────────────────────────────────
+const formatCurrency = (value: number) => {
+    if (value >= 10000000) return `${(value / 10000000).toFixed(2)} Cr`;
+    if (value >= 100000) return `${(value / 100000).toFixed(2)} L`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)} K`;
+    return value.toLocaleString('en-IN');
+};
+
+const formatFullCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
-        minimumFractionDigits: 0,
         maximumFractionDigits: 0,
-    }).format(amount);
-}
+    }).format(value);
+};
 
-// Fiscal year month names (Apr-Mar order)
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTH_FULL_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-// Convert calendar month to fiscal month label
-function getFiscalMonthLabel(calendarMonth: number): string {
-    return MONTH_NAMES[calendarMonth - 1];
-}
-
-type FilterType = 'yearly' | 'quarterly' | 'monthly' | 'custom';
-
-// ── Stat Card Component ─────────────────────────────────────────────
-function StatCard({
-    label,
-    value,
-    icon,
-    trend,
-    trendValue,
-    color,
-    bgGradient,
-}: {
-    label: string;
-    value: string;
-    icon: React.ReactNode;
-    trend?: 'up' | 'down' | 'neutral';
-    trendValue?: string;
-    color: string;
-    bgGradient: string;
-}) {
-    return (
-        <div className="stat-card" style={{ '--card-color': color, '--card-gradient': bgGradient } as React.CSSProperties}>
-            <div className="stat-card-icon-wrapper">
-                {icon}
+// ── Custom Tooltip ────────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div
+                className="rounded-lg border p-3 shadow-lg"
+                style={{
+                    backgroundColor: 'white',
+                    borderColor: '#E5E7EB',
+                }}
+            >
+                <p className="font-semibold mb-2" style={{ color: '#111827' }}>{label}</p>
+                {payload.map((entry: any, index: number) => (
+                    <p key={index} className="text-sm" style={{ color: entry.color }}>
+                        {entry.name}: {formatFullCurrency(entry.value)}
+                    </p>
+                ))}
             </div>
-            <div className="stat-card-content">
-                <span className="stat-card-label">{label}</span>
-                <div className="stat-card-value">{value}</div>
-                {trendValue && (
-                    <div className={`stat-card-trend ${trend === 'up' ? 'positive' : trend === 'down' ? 'negative' : ''}`}>
-                        {trend === 'up' ? <ArrowUpRight size={12} /> : trend === 'down' ? <ArrowDownRight size={12} /> : null}
-                        <span>{trendValue}</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
+        );
+    }
+    return null;
+};
 
-// ── Line Chart (Revenue vs Expenses) ────────────────────────────────
-function RevenueExpenseChart({
-    data,
-}: {
-    data: { month: number; calendarYear?: number; revenue: number; expenses: number }[];
-}) {
-    const maxVal = useMemo(() => {
-        const allVals = data.flatMap(d => [d.revenue, d.expenses]);
-        return Math.max(...allVals, 1);
-    }, [data]);
+// ── Empty State Component ─────────────────────────────────────────────────
+const EmptyState = ({ message }: { message: string }) => (
+    <div className="flex flex-col items-center justify-center py-12">
+        <Receipt size={48} className="mb-3" style={{ color: 'var(--color-text-muted)' }} />
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{message}</p>
+    </div>
+);
 
-    const chartHeight = 200;
-    const chartWidth = 100;
-
-    const getY = (val: number) => chartHeight - (val / maxVal) * chartHeight;
-
-    const revenuePath = data
-        .map((d, i) => `${i === 0 ? 'M' : 'L'} ${(i / Math.max(data.length - 1, 1)) * chartWidth} ${getY(d.revenue)}`)
-        .join(' ');
-
-    const expensePath = data
-        .map((d, i) => `${i === 0 ? 'M' : 'L'} ${(i / Math.max(data.length - 1, 1)) * chartWidth} ${getY(d.expenses)}`)
-        .join(' ');
-
-    return (
-        <div className="chart-container line-chart">
-            <div className="chart-header">
-                <h3>Revenue vs Expenses</h3>
-                <div className="chart-legend">
-                    <span className="legend-item"><span className="legend-dot revenue"></span> Revenue</span>
-                    <span className="legend-item"><span className="legend-dot expenses"></span> Expenses</span>
-                </div>
-            </div>
-            <div className="chart-body">
-                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" className="line-chart-svg">
-                    {/* Grid lines */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
-                        <line
-                            key={pct}
-                            x1="0"
-                            y1={chartHeight * (1 - pct)}
-                            x2={chartWidth}
-                            y2={chartHeight * (1 - pct)}
-                            className="grid-line"
-                        />
-                    ))}
-                    {/* Revenue line */}
-                    <path d={revenuePath} className="chart-line revenue-line" />
-                    {/* Expenses line */}
-                    <path d={expensePath} className="chart-line expenses-line" />
-                    {/* Data points */}
-                    {data.map((d, i) => (
-                        <g key={i}>
-                            <circle
-                                cx={(i / Math.max(data.length - 1, 1)) * chartWidth}
-                                cy={getY(d.revenue)}
-                                r="1.5"
-                                className="data-point revenue-point"
-                            />
-                            <circle
-                                cx={(i / Math.max(data.length - 1, 1)) * chartWidth}
-                                cy={getY(d.expenses)}
-                                r="1.5"
-                                className="data-point expenses-point"
-                            />
-                        </g>
-                    ))}
-                </svg>
-                <div className="chart-x-labels">
-                    {data.map((d, i) => (
-                        <span key={i}>{getFiscalMonthLabel(d.month)}</span>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Bar Chart (Monthly Salaries) ─────────────────────────────────────
-function SalariesChart({
-    data,
-}: {
-    data: { month: number; totalSalary: number; employeeCount: number }[];
-}) {
-    const maxSalary = useMemo(() => Math.max(...data.map(d => d.totalSalary), 1), [data]);
-
-    return (
-        <div className="chart-container bar-chart salaries-chart">
-            <div className="chart-header">
-                <h3>Monthly Salaries</h3>
-                <div className="chart-legend">
-                    <span className="legend-item"><span className="legend-dot salary"></span> Payroll</span>
-                </div>
-            </div>
-            <div className="chart-body">
-                <div className="bar-chart-wrapper">
-                    {data.map((d, i) => {
-                        const heightPct = (d.totalSalary / maxSalary) * 100;
-                        return (
-                            <div key={i} className="bar-column">
-                                <div className="bar-container">
-                                    <div
-                                        className="bar salary"
-                                        style={{ height: `${heightPct}%` }}
-                                        title={`${getFiscalMonthLabel(d.month)}: ${formatCurrency(d.totalSalary)} (${d.employeeCount} employees)`}
-                                    />
-                                </div>
-                                <span className="bar-label">{getFiscalMonthLabel(d.month)}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Bar Chart (Monthly Profitability) ───────────────────────────────
-function ProfitabilityChart({
-    data,
-}: {
-    data: { month: number; profit: number }[];
-}) {
-    const maxProfit = useMemo(() => Math.max(...data.map(d => Math.abs(d.profit)), 1), [data]);
-    const hasNegative = data.some(d => d.profit < 0);
-
-    return (
-        <div className="chart-container bar-chart">
-            <div className="chart-header">
-                <h3>Monthly Profitability</h3>
-            </div>
-            <div className="chart-body profitability-chart">
-                <div className="bar-chart-wrapper" style={{ '--has-negative': hasNegative ? 1 : 0 } as React.CSSProperties}>
-                    {data.map((d, i) => {
-                        const heightPct = (Math.abs(d.profit) / maxProfit) * 100;
-                        const isNegative = d.profit < 0;
-                        return (
-                            <div key={i} className="bar-column">
-                                <div className="bar-container">
-                                    <div
-                                        className={`bar ${isNegative ? 'negative' : 'positive'}`}
-                                        style={{
-                                            height: `${heightPct}%`,
-                                            [isNegative ? 'bottom' : 'top']: hasNegative && !isNegative ? '50%' : 0,
-                                        }}
-                                        title={`${getFiscalMonthLabel(d.month)}: ${formatCurrency(d.profit)}`}
-                                    />
-                                </div>
-                                <span className="bar-label">{getFiscalMonthLabel(d.month)}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-                {hasNegative && <div className="zero-line" />}
-            </div>
-        </div>
-    );
-}
-
-// ── Project Profitability Chart ──────────────────────────────────────
-function ProjectProfitabilityChart({
-    data,
-}: {
-    data: {
-        projectId: string;
-        projectName: string;
-        profitMargin: number;
-        isProfitable: boolean;
-        profitableUntil: string | null;
-        totalRevenue: number;
-        totalExpenses: number;
-    }[];
-}) {
-    const maxMargin = useMemo(() => Math.max(...data.map(d => Math.abs(d.profitMargin)), 1), [data]);
-
-    const formatDate = (dateStr: string | null) => {
-        if (!dateStr) return null;
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-    };
-
-    return (
-        <div className="chart-container project-profitability-chart">
-            <div className="chart-header">
-                <h3>Project-wise Profitability</h3>
-            </div>
-            <div className="chart-body">
-                {data.length === 0 ? (
-                    <div className="no-data">No active projects found</div>
-                ) : (
-                    <div className="project-profitability-list">
-                        {data.slice(0, 6).map((project) => {
-                            const widthPct = (Math.abs(project.profitMargin) / maxMargin) * 100;
-                            return (
-                                <div key={project.projectId} className="project-profitability-item">
-                                    <div className="project-info">
-                                        <span className="project-name">{project.projectName}</span>
-                                        <div className="project-meta">
-                                            {project.isProfitable ? (
-                                                <span className="status profitable">
-                                                    <CheckCircle size={12} />
-                                                    {project.profitMargin.toFixed(1)}% margin
-                                                </span>
-                                            ) : (
-                                                <span className="status unprofitable">
-                                                    <AlertTriangle size={12} />
-                                                    {project.profitMargin.toFixed(1)}% (loss)
-                                                </span>
-                                            )}
-                                            {project.profitableUntil && (
-                                                <span className="until-date">
-                                                    <Clock size={12} />
-                                                    Until {formatDate(project.profitableUntil)}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="project-bar-container">
-                                        <div
-                                            className={`project-bar ${project.isProfitable ? 'profitable' : 'unprofitable'}`}
-                                            style={{ width: `${widthPct}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ── Main Dashboard ──────────────────────────────────────────────────
 export default function FinanceDashboardPage() {
-    // Indian Fiscal Year: April-March
-    const currentDate = new Date();
-    const currentCalendarYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth(); // 0-indexed
+    const [filterType, setFilterType] = useState<FilterType>('fiscal-year');
+    const [selectedFiscalYear, setSelectedFiscalYear] = useState(FISCAL_YEARS[0].value);
+    const [selectedMonth, setSelectedMonth] = useState('');
+    const [selectedQuarter, setSelectedQuarter] = useState('');
+    const [dateRange, setDateRange] = useState({ from: '', to: '' });
+    const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
-    // Determine current fiscal year (e.g., FY 2024-25 if current month >= April)
-    const currentFiscalYear = currentMonth >= 3 ? currentCalendarYear : currentCalendarYear - 1; // April = month 3
-    const currentFiscalQuarter = Math.floor((currentMonth + 9) % 12 / 3); // Adjust for April start
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('.filter-dropdown-container')) {
+                setShowFilterDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
-    const [filterType, setFilterType] = useState<FilterType>('yearly');
-    const [selectedYear, setSelectedYear] = useState(currentFiscalYear);
-    const [selectedQuarter, setSelectedQuarter] = useState(currentFiscalQuarter);
-    const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-    const [customRange, setCustomRange] = useState({
-        startDate: `${currentFiscalYear}-04-01`,
-        endDate: `${currentFiscalYear + 1}-03-31`,
-    });
+    // Build filter params for API
+    const getFilterParams = () => {
+        const currentYear = new Date().getFullYear();
+        const currentMonthIndex = new Date().getMonth();
+        const fyStartYear = currentMonthIndex >= 3 ? currentYear : currentYear - 1;
 
-    // Calculate date range based on filter
-    const { startDate, endDate } = useMemo(() => {
-        switch (filterType) {
-            case 'yearly':
-                // Fiscal year: April 1 to March 31
+        if (filterType === 'fiscal-year') {
+            const fy = FISCAL_YEARS.find(f => f.value === selectedFiscalYear);
+            if (fy) {
                 return {
-                    startDate: `${selectedYear}-04-01`,
-                    endDate: `${selectedYear + 1}-03-31`,
+                    startDate: fy.startDate.toISOString(),
+                    endDate: fy.endDate.toISOString(),
                 };
-            case 'quarterly':
-                // Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar
-                const fiscalQuarterMonths = [
-                    { start: 4, end: 6 },   // Q1
-                    { start: 7, end: 9 },   // Q2
-                    { start: 10, end: 12 }, // Q3
-                    { start: 1, end: 3 },   // Q4
-                ];
-                const quarter = fiscalQuarterMonths[selectedQuarter];
-                const qYear = selectedQuarter === 3 ? selectedYear + 1 : selectedYear; // Q4 is in next calendar year
-                const qStartMonth = quarter.start;
-                const qEndMonth = quarter.end;
-                const qLastDay = new Date(qYear, qEndMonth, 0).getDate();
-
-                return {
-                    startDate: `${selectedQuarter === 3 ? selectedYear + 1 : selectedYear}-${String(qStartMonth).padStart(2, '0')}-01`,
-                    endDate: `${qYear}-${String(qEndMonth).padStart(2, '0')}-${qLastDay}`,
-                };
-            case 'monthly':
-                const monthNum = selectedMonth + 1;
-                const yearForMonth = selectedMonth < 3 ? selectedYear + 1 : selectedYear; // Jan-Mar are in next calendar year
-                const lastDay = new Date(yearForMonth, monthNum, 0).getDate();
-                return {
-                    startDate: `${yearForMonth}-${String(monthNum).padStart(2, '0')}-01`,
-                    endDate: `${yearForMonth}-${String(monthNum).padStart(2, '0')}-${lastDay}`,
-                };
-            case 'custom':
-                return customRange;
-            default:
-                return { startDate: `${selectedYear}-04-01`, endDate: `${selectedYear + 1}-03-31` };
+            }
         }
-    }, [filterType, selectedYear, selectedQuarter, selectedMonth, customRange]);
 
-    const { data: stats, isLoading: statsLoading } = useGetFinanceDashboardQuery({ startDate, endDate });
-    const { data: monthlyData, isLoading: monthlyLoading } = useGetMonthlyReportQuery(selectedYear);
-    const { data: salaryData, isLoading: salaryLoading } = useGetMonthlySalariesQuery(selectedYear);
-    const { data: projectProfitability, isLoading: profitabilityLoading } = useGetProjectProfitabilityQuery();
-
-    const isLoading = statsLoading || monthlyLoading || salaryLoading || profitabilityLoading;
-
-    // Filter monthly data based on selection (data is already in fiscal year order from API)
-    const filteredMonthlyData = useMemo(() => {
-        if (!monthlyData) return [];
-        switch (filterType) {
-            case 'yearly':
-                return monthlyData;
-            case 'quarterly':
-                const qStart = selectedQuarter * 3;
-                return monthlyData.slice(qStart, qStart + 3);
-            case 'monthly':
-                // Find the month in fiscal order (Apr=0, May=1, ..., Mar=11)
-                const fiscalMonthIndex = selectedMonth >= 3 ? selectedMonth - 3 : selectedMonth + 9;
-                return monthlyData.filter((_, idx) => idx === fiscalMonthIndex);
-            case 'custom':
-                return monthlyData; // Show all for custom range
-            default:
-                return monthlyData;
+        if (filterType === 'month' && selectedMonth) {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthIndex = monthNames.indexOf(selectedMonth);
+            const year = monthIndex >= 3 ? fyStartYear : fyStartYear + 1;
+            const startDate = new Date(year, monthIndex, 1);
+            const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+            return {
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+            };
         }
-    }, [monthlyData, filterType, selectedQuarter, selectedMonth]);
 
-    // Filter salary data similar to monthly data
-    const filteredSalaryData = useMemo(() => {
-        if (!salaryData) return [];
-        switch (filterType) {
-            case 'yearly':
-                return salaryData;
-            case 'quarterly':
-                const qStart = selectedQuarter * 3;
-                return salaryData.slice(qStart, qStart + 3);
-            case 'monthly':
-                const fiscalMonthIndex = selectedMonth >= 3 ? selectedMonth - 3 : selectedMonth + 9;
-                return salaryData.filter((_, idx) => idx === fiscalMonthIndex);
-            case 'custom':
-                return salaryData;
-            default:
-                return salaryData;
+        if (filterType === 'quarter' && selectedQuarter) {
+            let startMonth = 3, endMonth = 5, yearStart = fyStartYear, yearEnd = fyStartYear;
+            if (selectedQuarter === 'Q1 (Apr-Jun)') { startMonth = 3; endMonth = 5; } // April to June
+            else if (selectedQuarter === 'Q2 (Jul-Sep)') { startMonth = 6; endMonth = 8; } // July to Sep
+            else if (selectedQuarter === 'Q3 (Oct-Dec)') { startMonth = 9; endMonth = 11; } // Oct to Dec
+            else if (selectedQuarter === 'Q4 (Jan-Mar)') { startMonth = 0; endMonth = 2; yearStart = fyStartYear + 1; yearEnd = fyStartYear + 1; } // Jan to Mar
+            
+            const startDate = new Date(yearStart, startMonth, 1);
+            const endDate = new Date(yearEnd, endMonth + 1, 0, 23, 59, 59);
+            return {
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+            };
         }
-    }, [salaryData, filterType, selectedQuarter, selectedMonth]);
 
-    const chartData = useMemo(() => {
-        return (filteredMonthlyData || []).map(m => ({
-            month: m.month,
-            calendarYear: m.calendarYear,
-            revenue: m.revenueWithoutGst,
-            expenses: m.totalExpenses,
-            profit: m.netProfit,
-        }));
-    }, [filteredMonthlyData]);
-
-    const salaryChartData = useMemo(() => {
-        return (filteredSalaryData || []).map(m => ({
-            month: m.month,
-            totalSalary: m.totalSalary,
-            employeeCount: m.employeeCount,
-        }));
-    }, [filteredSalaryData]);
-
-    // Format runway value
-    const formatRunway = (months: number) => {
-        if (months <= 0) return 'N/A';
-        if (months >= 24) return '24+ months';
-        return `${months.toFixed(1)} months`;
+        if (filterType === 'custom' && dateRange.from && dateRange.to) {
+            return {
+                startDate: new Date(dateRange.from).toISOString(),
+                endDate: new Date(dateRange.to).toISOString(),
+            };
+        }
+        // Default to current fiscal year
+        return {
+            startDate: FISCAL_YEARS[0].startDate.toISOString(),
+            endDate: FISCAL_YEARS[0].endDate.toISOString(),
+        };
     };
 
-    // Get fiscal month options for monthly filter
-    const getFiscalMonthOptions = () => {
-        // Return months in fiscal year order: Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar
-        return [
-            { value: 3, label: 'April' },
-            { value: 4, label: 'May' },
-            { value: 5, label: 'June' },
-            { value: 6, label: 'July' },
-            { value: 7, label: 'August' },
-            { value: 8, label: 'September' },
-            { value: 9, label: 'October' },
-            { value: 10, label: 'November' },
-            { value: 11, label: 'December' },
-            { value: 0, label: 'January' },
-            { value: 1, label: 'February' },
-            { value: 2, label: 'March' },
-        ];
+    // Fetch dashboard data from API
+    const { data: dashboardData, isLoading } = useGetFinanceDashboardQuery(getFilterParams());
+
+    const metrics = dashboardData?.data?.metrics || {
+        totalRevenue: 0,
+        totalExpense: 0,
+        ebidta: 0,
+        runwayLeft: 0,
+        cashInBank: 0,
+        receivables: 0,
     };
+
+    const monthlyData = dashboardData?.data?.monthlyData || [];
+    const breakdownData = dashboardData?.data?.breakdownData || [];
+
+    const metricCards = [
+        {
+            label: 'Cash in Bank',
+            value: formatCurrency(metrics.cashInBank),
+            fullValue: formatFullCurrency(metrics.cashInBank),
+            icon: Wallet,
+            color: '#0EA5E9',
+            bg: '#F0F9FF',
+        },
+        {
+            label: 'Total Revenue',
+            value: formatCurrency(metrics.totalRevenue),
+            fullValue: formatFullCurrency(metrics.totalRevenue),
+            icon: TrendingUp,
+            color: '#22C55E',
+            bg: '#F0FDF4',
+        },
+        {
+            label: 'Total Expense',
+            value: formatCurrency(metrics.totalExpense),
+            fullValue: formatFullCurrency(metrics.totalExpense),
+            icon: TrendingDown,
+            color: '#EF4444',
+            bg: '#FEF2F2',
+        },
+        {
+            label: 'EBIDTA',
+            value: formatCurrency(metrics.ebidta),
+            fullValue: formatFullCurrency(metrics.ebidta),
+            icon: IndianRupee,
+            color: metrics.ebidta >= 0 ? '#6366F1' : '#EF4444',
+            bg: metrics.ebidta >= 0 ? '#EEF2FF' : '#FEF2F2',
+        },
+        {
+            label: 'Receivables',
+            value: formatCurrency(metrics.receivables),
+            fullValue: formatFullCurrency(metrics.receivables),
+            icon: Receipt,
+            color: '#8B5CF6',
+            bg: '#F5F3FF',
+        },
+        {
+            label: 'Runway Left',
+            value: metrics.runwayLeft > 0 ? `${metrics.runwayLeft} mo` : 'N/A',
+            fullValue: metrics.runwayLeft > 0 ? `${metrics.runwayLeft} months` : 'Not enough data',
+            icon: Calendar,
+            color: '#F59E0B',
+            bg: '#FFFBEB',
+        },
+    ];
+
+    const getFilterLabel = () => {
+        switch (filterType) {
+            case 'fiscal-year':
+                return FISCAL_YEARS.find(fy => fy.value === selectedFiscalYear)?.label || 'Select FY';
+            case 'month':
+                return selectedMonth || 'Select Month';
+            case 'quarter':
+                return selectedQuarter || 'Select Quarter';
+            case 'custom':
+                return dateRange.from && dateRange.to
+                    ? `${new Date(dateRange.from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} - ${new Date(dateRange.to).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`
+                    : 'Select Range';
+            default:
+                return 'Filter';
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-24">
+                <div className="text-center">
+                    <Loader2 size={36} className="mx-auto mb-3 animate-spin" style={{ color: 'var(--color-primary)' }} />
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Loading financial data...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="finance-dashboard-v2">
-            {/* ── Header ───────────────────────────────────────────── */}
-            <div className="dashboard-header">
+        <div className="space-y-6">
+            {/* ── Header with Filters ─────────────────────────────────────── */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1>Finance Dashboard</h1>
-                    <p>Company-wide financial overview</p>
+                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                        Finance Dashboard
+                    </h1>
+                    <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                        Financial overview and analytics
+                    </p>
                 </div>
-            </div>
 
-            {/* ── Filter Tabs ──────────────────────────────────────── */}
-            <div className="filter-section">
-                <div className="filter-tabs">
-                    {(['yearly', 'quarterly', 'monthly', 'custom'] as FilterType[]).map((type) => (
+                <div className="flex items-center gap-3">
+                    {/* Filter Type Selector */}
+                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
+                        {(['fiscal-year', 'quarter', 'month', 'custom'] as FilterType[]).map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className="px-3 py-2 text-sm font-medium transition-colors"
+                                style={{
+                                    background: filterType === type ? 'var(--color-primary)' : 'white',
+                                    color: filterType === type ? 'white' : 'var(--color-text-secondary)',
+                                }}
+                            >
+                                {type === 'fiscal-year' ? 'FY' : type === 'custom' ? 'Custom' : type.charAt(0).toUpperCase() + type.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Filter Value Selector */}
+                    <div className="relative filter-dropdown-container">
                         <button
-                            key={type}
-                            className={`filter-tab ${filterType === type ? 'active' : ''}`}
-                            onClick={() => setFilterType(type)}
+                            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'white',
+                                color: 'var(--color-text-primary)',
+                            }}
                         >
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                            <Filter size={16} />
+                            {getFilterLabel()}
+                            <ChevronDown size={16} />
                         </button>
-                    ))}
-                </div>
 
-                <div className="filter-controls">
-                    {filterType !== 'custom' && (
-                        <div className="select-wrapper">
-                            <select
-                                value={selectedYear}
-                                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        {showFilterDropdown && (
+                            <div
+                                className="absolute right-0 mt-2 w-64 rounded-lg border shadow-xl z-50 p-3"
+                                style={{
+                                    backgroundColor: 'white',
+                                    borderColor: '#E5E7EB',
+                                }}
                             >
-                                {[currentFiscalYear, currentFiscalYear - 1, currentFiscalYear - 2, currentFiscalYear - 3].map((y) => (
-                                    <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} />
-                        </div>
-                    )}
+                                {filterType === 'fiscal-year' && (
+                                    <div className="space-y-1">
+                                        {FISCAL_YEARS.map((fy) => (
+                                            <button
+                                                key={fy.value}
+                                                onClick={() => {
+                                                    setSelectedFiscalYear(fy.value);
+                                                    setShowFilterDropdown(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                                                style={{
+                                                    backgroundColor: selectedFiscalYear === fy.value ? '#F0F9FF' : 'transparent',
+                                                    color: selectedFiscalYear === fy.value ? '#0369A1' : '#374151',
+                                                }}
+                                            >
+                                                {fy.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
-                    {filterType === 'quarterly' && (
-                        <div className="select-wrapper">
-                            <select
-                                value={selectedQuarter}
-                                onChange={(e) => setSelectedQuarter(Number(e.target.value))}
-                            >
-                                {['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)'].map((q, i) => (
-                                    <option key={i} value={i}>{q}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} />
-                        </div>
-                    )}
+                                {filterType === 'month' && (
+                                    <div className="grid grid-cols-3 gap-1">
+                                        {MONTHS.map((month) => (
+                                            <button
+                                                key={month}
+                                                onClick={() => {
+                                                    setSelectedMonth(month);
+                                                    setShowFilterDropdown(false);
+                                                }}
+                                                className="px-2 py-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                                                style={{
+                                                    backgroundColor: selectedMonth === month ? '#F0F9FF' : 'transparent',
+                                                    color: selectedMonth === month ? '#0369A1' : '#374151',
+                                                }}
+                                            >
+                                                {month}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
-                    {filterType === 'monthly' && (
-                        <div className="select-wrapper">
-                            <select
-                                value={selectedMonth}
-                                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                            >
-                                {getFiscalMonthOptions().map((m) => (
-                                    <option key={m.value} value={m.value}>{m.label}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} />
-                        </div>
-                    )}
+                                {filterType === 'quarter' && (
+                                    <div className="space-y-1">
+                                        {QUARTERS.map((q) => (
+                                            <button
+                                                key={q}
+                                                onClick={() => {
+                                                    setSelectedQuarter(q);
+                                                    setShowFilterDropdown(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                                                style={{
+                                                    backgroundColor: selectedQuarter === q ? '#F0F9FF' : 'transparent',
+                                                    color: selectedQuarter === q ? '#0369A1' : '#374151',
+                                                }}
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
-                    {filterType === 'custom' && (
-                        <div className="custom-date-range">
-                            <div className="date-input-wrapper">
-                                <Calendar size={14} />
-                                <input
-                                    type="date"
-                                    value={customRange.startDate}
-                                    onChange={(e) => setCustomRange(prev => ({ ...prev, startDate: e.target.value }))}
-                                />
+                                {filterType === 'custom' && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs font-medium mb-1 block" style={{ color: '#6B7280' }}>From</label>
+                                            <input
+                                                type="date"
+                                                value={dateRange.from}
+                                                onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+                                                className="w-full px-3 py-2 rounded-md border text-sm"
+                                                style={{
+                                                    borderColor: '#E5E7EB',
+                                                    backgroundColor: 'white',
+                                                    color: '#374151',
+                                                }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-medium mb-1 block" style={{ color: '#6B7280' }}>To</label>
+                                            <input
+                                                type="date"
+                                                value={dateRange.to}
+                                                onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+                                                className="w-full px-3 py-2 rounded-md border text-sm"
+                                                style={{
+                                                    borderColor: '#E5E7EB',
+                                                    backgroundColor: 'white',
+                                                    color: '#374151',
+                                                }}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => setShowFilterDropdown(false)}
+                                            className="w-full py-2 rounded-md text-sm font-medium"
+                                            style={{ background: 'var(--color-primary)', color: 'white' }}
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                            <span className="date-separator">to</span>
-                            <div className="date-input-wrapper">
-                                <Calendar size={14} />
-                                <input
-                                    type="date"
-                                    value={customRange.endDate}
-                                    onChange={(e) => setCustomRange(prev => ({ ...prev, endDate: e.target.value }))}
-                                />
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {isLoading ? (
-                <div className="loading-state">
-                    <div className="spinner" />
-                    <span>Loading financial data...</span>
+            {/* ── Metric Cards ────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {metricCards.map((card) => (
+                    <div
+                        key={card.label}
+                        className="rounded-xl border p-4 transition-all hover:shadow-md"
+                        style={{
+                            backgroundColor: 'white',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <div className="flex items-center justify-between mb-3">
+                            <div
+                                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                style={{ background: card.bg }}
+                            >
+                                <card.icon size={20} style={{ color: card.color }} />
+                            </div>
+                        </div>
+                        <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                            {card.label}
+                        </p>
+                        <p className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }} title={card.fullValue}>
+                            {card.value}
+                        </p>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Charts Section ──────────────────────────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Revenue vs Expense Chart - LINE GRAPH */}
+                <div
+                    className="rounded-xl border p-5"
+                    style={{
+                        backgroundColor: 'white',
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                        Monthly Revenue & Expense
+                    </h3>
+                    <div className="h-72">
+                        {monthlyData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={monthlyData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                                    <XAxis
+                                        dataKey="month"
+                                        tick={{ fill: '#6B7280', fontSize: 12 }}
+                                        axisLine={{ stroke: '#E5E7EB' }}
+                                    />
+                                    <YAxis
+                                        tick={{ fill: '#6B7280', fontSize: 12 }}
+                                        axisLine={{ stroke: '#E5E7EB' }}
+                                        tickFormatter={(value) => formatCurrency(value)}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend
+                                        wrapperStyle={{ paddingTop: '10px' }}
+                                        formatter={(value) => <span style={{ color: '#6B7280', fontSize: '12px' }}>{value}</span>}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="revenue"
+                                        name="Revenue"
+                                        stroke="#22C55E"
+                                        strokeWidth={2}
+                                        dot={{ fill: '#22C55E', strokeWidth: 2, r: 4 }}
+                                        activeDot={{ r: 6 }}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="expense"
+                                        name="Expense"
+                                        stroke="#EF4444"
+                                        strokeWidth={2}
+                                        dot={{ fill: '#EF4444', strokeWidth: 2, r: 4 }}
+                                        activeDot={{ r: 6 }}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="No data available for the selected period" />
+                        )}
+                    </div>
                 </div>
-            ) : (
-                <>
-                    {/* ── Stat Cards ──────────────────────────────── */}
-                    <div className="stats-grid">
-                        <StatCard
-                            label="Total Revenue"
-                            value={formatCurrency(stats?.totalRevenue || 0, true)}
-                            icon={<DollarSign size={20} />}
-                            color="#10b981"
-                            bgGradient="linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)"
-                            trend="up"
-                            trendValue={`${formatCurrency(stats?.revenueWithoutGst || 0, true)} excl. GST`}
-                        />
-                        <StatCard
-                            label="Total Expenses"
-                            value={formatCurrency(stats?.totalExpenses || 0, true)}
-                            icon={<CreditCard size={20} />}
-                            color="#ef4444"
-                            bgGradient="linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)"
-                            trendValue={`Payroll: ${formatCurrency(stats?.payrollCost || 0, true)}`}
-                        />
-                        <StatCard
-                            label="EBITDA"
-                            value={formatCurrency(stats?.ebitda || 0, true)}
-                            icon={<BarChart3 size={20} />}
-                            color="#3b82f6"
-                            bgGradient="linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)"
-                            trend={(stats?.ebitda || 0) >= 0 ? 'up' : 'down'}
-                            trendValue={`${stats?.ebitdaMargin?.toFixed(1) || 0}% margin`}
-                        />
-                        <StatCard
-                            label="Runway Left"
-                            value={formatRunway(stats?.runwayMonths || 0)}
-                            icon={<Clock size={20} />}
-                            color="#8b5cf6"
-                            bgGradient="linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)"
-                            trend={(stats?.runwayMonths || 0) >= 6 ? 'up' : 'down'}
-                            trendValue={`Avg burn: ${formatCurrency(stats?.avgMonthlyExpenses || 0, true)}/mo`}
-                        />
-                        <StatCard
-                            label="Cash in Bank"
-                            value={formatCurrency(stats?.cashInBank || 0, true)}
-                            icon={<Wallet size={20} />}
-                            color="#f59e0b"
-                            bgGradient="linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)"
-                            trendValue={`Net position`}
-                        />
-                        <StatCard
-                            label="Receivables"
-                            value={formatCurrency(stats?.receivables || 0, true)}
-                            icon={<TrendingDown size={20} />}
-                            color="#ec4899"
-                            bgGradient="linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)"
-                            trendValue={`${stats?.overdueInvoices || 0} overdue invoices`}
-                        />
-                    </div>
 
-                    {/* ── Charts Section Row 1 ─────────────────────── */}
-                    {chartData.length > 1 && (
-                        <div className="charts-grid two-col">
-                            <RevenueExpenseChart data={chartData} />
-                            <SalariesChart data={salaryChartData} />
-                        </div>
-                    )}
-
-                    {/* ── Charts Section Row 2 ─────────────────────── */}
-                    <div className="charts-grid two-col">
-                        {chartData.length > 1 && (
-                            <ProfitabilityChart data={chartData.map(d => ({ month: d.month, profit: d.profit }))} />
-                        )}
-                        {projectProfitability && projectProfitability.length > 0 && (
-                            <ProjectProfitabilityChart data={projectProfitability} />
-                        )}
-                    </div>
-
-                    {/* ── Monthly P&L Table ───────────────────────── */}
-                    {filteredMonthlyData && filteredMonthlyData.length > 0 && (
-                        <div className="data-table-section">
-                            <div className="section-header">
-                                <h2>Monthly P&L Statement</h2>
-                            </div>
-                            <div className="table-wrapper">
-                                <table className="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Month</th>
-                                            <th>Revenue</th>
-                                            <th>GST</th>
-                                            <th>Revenue (excl. GST)</th>
-                                            <th>Expenses</th>
-                                            <th>Payroll</th>
-                                            <th>Net Profit</th>
-                                            <th>Margin</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredMonthlyData.map((m, idx) => (
-                                            <tr key={idx}>
-                                                <td className="month-cell">
-                                                    {MONTH_FULL_NAMES[m.month - 1]} {m.calendarYear ? `'${String(m.calendarYear).slice(-2)}` : ''}
-                                                </td>
-                                                <td>{formatCurrency(m.revenue)}</td>
-                                                <td>{formatCurrency(m.gst)}</td>
-                                                <td>{formatCurrency(m.revenueWithoutGst)}</td>
-                                                <td>{formatCurrency(m.expenses)}</td>
-                                                <td>{formatCurrency(m.payroll)}</td>
-                                                <td className={m.netProfit >= 0 ? 'positive' : 'negative'}>
-                                                    {formatCurrency(m.netProfit)}
-                                                </td>
-                                                <td className={m.netMargin >= 0 ? 'positive' : 'negative'}>
-                                                    {m.netMargin.toFixed(1)}%
-                                                </td>
-                                            </tr>
+                {/* Profitability Chart - BAR with positive/negative */}
+                <div
+                    className="rounded-xl border p-5"
+                    style={{
+                        backgroundColor: 'white',
+                        borderColor: 'var(--color-border-default)',
+                    }}
+                >
+                    <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                        Monthly Profitability (EBIDTA)
+                    </h3>
+                    <div className="h-72">
+                        {monthlyData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={monthlyData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                                    <XAxis
+                                        dataKey="month"
+                                        tick={{ fill: '#6B7280', fontSize: 12 }}
+                                        axisLine={{ stroke: '#E5E7EB' }}
+                                    />
+                                    <YAxis
+                                        tick={{ fill: '#6B7280', fontSize: 12 }}
+                                        axisLine={{ stroke: '#E5E7EB' }}
+                                        tickFormatter={(value) => formatCurrency(value)}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <ReferenceLine y={0} stroke="#9CA3AF" />
+                                    <Bar dataKey="profit" name="Profit/Loss" radius={[4, 4, 0, 0]}>
+                                        {monthlyData.map((entry: any, index: number) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={entry.profit >= 0 ? '#22C55E' : '#EF4444'}
+                                            />
                                         ))}
-                                    </tbody>
-                                    {filteredMonthlyData.length > 1 && (
-                                        <tfoot>
-                                            <tr>
-                                                <td><strong>Total</strong></td>
-                                                <td><strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.revenue, 0))}</strong></td>
-                                                <td><strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.gst, 0))}</strong></td>
-                                                <td><strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.revenueWithoutGst, 0))}</strong></td>
-                                                <td><strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.expenses, 0))}</strong></td>
-                                                <td><strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.payroll, 0))}</strong></td>
-                                                <td className={(stats?.netProfit || 0) >= 0 ? 'positive' : 'negative'}>
-                                                    <strong>{formatCurrency(filteredMonthlyData.reduce((s, m) => s + m.netProfit, 0))}</strong>
-                                                </td>
-                                                <td className={(stats?.netMargin || 0) >= 0 ? 'positive' : 'negative'}>
-                                                    <strong>{stats?.netMargin?.toFixed(1) || 0}%</strong>
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    )}
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="No data available for the selected period" />
+                        )}
+                    </div>
+                </div>
+            </div>
 
-            <style>{`
-                .finance-dashboard-v2 {
-                    padding: 1.5rem 2rem 2rem;
-                    max-width: 1440px;
-                    margin: 0 auto;
-                    animation: fadeIn 0.3s ease;
-                }
-
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(8px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-
-                /* ── Header ──────────────────────────────────────── */
-                .dashboard-header {
-                    margin-bottom: 1.5rem;
-                }
-                .dashboard-header h1 {
-                    font-size: 1.5rem;
-                    font-weight: 700;
-                    color: var(--color-text-primary, #0f172a);
-                    margin: 0 0 0.25rem 0;
-                }
-                .dashboard-header p {
-                    font-size: 0.875rem;
-                    color: var(--color-text-secondary, #64748b);
-                    margin: 0;
-                }
-
-                /* ── Filter Section ──────────────────────────────── */
-                .filter-section {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                    flex-wrap: wrap;
-                }
-                .filter-tabs {
-                    display: flex;
-                    gap: 0.25rem;
-                    background: var(--color-bg-subtle, #f1f5f9);
-                    padding: 0.25rem;
-                    border-radius: 10px;
-                }
-                .filter-tab {
-                    padding: 0.5rem 1rem;
-                    border: none;
-                    background: transparent;
-                    border-radius: 8px;
-                    font-size: 0.8125rem;
-                    font-weight: 500;
-                    color: var(--color-text-secondary, #64748b);
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-                .filter-tab:hover {
-                    color: var(--color-text-primary, #0f172a);
-                }
-                .filter-tab.active {
-                    background: white;
-                    color: var(--color-primary, #10b981);
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                }
-                .filter-controls {
-                    display: flex;
-                    gap: 0.75rem;
-                    align-items: center;
-                }
-                .select-wrapper {
-                    position: relative;
-                    display: flex;
-                    align-items: center;
-                }
-                .select-wrapper select {
-                    appearance: none;
-                    padding: 0.5rem 2rem 0.5rem 0.75rem;
-                    border: 1px solid var(--color-border, #e2e8f0);
-                    border-radius: 8px;
-                    background: white;
-                    font-size: 0.8125rem;
-                    font-weight: 500;
-                    color: var(--color-text-primary, #0f172a);
-                    cursor: pointer;
-                    transition: all 0.15s ease;
-                }
-                .select-wrapper select:hover {
-                    border-color: var(--color-primary, #10b981);
-                }
-                .select-wrapper select:focus {
-                    outline: none;
-                    border-color: var(--color-primary, #10b981);
-                    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-                }
-                .select-wrapper svg {
-                    position: absolute;
-                    right: 0.5rem;
-                    pointer-events: none;
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .custom-date-range {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-                .date-input-wrapper {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.5rem 0.75rem;
-                    border: 1px solid var(--color-border, #e2e8f0);
-                    border-radius: 8px;
-                    background: white;
-                }
-                .date-input-wrapper svg {
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .date-input-wrapper input {
-                    border: none;
-                    outline: none;
-                    font-size: 0.8125rem;
-                    color: var(--color-text-primary, #0f172a);
-                    background: transparent;
-                    width: 110px;
-                }
-                .date-separator {
-                    color: var(--color-text-secondary, #64748b);
-                    font-size: 0.75rem;
-                }
-
-                /* ── Stats Grid ──────────────────────────────────── */
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                }
-                .stat-card {
-                    background: var(--card-gradient);
-                    border-radius: 16px;
-                    padding: 1.25rem;
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 1rem;
-                    transition: transform 0.2s ease, box-shadow 0.2s ease;
-                    border: 1px solid rgba(0,0,0,0.03);
-                }
-                .stat-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-                }
-                .stat-card-icon-wrapper {
-                    width: 44px;
-                    height: 44px;
-                    border-radius: 12px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: white;
-                    color: var(--card-color);
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-                    flex-shrink: 0;
-                }
-                .stat-card-content {
-                    flex: 1;
-                    min-width: 0;
-                }
-                .stat-card-label {
-                    font-size: 0.75rem;
-                    font-weight: 500;
-                    color: var(--color-text-secondary, #64748b);
-                    text-transform: uppercase;
-                    letter-spacing: 0.03em;
-                }
-                .stat-card-value {
-                    font-size: 1.375rem;
-                    font-weight: 700;
-                    color: var(--color-text-primary, #0f172a);
-                    margin: 0.25rem 0;
-                    line-height: 1.2;
-                }
-                .stat-card-trend {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    font-size: 0.6875rem;
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .stat-card-trend.positive { color: #10b981; }
-                .stat-card-trend.negative { color: #ef4444; }
-
-                /* ── Charts Grid ─────────────────────────────────── */
-                .charts-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                }
-                .charts-grid.two-col {
-                    grid-template-columns: 1fr 1fr;
-                }
-                .chart-container {
-                    background: white;
-                    border-radius: 16px;
-                    padding: 1.25rem;
-                    border: 1px solid var(--color-border, #e2e8f0);
-                }
-                .chart-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 1rem;
-                }
-                .chart-header h3 {
-                    font-size: 0.9375rem;
-                    font-weight: 600;
-                    color: var(--color-text-primary, #0f172a);
-                    margin: 0;
-                }
-                .chart-legend {
-                    display: flex;
-                    gap: 1rem;
-                }
-                .legend-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.375rem;
-                    font-size: 0.75rem;
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .legend-dot {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 2px;
-                }
-                .legend-dot.revenue { background: #10b981; }
-                .legend-dot.expenses { background: #ef4444; }
-                .legend-dot.salary { background: #8b5cf6; }
-                .chart-body {
-                    position: relative;
-                }
-                .line-chart-svg {
-                    width: 100%;
-                    height: 180px;
-                }
-                .grid-line {
-                    stroke: var(--color-border, #e2e8f0);
-                    stroke-width: 0.5;
-                }
-                .chart-line {
-                    fill: none;
-                    stroke-width: 2;
-                    stroke-linecap: round;
-                    stroke-linejoin: round;
-                }
-                .revenue-line { stroke: #10b981; }
-                .expenses-line { stroke: #ef4444; }
-                .data-point { transition: r 0.15s ease; }
-                .data-point:hover { r: 3; }
-                .revenue-point { fill: #10b981; }
-                .expenses-point { fill: #ef4444; }
-                .chart-x-labels {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-top: 0.5rem;
-                    font-size: 0.6875rem;
-                    color: var(--color-text-secondary, #94a3b8);
-                }
-
-                /* Bar Chart */
-                .profitability-chart {
-                    height: 200px;
-                    position: relative;
-                }
-                .bar-chart-wrapper {
-                    display: flex;
-                    align-items: flex-end;
-                    justify-content: space-between;
-                    height: 100%;
-                    gap: 0.25rem;
-                }
-                .bar-column {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    height: 100%;
-                }
-                .bar-container {
-                    flex: 1;
-                    width: 100%;
-                    position: relative;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: flex-end;
-                }
-                .bar {
-                    width: 80%;
-                    max-width: 32px;
-                    margin: 0 auto;
-                    border-radius: 4px 4px 0 0;
-                    transition: height 0.4s ease, opacity 0.2s ease;
-                    cursor: pointer;
-                }
-                .bar:hover { opacity: 0.85; }
-                .bar.positive { background: linear-gradient(180deg, #10b981 0%, #059669 100%); }
-                .bar.negative {
-                    background: linear-gradient(0deg, #ef4444 0%, #dc2626 100%);
-                    border-radius: 0 0 4px 4px;
-                }
-                .bar.salary { background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%); }
-                .bar-label {
-                    font-size: 0.6875rem;
-                    color: var(--color-text-secondary, #94a3b8);
-                    margin-top: 0.375rem;
-                }
-                .zero-line {
-                    position: absolute;
-                    left: 0;
-                    right: 0;
-                    top: 50%;
-                    height: 1px;
-                    background: var(--color-border, #e2e8f0);
-                }
-
-                /* Salaries Chart */
-                .salaries-chart .chart-body {
-                    height: 200px;
-                }
-                .salaries-chart .bar-chart-wrapper {
-                    height: 180px;
-                }
-
-                /* Project Profitability Chart */
-                .project-profitability-chart .chart-body {
-                    max-height: 220px;
-                    overflow-y: auto;
-                }
-                .project-profitability-list {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.75rem;
-                }
-                .project-profitability-item {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.375rem;
-                }
-                .project-info {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                }
-                .project-name {
-                    font-size: 0.8125rem;
-                    font-weight: 500;
-                    color: var(--color-text-primary, #0f172a);
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 150px;
-                }
-                .project-meta {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.75rem;
-                }
-                .project-meta .status {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    font-size: 0.6875rem;
-                    font-weight: 500;
-                }
-                .project-meta .status.profitable { color: #10b981; }
-                .project-meta .status.unprofitable { color: #ef4444; }
-                .project-meta .until-date {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    font-size: 0.6875rem;
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .project-bar-container {
-                    height: 8px;
-                    background: var(--color-bg-subtle, #f1f5f9);
-                    border-radius: 4px;
-                    overflow: hidden;
-                }
-                .project-bar {
-                    height: 100%;
-                    border-radius: 4px;
-                    transition: width 0.3s ease;
-                }
-                .project-bar.profitable { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
-                .project-bar.unprofitable { background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); }
-                .no-data {
-                    text-align: center;
-                    padding: 2rem;
-                    color: var(--color-text-secondary, #64748b);
-                    font-size: 0.875rem;
-                }
-
-                /* ── Data Table ──────────────────────────────────── */
-                .data-table-section {
-                    background: white;
-                    border-radius: 16px;
-                    border: 1px solid var(--color-border, #e2e8f0);
-                    overflow: hidden;
-                }
-                .section-header {
-                    padding: 1rem 1.25rem;
-                    border-bottom: 1px solid var(--color-border, #e2e8f0);
-                }
-                .section-header h2 {
-                    font-size: 0.9375rem;
-                    font-weight: 600;
-                    color: var(--color-text-primary, #0f172a);
-                    margin: 0;
-                }
-                .table-wrapper {
-                    overflow-x: auto;
-                }
-                .data-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 0.8125rem;
-                }
-                .data-table th,
-                .data-table td {
-                    padding: 0.75rem 1rem;
-                    text-align: right;
-                    border-bottom: 1px solid var(--color-border, #e2e8f0);
-                }
-                .data-table th {
-                    font-weight: 600;
-                    font-size: 0.6875rem;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    color: var(--color-text-secondary, #64748b);
-                    background: var(--color-bg-subtle, #f8fafc);
-                }
-                .data-table th:first-child,
-                .data-table td:first-child {
-                    text-align: left;
-                }
-                .data-table tbody tr {
-                    transition: background 0.15s ease;
-                }
-                .data-table tbody tr:hover {
-                    background: var(--color-bg-subtle, #f8fafc);
-                }
-                .data-table td.month-cell {
-                    font-weight: 500;
-                    color: var(--color-text-primary, #0f172a);
-                }
-                .data-table td.positive { color: #10b981; font-weight: 500; }
-                .data-table td.negative { color: #ef4444; font-weight: 500; }
-                .data-table tfoot td {
-                    border-top: 2px solid var(--color-border, #e2e8f0);
-                    background: var(--color-bg-subtle, #f8fafc);
-                }
-
-                /* ── Loading State ───────────────────────────────── */
-                .loading-state {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 4rem;
-                    gap: 1rem;
-                    color: var(--color-text-secondary, #64748b);
-                }
-                .spinner {
-                    width: 36px;
-                    height: 36px;
-                    border: 3px solid var(--color-border, #e2e8f0);
-                    border-top-color: var(--color-primary, #10b981);
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                }
-                @keyframes spin { to { transform: rotate(360deg); } }
-
-                /* ── Responsive ──────────────────────────────────── */
-                @media (max-width: 1024px) {
-                    .charts-grid.two-col {
-                        grid-template-columns: 1fr;
-                    }
-                }
-                @media (max-width: 768px) {
-                    .finance-dashboard-v2 {
-                        padding: 1rem;
-                    }
-                    .filter-section {
-                        flex-direction: column;
-                        align-items: stretch;
-                    }
-                    .filter-controls {
-                        flex-wrap: wrap;
-                    }
-                    .charts-grid {
-                        grid-template-columns: 1fr;
-                    }
-                    .stats-grid {
-                        grid-template-columns: repeat(2, 1fr);
-                    }
-                }
-            `}</style>
+            {/* ── Monthly Breakdown Table ─────────────────────────────────── */}
+            <div
+                className="rounded-xl border overflow-hidden"
+                style={{
+                    backgroundColor: 'white',
+                    borderColor: 'var(--color-border-default)',
+                }}
+            >
+                <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        Monthly Financial Breakdown
+                    </h3>
+                </div>
+                {breakdownData.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr style={{ backgroundColor: '#F9FAFB' }}>
+                                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Month
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Revenue
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Expense
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        EBIDTA
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Salaries
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Project Costs
+                                    </th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>
+                                        Fixed Costs
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {breakdownData.map((row: any, index: number) => (
+                                    <tr
+                                        key={row.month}
+                                        className="transition-colors hover:bg-gray-50"
+                                        style={{
+                                            borderTop: index > 0 ? '1px solid #E5E7EB' : undefined,
+                                        }}
+                                    >
+                                        <td className="px-5 py-3 text-sm font-medium" style={{ color: '#111827' }}>
+                                            {row.month}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right font-medium" style={{ color: '#22C55E' }}>
+                                            {formatFullCurrency(row.revenue)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right font-medium" style={{ color: '#EF4444' }}>
+                                            {formatFullCurrency(row.expense)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right font-semibold" style={{ color: row.ebidta >= 0 ? '#22C55E' : '#EF4444' }}>
+                                            {formatFullCurrency(row.ebidta)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right" style={{ color: '#6B7280' }}>
+                                            {formatFullCurrency(row.salaries || 0)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right" style={{ color: '#6B7280' }}>
+                                            {formatFullCurrency(row.projectCosts || 0)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right" style={{ color: '#6B7280' }}>
+                                            {formatFullCurrency(row.fixedCosts || 0)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr style={{ backgroundColor: '#F9FAFB', borderTop: '2px solid #E5E7EB' }}>
+                                    <td className="px-5 py-3 text-sm font-bold" style={{ color: '#111827' }}>
+                                        Total
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#22C55E' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.revenue || 0), 0))}
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#EF4444' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.expense || 0), 0))}
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#6366F1' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.ebidta || 0), 0))}
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#6B7280' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.salaries || 0), 0))}
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#6B7280' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.projectCosts || 0), 0))}
+                                    </td>
+                                    <td className="px-5 py-3 text-sm text-right font-bold" style={{ color: '#6B7280' }}>
+                                        {formatFullCurrency(breakdownData.reduce((acc: number, row: any) => acc + (row.fixedCosts || 0), 0))}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                ) : (
+                    <EmptyState message="No financial data available. Add revenue and expense entries to see the breakdown." />
+                )}
+            </div>
         </div>
     );
 }

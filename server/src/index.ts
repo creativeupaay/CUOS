@@ -1,6 +1,9 @@
 import express from "express";
 import http from "http";
 import dotenv from "dotenv";
+
+
+
 import morgan from "morgan";
 import helmet from "helmet";
 import cors, { CorsOptions } from "cors";
@@ -20,7 +23,6 @@ import { initBirthdayNotificationJob } from "./modules/notification/jobs/birthda
 import "./modules/auth/models/Permission.model";
 
 dotenv.config();
-
 connectDB();
 
 const app = express();

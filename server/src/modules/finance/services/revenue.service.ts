@@ -1,321 +1,253 @@
-import { Types } from 'mongoose';
-import { Revenue, IRevenue, RevenueSource, RevenueStatus } from '../models/Revenue.model';
-import { Invoice } from '../models/Invoice.model';
-import AppError from '../../../utils/appError';
+import { Revenue, IRevenue } from '../models/Revenue.model';
+import { Types, FilterQuery } from 'mongoose';
 
-// ── Types ───────────────────────────────────────────────────────────
-interface CreateRevenuePayload {
-    title: string;
-    description?: string;
-    source: RevenueSource;
+interface CreateRevenueData {
+    date: Date;
+    description: string;
+    client: string;
+    clientId?: Types.ObjectId;
+    project?: string;
+    projectId?: Types.ObjectId;
     amount: number;
-    currency?: string;
+    currency?: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
     exchangeRate?: number;
     gstApplicable?: boolean;
     gstRate?: number;
-    tdsApplicable?: boolean;
-    tdsRate?: number;
-    projectId?: string;
-    clientId?: string;
-    accrualMonth: number;
-    accrualYear: number;
+    tdsDeducted?: number;
+    receivedAmount?: number;
+    source?: 'manual' | 'invoice' | 'project';
+    status?: 'received' | 'pending' | 'partial' | 'overdue';
+    invoiceNumber?: string;
+    dueDate?: Date;
     notes?: string;
+    createdBy: Types.ObjectId;
 }
 
 interface RevenueFilters {
+    status?: string;
+    source?: string;
+    search?: string;
+    startDate?: Date;
+    endDate?: Date;
+    clientId?: Types.ObjectId;
+    projectId?: Types.ObjectId;
     page?: number;
     limit?: number;
-    source?: RevenueSource;
-    status?: RevenueStatus;
-    projectId?: string;
-    clientId?: string;
-    startDate?: string;
-    endDate?: string;
-    year?: number;
 }
 
-// ── Create Revenue ──────────────────────────────────────────────────
-export const createRevenue = async (
-    data: CreateRevenuePayload,
-    userId: string
-): Promise<IRevenue> => {
-    const revenue = new Revenue({
-        ...data,
-        currency: data.currency || 'INR',
-        exchangeRate: data.exchangeRate || 1,
-        gstApplicable: data.gstApplicable ?? true,
-        gstRate: data.gstRate ?? 18,
-        tdsApplicable: data.tdsApplicable ?? false,
-        tdsRate: data.tdsRate ?? 0,
-        amountInBaseCurrency: (data.amount || 0) * (data.exchangeRate || 1),
-        amountWithoutGst: data.amount || 0,
-        projectId: data.projectId ? new Types.ObjectId(data.projectId) : undefined,
-        clientId: data.clientId ? new Types.ObjectId(data.clientId) : undefined,
-        createdBy: new Types.ObjectId(userId),
-    });
+export class RevenueService {
+    /**
+     * Create a new revenue entry
+     */
+    static async create(data: CreateRevenueData): Promise<IRevenue> {
+        const currency = data.currency || 'INR';
+        const exchangeRate = data.exchangeRate || 1;
+        const amountINR = currency === 'INR' ? data.amount : data.amount * exchangeRate;
 
-    await revenue.save();
-    return revenue;
-};
+        const gstApplicable = data.gstApplicable ?? true;
+        const gstRate = data.gstRate || 18;
+        const gst = gstApplicable ? (amountINR * gstRate) / 100 : 0;
+        const tdsDeducted = data.tdsDeducted || 0;
+        const totalAmount = amountINR + gst - tdsDeducted;
 
-// ── Get Revenues ────────────────────────────────────────────────────
-export const getRevenues = async (filters: RevenueFilters) => {
-    const page = filters.page || 1;
-    const limit = filters.limit || 20;
-    const skip = (page - 1) * limit;
+        const revenue = new Revenue({
+            ...data,
+            currency,
+            exchangeRate,
+            amountINR,
+            gstApplicable,
+            gstRate,
+            gst,
+            totalAmount,
+            receivedAmount: data.receivedAmount || 0,
+            pendingAmount: totalAmount - (data.receivedAmount || 0),
+        });
 
-    const query: any = {};
+        return revenue.save();
+    }
 
-    if (filters.source) query.source = filters.source;
-    if (filters.status) query.status = filters.status;
-    if (filters.projectId) query.projectId = new Types.ObjectId(filters.projectId);
-    if (filters.clientId) query.clientId = new Types.ObjectId(filters.clientId);
-    if (filters.year) query.accrualYear = filters.year;
+    /**
+     * Get all revenues with filters
+     */
+    static async getAll(filters: RevenueFilters): Promise<{ revenues: IRevenue[]; total: number }> {
+        const query: FilterQuery<IRevenue> = {};
 
-    if (filters.startDate || filters.endDate) {
-        query.$or = [
+        if (filters.status) {
+            query.status = filters.status;
+        }
+
+        if (filters.source) {
+            query.source = filters.source;
+        }
+
+        if (filters.clientId) {
+            query.clientId = filters.clientId;
+        }
+
+        if (filters.projectId) {
+            query.projectId = filters.projectId;
+        }
+
+        if (filters.startDate || filters.endDate) {
+            query.date = {};
+            if (filters.startDate) query.date.$gte = filters.startDate;
+            if (filters.endDate) query.date.$lte = filters.endDate;
+        }
+
+        if (filters.search) {
+            const searchRegex = new RegExp(filters.search, 'i');
+            query.$or = [
+                { description: searchRegex },
+                { client: searchRegex },
+                { invoiceNumber: searchRegex },
+                { project: searchRegex },
+            ];
+        }
+
+        const page = filters.page || 1;
+        const limit = filters.limit || 50;
+        const skip = (page - 1) * limit;
+
+        const [revenues, total] = await Promise.all([
+            Revenue.find(query)
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Revenue.countDocuments(query),
+        ]);
+
+        return { revenues: revenues as IRevenue[], total };
+    }
+
+    /**
+     * Get revenue by ID
+     */
+    static async getById(id: Types.ObjectId | string): Promise<IRevenue | null> {
+        return Revenue.findById(id).lean();
+    }
+
+    /**
+     * Update revenue
+     */
+    static async update(
+        id: Types.ObjectId | string,
+        data: Partial<CreateRevenueData> & { updatedBy: Types.ObjectId }
+    ): Promise<IRevenue | null> {
+        // Recalculate amounts if needed
+        const existing = await Revenue.findById(id);
+        if (!existing) return null;
+
+        const currency = data.currency || existing.currency;
+        const exchangeRate = data.exchangeRate ?? existing.exchangeRate;
+        const amount = data.amount ?? existing.amount;
+        const amountINR = currency === 'INR' ? amount : amount * exchangeRate;
+
+        const gstApplicable = data.gstApplicable ?? existing.gstApplicable;
+        const gstRate = data.gstRate ?? existing.gstRate;
+        const gst = gstApplicable ? (amountINR * gstRate) / 100 : 0;
+        const tdsDeducted = data.tdsDeducted ?? existing.tdsDeducted;
+        const totalAmount = amountINR + gst - tdsDeducted;
+
+        return Revenue.findByIdAndUpdate(
+            id,
             {
-                accrualYear: {
-                    $gte: filters.startDate ? new Date(filters.startDate).getFullYear() : 1900,
-                    $lte: filters.endDate ? new Date(filters.endDate).getFullYear() : 2100,
-                },
+                ...data,
+                currency,
+                exchangeRate,
+                amountINR,
+                gstApplicable,
+                gstRate,
+                gst,
+                totalAmount,
             },
-        ];
+            { new: true }
+        ).lean();
     }
 
-    const [revenues, total] = await Promise.all([
-        Revenue.find(query)
-            .populate('projectId', 'name')
-            .populate('clientId', 'name companyName')
-            .populate('createdBy', 'name')
-            .sort({ accrualYear: -1, accrualMonth: -1, createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-        Revenue.countDocuments(query),
-    ]);
-
-    return {
-        revenues,
-        pagination: {
-            total,
-            page,
-            limit,
-            pages: Math.ceil(total / limit),
-        },
-    };
-};
-
-// ── Get Revenue by ID ───────────────────────────────────────────────
-export const getRevenueById = async (id: string): Promise<IRevenue> => {
-    const revenue = await Revenue.findById(id)
-        .populate('projectId', 'name')
-        .populate('clientId', 'name companyName')
-        .populate('createdBy', 'name');
-
-    if (!revenue) {
-        throw new AppError('Revenue entry not found', 404);
+    /**
+     * Delete revenue
+     */
+    static async delete(id: Types.ObjectId | string): Promise<boolean> {
+        const result = await Revenue.findByIdAndDelete(id);
+        return !!result;
     }
 
-    return revenue;
-};
+    /**
+     * Get revenue summary for date range
+     */
+    static async getSummary(startDate: Date, endDate: Date): Promise<{
+        totalRevenue: number;
+        totalReceived: number;
+        totalPending: number;
+        totalGST: number;
+        byStatus: Record<string, number>;
+        bySource: Record<string, number>;
+    }> {
+        const revenues = await Revenue.find({
+            date: { $gte: startDate, $lte: endDate },
+        }).lean();
 
-// ── Update Revenue ──────────────────────────────────────────────────
-export const updateRevenue = async (
-    id: string,
-    data: Partial<CreateRevenuePayload>
-): Promise<IRevenue> => {
-    const revenue = await Revenue.findById(id);
-    if (!revenue) {
-        throw new AppError('Revenue entry not found', 404);
-    }
-
-    // Only allow updates to manual revenue entries
-    if (revenue.source === 'project' && revenue.invoiceId) {
-        throw new AppError('Cannot modify invoice-linked revenue entries', 400);
-    }
-
-    Object.assign(revenue, data);
-    await revenue.save();
-
-    return revenue;
-};
-
-// ── Delete Revenue ──────────────────────────────────────────────────
-export const deleteRevenue = async (id: string): Promise<void> => {
-    const revenue = await Revenue.findById(id);
-    if (!revenue) {
-        throw new AppError('Revenue entry not found', 404);
-    }
-
-    // Only allow deletion of manual revenue entries
-    if (revenue.source === 'project' && revenue.invoiceId) {
-        throw new AppError('Cannot delete invoice-linked revenue entries', 400);
-    }
-
-    await revenue.deleteOne();
-};
-
-// ── Record Payment ──────────────────────────────────────────────────
-export const recordRevenuePayment = async (
-    id: string,
-    amount: number,
-    receivedDate?: Date
-): Promise<IRevenue> => {
-    const revenue = await Revenue.findById(id);
-    if (!revenue) {
-        throw new AppError('Revenue entry not found', 404);
-    }
-
-    const date = receivedDate || new Date();
-    revenue.amountReceived = Math.min(
-        revenue.amountReceived + amount,
-        revenue.amountInBaseCurrency
-    );
-    revenue.receivedDate = date;
-    revenue.cashMonth = date.getMonth() + 1;
-    revenue.cashYear = date.getFullYear();
-
-    await revenue.save();
-    return revenue;
-};
-
-// ── Get Monthly Revenue ─────────────────────────────────────────────
-export const getMonthlyRevenue = async (year: number) => {
-    // Get manual revenue
-    const manualRevenue = await Revenue.aggregate([
-        {
-            $match: {
-                accrualYear: year,
-                status: { $in: ['pending', 'received', 'partially_received'] },
-            },
-        },
-        {
-            $group: {
-                _id: '$accrualMonth',
-                total: { $sum: '$amountInBaseCurrency' },
-                totalWithoutGst: { $sum: '$amountWithoutGst' },
-                gst: { $sum: '$gstAmount' },
-                received: { $sum: '$amountReceived' },
-                count: { $sum: 1 },
-            },
-        },
-        { $sort: { _id: 1 } },
-    ]);
-
-    // Get invoice-based revenue
-    const invoiceRevenue = await Invoice.aggregate([
-        {
-            $match: {
-                issueDate: {
-                    $gte: new Date(`${year}-01-01`),
-                    $lte: new Date(`${year}-12-31`),
-                },
-                status: { $in: ['sent', 'partial', 'paid'] },
-            },
-        },
-        {
-            $group: {
-                _id: { $month: '$issueDate' },
-                total: { $sum: '$amountInBaseCurrency' },
-                totalWithoutGst: { $sum: '$subtotal' },
-                gst: { $sum: '$gstAmount' },
-                received: { $sum: '$paidAmount' },
-                count: { $sum: 1 },
-            },
-        },
-        { $sort: { _id: 1 } },
-    ]);
-
-    // Merge data
-    const manualMap = new Map(manualRevenue.map((r: any) => [r._id, r]));
-    const invoiceMap = new Map(invoiceRevenue.map((r: any) => [r._id, r]));
-
-    const months = Array.from({ length: 12 }, (_, i) => {
-        const month = i + 1;
-        const manual = manualMap.get(month) || { total: 0, totalWithoutGst: 0, gst: 0, received: 0, count: 0 };
-        const invoice = invoiceMap.get(month) || { total: 0, totalWithoutGst: 0, gst: 0, received: 0, count: 0 };
-
-        return {
-            month,
-            totalRevenue: Math.round((manual.total + invoice.total) * 100) / 100,
-            revenueWithoutGst: Math.round((manual.totalWithoutGst + invoice.totalWithoutGst) * 100) / 100,
-            gst: Math.round((manual.gst + invoice.gst) * 100) / 100,
-            received: Math.round((manual.received + invoice.received) * 100) / 100,
-            manualRevenue: Math.round(manual.total * 100) / 100,
-            invoiceRevenue: Math.round(invoice.total * 100) / 100,
+        const summary = {
+            totalRevenue: 0,
+            totalReceived: 0,
+            totalPending: 0,
+            totalGST: 0,
+            byStatus: {} as Record<string, number>,
+            bySource: {} as Record<string, number>,
         };
-    });
 
-    return months;
-};
+        for (const rev of revenues) {
+            summary.totalRevenue += rev.amountINR;
+            summary.totalReceived += rev.receivedAmount;
+            summary.totalPending += rev.pendingAmount;
+            summary.totalGST += rev.gst;
 
-// ── Get Revenue Summary ─────────────────────────────────────────────
-export const getRevenueSummary = async (startDate: string, endDate: string) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const startYear = start.getFullYear();
-    const endYear = end.getFullYear();
-    const startMonth = start.getMonth() + 1;
-    const endMonth = end.getMonth() + 1;
+            summary.byStatus[rev.status] = (summary.byStatus[rev.status] || 0) + rev.amountINR;
+            summary.bySource[rev.source] = (summary.bySource[rev.source] || 0) + rev.amountINR;
+        }
 
-    // Manual revenue summary
-    const [manualAgg] = await Revenue.aggregate([
-        {
-            $match: {
-                $or: [
-                    { accrualYear: { $gt: startYear, $lt: endYear } },
-                    { accrualYear: startYear, accrualMonth: { $gte: startMonth } },
-                    { accrualYear: endYear, accrualMonth: { $lte: endMonth } },
-                ],
-            },
-        },
-        {
-            $group: {
-                _id: null,
-                total: { $sum: '$amountInBaseCurrency' },
-                totalWithoutGst: { $sum: '$amountWithoutGst' },
-                gst: { $sum: '$gstAmount' },
-                received: { $sum: '$amountReceived' },
-                pending: {
-                    $sum: {
-                        $subtract: ['$amountInBaseCurrency', '$amountReceived'],
-                    },
+        return summary;
+    }
+
+    /**
+     * Get monthly revenue data for charts
+     */
+    static async getMonthlyData(startDate: Date, endDate: Date): Promise<{
+        month: string;
+        revenue: number;
+        received: number;
+        pending: number;
+    }[]> {
+        const result = await Revenue.aggregate([
+            {
+                $match: {
+                    date: { $gte: startDate, $lte: endDate },
                 },
             },
-        },
-    ]);
-
-    // Invoice revenue summary
-    const [invoiceAgg] = await Invoice.aggregate([
-        {
-            $match: {
-                issueDate: { $gte: start, $lte: end },
-                status: { $in: ['sent', 'partial', 'paid'] },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: '$date' },
+                        month: { $month: '$date' },
+                    },
+                    revenue: { $sum: '$amountINR' },
+                    received: { $sum: '$receivedAmount' },
+                    pending: { $sum: '$pendingAmount' },
+                },
             },
-        },
-        {
-            $group: {
-                _id: null,
-                total: { $sum: '$amountInBaseCurrency' },
-                totalWithoutGst: { $sum: '$subtotal' },
-                gst: { $sum: '$gstAmount' },
-                received: { $sum: '$paidAmount' },
-                pending: { $sum: { $subtract: ['$total', '$paidAmount'] } },
+            {
+                $sort: { '_id.year': 1, '_id.month': 1 },
             },
-        },
-    ]);
+        ]);
 
-    const manual = manualAgg || { total: 0, totalWithoutGst: 0, gst: 0, received: 0, pending: 0 };
-    const invoice = invoiceAgg || { total: 0, totalWithoutGst: 0, gst: 0, received: 0, pending: 0 };
+        const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    return {
-        totalRevenue: Math.round((manual.total + invoice.total) * 100) / 100,
-        revenueWithoutGst: Math.round((manual.totalWithoutGst + invoice.totalWithoutGst) * 100) / 100,
-        gstCollected: Math.round((manual.gst + invoice.gst) * 100) / 100,
-        received: Math.round((manual.received + invoice.received) * 100) / 100,
-        pending: Math.round((manual.pending + invoice.pending) * 100) / 100,
-        manualRevenue: Math.round(manual.total * 100) / 100,
-        invoiceRevenue: Math.round(invoice.total * 100) / 100,
-    };
-};
+        return result.map((r) => ({
+            month: `${monthNames[r._id.month]} ${r._id.year}`,
+            revenue: r.revenue,
+            received: r.received,
+            pending: r.pending,
+        }));
+    }
+}

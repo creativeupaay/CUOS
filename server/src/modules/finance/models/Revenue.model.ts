@@ -1,144 +1,133 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-// ── Revenue Sources ─────────────────────────────────────────────────
-export type RevenueSource = 'project' | 'manual' | 'interest' | 'refund' | 'other';
-export type RevenueStatus = 'pending' | 'received' | 'partially_received';
-
-// ── Interface ───────────────────────────────────────────────────────
 export interface IRevenue extends Document {
     _id: Types.ObjectId;
-    title: string;
-    description?: string;
-    source: RevenueSource;
-    // Amounts
+    date: Date;
+    description: string;
+    client: string;
+    clientId?: Types.ObjectId; // Link to CRM client if exists
+    project?: string;
+    projectId?: Types.ObjectId; // Link to project if applicable
+
+    // Amount details
     amount: number;
-    currency: string;
+    currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
     exchangeRate: number;
-    amountInBaseCurrency: number;
-    // GST/Tax
+    amountINR: number; // Converted amount in INR
+
+    // Tax details
     gstApplicable: boolean;
-    gstAmount: number;
-    gstRate: number;
-    amountWithoutGst: number;
-    // TDS
-    tdsApplicable: boolean;
-    tdsAmount: number;
-    tdsRate: number;
-    // Received
-    amountReceived: number;
-    receivedDate?: Date;
-    // Linking
-    projectId?: Types.ObjectId;
-    clientId?: Types.ObjectId;
+    gstRate: number; // 5, 12, 18, or 28
+    gst: number;
+    tdsDeducted: number;
+    totalAmount: number; // amountINR + gst - tdsDeducted
+
+    // Payment tracking
+    receivedAmount: number;
+    pendingAmount: number;
+
+    // Source
+    source: 'manual' | 'invoice' | 'project';
+    status: 'received' | 'pending' | 'partial' | 'overdue';
+
+    // Invoice details
+    invoiceNumber?: string;
     invoiceId?: Types.ObjectId;
-    // Accrual tracking
-    accrualMonth: number;
-    accrualYear: number;
-    cashMonth?: number;
-    cashYear?: number;
-    // Status
-    status: RevenueStatus;
-    // Meta
+    dueDate?: Date;
+
+    // Additional
     notes?: string;
     attachments?: string[];
     createdBy: Types.ObjectId;
+    updatedBy?: Types.ObjectId;
+
     createdAt: Date;
     updatedAt: Date;
 }
 
-// ── Schema ──────────────────────────────────────────────────────────
 const RevenueSchema = new Schema<IRevenue>(
     {
-        title: { type: String, required: true, trim: true },
-        description: { type: String, trim: true },
+        date: { type: Date, required: true },
+        description: { type: String, required: true, trim: true },
+        client: { type: String, required: true, trim: true },
+        clientId: { type: Schema.Types.ObjectId, ref: 'Client' },
+        project: { type: String, trim: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
+
+        // Amount details
+        amount: { type: Number, required: true, min: 0 },
+        currency: {
+            type: String,
+            enum: ['INR', 'USD', 'EUR', 'GBP', 'AED'],
+            default: 'INR',
+        },
+        exchangeRate: { type: Number, default: 1, min: 0 },
+        amountINR: { type: Number, required: true, min: 0 },
+
+        // Tax details
+        gstApplicable: { type: Boolean, default: true },
+        gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
+        gst: { type: Number, default: 0, min: 0 },
+        tdsDeducted: { type: Number, default: 0, min: 0 },
+        totalAmount: { type: Number, required: true, min: 0 },
+
+        // Payment tracking
+        receivedAmount: { type: Number, default: 0, min: 0 },
+        pendingAmount: { type: Number, default: 0, min: 0 },
+
+        // Source
         source: {
             type: String,
-            required: true,
-            enum: ['project', 'manual', 'interest', 'refund', 'other'],
+            enum: ['manual', 'invoice', 'project'],
             default: 'manual',
         },
-        // Amounts
-        amount: { type: Number, required: true, min: 0 },
-        currency: { type: String, default: 'INR', trim: true, uppercase: true },
-        exchangeRate: { type: Number, default: 1, min: 0 },
-        amountInBaseCurrency: { type: Number, required: true, min: 0 },
-        // GST
-        gstApplicable: { type: Boolean, default: true },
-        gstAmount: { type: Number, default: 0, min: 0 },
-        gstRate: { type: Number, default: 18, min: 0 },
-        amountWithoutGst: { type: Number, required: true, min: 0 },
-        // TDS
-        tdsApplicable: { type: Boolean, default: false },
-        tdsAmount: { type: Number, default: 0, min: 0 },
-        tdsRate: { type: Number, default: 0, min: 0 },
-        // Received
-        amountReceived: { type: Number, default: 0, min: 0 },
-        receivedDate: Date,
-        // Linking
-        projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
-        clientId: { type: Schema.Types.ObjectId, ref: 'Client' },
-        invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
-        // Accrual tracking (when revenue is earned)
-        accrualMonth: { type: Number, required: true, min: 1, max: 12 },
-        accrualYear: { type: Number, required: true },
-        // Cash tracking (when payment is received)
-        cashMonth: { type: Number, min: 1, max: 12 },
-        cashYear: { type: Number },
-        // Status
         status: {
             type: String,
-            enum: ['pending', 'received', 'partially_received'],
+            enum: ['received', 'pending', 'partial', 'overdue'],
             default: 'pending',
         },
-        // Meta
+
+        // Invoice details
+        invoiceNumber: { type: String, trim: true },
+        invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
+        dueDate: Date,
+
+        // Additional
         notes: { type: String, trim: true },
         attachments: [{ type: String }],
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+    }
 );
 
-// ── Indexes ─────────────────────────────────────────────────────────
-RevenueSchema.index({ source: 1 });
-RevenueSchema.index({ projectId: 1 });
-RevenueSchema.index({ clientId: 1 });
-RevenueSchema.index({ accrualYear: 1, accrualMonth: 1 });
-RevenueSchema.index({ cashYear: 1, cashMonth: 1 });
-RevenueSchema.index({ status: 1 });
-RevenueSchema.index({ createdBy: 1 });
-
-// Auto-compute amounts before save
+// Calculate pending amount before save
 RevenueSchema.pre('save', function (next) {
-    // Calculate base currency amount
-    this.amountInBaseCurrency = Math.round(this.amount * this.exchangeRate * 100) / 100;
+    this.pendingAmount = this.totalAmount - this.receivedAmount;
 
-    // Calculate GST if applicable
-    if (this.gstApplicable && this.gstRate > 0) {
-        // If amount includes GST, calculate backward
-        this.amountWithoutGst = Math.round((this.amountInBaseCurrency / (1 + this.gstRate / 100)) * 100) / 100;
-        this.gstAmount = Math.round((this.amountInBaseCurrency - this.amountWithoutGst) * 100) / 100;
-    } else {
-        this.amountWithoutGst = this.amountInBaseCurrency;
-        this.gstAmount = 0;
-    }
-
-    // Calculate TDS if applicable (TDS on base amount without GST)
-    if (this.tdsApplicable && this.tdsRate > 0) {
-        this.tdsAmount = Math.round((this.amountWithoutGst * this.tdsRate / 100) * 100) / 100;
-    } else {
-        this.tdsAmount = 0;
-    }
-
-    // Update status based on received amount
-    if (this.amountReceived >= this.amountInBaseCurrency) {
+    // Auto-update status based on received amount
+    if (this.receivedAmount >= this.totalAmount) {
         this.status = 'received';
-    } else if (this.amountReceived > 0) {
-        this.status = 'partially_received';
+    } else if (this.receivedAmount > 0) {
+        this.status = 'partial';
+    } else if (this.dueDate && new Date() > this.dueDate) {
+        this.status = 'overdue';
     } else {
         this.status = 'pending';
     }
 
     next();
 });
+
+// Indexes
+RevenueSchema.index({ date: 1 });
+RevenueSchema.index({ status: 1 });
+RevenueSchema.index({ source: 1 });
+RevenueSchema.index({ client: 1 });
+RevenueSchema.index({ projectId: 1 });
+RevenueSchema.index({ createdAt: -1 });
+RevenueSchema.index({ date: 1, status: 1 }); // For dashboard queries
 
 export const Revenue = mongoose.model<IRevenue>('Revenue', RevenueSchema);

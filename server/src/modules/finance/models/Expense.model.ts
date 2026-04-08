@@ -1,129 +1,150 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-// ── Expense Categories ──────────────────────────────────────────────
-export type ExpenseCategory =
-    | 'salary'
-    | 'fixed'
-    | 'cac'
-    | 'project'
-    | 'overhead'
-    | 'tax'
-    | 'transaction-fee'
-    | 'currency-loss';
-
-export type ExpenseStatus = 'pending' | 'approved' | 'paid' | 'rejected';
-
-// ── Cost Type (for analysis) ────────────────────────────────────────
-export type CostType = 'fixed' | 'variable';
-
-// ── Expense Level ───────────────────────────────────────────────────
-export type ExpenseLevel = 'company' | 'project';
-
-// ── Interface ───────────────────────────────────────────────────────
 export interface IExpense extends Document {
     _id: Types.ObjectId;
-    title: string;
-    description?: string;
-    amount: number;
-    currency: string;
-    exchangeRate: number;
-    amountInBaseCurrency: number;
-    category: ExpenseCategory;
-    costType: CostType;
-    expenseLevel: ExpenseLevel;
-    projectId?: Types.ObjectId;
-    employeeId?: Types.ObjectId;
     date: Date;
-    recurring: boolean;
+    description: string;
+    category: string;
+
+    // Classification
+    level: 'company' | 'project';
+    type: 'fixed' | 'variable';
+
+    // Amount
+    amount: number;
+
+    // Project linkage (for project level expenses)
+    projectId?: Types.ObjectId;
+    projectName?: string;
+
+    // Employee linkage (for salary expenses)
+    employeeId?: Types.ObjectId;
+    employeeName?: string;
+    payrollId?: Types.ObjectId;
+
+    // Allocation details (for shared employee costs across projects)
+    isAllocated?: boolean;
+    allocationPercentage?: number;
+    totalMonthlyHours?: number;
+    projectHours?: number;
+
+    // Vendor & Payment
+    vendor?: string;
+    paidBy?: string;
+    paymentMethod?: 'cash' | 'bank_transfer' | 'credit_card' | 'upi' | 'cheque';
+    transactionRef?: string;
+
+    // Recurring
+    isRecurring: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
-    gstApplicable: boolean;
-    gstAmount: number;
-    tdsApplicable: boolean;
-    tdsAmount: number;
-    status: ExpenseStatus;
-    approvedBy?: Types.ObjectId;
-    approvedAt?: Date;
+    isSynced?: boolean; // For auto-synced expenses from payroll
+
+    // Additional
     notes?: string;
     attachments?: string[];
     createdBy: Types.ObjectId;
+    updatedBy?: Types.ObjectId;
+
     createdAt: Date;
     updatedAt: Date;
 }
 
-// ── Schema ──────────────────────────────────────────────────────────
 const ExpenseSchema = new Schema<IExpense>(
     {
-        title: { type: String, required: true, trim: true },
-        description: { type: String, trim: true },
-        amount: { type: Number, required: true, min: 0 },
-        currency: { type: String, default: 'INR', trim: true, uppercase: true },
-        exchangeRate: { type: Number, default: 1, min: 0 },
-        amountInBaseCurrency: { type: Number, required: true, min: 0 },
+        date: { type: Date, required: true },
+        description: { type: String, required: true, trim: true },
         category: {
             type: String,
             required: true,
+            trim: true,
             enum: [
-                'salary',
-                'fixed',
-                'cac',
-                'project',
-                'overhead',
-                'tax',
-                'transaction-fee',
-                'currency-loss',
+                'Salaries',
+                'Rent',
+                'Utilities',
+                'Cloud Services',
+                'Software Licenses',
+                'Marketing',
+                'HR & Culture',
+                'Infrastructure',
+                'Travel',
+                'Office Supplies',
+                'Professional Services',
+                'Internet & Communication',
+                'Insurance',
+                'Legal & Compliance',
+                'GST Payment',
+                'TDS Payment',
+                'Other',
             ],
         },
-        costType: {
-            type: String,
-            enum: ['fixed', 'variable'],
-            default: 'variable',
-        },
-        expenseLevel: {
+
+        // Classification
+        level: {
             type: String,
             enum: ['company', 'project'],
             default: 'company',
         },
+        type: {
+            type: String,
+            enum: ['fixed', 'variable'],
+            default: 'variable',
+        },
+
+        // Amount
+        amount: { type: Number, required: true, min: 0 },
+
+        // Project linkage
         projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
+        projectName: { type: String, trim: true },
+
+        // Employee linkage
         employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
-        date: { type: Date, required: true },
-        recurring: { type: Boolean, default: false },
+        employeeName: { type: String, trim: true },
+        payrollId: { type: Schema.Types.ObjectId, ref: 'Payroll' },
+
+        // Allocation details
+        isAllocated: { type: Boolean, default: false },
+        allocationPercentage: { type: Number, min: 0, max: 100 },
+        totalMonthlyHours: { type: Number, min: 0 },
+        projectHours: { type: Number, min: 0 },
+
+        // Vendor & Payment
+        vendor: { type: String, trim: true },
+        paidBy: { type: String, trim: true },
+        paymentMethod: {
+            type: String,
+            enum: ['cash', 'bank_transfer', 'credit_card', 'upi', 'cheque'],
+        },
+        transactionRef: { type: String, trim: true },
+
+        // Recurring
+        isRecurring: { type: Boolean, default: false },
         recurringFrequency: {
             type: String,
             enum: ['monthly', 'quarterly', 'yearly'],
         },
-        gstApplicable: { type: Boolean, default: false },
-        gstAmount: { type: Number, default: 0, min: 0 },
-        tdsApplicable: { type: Boolean, default: false },
-        tdsAmount: { type: Number, default: 0, min: 0 },
-        status: {
-            type: String,
-            enum: ['pending', 'approved', 'paid', 'rejected'],
-            default: 'pending',
-        },
-        approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
-        approvedAt: Date,
+        isSynced: { type: Boolean, default: false },
+
+        // Additional
         notes: { type: String, trim: true },
         attachments: [{ type: String }],
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+    }
 );
 
-// ── Indexes ─────────────────────────────────────────────────────────
+// Indexes
+ExpenseSchema.index({ date: 1 });
+ExpenseSchema.index({ level: 1 });
+ExpenseSchema.index({ type: 1 });
 ExpenseSchema.index({ category: 1 });
-ExpenseSchema.index({ costType: 1 });
-ExpenseSchema.index({ expenseLevel: 1 });
 ExpenseSchema.index({ projectId: 1 });
-ExpenseSchema.index({ date: -1 });
-ExpenseSchema.index({ status: 1 });
-ExpenseSchema.index({ category: 1, date: -1 }); // For monthly expense reports
-ExpenseSchema.index({ expenseLevel: 1, costType: 1 }); // For filtered views
-ExpenseSchema.index({ createdBy: 1 });
-
-// Auto-compute amountInBaseCurrency before save
-ExpenseSchema.pre('save', function (next) {
-    this.amountInBaseCurrency = Math.round(this.amount * this.exchangeRate * 100) / 100;
-    next();
-});
+ExpenseSchema.index({ employeeId: 1 });
+ExpenseSchema.index({ createdAt: -1 });
+ExpenseSchema.index({ date: 1, level: 1, type: 1 }); // For dashboard queries
+ExpenseSchema.index({ payrollId: 1 }, { sparse: true }); // For synced expenses
 
 export const Expense = mongoose.model<IExpense>('Expense', ExpenseSchema);

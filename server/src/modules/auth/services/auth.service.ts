@@ -364,6 +364,7 @@ export const refreshAccessToken = async (
 
         return { accessToken };
     } catch (error) {
+        console.log('Error refreshing access token:', error);
         throw new AppError('Invalid or expired refresh token', 401);
     }
 };

@@ -1,21 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    DollarSign,
-    Plus,
-    X,
-    Filter,
-    Edit,
-    Trash2,
-    Search,
-    TrendingUp,
-    Calendar,
-    Building2,
-    FolderKanban,
-    CheckCircle,
-    Clock,
-    ArrowUpRight,
-    CreditCard,
-    FileText,
+    TrendingUp, IndianRupee, Clock, Receipt, Plus, X,
+    Search, Calendar, Building2, Edit2, Trash2,
+    Check, AlertCircle, Loader2, Globe,
 } from 'lucide-react';
 import {
     useGetRevenuesQuery,
@@ -23,1165 +10,659 @@ import {
     useUpdateRevenueMutation,
     useDeleteRevenueMutation,
 } from '@/features/finance/api/financeApi';
-import { useGetProjectsQuery } from '@/features/project/projectApi';
-import { useGetClientsQuery } from '@/features/client/clientApi';
-import type { RevenueSource, RevenueStatus, CreateRevenuePayload, Revenue } from '@/features/finance/types/finance.types';
+import ModalPortal from '@/components/ui/ModalPortal';
 
-function formatCurrency(amount: number, currency = 'INR'): string {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(amount);
+// ── Types ─────────────────────────────────────────────────────────────────
+type RevenueSource = 'manual' | 'invoice' | 'project';
+type RevenueStatus = 'received' | 'pending' | 'partial' | 'overdue';
+type Currency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+
+interface RevenueFormData {
+    date: string;
+    description: string;
+    client: string;
+    project?: string;
+    amount: number;
+    currency: Currency;
+    exchangeRate: number;
+    amountINR: number;
+    gstApplicable: boolean;
+    gstRate: number;
+    gst: number;
+    tdsDeducted: number;
+    totalAmount: number;
+    receivedAmount: number;
+    source: RevenueSource;
+    status: RevenueStatus;
+    invoiceNumber?: string;
+    dueDate?: string;
+    notes?: string;
 }
 
-const SOURCES: { value: RevenueSource; label: string; color: string; bg: string }[] = [
-    { value: 'project', label: 'Project Payment', color: '#10B981', bg: '#ECFDF5' },
-    { value: 'manual', label: 'Manual Entry', color: '#3B82F6', bg: '#EFF6FF' },
-    { value: 'interest', label: 'Interest Income', color: '#8B5CF6', bg: '#F5F3FF' },
-    { value: 'refund', label: 'Refund', color: '#F59E0B', bg: '#FFFBEB' },
-    { value: 'other', label: 'Other', color: '#6B7280', bg: '#F3F4F6' },
+// ── Currency Config ───────────────────────────────────────────────────────
+const CURRENCIES: { code: Currency; symbol: string; name: string }[] = [
+    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+    { code: 'USD', symbol: '$', name: 'US Dollar' },
+    { code: 'EUR', symbol: '€', name: 'Euro' },
+    { code: 'GBP', symbol: '£', name: 'British Pound' },
+    { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
 ];
 
-const STATUSES: { value: RevenueStatus; label: string; color: string; bg: string; icon: React.ReactNode }[] = [
-    { value: 'received', label: 'Received', color: '#10B981', bg: '#ECFDF5', icon: <CheckCircle size={12} /> },
-    { value: 'pending', label: 'Pending', color: '#F59E0B', bg: '#FFFBEB', icon: <Clock size={12} /> },
-    { value: 'partially_received', label: 'Partial', color: '#3B82F6', bg: '#EFF6FF', icon: <ArrowUpRight size={12} /> },
-];
+// ── Format Currency ───────────────────────────────────────────────────────
+const formatCurrency = (value: number, currency: Currency = 'INR') => {
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: currency,
+        maximumFractionDigits: 0,
+    }).format(value);
+};
 
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const formatShortCurrency = (value: number) => {
+    if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
+    if (value >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
+    if (value >= 1000) return `₹${(value / 1000).toFixed(1)} K`;
+    return formatCurrency(value);
+};
+
+// ── Status Badge Component ────────────────────────────────────────────────
+const StatusBadge = ({ status }: { status: RevenueStatus }) => {
+    const config = {
+        received: { label: 'Received', color: '#22C55E', bg: '#F0FDF4', icon: Check },
+        pending: { label: 'Pending', color: '#F59E0B', bg: '#FFFBEB', icon: Clock },
+        partial: { label: 'Partial', color: '#6366F1', bg: '#EEF2FF', icon: AlertCircle },
+        overdue: { label: 'Overdue', color: '#EF4444', bg: '#FEF2F2', icon: AlertCircle },
+    };
+    const { label, color, bg, icon: Icon } = config[status];
+
+    return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: bg, color }}>
+            <Icon size={12} />
+            {label}
+        </span>
+    );
+};
+
+// ── Source Badge Component ────────────────────────────────────────────────
+const SourceBadge = ({ source }: { source: RevenueSource }) => {
+    const config = {
+        manual: { label: 'Manual', color: '#8B5CF6', bg: '#F5F3FF' },
+        invoice: { label: 'Invoice', color: '#0EA5E9', bg: '#F0F9FF' },
+        project: { label: 'Project', color: '#10B981', bg: '#ECFDF5' },
+    };
+    const { label, color, bg } = config[source];
+
+    return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: bg, color }}>
+            {label}
+        </span>
+    );
+};
+
+// ── Empty State Component ─────────────────────────────────────────────────
+const EmptyState = () => (
+    <div className="text-center py-12">
+        <Receipt size={48} className="mx-auto mb-3" style={{ color: '#9CA3AF' }} />
+        <p className="text-sm" style={{ color: '#6B7280' }}>No revenue entries found</p>
+        <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>Add your first revenue entry to get started</p>
+    </div>
+);
 
 export default function FinanceRevenuePage() {
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1;
-
-    const [page, setPage] = useState(1);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sourceFilter, setSourceFilter] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [showModal, setShowModal] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterStatus, setFilterStatus] = useState<RevenueStatus | 'all'>('all');
+    const [filterSource, setFilterSource] = useState<RevenueSource | 'all'>('all');
 
-    const [form, setForm] = useState<CreateRevenuePayload>({
-        title: '',
+    const initialFormData: RevenueFormData = {
+        date: new Date().toISOString().split('T')[0],
+        description: '',
+        client: '',
+        project: '',
         amount: 0,
-        source: 'project',
-        accrualMonth: currentMonth,
-        accrualYear: currentYear,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 0,
+        gstApplicable: true,
+        gstRate: 18,
+        gst: 0,
+        tdsDeducted: 0,
+        totalAmount: 0,
+        receivedAmount: 0,
+        source: 'manual',
+        status: 'pending',
+        invoiceNumber: '',
+        dueDate: '',
+        notes: '',
+    };
+
+    const [formData, setFormData] = useState<RevenueFormData>(initialFormData);
+
+    // API Hooks
+    const { data: revenuesData, isLoading } = useGetRevenuesQuery({
+        status: filterStatus !== 'all' ? filterStatus : undefined,
+        source: filterSource !== 'all' ? filterSource : undefined,
+        search: searchQuery || undefined,
     });
-
-    const { data, isLoading, error } = useGetRevenuesQuery({
-        page,
-        limit: 15,
-        ...(sourceFilter ? { source: sourceFilter } : {}),
-        ...(statusFilter ? { status: statusFilter } : {}),
-        ...(searchQuery ? { search: searchQuery } : {}),
-    });
-
-    const { data: projectsData } = useGetProjectsQuery({});
-    const { data: clientsData } = useGetClientsQuery({ page: 1, limit: 500 });
-
-    const [createRevenue, { isLoading: creating }] = useCreateRevenueMutation();
-    const [updateRevenue] = useUpdateRevenueMutation();
+    const [createRevenue, { isLoading: isCreating }] = useCreateRevenueMutation();
+    const [updateRevenue, { isLoading: isUpdating }] = useUpdateRevenueMutation();
     const [deleteRevenue] = useDeleteRevenueMutation();
 
-    const revenues = data?.revenues || [];
-    const pagination = data?.pagination;
-    const projects = projectsData?.data || [];
-    const clients = clientsData?.data?.clients || [];
+    const revenues = revenuesData?.data?.revenues || [];
 
-    // Calculate summary stats
-    const summaryStats = useMemo(() => {
-        const totalAmount = revenues.reduce((sum, r) => sum + r.amountInBaseCurrency, 0);
-        const receivedAmount = revenues.filter(r => r.status === 'received').reduce((sum, r) => sum + r.amountInBaseCurrency, 0);
-        const pendingAmount = revenues.filter(r => r.status === 'pending' || r.status === 'partially_received').reduce((sum, r) => sum + (r.amountInBaseCurrency - r.amountReceived), 0);
-        const gstAmount = revenues.reduce((sum, r) => sum + (r.gstAmount || 0), 0);
-        const withoutGst = revenues.reduce((sum, r) => sum + (r.amountWithoutGst || 0), 0);
-
-        return { totalAmount, receivedAmount, pendingAmount, gstAmount, withoutGst };
-    }, [revenues]);
-
-    const openCreate = () => {
-        setEditingId(null);
-        setForm({
-            title: '',
-            amount: 0,
-            source: 'project',
-            accrualMonth: currentMonth,
-            accrualYear: currentYear,
-        });
-        setShowModal(true);
+    // Calculate metrics from actual data
+    const metrics = {
+        totalRevenue: revenues.reduce((acc: number, e: any) => acc + (e.amountINR || e.amount || 0), 0),
+        received: revenues.reduce((acc: number, e: any) => acc + (e.receivedAmount || 0), 0),
+        pending: revenues.reduce((acc: number, e: any) => {
+            const total = e.amountINR || e.amount || 0;
+            const received = e.receivedAmount || 0;
+            return acc + (total - received);
+        }, 0),
+        gstCollected: revenues
+            .filter((e: any) => e.status === 'received')
+            .reduce((acc: number, e: any) => acc + (e.gst || 0), 0),
     };
 
-    const openEdit = (rev: Revenue) => {
-        setEditingId(rev._id);
-        setForm({
-            title: rev.title,
-            description: rev.description || '',
-            amount: rev.amount,
-            currency: rev.currency,
-            exchangeRate: rev.exchangeRate,
-            source: rev.source,
-            projectId: typeof rev.projectId === 'object' ? rev.projectId?._id : rev.projectId,
-            clientId: typeof rev.clientId === 'object' ? rev.clientId?._id : rev.clientId,
-            accrualMonth: rev.accrualMonth,
-            accrualYear: rev.accrualYear,
-            gstApplicable: rev.gstApplicable,
-            gstRate: rev.gstRate,
-            tdsApplicable: rev.tdsApplicable,
-            tdsRate: rev.tdsRate,
-            notes: rev.notes || '',
-        });
-        setShowModal(true);
-    };
+    const metricCards = [
+        { label: 'Total Revenue', value: formatShortCurrency(metrics.totalRevenue), fullValue: formatCurrency(metrics.totalRevenue), icon: TrendingUp, color: '#22C55E', bg: '#F0FDF4' },
+        { label: 'Received', value: formatShortCurrency(metrics.received), fullValue: formatCurrency(metrics.received), icon: IndianRupee, color: '#6366F1', bg: '#EEF2FF' },
+        { label: 'Pending', value: formatShortCurrency(metrics.pending), fullValue: formatCurrency(metrics.pending), icon: Clock, color: '#F59E0B', bg: '#FFFBEB' },
+        { label: 'GST Collected', value: formatShortCurrency(metrics.gstCollected), fullValue: formatCurrency(metrics.gstCollected), icon: Receipt, color: '#0EA5E9', bg: '#F0F9FF' },
+    ];
+
+    // Auto-calculate amounts when form data changes
+    useEffect(() => {
+        const amountINR = formData.currency === 'INR' ? formData.amount : formData.amount * formData.exchangeRate;
+        const gst = formData.gstApplicable ? (amountINR * formData.gstRate) / 100 : 0;
+        const totalAmount = amountINR + gst - formData.tdsDeducted;
+
+        setFormData(prev => ({
+            ...prev,
+            amountINR,
+            gst,
+            totalAmount,
+        }));
+    }, [formData.amount, formData.currency, formData.exchangeRate, formData.gstApplicable, formData.gstRate, formData.tdsDeducted]);
 
     const handleSubmit = async () => {
-        if (editingId) {
-            await updateRevenue({ id: editingId, data: form });
-        } else {
-            await createRevenue(form);
+        try {
+            if (editingId) {
+                await updateRevenue({ id: editingId, ...formData }).unwrap();
+            } else {
+                await createRevenue(formData).unwrap();
+            }
+            setShowAddModal(false);
+            setEditingId(null);
+            setFormData(initialFormData);
+        } catch (error) {
+            console.error('Failed to save revenue:', error);
         }
-        setShowModal(false);
+    };
+
+    const handleEdit = (entry: any) => {
+        setFormData({
+            ...initialFormData,
+            ...entry,
+            date: entry.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+            dueDate: entry.dueDate?.split('T')[0] || '',
+        });
+        setEditingId(entry._id);
+        setShowAddModal(true);
     };
 
     const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this revenue entry?')) {
-            await deleteRevenue(id);
+            try {
+                await deleteRevenue(id).unwrap();
+            } catch (error) {
+                console.error('Failed to delete revenue:', error);
+            }
         }
     };
 
-    const getSourceInfo = (source: RevenueSource) => SOURCES.find(s => s.value === source) || SOURCES[4];
-    const getStatusInfo = (status: RevenueStatus) => STATUSES.find(s => s.value === status) || STATUSES[1];
-
-    // Handle API errors gracefully
-    const hasApiError = error && 'status' in error;
+    const openAddModal = () => {
+        setFormData(initialFormData);
+        setEditingId(null);
+        setShowAddModal(true);
+    };
 
     return (
-        <div className="finance-revenue">
-            {/* Header */}
-            <div className="page-header">
-                <div className="header-left">
-                    <div className="header-icon">
-                        <TrendingUp size={24} />
-                    </div>
-                    <div>
-                        <h1 className="page-title">Revenue</h1>
-                        <p className="page-subtitle">Track and manage all company revenue</p>
-                    </div>
-                </div>
-                <button className="btn-primary" onClick={openCreate}>
-                    <Plus size={16} />
-                    Add Revenue
-                </button>
+        <div className="space-y-6">
+            {/* ── Header ──────────────────────────────────────────────────── */}
+            <div>
+                <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Revenue</h1>
+                <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Track and manage company revenue</p>
             </div>
 
-            {/* Summary Cards */}
-            <div className="summary-cards">
-                <div className="summary-card">
-                    <div className="summary-icon" style={{ background: '#ECFDF5', color: '#10B981' }}>
-                        <DollarSign size={20} />
-                    </div>
-                    <div className="summary-info">
-                        <span className="summary-label">Total Revenue</span>
-                        <span className="summary-value">{formatCurrency(summaryStats.totalAmount)}</span>
-                    </div>
-                </div>
-                <div className="summary-card">
-                    <div className="summary-icon" style={{ background: '#EFF6FF', color: '#3B82F6' }}>
-                        <CheckCircle size={20} />
-                    </div>
-                    <div className="summary-info">
-                        <span className="summary-label">Received</span>
-                        <span className="summary-value">{formatCurrency(summaryStats.receivedAmount)}</span>
-                    </div>
-                </div>
-                <div className="summary-card">
-                    <div className="summary-icon" style={{ background: '#FFFBEB', color: '#F59E0B' }}>
-                        <Clock size={20} />
-                    </div>
-                    <div className="summary-info">
-                        <span className="summary-label">Pending</span>
-                        <span className="summary-value">{formatCurrency(summaryStats.pendingAmount)}</span>
-                    </div>
-                </div>
-                <div className="summary-card">
-                    <div className="summary-icon" style={{ background: '#F5F3FF', color: '#8B5CF6' }}>
-                        <CreditCard size={20} />
-                    </div>
-                    <div className="summary-info">
-                        <span className="summary-label">GST Collected</span>
-                        <span className="summary-value">{formatCurrency(summaryStats.gstAmount)}</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Filters */}
-            <div className="filters-bar">
-                <div className="search-box">
-                    <Search size={16} />
-                    <input
-                        type="text"
-                        placeholder="Search revenue..."
-                        value={searchQuery}
-                        onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-                    />
-                </div>
-                <div className="filter-group">
-                    <Filter size={16} />
-                    <select
-                        value={sourceFilter}
-                        onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }}
-                        className="filter-select"
+            {/* ── Metric Cards ────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {metricCards.map((card) => (
+                    <div
+                        key={card.label}
+                        className="rounded-xl border p-4 transition-all hover:shadow-md"
+                        style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}
                     >
-                        <option value="">All Sources</option>
-                        {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: card.bg }}>
+                                <card.icon size={20} style={{ color: card.color }} />
+                            </div>
+                        </div>
+                        <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
+                        <p className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }} title={card.fullValue}>{card.value}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Filters & Search ────────────────────────────────────────── */}
+            <div className="rounded-xl border p-4" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative flex-1 min-w-[240px]">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9CA3AF' }} />
+                        <input
+                            type="text"
+                            placeholder="Search by description, client, or invoice..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 rounded-lg border text-sm"
+                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                        />
+                    </div>
+                    <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value as RevenueStatus | 'all')}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                    >
+                        <option value="all">All Status</option>
+                        <option value="received">Received</option>
+                        <option value="pending">Pending</option>
+                        <option value="partial">Partial</option>
+                        <option value="overdue">Overdue</option>
                     </select>
                     <select
-                        value={statusFilter}
-                        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                        className="filter-select"
+                        value={filterSource}
+                        onChange={(e) => setFilterSource(e.target.value as RevenueSource | 'all')}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
                     >
-                        <option value="">All Status</option>
-                        {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        <option value="all">All Sources</option>
+                        <option value="manual">Manual</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="project">Project</option>
                     </select>
                 </div>
             </div>
 
-            {/* Content */}
-            {isLoading ? (
-                <div className="loading-state">
-                    <div className="loading-spinner" />
-                    <span>Loading revenue data...</span>
-                </div>
-            ) : hasApiError ? (
-                <div className="empty-state">
-                    <TrendingUp size={48} strokeWidth={1.5} />
-                    <h3>Revenue module not configured</h3>
-                    <p>The backend API for revenue management needs to be set up. Please contact your administrator.</p>
-                </div>
-            ) : revenues.length === 0 ? (
-                <div className="empty-state">
-                    <TrendingUp size={48} strokeWidth={1.5} />
-                    <h3>No revenue entries found</h3>
-                    <p>Start adding revenue entries to track your company income.</p>
-                    <button className="btn-primary" onClick={openCreate}>
-                        <Plus size={16} />
-                        Add First Revenue
-                    </button>
-                </div>
-            ) : (
-                <>
-                    {/* Revenue List */}
-                    <div className="revenue-list">
-                        {revenues.map((rev, index) => {
-                            const sourceInfo = getSourceInfo(rev.source);
-                            const statusInfo = getStatusInfo(rev.status);
-                            const clientName = typeof rev.clientId === 'object' ? rev.clientId?.name || rev.clientId?.companyName : '';
-                            const projectName = typeof rev.projectId === 'object' ? rev.projectId?.name : '';
-                            const invoiceNumber = typeof rev.invoiceId === 'object' ? rev.invoiceId?.invoiceNumber : '';
-
-                            return (
-                                <div key={rev._id} className="revenue-item" style={{ animationDelay: `${index * 30}ms` }}>
-                                    <div className="revenue-main">
-                                        <div className="revenue-icon" style={{ background: sourceInfo.bg, color: sourceInfo.color }}>
-                                            <DollarSign size={18} />
-                                        </div>
-                                        <div className="revenue-details">
-                                            <h4 className="revenue-title">{rev.title}</h4>
-                                            <div className="revenue-meta">
-                                                {projectName && (
-                                                    <span className="meta-item">
-                                                        <FolderKanban size={12} />
-                                                        {projectName}
-                                                    </span>
-                                                )}
-                                                {clientName && (
-                                                    <span className="meta-item">
-                                                        <Building2 size={12} />
-                                                        {clientName}
-                                                    </span>
-                                                )}
-                                                {invoiceNumber && (
-                                                    <span className="meta-item">
-                                                        <FileText size={12} />
-                                                        {invoiceNumber}
-                                                    </span>
-                                                )}
-                                                <span className="meta-item">
-                                                    <Calendar size={12} />
-                                                    {MONTH_NAMES[rev.accrualMonth - 1]} {rev.accrualYear}
+            {/* ── Revenue Entries Table ───────────────────────────────────── */}
+            <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
+                    </div>
+                ) : revenues.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr style={{ backgroundColor: '#F9FAFB' }}>
+                                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Date</th>
+                                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Description</th>
+                                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Client</th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Amount</th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>GST</th>
+                                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Total (INR)</th>
+                                    <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Source</th>
+                                    <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Status</th>
+                                    <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7280' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {revenues.map((entry: any, index: number) => (
+                                    <tr
+                                        key={entry._id}
+                                        className="transition-colors hover:bg-gray-50"
+                                        style={{ borderTop: index > 0 ? '1px solid #E5E7EB' : undefined }}
+                                    >
+                                        <td className="px-5 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar size={14} style={{ color: '#9CA3AF' }} />
+                                                <span className="text-sm" style={{ color: '#6B7280' }}>
+                                                    {new Date(entry.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                 </span>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="revenue-right">
-                                        <div className="revenue-amount-section">
-                                            <span className="revenue-amount">{formatCurrency(rev.amountInBaseCurrency)}</span>
-                                            {rev.gstApplicable && rev.gstAmount > 0 && (
-                                                <span className="revenue-gst">incl. GST {formatCurrency(rev.gstAmount)}</span>
-                                            )}
-                                        </div>
-                                        <div className="revenue-badges">
-                                            <span className="badge source-badge" style={{ background: sourceInfo.bg, color: sourceInfo.color }}>
-                                                {sourceInfo.label}
-                                            </span>
-                                            <span className="badge status-badge" style={{ background: statusInfo.bg, color: statusInfo.color }}>
-                                                {statusInfo.icon}
-                                                {statusInfo.label}
-                                            </span>
-                                        </div>
-                                        <div className="revenue-actions">
-                                            <button className="action-btn" title="Edit" onClick={() => openEdit(rev)}>
-                                                <Edit size={14} />
-                                            </button>
-                                            <button className="action-btn danger" title="Delete" onClick={() => handleDelete(rev._id)}>
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                                        </td>
+                                        <td className="px-5 py-3">
+                                            <div>
+                                                <p className="text-sm font-medium" style={{ color: '#111827' }}>{entry.description}</p>
+                                                {entry.invoiceNumber && <p className="text-xs mt-0.5" style={{ color: '#9CA3AF' }}>{entry.invoiceNumber}</p>}
+                                                {entry.currency !== 'INR' && (
+                                                    <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#6366F1' }}>
+                                                        <Globe size={10} />
+                                                        {formatCurrency(entry.amount, entry.currency)} @ {entry.exchangeRate}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <Building2 size={14} style={{ color: '#9CA3AF' }} />
+                                                <div>
+                                                    <p className="text-sm" style={{ color: '#111827' }}>{entry.client}</p>
+                                                    {entry.project && <p className="text-xs" style={{ color: '#9CA3AF' }}>{entry.project}</p>}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right" style={{ color: '#111827' }}>
+                                            {formatCurrency(entry.amountINR || entry.amount)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right" style={{ color: '#9CA3AF' }}>
+                                            {formatCurrency(entry.gst || 0)}
+                                        </td>
+                                        <td className="px-5 py-3 text-sm text-right font-semibold" style={{ color: '#22C55E' }}>
+                                            {formatCurrency(entry.totalAmount || entry.amountINR || entry.amount)}
+                                        </td>
+                                        <td className="px-5 py-3 text-center">
+                                            <SourceBadge source={entry.source} />
+                                        </td>
+                                        <td className="px-5 py-3 text-center">
+                                            <StatusBadge status={entry.status} />
+                                        </td>
+                                        <td className="px-5 py-3">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                    onClick={() => handleEdit(entry)}
+                                                    className="p-1.5 rounded-md transition-colors hover:bg-gray-100"
+                                                    style={{ color: '#9CA3AF' }}
+                                                    title="Edit"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(entry._id)}
+                                                    className="p-1.5 rounded-md transition-colors hover:bg-red-50"
+                                                    style={{ color: '#9CA3AF' }}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
+                ) : (
+                    <EmptyState />
+                )}
+            </div>
 
-                    {/* Pagination */}
-                    {pagination && pagination.pages > 1 && (
-                        <div className="pagination">
-                            <button
-                                className="page-btn"
-                                disabled={page === 1}
-                                onClick={() => setPage(page - 1)}
-                            >
-                                Previous
+            {/* ── Add/Edit Revenue Modal ──────────────────────────────────── */}
+            {showAddModal && (
+                <ModalPortal>
+                    <div className="w-full max-w-2xl rounded-xl shadow-xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'white' }}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10" style={{ borderColor: '#E5E7EB', backgroundColor: 'white' }}>
+                            <h2 className="text-lg font-semibold" style={{ color: '#111827' }}>
+                                {editingId ? 'Edit Revenue Entry' : 'Add Revenue Entry'}
+                            </h2>
+                            <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-md hover:bg-gray-100" style={{ color: '#6B7280' }}>
+                                <X size={20} />
                             </button>
-                            <div className="page-numbers">
-                                {Array.from({ length: pagination.pages }, (_, i) => i + 1)
-                                    .filter(p => p === 1 || p === pagination.pages || Math.abs(p - page) <= 1)
-                                    .map((p, idx, arr) => (
-                                        <span key={`page-${p}`}>
-                                            {idx > 0 && arr[idx - 1] !== p - 1 && <span className="page-ellipsis">...</span>}
-                                            <button
-                                                className={`page-btn ${page === p ? 'active' : ''}`}
-                                                onClick={() => setPage(p)}
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Date *</label>
+                                    <input
+                                        type="date"
+                                        value={formData.date}
+                                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Invoice Number</label>
+                                    <input
+                                        type="text"
+                                        placeholder="INV-2025-001"
+                                        value={formData.invoiceNumber}
+                                        onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Description *</label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter description"
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                                    style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Client Name *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter client name"
+                                        value={formData.client}
+                                        onChange={(e) => setFormData({ ...formData, client: e.target.value })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Project (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter project name"
+                                        value={formData.project}
+                                        onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Currency & Amount Section */}
+                            <div className="p-4 rounded-lg" style={{ backgroundColor: '#F9FAFB' }}>
+                                <h3 className="text-sm font-semibold mb-3" style={{ color: '#374151' }}>Amount Details</h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Currency</label>
+                                        <select
+                                            value={formData.currency}
+                                            onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency, exchangeRate: e.target.value === 'INR' ? 1 : formData.exchangeRate })}
+                                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                        >
+                                            {CURRENCIES.map(c => (
+                                                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Amount</label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={formData.amount || ''}
+                                            onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                        />
+                                    </div>
+                                    {formData.currency !== 'INR' && (
+                                        <div>
+                                            <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Exchange Rate</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="1.00"
+                                                value={formData.exchangeRate || ''}
+                                                onChange={(e) => setFormData({ ...formData, exchangeRate: parseFloat(e.target.value) || 1 })}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                {formData.currency !== 'INR' && (
+                                    <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
+                                        Amount in INR: {formatCurrency(formData.amountINR)}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* GST & TDS Section */}
+                            <div className="p-4 rounded-lg" style={{ backgroundColor: '#F9FAFB' }}>
+                                <h3 className="text-sm font-semibold mb-3" style={{ color: '#374151' }}>Tax Details</h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="flex items-center gap-2 text-sm font-medium mb-1.5" style={{ color: '#374151' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.gstApplicable}
+                                                onChange={(e) => setFormData({ ...formData, gstApplicable: e.target.checked })}
+                                                className="rounded"
+                                            />
+                                            GST Applicable
+                                        </label>
+                                        {formData.gstApplicable && (
+                                            <select
+                                                value={formData.gstRate}
+                                                onChange={(e) => setFormData({ ...formData, gstRate: parseFloat(e.target.value) })}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm mt-1"
+                                                style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
                                             >
-                                                {p}
-                                            </button>
-                                        </span>
-                                    ))}
-                            </div>
-                            <button
-                                className="page-btn"
-                                disabled={page === pagination.pages}
-                                onClick={() => setPage(page + 1)}
-                            >
-                                Next
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Modal */}
-            {showModal && (
-                <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2>{editingId ? 'Edit Revenue' : 'Add Revenue'}</h2>
-                            <button className="modal-close" onClick={() => setShowModal(false)}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="form-grid">
-                                <div className="form-field full">
-                                    <label>Title *</label>
-                                    <input
-                                        type="text"
-                                        value={form.title}
-                                        onChange={(e) => setForm({ ...form, title: e.target.value })}
-                                        placeholder="Revenue title"
-                                    />
+                                                <option value={5}>5%</option>
+                                                <option value={12}>12%</option>
+                                                <option value={18}>18%</option>
+                                                <option value={28}>28%</option>
+                                            </select>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>GST Amount</label>
+                                        <input
+                                            type="text"
+                                            value={formatCurrency(formData.gst)}
+                                            disabled
+                                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                                            style={{ borderColor: '#E5E7EB', backgroundColor: '#F3F4F6', color: '#6B7280' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>TDS Deducted</label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={formData.tdsDeducted || ''}
+                                            onChange={(e) => setFormData({ ...formData, tdsDeducted: parseFloat(e.target.value) || 0 })}
+                                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                        />
+                                    </div>
                                 </div>
+                                <div className="mt-3 pt-3 border-t" style={{ borderColor: '#E5E7EB' }}>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-semibold" style={{ color: '#374151' }}>Total Amount (INR)</span>
+                                        <span className="text-lg font-bold" style={{ color: '#22C55E' }}>{formatCurrency(formData.totalAmount)}</span>
+                                    </div>
+                                </div>
+                            </div>
 
-                                <div className="form-field">
-                                    <label>Amount *</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Status</label>
+                                    <select
+                                        value={formData.status}
+                                        onChange={(e) => setFormData({ ...formData, status: e.target.value as RevenueStatus })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                    >
+                                        <option value="pending">Pending</option>
+                                        <option value="partial">Partial</option>
+                                        <option value="received">Received</option>
+                                        <option value="overdue">Overdue</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Received Amount</label>
                                     <input
                                         type="number"
-                                        value={form.amount}
-                                        onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
                                         placeholder="0"
-                                    />
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Source *</label>
-                                    <select
-                                        value={form.source}
-                                        onChange={(e) => setForm({ ...form, source: e.target.value as RevenueSource })}
-                                    >
-                                        {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                                    </select>
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Accrual Month *</label>
-                                    <select
-                                        value={form.accrualMonth}
-                                        onChange={(e) => setForm({ ...form, accrualMonth: Number(e.target.value) })}
-                                    >
-                                        {MONTH_NAMES.map((m, i) => (
-                                            <option key={i} value={i + 1}>{m}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Accrual Year *</label>
-                                    <select
-                                        value={form.accrualYear}
-                                        onChange={(e) => setForm({ ...form, accrualYear: Number(e.target.value) })}
-                                    >
-                                        {[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                                            <option key={y} value={y}>{y}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Project</label>
-                                    <select
-                                        value={form.projectId || ''}
-                                        onChange={(e) => setForm({ ...form, projectId: e.target.value || undefined })}
-                                    >
-                                        <option value="">Select Project</option>
-                                        {projects.map((p: any) => <option key={p._id} value={p._id}>{p.name}</option>)}
-                                    </select>
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Client</label>
-                                    <select
-                                        value={form.clientId || ''}
-                                        onChange={(e) => setForm({ ...form, clientId: e.target.value || undefined })}
-                                    >
-                                        <option value="">Select Client</option>
-                                        {clients.map((c: any) => <option key={c._id} value={c._id}>{c.name || c.companyName}</option>)}
-                                    </select>
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Currency</label>
-                                    <input
-                                        type="text"
-                                        value={form.currency || 'INR'}
-                                        onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="form-field">
-                                    <label>Exchange Rate</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={form.exchangeRate || 1}
-                                        onChange={(e) => setForm({ ...form, exchangeRate: Number(e.target.value) })}
-                                    />
-                                </div>
-
-                                <div className="form-field checkbox-field">
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={form.gstApplicable || false}
-                                            onChange={(e) => setForm({ ...form, gstApplicable: e.target.checked })}
-                                        />
-                                        GST Applicable
-                                    </label>
-                                    {form.gstApplicable && (
-                                        <div className="inline-fields">
-                                            <input
-                                                type="number"
-                                                placeholder="GST Rate %"
-                                                value={form.gstRate || 18}
-                                                onChange={(e) => setForm({ ...form, gstRate: Number(e.target.value) })}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="form-field checkbox-field">
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={form.tdsApplicable || false}
-                                            onChange={(e) => setForm({ ...form, tdsApplicable: e.target.checked })}
-                                        />
-                                        TDS Applicable
-                                    </label>
-                                    {form.tdsApplicable && (
-                                        <div className="inline-fields">
-                                            <input
-                                                type="number"
-                                                placeholder="TDS Rate %"
-                                                value={form.tdsRate || 10}
-                                                onChange={(e) => setForm({ ...form, tdsRate: Number(e.target.value) })}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="form-field full">
-                                    <label>Description</label>
-                                    <textarea
-                                        rows={2}
-                                        value={form.description || ''}
-                                        onChange={(e) => setForm({ ...form, description: e.target.value })}
-                                        placeholder="Optional description"
-                                    />
-                                </div>
-
-                                <div className="form-field full">
-                                    <label>Notes</label>
-                                    <textarea
-                                        rows={2}
-                                        value={form.notes || ''}
-                                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                                        placeholder="Internal notes"
+                                        value={formData.receivedAmount || ''}
+                                        onChange={(e) => setFormData({ ...formData, receivedAmount: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
                                     />
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Due Date</label>
+                                <input
+                                    type="date"
+                                    value={formData.dueDate}
+                                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                                    style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Notes</label>
+                                <textarea
+                                    rows={3}
+                                    placeholder="Add any additional notes..."
+                                    value={formData.notes}
+                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
+                                    style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                />
+                            </div>
                         </div>
-                        <div className="modal-footer">
-                            <button className="btn-secondary" onClick={() => setShowModal(false)}>
+
+                        <div className="flex justify-end gap-3 px-6 py-4 border-t sticky bottom-0" style={{ borderColor: '#E5E7EB', backgroundColor: 'white' }}>
+                            <button
+                                onClick={() => setShowAddModal(false)}
+                                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-gray-50"
+                                style={{ border: '1px solid #E5E7EB', color: '#6B7280' }}
+                            >
                                 Cancel
                             </button>
                             <button
-                                className="btn-primary"
                                 onClick={handleSubmit}
-                                disabled={creating || !form.title || !form.amount}
+                                disabled={isCreating || isUpdating || !formData.description || !formData.client || !formData.amount}
+                                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                                style={{ background: 'var(--color-primary)', color: 'white' }}
                             >
-                                {creating ? 'Saving...' : editingId ? 'Update' : 'Create'}
+                                {(isCreating || isUpdating) && <Loader2 size={16} className="animate-spin" />}
+                                {editingId ? 'Update Entry' : 'Add Entry'}
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
 
-            <style>{`
-                .finance-revenue {
-                    padding: 1.5rem 2rem;
-                    max-width: 1400px;
-                    margin: 0 auto;
-                    animation: fadeIn 0.4s ease-out;
-                }
-
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(8px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-
-                @keyframes slideUp {
-                    from { opacity: 0; transform: translateY(16px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-
-                /* Header */
-                .page-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 1.5rem;
-                }
-
-                .header-left {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                }
-
-                .header-icon {
-                    width: 48px;
-                    height: 48px;
-                    border-radius: 14px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: linear-gradient(135deg, #10B98120, #10B98110);
-                    color: #10B981;
-                    border: 1px solid #10B98125;
-                }
-
-                .page-title {
-                    font-size: 1.75rem;
-                    font-weight: 700;
-                    color: var(--color-text-primary, #111);
-                    margin: 0;
-                    font-family: 'Outfit', sans-serif;
-                }
-
-                .page-subtitle {
-                    color: var(--color-text-muted, #666);
-                    margin: 0.25rem 0 0 0;
-                    font-size: 0.9rem;
-                }
-
-                .btn-primary {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    padding: 0.65rem 1.25rem;
-                    border: none;
-                    border-radius: 10px;
-                    background: linear-gradient(135deg, #10B981, #059669);
-                    color: white;
-                    font-weight: 600;
-                    font-size: 0.875rem;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
-                }
-
-                .btn-primary:hover {
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
-                }
-
-                .btn-primary:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                    transform: none;
-                }
-
-                .btn-secondary {
-                    padding: 0.65rem 1.25rem;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 10px;
-                    background: transparent;
-                    color: var(--color-text-primary, #111);
-                    font-weight: 500;
-                    font-size: 0.875rem;
-                    cursor: pointer;
-                    transition: all 0.15s;
-                }
-
-                .btn-secondary:hover {
-                    background: var(--color-bg-subtle, #f3f4f6);
-                }
-
-                /* Summary Cards */
-                .summary-cards {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                }
-
-                .summary-card {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                    padding: 1.25rem;
-                    background: var(--color-bg-surface, #fff);
-                    border-radius: 14px;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    animation: slideUp 0.4s ease-out backwards;
-                }
-
-                .summary-card:nth-child(1) { animation-delay: 0ms; }
-                .summary-card:nth-child(2) { animation-delay: 50ms; }
-                .summary-card:nth-child(3) { animation-delay: 100ms; }
-                .summary-card:nth-child(4) { animation-delay: 150ms; }
-
-                .summary-icon {
-                    width: 44px;
-                    height: 44px;
-                    border-radius: 12px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
-
-                .summary-info {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-
-                .summary-label {
-                    font-size: 0.75rem;
-                    font-weight: 500;
-                    color: var(--color-text-muted, #666);
-                    text-transform: uppercase;
-                    letter-spacing: 0.03em;
-                }
-
-                .summary-value {
-                    font-size: 1.25rem;
-                    font-weight: 700;
-                    color: var(--color-text-primary, #111);
-                    font-family: 'Outfit', sans-serif;
-                }
-
-                /* Filters */
-                .filters-bar {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                    flex-wrap: wrap;
-                }
-
-                .search-box {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.5rem 1rem;
-                    background: var(--color-bg-surface, #fff);
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 10px;
-                    min-width: 280px;
-                    color: var(--color-text-muted, #999);
-                }
-
-                .search-box input {
-                    border: none;
-                    background: transparent;
-                    outline: none;
-                    flex: 1;
-                    font-size: 0.875rem;
-                    color: var(--color-text-primary, #111);
-                }
-
-                .search-box input::placeholder {
-                    color: var(--color-text-muted, #999);
-                }
-
-                .filter-group {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.75rem;
-                    color: var(--color-text-muted, #666);
-                }
-
-                .filter-select {
-                    padding: 0.5rem 0.75rem;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 8px;
-                    background: var(--color-bg-surface, #fff);
-                    color: var(--color-text-primary, #111);
-                    font-size: 0.85rem;
-                    cursor: pointer;
-                }
-
-                /* Revenue List */
-                .revenue-list {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.75rem;
-                }
-
-                .revenue-item {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 1.25rem;
-                    background: var(--color-bg-surface, #fff);
-                    border-radius: 14px;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    animation: slideUp 0.3s ease-out backwards;
-                    transition: all 0.2s;
-                }
-
-                .revenue-item:hover {
-                    border-color: var(--color-primary, #3b82f6);
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-                }
-
-                .revenue-main {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                }
-
-                .revenue-icon {
-                    width: 44px;
-                    height: 44px;
-                    border-radius: 12px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
-
-                .revenue-details {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-
-                .revenue-title {
-                    font-size: 0.95rem;
-                    font-weight: 600;
-                    color: var(--color-text-primary, #111);
-                    margin: 0;
-                }
-
-                .revenue-meta {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                    flex-wrap: wrap;
-                }
-
-                .meta-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    font-size: 0.75rem;
-                    color: var(--color-text-muted, #666);
-                }
-
-                .revenue-right {
-                    display: flex;
-                    align-items: center;
-                    gap: 1.5rem;
-                }
-
-                .revenue-amount-section {
-                    text-align: right;
-                }
-
-                .revenue-amount {
-                    font-size: 1.15rem;
-                    font-weight: 700;
-                    color: var(--color-text-primary, #111);
-                    font-family: 'Outfit', sans-serif;
-                }
-
-                .revenue-gst {
-                    display: block;
-                    font-size: 0.7rem;
-                    color: var(--color-text-muted, #999);
-                }
-
-                .revenue-badges {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                    align-items: flex-end;
-                }
-
-                .badge {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 0.25rem 0.6rem;
-                    border-radius: 6px;
-                    font-size: 0.7rem;
-                    font-weight: 600;
-                }
-
-                .revenue-actions {
-                    display: flex;
-                    gap: 4px;
-                }
-
-                .action-btn {
-                    width: 32px;
-                    height: 32px;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 8px;
-                    background: transparent;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: var(--color-text-muted, #666);
-                    transition: all 0.15s;
-                }
-
-                .action-btn:hover {
-                    background: var(--color-bg-subtle, #f3f4f6);
-                    color: var(--color-text-primary, #111);
-                }
-
-                .action-btn.danger:hover {
-                    background: #FEF2F2;
-                    color: #EF4444;
-                    border-color: #FECACA;
-                }
-
-                /* Pagination */
-                .pagination {
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    gap: 0.5rem;
-                    margin-top: 2rem;
-                }
-
-                .page-numbers {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                }
-
-                .page-btn {
-                    padding: 0.5rem 1rem;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 8px;
-                    background: var(--color-bg-surface, #fff);
-                    color: var(--color-text-primary, #111);
-                    font-size: 0.85rem;
-                    cursor: pointer;
-                    transition: all 0.15s;
-                }
-
-                .page-btn:hover:not(:disabled) {
-                    background: var(--color-bg-subtle, #f3f4f6);
-                }
-
-                .page-btn:disabled {
-                    opacity: 0.5;
-                    cursor: not-allowed;
-                }
-
-                .page-btn.active {
-                    background: var(--color-primary, #3b82f6);
-                    color: white;
-                    border-color: transparent;
-                }
-
-                .page-ellipsis {
-                    padding: 0 0.5rem;
-                    color: var(--color-text-muted, #999);
-                }
-
-                /* Empty & Loading States */
-                .empty-state, .loading-state {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 4rem 2rem;
-                    background: var(--color-bg-surface, #fff);
-                    border-radius: 16px;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    text-align: center;
-                    gap: 1rem;
-                }
-
-                .empty-state h3 {
-                    font-size: 1.1rem;
-                    font-weight: 600;
-                    color: var(--color-text-primary, #111);
-                    margin: 0;
-                }
-
-                .empty-state p {
-                    color: var(--color-text-muted, #666);
-                    margin: 0;
-                    font-size: 0.9rem;
-                }
-
-                .loading-spinner {
-                    width: 40px;
-                    height: 40px;
-                    border: 3px solid var(--color-border-default, #e5e7eb);
-                    border-top-color: var(--color-primary, #3b82f6);
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                }
-
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-
-                /* Modal */
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.5);
-                    backdrop-filter: blur(4px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 1000;
-                    padding: 1rem;
-                    animation: fadeIn 0.2s ease-out;
-                }
-
-                .modal {
-                    background: var(--color-bg-surface, #fff);
-                    border-radius: 20px;
-                    width: 100%;
-                    max-width: 640px;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
-                    animation: slideUp 0.3s ease-out;
-                }
-
-                .modal-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 1.25rem 1.5rem;
-                    border-bottom: 1px solid var(--color-border-default, #e5e7eb);
-                }
-
-                .modal-header h2 {
-                    margin: 0;
-                    font-size: 1.15rem;
-                    font-weight: 600;
-                    color: var(--color-text-primary, #111);
-                }
-
-                .modal-close {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    color: var(--color-text-muted, #666);
-                    padding: 4px;
-                    border-radius: 6px;
-                    transition: all 0.15s;
-                }
-
-                .modal-close:hover {
-                    background: var(--color-bg-subtle, #f3f4f6);
-                    color: var(--color-text-primary, #111);
-                }
-
-                .modal-body {
-                    padding: 1.5rem;
-                }
-
-                .modal-footer {
-                    display: flex;
-                    gap: 0.75rem;
-                    justify-content: flex-end;
-                    padding: 1rem 1.5rem;
-                    border-top: 1px solid var(--color-border-default, #e5e7eb);
-                }
-
-                .form-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 1rem;
-                }
-
-                .form-field {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                }
-
-                .form-field.full {
-                    grid-column: 1 / -1;
-                }
-
-                .form-field label {
-                    font-size: 0.8rem;
-                    font-weight: 500;
-                    color: var(--color-text-secondary, #666);
-                }
-
-                .form-field input,
-                .form-field select,
-                .form-field textarea {
-                    padding: 0.6rem 0.875rem;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 10px;
-                    font-size: 0.875rem;
-                    background: var(--color-bg-surface, #fff);
-                    color: var(--color-text-primary, #111);
-                    transition: border-color 0.15s;
-                }
-
-                .form-field input:focus,
-                .form-field select:focus,
-                .form-field textarea:focus {
-                    outline: none;
-                    border-color: var(--color-primary, #3b82f6);
-                }
-
-                .form-field textarea {
-                    resize: vertical;
-                }
-
-                .checkbox-field label {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    cursor: pointer;
-                }
-
-                .checkbox-field input[type="checkbox"] {
-                    width: auto;
-                    cursor: pointer;
-                }
-
-                .inline-fields {
-                    display: flex;
-                    gap: 0.5rem;
-                    margin-top: 0.5rem;
-                }
-
-                .inline-fields input {
-                    flex: 1;
-                    padding: 0.5rem 0.75rem;
-                    border: 1px solid var(--color-border-default, #e5e7eb);
-                    border-radius: 8px;
-                    font-size: 0.85rem;
-                }
-
-                /* Responsive */
-                @media (max-width: 768px) {
-                    .finance-revenue {
-                        padding: 1rem;
-                    }
-
-                    .page-header {
-                        flex-direction: column;
-                        align-items: flex-start;
-                        gap: 1rem;
-                    }
-
-                    .filters-bar {
-                        flex-direction: column;
-                        align-items: stretch;
-                    }
-
-                    .search-box {
-                        min-width: 100%;
-                    }
-
-                    .filter-group {
-                        flex-wrap: wrap;
-                    }
-
-                    .revenue-item {
-                        flex-direction: column;
-                        align-items: flex-start;
-                        gap: 1rem;
-                    }
-
-                    .revenue-right {
-                        width: 100%;
-                        justify-content: space-between;
-                    }
-
-                    .form-grid {
-                        grid-template-columns: 1fr;
-                    }
-                }
-            `}</style>
+            {/* ── Fixed Add Revenue Button ────────────────────────────────── */}
+            <button
+                onClick={openAddModal}
+                className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium transition-all hover:shadow-lg transform hover:scale-105 z-40"
+                style={{ background: 'var(--color-primary)', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+            >
+                <Plus size={18} />
+                Add Revenue Entry
+            </button>
         </div>
     );
 }

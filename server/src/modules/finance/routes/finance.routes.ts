@@ -1,117 +1,38 @@
 import { Router } from 'express';
+import { RevenueController } from '../controllers/revenue.controller';
+import { ExpenseController } from '../controllers/expense.controller';
+import { DashboardController } from '../controllers/dashboard.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
-import { isAdmin } from '../../auth/middlewares/authorize.middleware';
-import { validateRequest } from '../../../middlewares/validateRequest';
-
-// Controller
-import * as fc from '../controllers/finance.controller';
-
-// Validators
-import {
-    createExpenseSchema,
-    updateExpenseSchema,
-    createInvoiceSchema,
-    updateInvoiceSchema,
-    recordPaymentSchema,
-    createMilestoneSchema,
-    updateMilestoneSchema,
-    setCurrencyRateSchema,
-    createRevenueSchema,
-    updateRevenueSchema,
-    recordRevenuePaymentSchema,
-} from '../validators/finance.validators';
 
 const router = Router();
 
 // All finance routes require authentication
 router.use(authenticate);
 
-// ══════════════════════════════════════════════════════════════════════
-// COMPANY DASHBOARD & REPORTS
-// ══════════════════════════════════════════════════════════════════════
-router.get('/dashboard', isAdmin, fc.getDashboardStats);
-router.get('/dashboard/salaries/:fiscalYear', isAdmin, fc.getMonthlySalaries);
-router.get('/dashboard/project-profitability', isAdmin, fc.getProjectProfitability);
-router.get('/reports/monthly/:year', isAdmin, fc.getMonthlyReport);
-router.get('/reports/accrual-vs-cash', isAdmin, fc.getAccrualVsCashflow);
-router.get('/reports/revenue/:year', isAdmin, fc.getRevenueByMonth);
-router.get('/reports/expenses/:year', isAdmin, fc.getExpensesByMonth);
+// ── Dashboard Routes ──────────────────────────────────────────────────────
+router.get('/dashboard', DashboardController.getDashboard);
+router.get('/quick-stats', DashboardController.getQuickStats);
+router.get('/top-clients', DashboardController.getTopClients);
+router.get('/expense-breakdown', DashboardController.getExpenseByCategory);
 
-// ══════════════════════════════════════════════════════════════════════
-// PROJECT FINANCE
-// ══════════════════════════════════════════════════════════════════════
-router.get('/projects', isAdmin, fc.getAllProjectsFinance);
-router.get('/projects/:projectId', isAdmin, fc.getProjectFinanceSummary);
+// ── Revenue Routes ────────────────────────────────────────────────────────
+router.post('/revenues', RevenueController.create);
+router.get('/revenues', RevenueController.getAll);
+router.get('/revenues/:id', RevenueController.getById);
+router.put('/revenues/:id', RevenueController.update);
+router.delete('/revenues/:id', RevenueController.delete);
 
-// ══════════════════════════════════════════════════════════════════════
-// EXPENSES
-// ══════════════════════════════════════════════════════════════════════
-router.get('/expenses', isAdmin, fc.getExpenses);
-router.get('/expenses/by-category', isAdmin, fc.getExpensesByCategory);
-router.get('/expenses/:id', isAdmin, fc.getExpenseById);
-router.post('/expenses', isAdmin, validateRequest(createExpenseSchema), fc.createExpense);
-router.patch('/expenses/:id', isAdmin, validateRequest(updateExpenseSchema), fc.updateExpense);
-router.delete('/expenses/:id', isAdmin, fc.deleteExpense);
-router.patch('/expenses/:id/approve', isAdmin, fc.approveExpense);
+// ── Expense Routes ────────────────────────────────────────────────────────
+router.post('/expenses', ExpenseController.create);
+router.get('/expenses', ExpenseController.getAll);
+router.get('/expenses/:id', ExpenseController.getById);
+router.put('/expenses/:id', ExpenseController.update);
+router.delete('/expenses/:id', ExpenseController.delete);
 
-// ══════════════════════════════════════════════════════════════════════
-// INVOICES
-// ══════════════════════════════════════════════════════════════════════
-router.get('/invoices', isAdmin, fc.getInvoices);
-router.get('/invoices/overdue', isAdmin, fc.getOverdueInvoices);
-router.get('/invoices/:id', isAdmin, fc.getInvoiceById);
-router.post('/invoices', isAdmin, validateRequest(createInvoiceSchema), fc.createInvoice);
-router.patch('/invoices/:id', isAdmin, validateRequest(updateInvoiceSchema), fc.updateInvoice);
-router.delete('/invoices/:id', isAdmin, fc.deleteInvoice);
-router.post(
-    '/invoices/:id/payment',
-    isAdmin,
-    validateRequest(recordPaymentSchema),
-    fc.recordPayment
-);
+// ── Salary Sync ───────────────────────────────────────────────────────────
+router.post('/sync-salaries', ExpenseController.syncSalaries);
 
-// ══════════════════════════════════════════════════════════════════════
-// PAYMENT MILESTONES
-// ══════════════════════════════════════════════════════════════════════
-router.get('/milestones/:projectId', isAdmin, fc.getProjectMilestones);
-router.post('/milestones', isAdmin, validateRequest(createMilestoneSchema), fc.createMilestone);
-router.patch(
-    '/milestones/:id',
-    isAdmin,
-    validateRequest(updateMilestoneSchema),
-    fc.updateMilestone
-);
-router.patch('/milestones/:id/complete', isAdmin, fc.completeMilestone);
-router.patch('/milestones/:id/paid', isAdmin, fc.markMilestonePaid);
-router.delete('/milestones/:id', isAdmin, fc.deleteMilestone);
-
-// ══════════════════════════════════════════════════════════════════════
-// REVENUE
-// ══════════════════════════════════════════════════════════════════════
-router.get('/revenue', isAdmin, fc.getRevenues);
-router.get('/revenue/summary', isAdmin, fc.getRevenueSummary);
-router.get('/revenue/monthly/:year', isAdmin, fc.getMonthlyRevenueReport);
-router.get('/revenue/:id', isAdmin, fc.getRevenueById);
-router.post('/revenue', isAdmin, validateRequest(createRevenueSchema), fc.createRevenue);
-router.patch('/revenue/:id', isAdmin, validateRequest(updateRevenueSchema), fc.updateRevenue);
-router.delete('/revenue/:id', isAdmin, fc.deleteRevenue);
-router.post(
-    '/revenue/:id/payment',
-    isAdmin,
-    validateRequest(recordRevenuePaymentSchema),
-    fc.recordRevenuePayment
-);
-
-// ══════════════════════════════════════════════════════════════════════
-// CURRENCY RATES
-// ══════════════════════════════════════════════════════════════════════
-router.get('/currency/rates', isAdmin, fc.getLatestRates);
-router.get('/currency/convert', isAdmin, fc.convertAmount);
-router.post(
-    '/currency/rates',
-    isAdmin,
-    validateRequest(setCurrencyRateSchema),
-    fc.setCurrencyRate
-);
+// ── Project Expense Summary ───────────────────────────────────────────────
+router.get('/project-expenses', ExpenseController.getProjectExpenseSummary);
 
 export default router;

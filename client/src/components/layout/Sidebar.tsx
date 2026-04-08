@@ -10,8 +10,8 @@ import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
-    ScrollText, Settings, DollarSign, Receipt,
-    TrendingUp, Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
+    ScrollText, Settings, DollarSign, Receipt, TrendingUp,
+    Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -56,6 +56,7 @@ function getModuleConfig(
         };
     }
     if (pathname.startsWith('/finance')) {
+        if (isPartner) return null;
         const finSubs = mp?.finance?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/finance', icon: <DollarSign size={18} />, matchPrefix: '/finance' },

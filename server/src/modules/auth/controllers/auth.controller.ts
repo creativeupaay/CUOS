@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import * as authService from '../services/auth.service';
 import asyncHandler from '../../../utils/asyncHandler';
 
+const ACCESS_TOKEN_COOKIE_MAX_AGE = 15 * 60 * 1000; // 15 minutes
+const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export const register = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const user = await authService.register(req.body);
@@ -24,7 +27,7 @@ export const login = asyncHandler(
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
             path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
         });
 
         // Set access token in HTTP-only cookie
@@ -33,7 +36,7 @@ export const login = asyncHandler(
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
             path: '/',
-            maxAge: 8 * 60 * 60 * 1000, // 8 hours
+            maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
 
         res.status(200).json({
@@ -57,7 +60,7 @@ export const partnerLogin = asyncHandler(
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
             path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
         });
 
         // Set access token in HTTP-only cookie
@@ -66,7 +69,7 @@ export const partnerLogin = asyncHandler(
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
             path: '/',
-            maxAge: 8 * 60 * 60 * 1000, // 8 hours
+            maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
 
         res.status(200).json({
@@ -99,7 +102,7 @@ export const refreshToken = asyncHandler(
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
             path: '/',
-            maxAge: 8 * 60 * 60 * 1000, // 8 hours
+            maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
         });
 
         res.status(200).json({
