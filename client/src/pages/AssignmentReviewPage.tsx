@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     AlertCircle,
@@ -77,6 +77,31 @@ function toCustomSubmissionFieldKey(name: string) {
         .replace(/^_+|_+$/g, '');
 
     return `custom_${slug || 'field'}_${Date.now().toString(36)}`;
+}
+
+function applyBoldShortcut(
+    e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    applyValue: (nextValue: string) => void
+) {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b') return;
+    e.preventDefault();
+
+    const input = e.currentTarget;
+    const currentValue = input.value;
+    const start = input.selectionStart ?? currentValue.length;
+    const end = input.selectionEnd ?? currentValue.length;
+    const selectedText = currentValue.slice(start, end);
+    const wrappedText = selectedText ? `**${selectedText}**` : '****';
+    const nextValue = `${currentValue.slice(0, start)}${wrappedText}${currentValue.slice(end)}`;
+
+    applyValue(nextValue);
+
+    window.requestAnimationFrame(() => {
+        const nextStart = start + 2;
+        const nextEnd = selectedText ? end + 2 : start + 2;
+        input.focus();
+        input.setSelectionRange(nextStart, nextEnd);
+    });
 }
 
 export default function AssignmentReviewPage() {
@@ -477,6 +502,7 @@ export default function AssignmentReviewPage() {
                         <input
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
+                            onKeyDown={(e) => applyBoldShortcut(e, setTitle)}
                             placeholder="Assignment title"
                             disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
                             className="w-full h-10 px-3 text-sm rounded-lg border outline-none"
@@ -490,6 +516,7 @@ export default function AssignmentReviewPage() {
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
+                            onKeyDown={(e) => applyBoldShortcut(e, setDescription)}
                             placeholder="Description"
                             rows={3}
                             disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
@@ -504,6 +531,7 @@ export default function AssignmentReviewPage() {
                         <textarea
                             value={instructions}
                             onChange={(e) => setInstructions(e.target.value)}
+                            onKeyDown={(e) => applyBoldShortcut(e, setInstructions)}
                             placeholder="Instructions for candidates"
                             rows={4}
                             disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
@@ -621,6 +649,7 @@ export default function AssignmentReviewPage() {
                                     <input
                                         value={customFieldName}
                                         onChange={(e) => setCustomFieldName(e.target.value)}
+                                        onKeyDown={(e) => applyBoldShortcut(e, setCustomFieldName)}
                                         disabled={!jobId || (Boolean(selectedAssignment) && !isEditing)}
                                         placeholder="Field name"
                                         className="h-9 px-2.5 text-xs rounded-md border outline-none"

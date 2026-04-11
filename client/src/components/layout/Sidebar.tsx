@@ -5,6 +5,7 @@ import { logout } from '@/features/auth/slices/authSlice';
 import { useLogoutMutation } from '@/features/auth/authApi';
 import { api } from '@/services/api';
 import { useGetProjectsQuery } from '@/features/project/projectApi';
+import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import {
@@ -12,6 +13,7 @@ import {
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
+    Folder, FolderOpen, Grid2X2, Building2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -24,6 +26,74 @@ interface NavItem {
     alwaysExpanded?: boolean;
 }
 interface ModuleConfig { title: string; items: NavItem[] }
+
+type SidebarProject = {
+    _id: string;
+    name: string;
+    partnerId?: any;
+};
+
+type ProjectFolderGroup = {
+    id: string;
+    name: string;
+    path: string;
+    kind: 'internal' | 'partner';
+    projects: SidebarProject[];
+};
+
+function getSidebarPartnerId(project: SidebarProject): string {
+    if (!project.partnerId) return '';
+    return typeof project.partnerId === 'object' ? project.partnerId?._id || '' : String(project.partnerId);
+}
+
+function getSidebarPartnerName(project: SidebarProject): string {
+    const partner = typeof project.partnerId === 'object' ? project.partnerId : undefined;
+    return partner?.userId?.name || partner?.contactPerson || partner?.companyName || 'Partner';
+}
+
+function buildProjectFolderGroups(projects: SidebarProject[], partnerNameById?: Record<string, string>): ProjectFolderGroup[] {
+    const internalProjects: SidebarProject[] = [];
+    const partnerGroups = new Map<string, ProjectFolderGroup>();
+
+    projects.forEach((project) => {
+        const partnerId = getSidebarPartnerId(project);
+        if (!partnerId) {
+            internalProjects.push(project);
+            return;
+        }
+
+        const existingGroup = partnerGroups.get(partnerId);
+        if (existingGroup) {
+            existingGroup.projects.push(project);
+            return;
+        }
+
+        partnerGroups.set(partnerId, {
+            id: partnerId,
+            name: partnerNameById?.[partnerId] || getSidebarPartnerName(project),
+            path: `/projects?partnerId=${encodeURIComponent(partnerId)}`,
+            kind: 'partner',
+            projects: [project],
+        });
+    });
+
+    const sortedPartners = Array.from(partnerGroups.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const sortProjects = (items: SidebarProject[]) => items.sort((a, b) => a.name.localeCompare(b.name));
+
+    return [
+        {
+            id: 'internal',
+            name: 'Projects',
+            path: '/projects?scope=internal',
+            kind: 'internal',
+            projects: sortProjects(internalProjects),
+        },
+        ...sortedPartners.map((group) => ({
+            ...group,
+            projects: sortProjects(group.projects),
+        })),
+    ];
+}
 
 function getModuleConfig(
     pathname: string,
@@ -62,8 +132,18 @@ function getModuleConfig(
             { key: 'dashboard', label: 'Dashboard', path: '/finance', icon: <DollarSign size={18} />, matchPrefix: '/finance' },
             { key: 'revenue', label: 'Revenue', path: '/finance/revenue', icon: <TrendingUp size={18} />, matchPrefix: '/finance/revenue' },
             { key: 'expenses', label: 'Expenses', path: '/finance/expenses', icon: <Receipt size={18} />, matchPrefix: '/finance/expenses' },
+            { key: 'salariesPayrolls', label: 'Salaries & Payrolls', path: '/finance/salaries-payrolls', icon: <Briefcase size={18} />, matchPrefix: '/finance/salaries-payrolls' },
         ];
-        return { title: 'Finance', items: isAdmin || !finSubs ? allItems : allItems.filter(i => (finSubs as any)[i.key] === true) };
+        return {
+            title: 'Finance',
+            items: isAdmin || !finSubs
+                ? allItems
+                : allItems.filter((item) => {
+                    if ((finSubs as any)[item.key] === true) return true;
+                    if (item.key === 'salariesPayrolls') return (finSubs as any).expenses === true;
+                    return false;
+                }),
+        };
     }
     if (pathname.startsWith('/crm')) {
         if (isPartnerEmployee && mp?.crm?.enabled !== true) {
@@ -76,8 +156,12 @@ function getModuleConfig(
             { key: 'proposals', label: 'Proposals', path: '/crm/proposals', icon: <FileText size={18} />, matchPrefix: '/crm/proposals' },
             { key: 'clients', label: 'Clients', path: '/crm/clients', icon: <Users2 size={18} />, matchPrefix: '/crm/clients' },
         ];
-        if (isPartner && !crmSubs) {
-            return { title: 'CRM', items: allItems.filter(i => i.key === 'clients') };
+        if (isPartner) {
+            // Always expose the partner CRM trio even if legacy sub-module config still has clients-only.
+            return {
+                title: 'CRM',
+                items: allItems.filter(i => i.key === 'pipeline' || i.key === 'leads' || i.key === 'clients')
+            };
         }
         return { title: 'CRM', items: isAdmin || !crmSubs ? allItems : allItems.filter(i => (crmSubs as any)[i.key] === true) };
     }
@@ -354,6 +438,256 @@ const NavItemComponent = ({
     );
 };
 
+const ProjectFoldersNav = ({
+    projects,
+    partnerNameById,
+    pathname,
+    search,
+    onNavigate,
+}: {
+    projects: SidebarProject[];
+    partnerNameById?: Record<string, string>;
+    pathname: string;
+    search: string;
+    onNavigate?: () => void;
+}) => {
+    const groups = buildProjectFolderGroups(projects, partnerNameById);
+    const currentProjectId = pathname.match(/^\/projects\/([^/]+)/)?.[1] || '';
+    const currentGroup = currentProjectId
+        ? groups.find((group) => group.projects.some((project) => project._id === currentProjectId))
+        : undefined;
+    const currentParams = new URLSearchParams(search);
+    const currentScope = currentParams.get('scope');
+    const currentPartnerId = currentParams.get('partnerId') || '';
+    const isAllDashboard = pathname === '/projects' && !currentScope && !currentPartnerId;
+
+    const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(() => ({
+        internal: true,
+        ...(currentGroup ? { [currentGroup.id]: true } : {}),
+    }));
+
+    useEffect(() => {
+        if (!currentGroup) return;
+        setExpandedFolders((previous) => ({ ...previous, [currentGroup.id]: true }));
+    }, [currentGroup?.id]);
+
+    const toggleFolder = (folderId: string) => {
+        setExpandedFolders((previous) => ({ ...previous, [folderId]: !previous[folderId] }));
+    };
+
+    return (
+        <div className="space-y-3">
+            <NavLink
+                to="/projects"
+                end
+                onClick={() => onNavigate?.()}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 select-none relative"
+                style={
+                    isAllDashboard
+                        ? {
+                            backgroundColor: 'var(--color-primary-soft)',
+                            color: 'var(--color-primary-darker)',
+                            boxShadow: 'inset 0 0 0 1px rgba(5, 150, 105, 0.13)',
+                        }
+                        : {
+                            color: 'var(--color-text-secondary)',
+                        }
+                }
+                onMouseEnter={(e) => {
+                    if (!isAllDashboard) {
+                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                        e.currentTarget.style.color = 'var(--color-text-primary)';
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    if (!isAllDashboard) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                    }
+                }}
+            >
+                {isAllDashboard && (
+                    <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full"
+                        style={{ backgroundColor: 'var(--color-primary)', left: '-12px' }}
+                    />
+                )}
+                <span
+                    className="flex items-center justify-center w-7 h-7 rounded-lg transition-all shrink-0"
+                    style={isAllDashboard ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'inherit' }}
+                >
+                    <Grid2X2 size={17} />
+                </span>
+                <span className="flex-1 truncate">Dashboard</span>
+            </NavLink>
+
+            <div className="space-y-1.5">
+                {groups.map((group) => {
+                    const isExpanded = expandedFolders[group.id] ?? group.kind === 'internal';
+                    const isFolderDashboardActive = pathname === '/projects' && (
+                        (group.kind === 'internal' && currentScope === 'internal') ||
+                        (group.kind === 'partner' && currentPartnerId === group.id)
+                    );
+                    const isCurrentProjectFolder = currentGroup?.id === group.id;
+                    const isFolderActive = isFolderDashboardActive || isCurrentProjectFolder;
+
+                    return (
+                        <div key={group.id} className="relative">
+                            {isFolderActive && (
+                                <div
+                                    className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
+                                    style={{ backgroundColor: 'var(--color-primary)', left: '-12px' }}
+                                />
+                            )}
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleFolder(group.id)}
+                                    className="w-7 h-9 flex items-center justify-center rounded-lg transition-all duration-200 shrink-0"
+                                    style={{ color: isFolderActive ? 'var(--color-primary-dark)' : 'var(--color-text-muted)' }}
+                                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.name}`}
+                                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                >
+                                    <ChevronRight
+                                        size={14}
+                                        className="transition-transform duration-200"
+                                        style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                    />
+                                </button>
+
+                                <NavLink
+                                    to={group.path}
+                                    onClick={() => onNavigate?.()}
+                                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
+                                    style={
+                                        isFolderActive
+                                            ? {
+                                                backgroundColor: 'var(--color-primary-soft)',
+                                                color: 'var(--color-primary-darker)',
+                                                boxShadow: 'inset 0 0 0 1px rgba(5, 150, 105, 0.13)',
+                                            }
+                                            : { color: 'var(--color-text-secondary)' }
+                                    }
+                                    onMouseEnter={(e) => {
+                                        if (!isFolderActive) {
+                                            e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                            e.currentTarget.style.color = 'var(--color-text-primary)';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (!isFolderActive) {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                            e.currentTarget.style.color = 'var(--color-text-secondary)';
+                                        }
+                                    }}
+                                >
+                                    <span
+                                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                                        style={
+                                            isFolderActive
+                                                ? { backgroundColor: 'var(--color-primary)', color: '#ffffff' }
+                                                : { backgroundColor: 'var(--color-bg-subtle)', color: 'inherit' }
+                                        }
+                                    >
+                                        {isExpanded ? (
+                                            <FolderOpen size={16} />
+                                        ) : group.kind === 'partner' ? (
+                                            <Building2 size={16} />
+                                        ) : (
+                                            <Folder size={16} />
+                                        )}
+                                    </span>
+                                    <span className="truncate">{group.name}</span>
+                                    <span
+                                        className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+                                        style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}
+                                    >
+                                        {group.projects.length}
+                                    </span>
+                                </NavLink>
+                            </div>
+
+                            <div
+                                className="grid transition-all duration-200 ease-out"
+                                style={{
+                                    gridTemplateRows: isExpanded ? '1fr' : '0fr',
+                                    opacity: isExpanded ? 1 : 0,
+                                    transform: isExpanded ? 'translateY(0)' : 'translateY(-4px)',
+                                }}
+                            >
+                                <div className="overflow-hidden">
+                                    <div
+                                        className="ml-8 mt-1 space-y-0.5 border-l pl-3"
+                                        style={{ borderColor: isFolderActive ? 'rgba(5, 150, 105, 0.22)' : 'var(--color-border-default)' }}
+                                    >
+                                    {group.projects.length === 0 ? (
+                                        <div className="px-3 py-2 text-xs rounded-lg" style={{ color: 'var(--color-text-muted)' }}>
+                                            No projects
+                                        </div>
+                                    ) : (
+                                        group.projects.map((project) => {
+                                            const isProjectActive = currentProjectId === project._id;
+                                            return (
+                                                <NavLink
+                                                    key={project._id}
+                                                    to={`/projects/${project._id}`}
+                                                    onClick={() => onNavigate?.()}
+                                                    className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
+                                                    style={
+                                                        isProjectActive
+                                                            ? {
+                                                                color: 'var(--color-primary-dark)',
+                                                                fontWeight: 600,
+                                                                backgroundColor: 'var(--color-primary-soft)',
+                                                                transform: 'translateX(2px)',
+                                                            }
+                                                            : { color: 'var(--color-text-secondary)', fontWeight: 500 }
+                                                    }
+                                                    onMouseEnter={(e) => {
+                                                        if (!isProjectActive) {
+                                                            e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                                            e.currentTarget.style.color = 'var(--color-text-primary)';
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (!isProjectActive) {
+                                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                                            e.currentTarget.style.color = 'var(--color-text-secondary)';
+                                                        }
+                                                    }}
+                                                >
+                                                    <div
+                                                        className="absolute top-1/2 h-px w-3"
+                                                        style={{
+                                                            left: '-13px',
+                                                            backgroundColor: isProjectActive ? 'rgba(5, 150, 105, 0.45)' : 'var(--color-border-default)',
+                                                        }}
+                                                    />
+                                                    <div
+                                                        className="w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-200"
+                                                        style={{
+                                                            backgroundColor: isProjectActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                                            opacity: isProjectActive ? 1 : 0.45,
+                                                            transform: isProjectActive ? 'scale(1.25)' : 'scale(1)',
+                                                        }}
+                                                    />
+                                                    <span className="truncate">{project.name}</span>
+                                                </NavLink>
+                                            );
+                                        })
+                                    )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 /* ── Sidebar ─────────────────────────────────────────────── */
 export default function Sidebar({
     onNavigate,
@@ -367,6 +701,8 @@ export default function Sidebar({
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
     const [logoutApi] = useLogoutMutation();
+    const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string } } | null)?.backgroundLocation;
+    const effectivePathname = backgroundLocation?.pathname || location.pathname;
 
     const handleLogout = async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
@@ -395,6 +731,7 @@ export default function Sidebar({
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
         : '';
+    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName);
     const isPartner = roleName === 'partner';
     const isHrAdmin = isAdmin || ['hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
@@ -412,13 +749,24 @@ export default function Sidebar({
     const { data: employeeProfile } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
 
-    const isPMRoute = location.pathname.startsWith('/projects');
+    const isPMRoute = effectivePathname.startsWith('/projects');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
+    const { data: partnersResponse } = useGetPartnersQuery(
+        { limit: 500 },
+        { skip: !(isPMRoute && isSuperAdmin) }
+    );
     const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
     const isJobManager = !!jobManagerStatus?.data?.isJobManager;
 
-    const projects = projectsResponse?.data || [];
-    const moduleConfig = getModuleConfig(location.pathname, user, isAdmin, projects, isHrAdmin, isJobManager);
+    const projects = (projectsResponse?.data || []) as SidebarProject[];
+    const partnerNameById = ((partnersResponse?.data?.partners || []) as any[]).reduce<Record<string, string>>((acc, partner) => {
+        if (partner?._id) {
+            acc[partner._id] = partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner';
+        }
+        return acc;
+    }, {});
+    const moduleConfig = getModuleConfig(effectivePathname, user, isAdmin, projects, isHrAdmin, isJobManager);
+    const useProjectFoldersNav = isPMRoute && isSuperAdmin;
 
     if (!moduleConfig) return null;
 
@@ -482,18 +830,28 @@ export default function Sidebar({
             {/* ── Navigation ─────────────────────────────────────────── */}
             <nav className="flex-1 py-3 px-3 overflow-y-auto overflow-x-hidden">
                 <div className="space-y-0.5 pl-3">
-                    {moduleConfig.items.map((item) => {
-                        const active = isItemActive(item, location.pathname, moduleConfig.items);
-                        return (
-                            <NavItemComponent
-                                key={item.path}
-                                item={item}
-                                active={active}
-                                pathname={location.pathname}
-                                onNavigate={onNavigate}
-                            />
-                        );
-                    })}
+                    {useProjectFoldersNav ? (
+                        <ProjectFoldersNav
+                            projects={projects}
+                            partnerNameById={partnerNameById}
+                            pathname={effectivePathname}
+                            search={location.search}
+                            onNavigate={onNavigate}
+                        />
+                    ) : (
+                        moduleConfig.items.map((item) => {
+                            const active = isItemActive(item, effectivePathname, moduleConfig.items);
+                            return (
+                                <NavItemComponent
+                                    key={item.path}
+                                    item={item}
+                                    active={active}
+                                    pathname={effectivePathname}
+                                    onNavigate={onNavigate}
+                                />
+                            );
+                        })
+                    )}
                 </div>
             </nav>
 

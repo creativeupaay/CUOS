@@ -5,9 +5,14 @@ import {
     useGetProjectTimeLogsQuery,
     useGetMyTimeLogsQuery,
     useGetTasksQuery,
+    useUpdateTimeLogMutation,
 } from '@/features/project';
-import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown, User, Play, Pause, SquareCheckBig, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown, User, Play, Pause, SquareCheckBig, ChevronDown, ChevronUp, Pencil, X, Save } from 'lucide-react';
 import { useState } from 'react';
+import type { TimeLog } from '@/features/project/types/types';
+import type { FormEvent } from 'react';
+import { createPortal } from 'react-dom';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (mins: number) => {
@@ -26,6 +31,84 @@ const fmtDateTime = (iso: string) =>
     `${fmtDate(iso)}, ${fmtTime(iso)}`;
 
 const SUPER_ADMIN_ROLES = ['super-admin', 'super_admin', 'admin'];
+const TIME_LOG_EDITOR_ROLES = ['super-admin', 'super_admin'];
+
+const toDateInputValue = (iso?: string) => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+};
+
+const toDateTimeInputValue = (iso?: string) => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const toIsoFromDateTimeInput = (value: string) => value ? new Date(value).toISOString() : undefined;
+
+const addMinutesToInput = (value: string, minutes: number) => {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime()) || !Number.isFinite(minutes)) return '';
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() + minutes * 60 * 1000 - offsetMs).toISOString().slice(0, 16);
+};
+
+const minutesBetweenInputs = (start: string, end: string) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (!start || !end || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+    const minutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+    return minutes > 0 ? minutes : null;
+};
+
+const moveInputToDate = (value: string, dateValue: string) => {
+    if (!value || !dateValue) return value;
+    const time = value.slice(11, 16) || '09:00';
+    return `${dateValue}T${time}`;
+};
+
+const createDefaultStart = (dateValue: string) => `${dateValue}T09:00`;
+
+const buildInitialEditForm = (log: TimeLog): EditTimeLogForm => {
+    const date = toDateInputValue(log.date) || toDateInputValue(log.startTime) || toDateInputValue(log.endTime);
+    const duration = Math.max(1, Number(log.duration || 1));
+    let startTime = toDateTimeInputValue(log.startTime);
+    let endTime = toDateTimeInputValue(log.endTime);
+
+    if (!startTime && endTime) {
+        startTime = addMinutesToInput(endTime, -duration);
+    }
+
+    if (!startTime && date) {
+        startTime = createDefaultStart(date);
+    }
+
+    if (!endTime && startTime) {
+        endTime = addMinutesToInput(startTime, duration);
+    }
+
+    return {
+        date,
+        duration: String(duration),
+        startTime,
+        endTime,
+        description: log.description || '',
+        billable: log.billable !== false,
+    };
+};
+
+interface EditTimeLogForm {
+    date: string;
+    duration: string;
+    startTime: string;
+    endTime: string;
+    description: string;
+    billable: boolean;
+}
 
 // ─── Activity event derived from a time log ────────────────────────────────
 interface ActivityEvent {
@@ -42,6 +125,17 @@ export default function ProjectTimeLogsTab() {
     const currentUser = useSelector((s: RootState) => s.auth.user);
 
     const [showActivity, setShowActivity] = useState(true);
+    const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
+    const [editForm, setEditForm] = useState<EditTimeLogForm>({
+        date: '',
+        duration: '',
+        startTime: '',
+        endTime: '',
+        description: '',
+        billable: true,
+    });
+    const [updateTimeLog, { isLoading: isUpdatingTimeLog }] = useUpdateTimeLogMutation();
+    useBodyScrollLock(Boolean(editingLog));
 
     // Resolve role name (role can be a Role object or a string)
     const roleName = currentUser?.role
@@ -51,6 +145,7 @@ export default function ProjectTimeLogsTab() {
         : '';
 
     const isSuperAdmin = SUPER_ADMIN_ROLES.includes(roleName);
+    const canEditTimeLogs = TIME_LOG_EDITOR_ROLES.includes(roleName);
 
     // Project-specific permissions
     const pmPerms = currentUser?.modulePermissions?.projectManagement;
@@ -81,6 +176,119 @@ export default function ProjectTimeLogsTab() {
 
     const isLoading = canSeeAll ? allLogsLoading : myLogsLoading;
     const timeLogs = canSeeAll ? (allLogsData?.data || []) : (myLogsData?.data || []);
+
+    const openEditTimeLog = (log: TimeLog) => {
+        setEditingLog(log);
+        setEditForm(buildInitialEditForm(log));
+    };
+
+    const closeEditTimeLog = () => {
+        setEditingLog(null);
+        setEditForm({
+            date: '',
+            duration: '',
+            startTime: '',
+            endTime: '',
+            description: '',
+            billable: true,
+        });
+    };
+
+    const saveEditedTimeLog = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingLog) return;
+
+        const duration = Number(editForm.duration);
+        if (!Number.isFinite(duration) || duration <= 0) {
+            alert('Duration must be greater than 0 minutes');
+            return;
+        }
+
+        try {
+            await updateTimeLog({
+                id: editingLog._id,
+                data: {
+                    date: editForm.date,
+                    duration,
+                    startTime: toIsoFromDateTimeInput(editForm.startTime),
+                    endTime: toIsoFromDateTimeInput(editForm.endTime),
+                    description: editForm.description.trim(),
+                    billable: editForm.billable,
+                },
+            }).unwrap();
+            closeEditTimeLog();
+        } catch (err: any) {
+            alert(err?.data?.message || 'Failed to update time log');
+        }
+    };
+
+    const handleEditDateChange = (date: string) => {
+        setEditForm((prev) => ({
+            ...prev,
+            date,
+            startTime: moveInputToDate(prev.startTime, date),
+            endTime: moveInputToDate(prev.endTime, date),
+        }));
+    };
+
+    const handleEditDurationChange = (durationValue: string) => {
+        setEditForm((prev) => {
+            const duration = Number(durationValue);
+            const next = { ...prev, duration: durationValue };
+
+            if (Number.isFinite(duration) && duration > 0) {
+                if (prev.startTime) {
+                    next.endTime = addMinutesToInput(prev.startTime, duration);
+                } else if (prev.endTime) {
+                    next.startTime = addMinutesToInput(prev.endTime, -duration);
+                    next.date = toDateInputValue(next.startTime) || prev.date;
+                }
+            }
+
+            return next;
+        });
+    };
+
+    const handleEditStartTimeChange = (startTime: string) => {
+        setEditForm((prev) => {
+            const duration = Number(prev.duration);
+            const next = {
+                ...prev,
+                startTime,
+                date: toDateInputValue(startTime) || prev.date,
+            };
+
+            if (Number.isFinite(duration) && duration > 0) {
+                next.endTime = addMinutesToInput(startTime, duration);
+            } else if (prev.endTime) {
+                const calculatedDuration = minutesBetweenInputs(startTime, prev.endTime);
+                if (calculatedDuration !== null) {
+                    next.duration = String(calculatedDuration);
+                }
+            }
+
+            return next;
+        });
+    };
+
+    const handleEditEndTimeChange = (endTime: string) => {
+        setEditForm((prev) => {
+            const next = { ...prev, endTime };
+            const calculatedDuration = minutesBetweenInputs(prev.startTime, endTime);
+
+            if (calculatedDuration !== null) {
+                next.duration = String(calculatedDuration);
+            } else {
+                const duration = Number(prev.duration);
+                if (Number.isFinite(duration) && duration > 0 && endTime) {
+                    next.startTime = addMinutesToInput(endTime, -duration);
+                    next.date = toDateInputValue(next.startTime) || prev.date;
+                }
+            }
+
+            return next;
+        });
+    };
 
     // ── Access Restricted ─────────────────────────────────────────────────────
     if (!isProjectMember) {
@@ -146,6 +354,9 @@ export default function ProjectTimeLogsTab() {
 
     const VISIBLE_ACTIVITY = 12;
     const visibleEvents = showActivity ? activityEvents.slice(0, VISIBLE_ACTIVITY) : [];
+    const logGridColumns = canSeeAll
+        ? (canEditTimeLogs ? 'grid-cols-[120px_1fr_1fr_80px_1fr_88px]' : 'grid-cols-[120px_1fr_1fr_80px_1fr]')
+        : 'grid-cols-[120px_1fr_80px_1fr]';
 
     // ── Activity event config ─────────────────────────────────────────────────
     const activityConfig: Record<ActivityEvent['type'], { icon: any; color: string; bg: string; label: string }> = {
@@ -311,9 +522,7 @@ export default function ProjectTimeLogsTab() {
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
                 {/* Column headers — Member column only for admins/managers */}
                 <div
-                    className={`grid gap-3 px-4 py-2.5 border-b text-[11px] font-semibold uppercase tracking-wider ${
-                        canSeeAll ? 'grid-cols-[120px_1fr_1fr_80px_1fr]' : 'grid-cols-[120px_1fr_80px_1fr]'
-                    }`}
+                    className={`grid gap-3 px-4 py-2.5 border-b text-[11px] font-semibold uppercase tracking-wider ${logGridColumns}`}
                     style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
                 >
                     <span>Date</span>
@@ -321,6 +530,7 @@ export default function ProjectTimeLogsTab() {
                     <span>Task</span>
                     <span>Duration</span>
                     <span>Description</span>
+                    {canEditTimeLogs && <span>Actions</span>}
                 </div>
 
                 {isLoading ? (
@@ -345,9 +555,7 @@ export default function ProjectTimeLogsTab() {
                         return (
                             <div
                                 key={log._id}
-                                className={`grid gap-3 px-4 py-3 items-center border-b last:border-0 ${
-                                    canSeeAll ? 'grid-cols-[120px_1fr_1fr_80px_1fr]' : 'grid-cols-[120px_1fr_80px_1fr]'
-                                }`}
+                                className={`grid gap-3 px-4 py-3 items-center border-b last:border-0 ${logGridColumns}`}
                                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
                             >
                                 <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -375,6 +583,18 @@ export default function ProjectTimeLogsTab() {
                                 <span className="text-xs truncate font-medium" style={{ color: descColor }} title={log.description}>
                                     {log.description || '—'}
                                 </span>
+                                {canEditTimeLogs && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openEditTimeLog(log)}
+                                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border cursor-pointer transition-colors hover:bg-black/5"
+                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                        title="Edit time log"
+                                    >
+                                        <Pencil size={12} />
+                                        Edit
+                                    </button>
+                                )}
                             </div>
                         );
                     })
@@ -389,7 +609,126 @@ export default function ProjectTimeLogsTab() {
                         : 'Showing your logged time only. Total project view is available to project managers.'}
                 </div>
             )}
+
+            {editingLog && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15, 23, 42, 0.45)' }}>
+                    <form
+                        onSubmit={saveEditedTimeLog}
+                        className="w-full max-w-lg rounded-xl border shadow-xl"
+                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <div>
+                                <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Time Log</h3>
+                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                    Correct wrongly marked task activity.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeEditTimeLog}
+                                className="p-1.5 rounded-lg cursor-pointer hover:bg-black/5"
+                                aria-label="Close edit time log"
+                            >
+                                <X size={16} style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className="block">
+                                    <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Date</span>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={editForm.date}
+                                        onChange={(e) => handleEditDateChange(e.target.value)}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Duration (minutes)</span>
+                                    <input
+                                        type="number"
+                                        required
+                                        min={1}
+                                        value={editForm.duration}
+                                        onChange={(e) => handleEditDurationChange(e.target.value)}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className="block">
+                                    <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Start Time</span>
+                                    <input
+                                        type="datetime-local"
+                                        value={editForm.startTime}
+                                        onChange={(e) => handleEditStartTimeChange(e.target.value)}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>End Time</span>
+                                    <input
+                                        type="datetime-local"
+                                        value={editForm.endTime}
+                                        onChange={(e) => handleEditEndTimeChange(e.target.value)}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                    />
+                                </label>
+                            </div>
+
+                            <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={editForm.billable}
+                                    onChange={(e) => setEditForm((prev) => ({ ...prev, billable: e.target.checked }))}
+                                    className="w-4 h-4 rounded"
+                                />
+                                Billable
+                            </label>
+
+                            <label className="block">
+                                <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Description</span>
+                                <textarea
+                                    value={editForm.description}
+                                    onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                                    rows={3}
+                                    className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none resize-none"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                />
+                            </label>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <button
+                                type="button"
+                                onClick={closeEditTimeLog}
+                                className="px-4 py-2 text-sm rounded-lg border cursor-pointer"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isUpdatingTimeLog}
+                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                {isUpdatingTimeLog ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>,
+                document.body,
+            )}
         </div>
     );
 }
-

@@ -1,5 +1,21 @@
 import type { Lead, Proposal } from './types';
 
+export interface LeadDocumentPayload {
+    name: string;
+    url: string;
+    cloudinaryId: string;
+    size?: number;
+    mimeType?: string;
+    uploadedAt?: string;
+    uploadedBy?: string;
+}
+
+export interface LeadLinkPayload {
+    name: string;
+    url: string;
+    addedAt?: string;
+}
+
 // ============================================
 // GENERIC API RESPONSE
 // ============================================
@@ -23,7 +39,10 @@ export interface CreateLeadRequest {
     currency?: string;
     notes?: string;
     tags?: string[];
+    documents?: LeadDocumentPayload[];
+    links?: LeadLinkPayload[];
     assignedTo?: string;
+    partnerId?: string;
     expectedCloseDate?: string;
 }
 
@@ -39,9 +58,22 @@ export interface UpdateLeadRequest {
     currency?: string;
     notes?: string;
     tags?: string[];
+    documents?: LeadDocumentPayload[];
+    links?: LeadLinkPayload[];
     assignedTo?: string | null;
+    partnerId?: string | null;
     lostReason?: string;
     expectedCloseDate?: string | null;
+}
+
+export interface UploadLeadDocumentRequest {
+    leadId: string;
+    file: File;
+}
+
+export interface UploadLeadDocumentsRequest {
+    leadId: string;
+    files: File[];
 }
 
 export interface ListLeadsParams {
@@ -49,6 +81,7 @@ export interface ListLeadsParams {
     source?: string;
     priority?: Lead['priority'];
     assignedTo?: string;
+    partnerId?: string;
     search?: string;
     page?: number;
     limit?: number;

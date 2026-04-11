@@ -15,6 +15,8 @@ export const updateLeaveStatusSchema = z.object({
     body: z.object({
         status: z.enum(['approved', 'rejected', 'cancelled']),
         rejectionReason: z.string().optional(),
+        type: z.enum(['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity']).optional(),
+        isPaid: z.boolean().optional(),
     }),
     params: z.object({ id: z.string() }),
 });

@@ -264,7 +264,15 @@ export default function PublicAssignmentSubmissionPage() {
                         className="text-3xl md:text-4xl font-bold mt-3"
                         style={{ color: 'var(--color-text-primary)' }}
                     >
-                        {assignment.title}
+                        <ReactMarkdown
+                            components={{
+                                p: ({ children }) => <>{children}</>,
+                                strong: ({ children }) => <strong className="font-extrabold">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
+                            }}
+                        >
+                            {assignment.title}
+                        </ReactMarkdown>
                     </h1>
                     <p className="text-sm md:text-base mt-2 max-w-3xl" style={{ color: 'var(--color-text-secondary)' }}>
                         Submit your work before the deadline. Your links and notes are sent directly to the hiring team for review.
@@ -544,7 +552,15 @@ export default function PublicAssignmentSubmissionPage() {
                                         return (
                                             <div key={field.key}>
                                                 <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
-                                                    {label}
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            p: ({ children }) => <>{children}</>,
+                                                            strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                                            em: ({ children }) => <em className="italic">{children}</em>,
+                                                        }}
+                                                    >
+                                                        {label}
+                                                    </ReactMarkdown>
                                                 </label>
                                                 <label
                                                     className="mt-1.5 flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-3"
@@ -579,7 +595,15 @@ export default function PublicAssignmentSubmissionPage() {
                                         return (
                                             <div key={field.key}>
                                                 <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
-                                                    {label}
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            p: ({ children }) => <>{children}</>,
+                                                            strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                                            em: ({ children }) => <em className="italic">{children}</em>,
+                                                        }}
+                                                    >
+                                                        {label}
+                                                    </ReactMarkdown>
                                                 </label>
                                                 <textarea
                                                     value={value}
@@ -605,7 +629,15 @@ export default function PublicAssignmentSubmissionPage() {
                                     return (
                                         <div key={field.key}>
                                             <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#64748B' }}>
-                                                {label}
+                                                <ReactMarkdown
+                                                    components={{
+                                                        p: ({ children }) => <>{children}</>,
+                                                        strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                                        em: ({ children }) => <em className="italic">{children}</em>,
+                                                    }}
+                                                >
+                                                    {label}
+                                                </ReactMarkdown>
                                             </label>
                                             <input
                                                 type={inputType}

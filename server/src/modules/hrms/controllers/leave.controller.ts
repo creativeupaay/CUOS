@@ -80,10 +80,10 @@ export const deleteLeave = asyncHandler(async (req: Request, res: Response) => {
 export const getLeaveBalance = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as any).id;
     const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
-    const balance = await leaveService.getLeaveBalance(userId, year);
+    const result = await leaveService.getLeaveBalance(userId, year);
 
     res.json({
         status: 'success',
-        data: { balance },
+        data: result,
     });
 });

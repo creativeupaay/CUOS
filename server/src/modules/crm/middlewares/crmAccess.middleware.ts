@@ -35,6 +35,19 @@ export const checkLeadAccess = async (
 
         const userId = req.user.id;
 
+        if (role === 'partner') {
+            const requesterPartnerId = (req.user as any).partnerId ? String((req.user as any).partnerId) : '';
+            const leadPartnerId = lead.partnerId ? String(lead.partnerId) : '';
+
+            if (!requesterPartnerId || !leadPartnerId || requesterPartnerId !== leadPartnerId) {
+                return next(
+                    new AppError('You do not have permission to access this lead', 403)
+                );
+            }
+
+            return next();
+        }
+
         // CRM employees can access if they are assigned or the creator
         if (
             lead.assignedTo?.toString() === userId ||

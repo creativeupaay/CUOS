@@ -8,7 +8,7 @@ import type {
     CreateEmployeeRequest, UpdateEmployeeRequest, ListEmployeesParams,
     CreateSalaryRequest, UpdateSalaryRequest,
     CreateLeaveRequest, UpdateLeaveStatusRequest,
-    GeneratePayrollRequest, UpdatePayrollStatusRequest,
+    GeneratePayrollRequest, UpdatePayrollRequest, UpdatePayrollStatusRequest,
     CheckInRequest, CheckOutRequest,
     CreateAnnouncementRequest,
 } from './types/apiTypes';
@@ -220,7 +220,15 @@ export const hrmsApi = api.injectEndpoints({
             providesTags: ['Leaves'],
         }),
 
-        getLeaveBalance: builder.query<ApiResponse<{ balance: LeaveBalance[] }>, { year?: number } | void>({
+        getLeaveBalance: builder.query<ApiResponse<{
+            balance: LeaveBalance[];
+            leaveSummary?: {
+                paid: { requests: number; days: number };
+                unpaid: { requests: number; days: number };
+                totalApprovedRequests: number;
+                totalApprovedDays: number;
+            };
+        }>, { year?: number } | void>({
             query: (params) => ({
                 url: '/hrms/leaves/balance',
                 params: params || {},
@@ -300,6 +308,18 @@ export const hrmsApi = api.injectEndpoints({
                 body: data,
             }),
             invalidatesTags: ['Payroll'],
+        }),
+
+        updatePayroll: builder.mutation<
+            ApiResponse<{ payroll: Payroll }>,
+            { id: string; data: UpdatePayrollRequest }
+        >({
+            query: ({ id, data }) => ({
+                url: `/hrms/payroll/${id}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: ['Payroll', 'BankTransactions', 'FinanceDashboard'],
         }),
 
         // ══════════════════════════════════════════════════════════
@@ -390,8 +410,8 @@ export const hrmsApi = api.injectEndpoints({
         }),
 
         bulkMarkAttendance: builder.mutation<
-            ApiResponse<{ saved: number }>,
-            { date: string; records: Array<{ employeeId: string; status: string; notes?: string }> }
+            ApiResponse<{ saved: number; cleared?: number; skipped?: number }>,
+            { date: string; records: Array<{ employeeId: string; status: string; notes?: string }>; onlyUnmarked?: boolean }
         >({
             query: (data) => ({
                 url: '/hrms/attendance/bulk',
@@ -518,6 +538,7 @@ export const {
     useGetPayrollsQuery,
     useGetMyPayrollsQuery,
     useGetPayrollByIdQuery,
+    useUpdatePayrollMutation,
     useUpdatePayrollStatusMutation,
     useGetDashboardStatsQuery,
     useGetUpcomingEventsQuery,

@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { LeadService } from '../services/lead.service';
 import asyncHandler from '../../../utils/asyncHandler';
+import AppError from '../../../utils/appError';
+import { Partner } from '../../partners/models/Partner.model';
+import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 import type {
     CreateLeadInput,
     UpdateLeadInput,
@@ -11,13 +14,41 @@ import type {
 
 const leadService = new LeadService();
 
+const resolveRequesterPartnerId = async (req: Request): Promise<string | undefined> => {
+    const user = (req.user as any) || {};
+    if (user.role !== 'partner') return undefined;
+
+    if (user.partnerId) {
+        return String(user.partnerId);
+    }
+
+    if (user.isPartnerEmployee) {
+        const employee = await PartnerEmployee.findById(user.id).select('partnerId').lean();
+        if (!employee?.partnerId) {
+            throw new AppError('Partner context not found', 403);
+        }
+        return String(employee.partnerId);
+    }
+
+    const partner = await Partner.findOne({ userId: user.id }).select('_id').lean();
+    if (!partner?._id) {
+        throw new AppError('Partner context not found', 403);
+    }
+    return String(partner._id);
+};
+
 /**
  * Create a new lead
  */
 export const createLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const data: CreateLeadInput = req.body;
+        const data: CreateLeadInput & { partnerId?: string } = req.body;
         const createdBy = (req.user as any).id;
+        const requesterPartnerId = await resolveRequesterPartnerId(req);
+
+        if (requesterPartnerId) {
+            data.partnerId = requesterPartnerId;
+        }
 
         const lead = await leadService.createLead(data, createdBy);
 
@@ -33,7 +64,12 @@ export const createLead = asyncHandler(
  */
 export const getLeads = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const filters: ListLeadsInput = req.query as any;
+        const filters: ListLeadsInput & { partnerId?: string } = req.query as any;
+        const requesterPartnerId = await resolveRequesterPartnerId(req);
+
+        if (requesterPartnerId) {
+            filters.partnerId = requesterPartnerId;
+        }
 
         const result = await leadService.getLeads(filters);
 
@@ -66,7 +102,12 @@ export const getLead = asyncHandler(
 export const updateLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
-        const data: UpdateLeadInput = req.body;
+        const data: UpdateLeadInput & { partnerId?: string | null } = req.body;
+        const requesterPartnerId = await resolveRequesterPartnerId(req);
+
+        if (requesterPartnerId) {
+            data.partnerId = requesterPartnerId;
+        }
 
         const lead = await leadService.updateLead(id, data);
 
@@ -130,6 +171,49 @@ export const addMeeting = asyncHandler(
 );
 
 /**
+ * Upload lead document
+ */
+export const uploadLeadDocument = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { id } = req.params;
+
+        const files = (req.files as Express.Multer.File[] | undefined) || [];
+        const singleFile = req.file as Express.Multer.File | undefined;
+        const normalizedFiles = files.length > 0 ? files : singleFile ? [singleFile] : [];
+
+        if (normalizedFiles.length === 0) {
+            res.status(400).json({ status: 'fail', message: 'No file uploaded.' });
+            return;
+        }
+
+        const lead = normalizedFiles.length === 1
+            ? await leadService.uploadLeadDocument(
+                id,
+                normalizedFiles[0].buffer,
+                normalizedFiles[0].originalname,
+                normalizedFiles[0].mimetype,
+                normalizedFiles[0].size,
+                (req.user as any).id
+            )
+            : await leadService.uploadLeadDocuments(
+                id,
+                normalizedFiles.map((file) => ({
+                    buffer: file.buffer,
+                    originalname: file.originalname,
+                    mimetype: file.mimetype,
+                    size: file.size,
+                })),
+                (req.user as any).id
+            );
+
+        res.status(201).json({
+            status: 'success',
+            data: { lead },
+        });
+    }
+);
+
+/**
  * Close lead — locks the lead; client creation is a separate step via the form.
  */
 export const closeLead = asyncHandler(
@@ -152,9 +236,11 @@ export const closeLead = asyncHandler(
 export const getPipelineSummary = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { assignedTo } = req.query;
+        const requesterPartnerId = await resolveRequesterPartnerId(req);
 
         const summary = await leadService.getPipelineSummary(
-            assignedTo as string | undefined
+            assignedTo as string | undefined,
+            requesterPartnerId
         );
 
         res.status(200).json({

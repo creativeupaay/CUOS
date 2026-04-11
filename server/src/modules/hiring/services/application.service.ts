@@ -124,6 +124,14 @@ export class ApplicationService {
                 ? (job as any).applicationForm.selectedStandardFields
                 : []
         );
+        const standardFieldSettings = Array.isArray((job as any).applicationForm?.standardFieldSettings)
+            ? (job as any).applicationForm.standardFieldSettings
+            : [];
+        const requiredStandardFields = new Set(
+            standardFieldSettings
+                .filter((field: any) => Boolean(field?.required) && selectedStandardFields.has(field?.key))
+                .map((field: any) => String(field.key))
+        );
         const customFields = (Array.isArray((job as any).applicationForm?.customFields)
             ? (job as any).applicationForm.customFields
             : []) as IJobApplicationCustomField[];
@@ -151,12 +159,35 @@ export class ApplicationService {
             throw new AppError('Figma URL must be a valid link', 400);
         }
 
+        if (requiredStandardFields.has('portfolio') && !String(data.portfolio || '').trim()) {
+            throw new AppError('Portfolio URL is required for this job', 400);
+        }
+        if (requiredStandardFields.has('github') && !String(data.github || '').trim()) {
+            throw new AppError('GitHub URL is required for this job', 400);
+        }
+        if (requiredStandardFields.has('linkedin') && !String(data.linkedin || '').trim()) {
+            throw new AppError('LinkedIn URL is required for this job', 400);
+        }
+        if (requiredStandardFields.has('experience') && !String(data.experience || '').trim()) {
+            throw new AppError('Relevant Experience is required for this job', 400);
+        }
+        if (requiredStandardFields.has('coverLetter') && !String(data.coverLetter || '').trim()) {
+            throw new AppError('Cover Letter is required for this job', 400);
+        }
+        if (requiredStandardFields.has('figmaUrl') && !String((data as any).figmaUrl || '').trim()) {
+            throw new AppError('Figma URL is required for this job', 400);
+        }
+
         const customFieldResponses: IApplication['customFieldResponses'] = [];
         for (const field of customFields) {
             const rawValue = String(customFieldValues[field.key] || '').trim();
+            const isRequired = Boolean(field.required);
 
             if (field.type === 'attachment') {
                 const file = filesByField.get(`custom_${field.key}`);
+                if (isRequired && !file) {
+                    throw new AppError(`${field.label} is required`, 400);
+                }
                 if (!file) continue;
 
                 const fieldUpload = await uploadDocument(
@@ -179,6 +210,9 @@ export class ApplicationService {
                 continue;
             }
 
+            if (isRequired && !rawValue) {
+                throw new AppError(`${field.label} is required`, 400);
+            }
             if (!rawValue) continue;
 
             if (field.type === 'url' && !isValidUrl(rawValue)) {

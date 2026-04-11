@@ -5,14 +5,19 @@ import {
     type ChangeEvent,
     type CSSProperties,
     type FormEvent,
+    type KeyboardEvent,
     type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     AlertCircle,
+    Check,
     CheckCircle2,
+    ChevronDown,
     ChevronLeft,
+    ChevronUp,
+    GripVertical,
     Loader2,
     Plus,
     Sparkles,
@@ -22,7 +27,6 @@ import {
 import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
 import {
     useCreateJobMutation,
-    useDeleteApplicationFieldMutation,
     useDeleteJobTemplateMutation,
     useGetApplicationFieldLibraryQuery,
     useGetJobByIdQuery,
@@ -36,6 +40,7 @@ import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import type {
     ApplicationCustomFieldDefinition,
     ApplicationFieldType,
+    JobApplicationFormConfig,
     ApplicationStandardFieldSetting,
     EmploymentType,
     StandardApplicationFieldId,
@@ -145,6 +150,7 @@ interface EditableFieldState {
     label: string;
     placeholder: string;
     helpText: string;
+    required: boolean;
 }
 
 const EMPTY_FORM: FormState = {
@@ -187,11 +193,72 @@ const EMPTY_NEW_FIELD: NewFieldState = {
 
 function normalizeFieldKey(label: string) {
     return label
+    .normalize('NFKC')
         .toLowerCase()
         .trim()
-        .replace(/[^a-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
         .replace(/^_+|_+$/g, '')
         .slice(0, 60);
+}
+
+function buildSafeFieldKey(label: string) {
+    const normalized = normalizeFieldKey(label);
+    if (normalized) return normalized;
+    return `field_${Date.now().toString(36)}`;
+}
+
+function isStandardFieldId(value: unknown): value is StandardApplicationFieldId {
+    return OPTIONAL_STANDARD_FIELDS.some((field) => field.key === value);
+}
+
+function buildApplicationFormState(applicationForm?: Partial<JobApplicationFormConfig>) {
+    const incomingSelected = Array.isArray(applicationForm?.selectedStandardFields)
+        ? applicationForm.selectedStandardFields.filter(isStandardFieldId)
+        : [];
+    const incomingSettings = Array.isArray(applicationForm?.standardFieldSettings)
+        ? applicationForm.standardFieldSettings.filter((field) => isStandardFieldId(field?.key))
+        : [];
+
+    const selectedStandardFields = (
+        incomingSelected.length > 0
+            ? incomingSelected
+            : incomingSettings.length > 0
+                ? incomingSettings.map((field) => field.key)
+                : DEFAULT_SELECTED_STANDARD_FIELDS
+    ).filter((value, index, arr) => arr.indexOf(value) === index);
+
+    const settingsByKey = incomingSettings.reduce<Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>>(
+        (acc, field) => {
+            acc[field.key] = field;
+            return acc;
+        },
+        {} as Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>
+    );
+
+    const standardFieldSettings = selectedStandardFields.map((key) => {
+        const existing = settingsByKey[key];
+        if (existing) return existing;
+        return {
+            key,
+            label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
+            placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
+            helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
+        } as ApplicationStandardFieldSetting;
+    });
+
+    return {
+        selectedStandardFields,
+        standardFieldSettings,
+        customFields: applicationForm?.customFields || [],
+        pageSections: {
+            showAboutCompany: true,
+            showAboutRole: applicationForm?.pageSections?.showAboutRole ?? true,
+            showRequirements: applicationForm?.pageSections?.showRequirements ?? true,
+            showWhatYouGet: applicationForm?.pageSections?.showWhatYouGet ?? true,
+            aboutCompany: '',
+            whatYouGet: applicationForm?.pageSections?.whatYouGet || '',
+        },
+    };
 }
 
 function Field({
@@ -281,8 +348,6 @@ export default function HiringJobFormPage() {
     const [createTemplate, { isLoading: isCreatingTemplate }] = useCreateJobTemplateMutation();
     const [deleteTemplate, { isLoading: isDeletingTemplate }] = useDeleteJobTemplateMutation();
     const [saveApplicationField, { isLoading: isSavingField }] = useSaveApplicationFieldMutation();
-    const [deleteApplicationField, { isLoading: isDeletingField }] =
-        useDeleteApplicationFieldMutation();
 
     const isSubmitting = isCreating || isUpdating;
     const templates = templatesData?.data?.templates || [];
@@ -297,6 +362,9 @@ export default function HiringJobFormPage() {
     const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
     const [showNewFieldModal, setShowNewFieldModal] = useState(false);
     const [showEditFieldModal, setShowEditFieldModal] = useState(false);
+    const [showReusableFields, setShowReusableFields] = useState(false);
+    const [draggingStandardFieldKey, setDraggingStandardFieldKey] = useState<StandardApplicationFieldId | null>(null);
+    const [draggingCustomFieldKey, setDraggingCustomFieldKey] = useState<string | null>(null);
     const [newTemplateName, setNewTemplateName] = useState('');
     const [newField, setNewField] = useState<NewFieldState>(EMPTY_NEW_FIELD);
     const [editingField, setEditingField] = useState<EditableFieldState | null>(null);
@@ -334,33 +402,7 @@ export default function HiringJobFormPage() {
             isHiring: job.isHiring,
             assignmentRequired: job.assignmentRequired,
             managers: job.managers?.map((m: any) => m._id) || [],
-            applicationForm: {
-                selectedStandardFields:
-                    job.applicationForm?.selectedStandardFields?.length
-                        ? job.applicationForm.selectedStandardFields
-                        : DEFAULT_SELECTED_STANDARD_FIELDS,
-                standardFieldSettings:
-                    job.applicationForm?.standardFieldSettings?.length
-                        ? job.applicationForm.standardFieldSettings
-                        : (job.applicationForm?.selectedStandardFields?.length
-                              ? job.applicationForm.selectedStandardFields
-                              : DEFAULT_SELECTED_STANDARD_FIELDS
-                          ).map((key) => ({
-                              key,
-                              label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
-                              placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
-                              helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
-                          })),
-                customFields: job.applicationForm?.customFields || [],
-                pageSections: {
-                    showAboutCompany: true,
-                    showAboutRole: job.applicationForm?.pageSections?.showAboutRole ?? true,
-                    showRequirements: job.applicationForm?.pageSections?.showRequirements ?? true,
-                    showWhatYouGet: job.applicationForm?.pageSections?.showWhatYouGet ?? true,
-                    aboutCompany: '',
-                    whatYouGet: job.applicationForm?.pageSections?.whatYouGet || '',
-                },
-            },
+            applicationForm: buildApplicationFormState(job.applicationForm),
         });
     }, [isEdit, jobData]);
 
@@ -393,6 +435,32 @@ export default function HiringJobFormPage() {
             }
         };
 
+    const handleBoldShortcut = (
+        e: KeyboardEvent<HTMLTextAreaElement>,
+        applyValue: (nextValue: string) => void
+    ) => {
+        if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b') return;
+        e.preventDefault();
+
+        const textarea = e.currentTarget;
+
+        const currentValue = textarea.value;
+        const start = textarea.selectionStart ?? currentValue.length;
+        const end = textarea.selectionEnd ?? currentValue.length;
+        const selectedText = currentValue.slice(start, end);
+        const wrappedText = selectedText ? `**${selectedText}**` : '****';
+        const nextValue = `${currentValue.slice(0, start)}${wrappedText}${currentValue.slice(end)}`;
+
+        applyValue(nextValue);
+
+        window.requestAnimationFrame(() => {
+            const nextStart = start + 2;
+            const nextEnd = selectedText ? end + 2 : start + 2;
+            textarea.focus();
+            textarea.setSelectionRange(nextStart, nextEnd);
+        });
+    };
+
     const handleImportTemplate = (e: ChangeEvent<HTMLSelectElement>) => {
         const templateId = e.target.value;
         if (!templateId) return;
@@ -409,34 +477,7 @@ export default function HiringJobFormPage() {
             description: selected.description || '',
             requirements: selected.requirements || '',
             employmentType: selected.employmentType || 'full-time',
-            applicationForm: {
-                selectedStandardFields:
-                    selected.applicationForm?.selectedStandardFields?.length
-                        ? selected.applicationForm.selectedStandardFields
-                        : DEFAULT_SELECTED_STANDARD_FIELDS,
-                standardFieldSettings:
-                    selected.applicationForm?.standardFieldSettings?.length
-                        ? selected.applicationForm.standardFieldSettings
-                        : (selected.applicationForm?.selectedStandardFields?.length
-                              ? selected.applicationForm.selectedStandardFields
-                              : DEFAULT_SELECTED_STANDARD_FIELDS
-                          ).map((key) => ({
-                              key,
-                              label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
-                              placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
-                              helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
-                          })),
-                customFields: selected.applicationForm?.customFields || [],
-                pageSections: {
-                    showAboutCompany: true,
-                    showAboutRole: selected.applicationForm?.pageSections?.showAboutRole ?? true,
-                    showRequirements:
-                        selected.applicationForm?.pageSections?.showRequirements ?? true,
-                    showWhatYouGet: selected.applicationForm?.pageSections?.showWhatYouGet ?? true,
-                    aboutCompany: '',
-                    whatYouGet: selected.applicationForm?.pageSections?.whatYouGet || '',
-                },
-            },
+            applicationForm: buildApplicationFormState(selected.applicationForm),
         }));
         setSuccessMsg('Template applied successfully');
         window.setTimeout(() => setSuccessMsg(''), 3000);
@@ -460,53 +501,118 @@ export default function HiringJobFormPage() {
 
     const toggleStandardField = (fieldKey: StandardApplicationFieldId) => {
         setForm((prev) => {
-            const current = new Set(prev.applicationForm.selectedStandardFields);
-            if (current.has(fieldKey)) {
-                current.delete(fieldKey);
-            } else {
-                current.add(fieldKey);
-            }
+            const exists = prev.applicationForm.selectedStandardFields.includes(fieldKey);
+            const selectedStandardFields = exists
+                ? prev.applicationForm.selectedStandardFields.filter((key) => key !== fieldKey)
+                : [...prev.applicationForm.selectedStandardFields, fieldKey];
+
+            const settingsByKey = prev.applicationForm.standardFieldSettings.reduce<
+                Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>
+            >((acc, setting) => {
+                acc[setting.key] = setting;
+                return acc;
+            }, {} as Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>);
 
             return {
                 ...prev,
                 applicationForm: {
                     ...prev.applicationForm,
-                    selectedStandardFields: Array.from(current) as StandardApplicationFieldId[],
-                    standardFieldSettings: Array.from(current).map((key) => {
-                        const existing = prev.applicationForm.standardFieldSettings.find(
-                            (item) => item.key === key
-                        );
+                    selectedStandardFields,
+                    standardFieldSettings: selectedStandardFields.map((key) => {
+                        const existing = settingsByKey[key];
                         return (
                             existing || {
-                                key: key as StandardApplicationFieldId,
-                                label: DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].label,
-                                placeholder:
-                                    DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].placeholder,
-                                helpText:
-                                    DEFAULT_STANDARD_FIELD_SETTINGS[key as StandardApplicationFieldId].helpText,
+                                key,
+                                label: DEFAULT_STANDARD_FIELD_SETTINGS[key].label,
+                                placeholder: DEFAULT_STANDARD_FIELD_SETTINGS[key].placeholder,
+                                helpText: DEFAULT_STANDARD_FIELD_SETTINGS[key].helpText,
                             }
                         );
-                    }) as ApplicationStandardFieldSetting[],
+                    }),
                 },
             };
         });
     };
 
-    const toggleCustomField = (field: ApplicationCustomFieldDefinition) => {
+    const moveStandardField = (
+        sourceKey: StandardApplicationFieldId,
+        targetKey: StandardApplicationFieldId
+    ) => {
+        if (sourceKey === targetKey) return;
+
         setForm((prev) => {
-            const exists = prev.applicationForm.customFields.some(
-                (customField) => customField.key === field.key
-            );
+            const current = [...prev.applicationForm.selectedStandardFields];
+            const sourceIndex = current.indexOf(sourceKey);
+            const targetIndex = current.indexOf(targetKey);
+            if (sourceIndex < 0 || targetIndex < 0) return prev;
+
+            current.splice(sourceIndex, 1);
+            current.splice(targetIndex, 0, sourceKey);
+
+            const settingsByKey = prev.applicationForm.standardFieldSettings.reduce<
+                Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>
+            >((acc, setting) => {
+                acc[setting.key] = setting;
+                return acc;
+            }, {} as Record<StandardApplicationFieldId, ApplicationStandardFieldSetting>);
 
             return {
                 ...prev,
                 applicationForm: {
                     ...prev.applicationForm,
-                    customFields: exists
-                        ? prev.applicationForm.customFields.filter(
-                              (customField) => customField.key !== field.key
-                          )
-                        : [...prev.applicationForm.customFields, field],
+                    selectedStandardFields: current,
+                    standardFieldSettings: current.map((key) => settingsByKey[key]).filter(Boolean),
+                },
+            };
+        });
+    };
+
+    const importCustomFieldFromLibrary = (field: ApplicationCustomFieldDefinition) => {
+        setForm((prev) => {
+            if (prev.applicationForm.customFields.some((customField) => customField.key === field.key)) {
+                return prev;
+            }
+            return {
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    customFields: [...prev.applicationForm.customFields, field],
+                },
+            };
+        });
+    };
+
+    const removeCustomField = (fieldKey: string) => {
+        setForm((prev) => {
+            return {
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    customFields: prev.applicationForm.customFields.filter(
+                        (customField) => customField.key !== fieldKey
+                    ),
+                },
+            };
+        });
+    };
+
+    const moveCustomField = (sourceKey: string, targetKey: string) => {
+        if (sourceKey === targetKey) return;
+
+        setForm((prev) => {
+            const current = [...prev.applicationForm.customFields];
+            const sourceIndex = current.findIndex((field) => field.key === sourceKey);
+            const targetIndex = current.findIndex((field) => field.key === targetKey);
+            if (sourceIndex < 0 || targetIndex < 0) return prev;
+
+            const [sourceField] = current.splice(sourceIndex, 1);
+            current.splice(targetIndex, 0, sourceField);
+
+            return {
+                ...prev,
+                applicationForm: {
+                    ...prev.applicationForm,
+                    customFields: current,
                 },
             };
         });
@@ -553,10 +659,12 @@ export default function HiringJobFormPage() {
             return;
         }
 
+        const safeKey = buildSafeFieldKey(label);
+
         setServerError('');
         try {
             const saved = await saveApplicationField({
-                key: normalizeFieldKey(label),
+                key: safeKey,
                 label,
                 type: newField.type,
                 placeholder: newField.placeholder.trim() || undefined,
@@ -565,9 +673,9 @@ export default function HiringJobFormPage() {
 
             const latestField =
                 saved.data.fields.find(
-                    (field) => field.key === normalizeFieldKey(label)
+                    (field) => field.key === safeKey
                 ) || {
-                    key: normalizeFieldKey(label),
+                    key: safeKey,
                     label,
                     type: newField.type,
                     placeholder: newField.placeholder.trim() || undefined,
@@ -597,23 +705,6 @@ export default function HiringJobFormPage() {
         }
     };
 
-    const handleDeleteSavedField = async (fieldKey: string) => {
-        try {
-            await deleteApplicationField(fieldKey).unwrap();
-            setForm((prev) => ({
-                ...prev,
-                applicationForm: {
-                    ...prev.applicationForm,
-                    customFields: prev.applicationForm.customFields.filter(
-                        (field) => field.key !== fieldKey
-                    ),
-                },
-            }));
-        } catch (err: any) {
-            setServerError(err?.data?.message || 'Failed to delete custom field');
-        }
-    };
-
     const openEditStandardField = (fieldKey: StandardApplicationFieldId) => {
         const existing = form.applicationForm.standardFieldSettings.find((item) => item.key === fieldKey);
         const defaults = DEFAULT_STANDARD_FIELD_SETTINGS[fieldKey];
@@ -623,6 +714,7 @@ export default function HiringJobFormPage() {
             label: existing?.label || defaults.label,
             placeholder: existing?.placeholder || defaults.placeholder || '',
             helpText: existing?.helpText || defaults.helpText || '',
+            required: Boolean(existing?.required),
         });
         setShowEditFieldModal(true);
     };
@@ -634,6 +726,7 @@ export default function HiringJobFormPage() {
             label: field.label,
             placeholder: field.placeholder || '',
             helpText: field.helpText || '',
+            required: Boolean(field.required),
         });
         setShowEditFieldModal(true);
     };
@@ -654,6 +747,7 @@ export default function HiringJobFormPage() {
                                         label: editingField.label.trim() || field.label,
                                         placeholder: editingField.placeholder.trim() || undefined,
                                         helpText: editingField.helpText.trim() || undefined,
+                                        required: editingField.required,
                                     }
                                   : field
                           )
@@ -667,6 +761,7 @@ export default function HiringJobFormPage() {
                                         label: editingField.label.trim() || field.label,
                                         placeholder: editingField.placeholder.trim() || undefined,
                                         helpText: editingField.helpText.trim() || undefined,
+                                        required: editingField.required,
                                     }
                                   : field
                           )
@@ -714,6 +809,21 @@ export default function HiringJobFormPage() {
             setServerError(err?.data?.message || 'Something went wrong. Please try again.');
         }
     };
+
+    const orderedOptionalFields = useMemo(() => {
+        const selected = form.applicationForm.selectedStandardFields;
+        const selectedSet = new Set(selected);
+        const selectedOrdered = selected
+            .map((key) => OPTIONAL_STANDARD_FIELDS.find((field) => field.key === key))
+            .filter(Boolean) as typeof OPTIONAL_STANDARD_FIELDS;
+        const unselected = OPTIONAL_STANDARD_FIELDS.filter((field) => !selectedSet.has(field.key));
+        return [...selectedOrdered, ...unselected];
+    }, [form.applicationForm.selectedStandardFields]);
+
+    const importedCustomFields = useMemo(
+        () => form.applicationForm.customFields,
+        [form.applicationForm.customFields]
+    );
 
     if (isEdit && isLoadingJob) {
         return (
@@ -939,6 +1049,11 @@ export default function HiringJobFormPage() {
                             <textarea
                                 value={form.description}
                                 onChange={set('description')}
+                                onKeyDown={(e) =>
+                                    handleBoldShortcut(e, (nextValue) =>
+                                        setForm((prev) => ({ ...prev, description: nextValue }))
+                                    )
+                                }
                                 rows={5}
                                 className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                 style={inputStyle}
@@ -949,6 +1064,11 @@ export default function HiringJobFormPage() {
                             <textarea
                                 value={form.requirements}
                                 onChange={set('requirements')}
+                                onKeyDown={(e) =>
+                                    handleBoldShortcut(e, (nextValue) =>
+                                        setForm((prev) => ({ ...prev, requirements: nextValue }))
+                                    )
+                                }
                                 rows={4}
                                 className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                 style={inputStyle}
@@ -969,6 +1089,20 @@ export default function HiringJobFormPage() {
                                             },
                                         },
                                     }))
+                                }
+                                onKeyDown={(e) =>
+                                    handleBoldShortcut(e, (nextValue) =>
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            applicationForm: {
+                                                ...prev.applicationForm,
+                                                pageSections: {
+                                                    ...prev.applicationForm.pageSections,
+                                                    whatYouGet: nextValue,
+                                                },
+                                            },
+                                        }))
+                                    )
                                 }
                                 rows={5}
                                 placeholder="Role specific perks, growth, benefits, and learning opportunities"
@@ -1064,7 +1198,13 @@ export default function HiringJobFormPage() {
                             <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
                                 Always Included
                             </p>
-                            <div className="space-y-3">
+                            <div
+                                className="max-h-[26.75rem] space-y-3 overflow-y-auto rounded-2xl border p-3"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'rgba(255,255,255,0.45)',
+                                }}
+                            >
                                 {MANDATORY_FIELDS.map((field) => (
                                     <div
                                         key={field.key}
@@ -1099,12 +1239,33 @@ export default function HiringJobFormPage() {
                             <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
                                 Optional Standard Fields
                             </p>
-                            <div className="space-y-3">
-                                {OPTIONAL_STANDARD_FIELDS.map((field) => {
+                            <div
+                                className="max-h-[26.75rem] space-y-3 overflow-y-auto rounded-2xl border p-3"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'rgba(255,255,255,0.45)',
+                                }}
+                            >
+                                {orderedOptionalFields.map((field) => {
                                     const selected = form.applicationForm.selectedStandardFields.includes(field.key);
                                     return (
                                         <label
                                             key={field.key}
+                                            draggable={selected}
+                                            onDragStart={() => {
+                                                if (!selected) return;
+                                                setDraggingStandardFieldKey(field.key);
+                                            }}
+                                            onDragOver={(e) => {
+                                                if (!draggingStandardFieldKey || !selected) return;
+                                                e.preventDefault();
+                                            }}
+                                            onDrop={() => {
+                                                if (!draggingStandardFieldKey || !selected) return;
+                                                moveStandardField(draggingStandardFieldKey, field.key);
+                                                setDraggingStandardFieldKey(null);
+                                            }}
+                                            onDragEnd={() => setDraggingStandardFieldKey(null)}
                                             className="field-choice flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-4"
                                             style={{
                                                 backgroundColor: selected
@@ -1115,6 +1276,18 @@ export default function HiringJobFormPage() {
                                                     : 'var(--color-border-default)',
                                             }}
                                         >
+                                            <div
+                                                className="mt-0.5"
+                                                style={{
+                                                    color: selected
+                                                        ? 'var(--color-primary)'
+                                                        : 'var(--color-text-muted)',
+                                                    cursor: selected ? 'grab' : 'default',
+                                                }}
+                                                title={selected ? 'Drag to reorder selected fields' : 'Select field to reorder'}
+                                            >
+                                                <GripVertical size={16} />
+                                            </div>
                                             <input
                                                 type="checkbox"
                                                 checked={selected}
@@ -1138,32 +1311,135 @@ export default function HiringJobFormPage() {
                                                     }}
                                                     className="ml-auto rounded-full border px-2.5 py-1 text-[11px] font-semibold"
                                                     style={{
-                                                        borderColor: 'var(--color-border-default)',
-                                                        color: 'var(--color-text-secondary)',
-                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                        borderColor: form.applicationForm.standardFieldSettings.find((item) => item.key === field.key)?.required
+                                                            ? '#15803D'
+                                                            : '#2563EB',
+                                                        color: form.applicationForm.standardFieldSettings.find((item) => item.key === field.key)?.required
+                                                            ? '#15803D'
+                                                            : '#2563EB',
+                                                        backgroundColor: form.applicationForm.standardFieldSettings.find((item) => item.key === field.key)?.required
+                                                            ? '#DCFCE7'
+                                                            : '#DBEAFE',
                                                     }}
                                                 >
-                                                    Edit
+                                                    {form.applicationForm.standardFieldSettings.find((item) => item.key === field.key)?.required
+                                                        ? 'Edit · Required'
+                                                        : 'Edit · Optional'}
                                                 </button>
                                             )}
                                         </label>
                                     );
                                 })}
+
+                                {importedCustomFields.length > 0 && (
+                                    <div className="pt-1">
+                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
+                                            Imported From Reusable Fields
+                                        </p>
+                                        <div className="space-y-3">
+                                            {importedCustomFields.map((field) => (
+                                                <div
+                                                    key={field.key}
+                                                    draggable
+                                                    onDragStart={() => setDraggingCustomFieldKey(field.key)}
+                                                    onDragOver={(e) => {
+                                                        if (!draggingCustomFieldKey) return;
+                                                        e.preventDefault();
+                                                    }}
+                                                    onDrop={() => {
+                                                        if (!draggingCustomFieldKey) return;
+                                                        moveCustomField(draggingCustomFieldKey, field.key);
+                                                        setDraggingCustomFieldKey(null);
+                                                    }}
+                                                    onDragEnd={() => setDraggingCustomFieldKey(null)}
+                                                    className="field-choice flex items-start gap-3 rounded-2xl border px-4 py-4"
+                                                    style={{
+                                                        backgroundColor: 'rgba(var(--color-primary-rgb), 0.12)',
+                                                        borderColor: 'var(--color-primary)',
+                                                    }}
+                                                >
+                                                    <div
+                                                        className="mt-0.5"
+                                                        style={{
+                                                            color: 'var(--color-primary)',
+                                                            cursor: 'grab',
+                                                        }}
+                                                        title="Drag to reorder imported custom fields"
+                                                    >
+                                                        <GripVertical size={16} />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            removeCustomField(field.key);
+                                                        }}
+                                                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border"
+                                                        style={{
+                                                            borderColor: '#B91C1C',
+                                                            color: '#B91C1C',
+                                                            backgroundColor: '#FEE2E2',
+                                                        }}
+                                                        title="Remove from optional fields"
+                                                        aria-label="Remove imported reusable field"
+                                                    >
+                                                        <span className="text-base leading-none">-</span>
+                                                    </button>
+                                                    <div>
+                                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                            {field.label}
+                                                        </p>
+                                                        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                            {FIELD_TYPE_OPTIONS.find((option) => option.value === field.type)?.label || field.type}
+                                                            {field.helpText ? ` · ${field.helpText}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            openEditCustomField(field);
+                                                        }}
+                                                        className="ml-auto rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                                                        style={{
+                                                            borderColor: field.required ? '#15803D' : '#2563EB',
+                                                            color: field.required ? '#15803D' : '#2563EB',
+                                                            backgroundColor: field.required ? '#DCFCE7' : '#DBEAFE',
+                                                        }}
+                                                    >
+                                                        {field.required ? 'Edit · Required' : 'Edit · Optional'}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
 
                     <div className="mt-8">
-                        <div className="mb-3 flex items-center justify-between gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowReusableFields((prev) => !prev)}
+                            className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'rgba(255,255,255,0.6)',
+                            }}
+                        >
                             <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
                                 Reusable Custom Fields
                             </p>
-                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                Saved here once, reusable in future jobs.
-                            </p>
-                        </div>
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                    Saved once, reusable in future jobs.
+                                </p>
+                                {showReusableFields ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </div>
+                        </button>
 
-                        {fieldLibrary.length === 0 ? (
+                        {showReusableFields && (fieldLibrary.length === 0 ? (
                             <div
                                 className="rounded-xl border border-dashed px-4 py-5 text-sm"
                                 style={{
@@ -1175,7 +1451,13 @@ export default function HiringJobFormPage() {
                                 No custom fields saved yet. Use “Add New Field” to build your reusable library.
                             </div>
                         ) : (
-                            <div className="space-y-3">
+                            <div
+                                className="max-h-[26.75rem] space-y-3 overflow-y-auto rounded-2xl border p-3"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'rgba(255,255,255,0.45)',
+                                }}
+                            >
                                 {fieldLibrary.map((field) => {
                                     const selected = selectedCustomFieldKeys.has(field.key);
                                     return (
@@ -1191,13 +1473,29 @@ export default function HiringJobFormPage() {
                                                     : 'var(--color-border-default)',
                                             }}
                                         >
-                                            <label className="flex cursor-pointer items-start gap-3">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selected}
-                                                    onChange={() => toggleCustomField(field)}
-                                                    className="mt-1"
-                                                />
+                                            <div className="flex items-start gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        importCustomFieldFromLibrary(field);
+                                                    }}
+                                                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border"
+                                                    style={{
+                                                        borderColor: selected
+                                                            ? 'var(--color-primary)'
+                                                            : 'var(--color-border-default)',
+                                                        color: selected
+                                                            ? 'var(--color-primary)'
+                                                            : 'var(--color-text-secondary)',
+                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                    }}
+                                                    title={selected ? 'Already added to this job form' : 'Add this field to this job form'}
+                                                    aria-label={selected ? 'Field added' : 'Add reusable custom field'}
+                                                >
+                                                    {selected ? <Check size={13} /> : <Plus size={13} />}
+                                                </button>
                                                 <div>
                                                     <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
                                                         {field.label}
@@ -1207,37 +1505,26 @@ export default function HiringJobFormPage() {
                                                         {field.helpText ? ` · ${field.helpText}` : ''}
                                                     </p>
                                                 </div>
-                                            </label>
+                                            </div>
                                             <div className="flex items-center gap-2">
-                                                {selected && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openEditCustomField(field)}
-                                                        className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
-                                                        style={{
-                                                            borderColor: 'var(--color-border-default)',
-                                                            color: 'var(--color-text-secondary)',
-                                                            backgroundColor: 'var(--color-bg-surface)',
-                                                        }}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleDeleteSavedField(field.key)}
-                                                    disabled={isDeletingField}
-                                                    className="rounded-lg border p-2"
-                                                    style={inputStyle}
+                                                    onClick={() => openEditCustomField(field)}
+                                                    className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                                                    style={{
+                                                        borderColor: field.required ? '#15803D' : '#2563EB',
+                                                        color: field.required ? '#15803D' : '#2563EB',
+                                                        backgroundColor: field.required ? '#DCFCE7' : '#DBEAFE',
+                                                    }}
                                                 >
-                                                    <Trash2 size={14} />
+                                                    {field.required ? 'Edit · Required' : 'Edit · Optional'}
                                                 </button>
                                             </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                        )}
+                        ))}
                     </div>
 
                 </div>
@@ -1606,6 +1893,22 @@ export default function HiringJobFormPage() {
                                 style={inputStyle}
                             />
                         </Field>
+
+                        <label
+                            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={editingField.required}
+                                onChange={(e) =>
+                                    setEditingField((prev) =>
+                                        prev ? { ...prev, required: e.target.checked } : prev
+                                    )
+                                }
+                            />
+                            Required for this job posting
+                        </label>
 
                         <div className="flex justify-end gap-3">
                             <button

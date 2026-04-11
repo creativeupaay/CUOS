@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { SalaryPayoutAccountKey } from './SalaryStructure.model';
 
 export interface IPayrollDeductions {
     pf: number;
@@ -19,10 +20,12 @@ export interface IPayroll extends Document {
     totalHoursWorked: number;
     overtime: number;
     grossSalary: number;
+    payableDays: number;
     incentiveAmount: number;
     penaltyAmount: number;
     deductions: IPayrollDeductions;
     netSalary: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     status: 'draft' | 'approved' | 'paid';
     generatedBy: Types.ObjectId;
     approvedBy?: Types.ObjectId;
@@ -57,6 +60,7 @@ const PayrollSchema = new Schema<IPayroll>(
         totalHoursWorked: { type: Number, default: 0, min: 0 },
         overtime: { type: Number, default: 0, min: 0 },
         grossSalary: { type: Number, required: true, min: 0 },
+        payableDays: { type: Number, required: true, min: 0, default: 30 },
         incentiveAmount: { type: Number, default: 0 },
         penaltyAmount: { type: Number, default: 0, min: 0 },
         deductions: {
@@ -64,6 +68,12 @@ const PayrollSchema = new Schema<IPayroll>(
             default: () => ({ pf: 0, esi: 0, tax: 0, leaves: 0, penalties: 0, other: 0 }),
         },
         netSalary: { type: Number, required: true },
+        payoutAccountKey: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+            required: true,
+            default: 'hdfc_gst',
+        },
         status: {
             type: String,
             enum: ['draft', 'approved', 'paid'],

@@ -35,6 +35,7 @@ export class ExpenseController {
             if (expenseData.employeeName === '') delete expenseData.employeeName;
             if (expenseData.vendor === '') delete expenseData.vendor;
             if (expenseData.paidBy === '') delete expenseData.paidBy;
+            if (expenseData.sourceAccountKey === '') delete expenseData.sourceAccountKey;
             if (expenseData.notes === '') delete expenseData.notes;
             if (expenseData.transactionRef === '') delete expenseData.transactionRef;
 
@@ -74,6 +75,9 @@ export class ExpenseController {
                 endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
                 projectId: req.query.projectId ? new Types.ObjectId(req.query.projectId as string) : undefined,
                 employeeId: req.query.employeeId ? new Types.ObjectId(req.query.employeeId as string) : undefined,
+                isRecurring: req.query.isRecurring !== undefined
+                    ? String(req.query.isRecurring).toLowerCase() === 'true'
+                    : undefined,
                 page: req.query.page ? parseInt(req.query.page as string) : 1,
                 limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
             };
@@ -161,6 +165,7 @@ export class ExpenseController {
             if (expenseData.employeeName === '') delete expenseData.employeeName;
             if (expenseData.vendor === '') delete expenseData.vendor;
             if (expenseData.paidBy === '') delete expenseData.paidBy;
+            if (expenseData.sourceAccountKey === '') delete expenseData.sourceAccountKey;
             if (expenseData.notes === '') delete expenseData.notes;
             if (expenseData.transactionRef === '') delete expenseData.transactionRef;
 

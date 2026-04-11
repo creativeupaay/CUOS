@@ -1,7 +1,10 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export type SalaryPayoutAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+
 export interface ISalaryRevision {
     basic: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     hra: number;
     da: number;
     specialAllowance: number;
@@ -21,6 +24,7 @@ export interface ISalaryStructure extends Document {
     _id: Types.ObjectId;
     employeeId: Types.ObjectId;
     basic: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     hra: number;
     da: number;
     specialAllowance: number;
@@ -36,6 +40,12 @@ export interface ISalaryStructure extends Document {
 const SalaryRevisionSchema = new Schema<ISalaryRevision>(
     {
         basic: { type: Number, required: true, min: 0, default: 0 },
+        payoutAccountKey: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+            required: true,
+            default: 'hdfc_gst',
+        },
         hra: { type: Number, required: true, min: 0, default: 0 },
         da: { type: Number, default: 0, min: 0 },
         specialAllowance: { type: Number, default: 0, min: 0 },
@@ -65,6 +75,12 @@ const SalaryStructureSchema = new Schema<ISalaryStructure>(
             unique: true,
         },
         basic: { type: Number, required: true, min: 0, default: 0 },
+        payoutAccountKey: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+            default: 'hdfc_gst',
+            required: true,
+        },
         hra: { type: Number, required: true, min: 0, default: 0 },
         da: { type: Number, default: 0, min: 0 },
         specialAllowance: { type: Number, default: 0, min: 0 },
@@ -84,7 +100,7 @@ const SalaryStructureSchema = new Schema<ISalaryStructure>(
 
 // Virtual: gross salary
 SalaryStructureSchema.virtual('grossSalary').get(function () {
-    return this.basic + this.hra + this.da + this.specialAllowance;
+    return this.basic + this.specialAllowance;
 });
 
 export const SalaryStructure = mongoose.model<ISalaryStructure>(

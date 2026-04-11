@@ -2,14 +2,15 @@ import { useOutletContext, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import type { Project, ProjectPhase } from '@/features/project';
-import { useAddAssigneeMutation, useRemoveAssigneeMutation, useUpdateAssigneePermissionsMutation, useLazyGetAssigneePermissionsQuery, useUpdateProjectMutation } from '@/features/project';
+import { useAddAssigneeMutation, useRemoveAssigneeMutation, useUpdateAssigneePermissionsMutation, useLazyGetAssigneePermissionsQuery, useUpdateProjectMutation, useMarkPhasePaymentReceivedMutation } from '@/features/project';
 import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
-import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle, Handshake } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Calendar, Users, Building2, Pencil, CheckCircle2, Circle, Clock, Target, Plus, Trash2, Loader2, Settings2, X, LayoutDashboard, ListTodo, Video, KeyRound, FileText, StickyNote, ChevronRight, AlertTriangle, Handshake, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import { useGetPartnerEmployeesQuery } from '@/features/partners/partnerEmployeeApi';
+import PhasePaymentDialog from '@/components/PhasePaymentDialog';
 
 function getAssigneeMeta(assignee: any) {
     const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
@@ -223,6 +224,9 @@ export default function ProjectOverviewTab() {
                         <InfoItem label="Start Date" value={new Date(project.startDate).toLocaleDateString()} />
                         {project.endDate && (
                             <InfoItem label="Internal Deadline" value={new Date(project.endDate).toLocaleDateString()} />
+                        )}
+                        {(project as any).overdueDate && (
+                            <InfoItem label="Overdue Date" value={new Date((project as any).overdueDate).toLocaleDateString()} />
                         )}
                         {project.deadline && (
                             <InfoItem label="Deadline" value={new Date(project.deadline).toLocaleDateString()} />
@@ -691,7 +695,29 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
 
     const [showPhasePanel, setShowPhasePanel] = useState(false);
     const [localPhases, setLocalPhases] = useState<any[]>([]);
+    const [expandedPaymentSections, setExpandedPaymentSections] = useState<Record<number, boolean>>({});
+    const [paymentDialogPhase, setPaymentDialogPhase] = useState<(ProjectPhase & { _id: string }) | null>(null);
     const [updateProject, { isLoading: isSavingPhases }] = useUpdateProjectMutation();
+    const [markPhasePaymentReceived] = useMarkPhasePaymentReceivedMutation();
+    const localPhaseRowRefs = useRef<Array<HTMLDivElement | null>>([]);
+    const newlyAddedLocalPhaseIndexRef = useRef<number | null>(null);
+
+    const totalPaymentAllocation = useMemo(
+        () => localPhases.reduce((sum, phase) => sum + (phase.hasPayment ? Number(phase.paymentPercentage || 0) : 0), 0),
+        [localPhases]
+    );
+    const paymentAllocationError = totalPaymentAllocation > 100
+        ? 'Total payment allocation cannot be more than 100% across all phases.'
+        : '';
+
+    const getMaxAllowedPaymentPercentage = (index: number) => {
+        const otherAllocated = localPhases.reduce((sum, phase, phaseIndex) => {
+            if (phaseIndex === index || !phase.hasPayment) return sum;
+            return sum + Number(phase.paymentPercentage || 0);
+        }, 0);
+
+        return Math.max(0, 100 - otherAllocated);
+    };
 
     useBodyScrollLock(showPhasePanel);
 
@@ -702,9 +728,42 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
     }, [showPhasePanel]);
 
     const addPhase = () =>
-        setLocalPhases(prev => [...prev, { name: '', status: 'pending', endDate: '' }]);
+        setLocalPhases(prev => {
+            const nextIndex = prev.length;
+            newlyAddedLocalPhaseIndexRef.current = nextIndex;
+            return [...prev, {
+                name: '',
+                status: 'pending',
+                endDate: '',
+                hasPayment: false,
+                paymentAmount: 0,
+                paymentPercentage: 0,
+                paymentCurrency: project.currency || 'INR',
+                gstApplicable: true,
+                gstRate: 18,
+                tdsDeducted: 0,
+            }];
+        });
 
-    const updatePhaseField = (idx: number, field: string, value: string) =>
+    useEffect(() => {
+        const index = newlyAddedLocalPhaseIndexRef.current;
+        if (index === null || !showPhasePanel) return;
+
+        const id = window.setTimeout(() => {
+            const row = localPhaseRowRefs.current[index];
+            if (!row) return;
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const firstInput = row.querySelector('input');
+            if (firstInput instanceof HTMLInputElement) {
+                firstInput.focus();
+            }
+        }, 90);
+
+        newlyAddedLocalPhaseIndexRef.current = null;
+        return () => window.clearTimeout(id);
+    }, [localPhases.length, showPhasePanel]);
+
+    const updatePhaseField = (idx: number, field: string, value: any) =>
         setLocalPhases(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
 
     const removePhase = (idx: number) =>
@@ -712,13 +771,37 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
 
     const savePhases = async () => {
         try {
+            if (totalPaymentAllocation > 100) {
+                return;
+            }
+
             const cleaned = localPhases
                 .filter(p => p.name.trim())
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .map(({ _id, __v, ...rest }: any) => {
+                .map(({ _id, __v, revenueId, bankTransactionId, completedAt, paymentReceivedAmount, paymentStatus, ...rest }: any) => {
                     const phase = { ...rest };
+                    // Clean up empty dates
                     if (!phase.endDate) delete phase.endDate;
                     if (!phase.startDate) delete phase.startDate;
+                    if (!phase.paymentDueDate) delete phase.paymentDueDate;
+
+                    // Clean up payment fields if hasPayment is false
+                    if (!phase.hasPayment) {
+                        delete phase.paymentAmount;
+                        delete phase.paymentPercentage;
+                        delete phase.paymentCurrency;
+                        delete phase.paymentDueDate;
+                        delete phase.paymentBankAccount;
+                        delete phase.gstApplicable;
+                        delete phase.gstRate;
+                        delete phase.tdsDeducted;
+                    } else {
+                        // Ensure numeric values are proper numbers or undefined
+                        if (!phase.paymentAmount || phase.paymentAmount === 0) delete phase.paymentAmount;
+                        if (!phase.paymentPercentage || phase.paymentPercentage === 0) delete phase.paymentPercentage;
+                        if (!phase.tdsDeducted || phase.tdsDeducted === 0) delete phase.tdsDeducted;
+                    }
+
                     return phase;
                 });
             await updateProject({ id: String(project._id), data: { phases: cleaned } }).unwrap();
@@ -736,6 +819,77 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                 return <Clock size={16} style={{ color: 'var(--color-warning)' }} />;
             default:
                 return <Circle size={16} style={{ color: 'var(--color-text-muted)' }} />;
+        }
+    };
+
+    const handleMarkPaymentReceived = async (data: {
+        phaseId: string;
+        receivedAmount: number;
+        bankAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+        receivedDate: string;
+        notes?: string;
+    }) => {
+        try {
+            // Mark payment as received
+            await markPhasePaymentReceived({
+                projectId: String(project._id),
+                ...data,
+            }).unwrap();
+
+            // Close the payment dialog
+            setPaymentDialogPhase(null);
+        } catch (error) {
+            console.error('Failed to mark payment received or complete phase:', error);
+        }
+    };
+
+    const handleTogglePhaseCompletion = async (phaseIndex: number, currentStatus: ProjectPhase['status']) => {
+        const currentPhase = project.phases?.[phaseIndex];
+        const paymentAlreadyReceived =
+            currentPhase?.paymentStatus === 'received'
+            || Number(currentPhase?.paymentReceivedAmount || 0) > 0
+            || Boolean((currentPhase as any)?.revenueId)
+            || Boolean((currentPhase as any)?.bankTransactionId);
+
+        // If marking as completed and phase has payment tracking, ask about payment
+        if (currentStatus !== 'completed' && currentPhase?.hasPayment && !paymentAlreadyReceived) {
+            const confirmed = confirm(
+                `Phase "${currentPhase.name}" is being marked as completed.\n\n` +
+                `Has the payment for this phase been received?\n\n` +
+                `• Click OK if payment is received (you'll enter payment details next)\n` +
+                `• Click Cancel to complete phase without marking payment as received`
+            );
+
+            if (confirmed) {
+                // Show payment dialog first, then complete the phase
+                setPaymentDialogPhase({ ...currentPhase, _id: currentPhase._id || `temp-${phaseIndex}` });
+                return;
+            }
+        }
+
+        try {
+            const updatedPhases = (project.phases || []).map((p: any, i: number) => {
+                if (i === phaseIndex) {
+                    // Toggle between completed and in-progress
+                    return {
+                        ...p,
+                        status: currentStatus === 'completed' ? 'in-progress' : 'completed',
+                        completedAt: currentStatus === 'completed' ? undefined : new Date().toISOString(),
+                    };
+                }
+                // If marking current phase as complete, auto-start next phase
+                if (currentStatus !== 'completed' && i === phaseIndex + 1 && p.status === 'pending') {
+                    return { ...p, status: 'in-progress' as const };
+                }
+                return p;
+            });
+
+            // Clean phases before sending (remove backend-only fields)
+            const cleanedPhases = updatedPhases.map(({ _id, __v, revenueId, bankTransactionId, ...rest }: any) => rest);
+
+            await updateProject({ id: String(project._id), data: { phases: cleanedPhases } }).unwrap();
+        } catch (error) {
+            console.error('Failed to update phase status:', error);
         }
     };
 
@@ -774,27 +928,87 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
             {/* Phases Grid */}
             {totalPhases > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {phases.map((phase, index) => (
-                        <div
-                            key={(phase as any)._id || index}
-                            className="flex items-center gap-3 p-3 rounded-lg border"
-                            style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
-                        >
-                            {getPhaseIcon(phase.status)}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{phase.name}</p>
-                                <div className="flex items-center gap-2 mt-0.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                                    <span className="capitalize">{phase.status.replace('-', ' ')}</span>
-                                    {phase.endDate && (
-                                        <>
-                                            <span style={{ color: 'var(--color-border-default)' }}>•</span>
-                                            <span>Due {new Date(phase.endDate).toLocaleDateString()}</span>
-                                        </>
+                    {phases.map((phase, index) => {
+                        const hasPayment = phase.hasPayment;
+                        const paymentStatus = phase.paymentStatus;
+                        const isPaymentReceived =
+                            paymentStatus === 'received'
+                            || Number((phase as any).paymentReceivedAmount || 0) > 0;
+
+                        return (
+                            <div
+                                key={(phase as any)._id || index}
+                                className="flex items-start gap-3 p-3 rounded-lg border"
+                                style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                            >
+                                {/* Completion Checkbox/Ticker */}
+                                {isSuperAdmin ? (
+                                    <button
+                                        onClick={() => handleTogglePhaseCompletion(index, phase.status)}
+                                        className="flex-shrink-0 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                                        style={{ outline: 'none' }}
+                                        title={phase.status === 'completed' ? 'Mark as in-progress' : 'Mark as completed'}
+                                    >
+                                        {getPhaseIcon(phase.status)}
+                                    </button>
+                                ) : (
+                                    <div className="flex-shrink-0">
+                                        {getPhaseIcon(phase.status)}
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{phase.name}</p>
+                                        {hasPayment && (
+                                            <DollarSign size={12} style={{ color: isPaymentReceived ? 'var(--color-success)' : 'var(--color-warning)' }} />
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                                        <span className="capitalize">{phase.status.replace('-', ' ')}</span>
+                                        {phase.endDate && (
+                                            <>
+                                                <span style={{ color: 'var(--color-border-default)' }}>•</span>
+                                                <span>Due {new Date(phase.endDate).toLocaleDateString()}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                    {hasPayment && (
+                                        <div className="mt-1.5 flex items-center gap-2">
+                                            <span
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                                style={{
+                                                    backgroundColor: isPaymentReceived
+                                                        ? 'var(--color-success-bg)'
+                                                        : paymentStatus === 'partial'
+                                                        ? 'var(--color-warning-bg)'
+                                                        : 'var(--color-bg-subtle)',
+                                                    color: isPaymentReceived
+                                                        ? 'var(--color-success)'
+                                                        : paymentStatus === 'partial'
+                                                        ? 'var(--color-warning)'
+                                                        : 'var(--color-text-muted)',
+                                                }}
+                                            >
+                                                Payment: {isPaymentReceived ? 'received' : (paymentStatus || 'pending')}
+                                            </span>
+                                            {phase.status === 'completed' && !isPaymentReceived && isSuperAdmin && (phase as any)._id && (
+                                                <button
+                                                    onClick={() => setPaymentDialogPhase({ ...phase, _id: (phase as any)._id })}
+                                                    className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded transition-colors"
+                                                    style={{
+                                                        backgroundColor: 'var(--color-success-bg)',
+                                                        color: 'var(--color-success)',
+                                                    }}
+                                                >
+                                                    Mark Received
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             ) : (
                 <div
@@ -842,6 +1056,11 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                             <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                 Define the milestones or stages of the project. Phases with empty names are ignored on save.
                             </p>
+                            {paymentAllocationError && (
+                                <p className="mt-2 text-xs font-semibold" style={{ color: '#B91C1C' }}>
+                                    {paymentAllocationError}
+                                </p>
+                            )}
                         </div>
 
                         {/* Scrollable phase rows */}
@@ -854,6 +1073,9 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                             {localPhases.map((phase, idx) => (
                                 <div
                                     key={idx}
+                                    ref={(el) => {
+                                        localPhaseRowRefs.current[idx] = el;
+                                    }}
                                     className="p-4 rounded-xl border space-y-3"
                                     style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
                                 >
@@ -898,6 +1120,206 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Payment Tracking Section */}
+                                    <div className="pt-2 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedPaymentSections(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                            className="flex items-center justify-between w-full text-xs font-medium py-2"
+                                            style={{ color: 'var(--color-text-secondary)' }}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <DollarSign size={14} />
+                                                <span>Payment Tracking</span>
+                                                {phase.hasPayment && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+                                                        Enabled
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {expandedPaymentSections[idx] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                        </button>
+
+                                        {expandedPaymentSections[idx] && (
+                                            <div className="space-y-3 mt-2 pt-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                {/* Has Payment Toggle */}
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={phase.hasPayment || false}
+                                                        onChange={e => updatePhaseField(idx, 'hasPayment', e.target.checked)}
+                                                        className="w-4 h-4 rounded border-gray-300"
+                                                    />
+                                                    <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                        This phase has a payment
+                                                    </span>
+                                                </label>
+
+                                                {phase.hasPayment && (
+                                                    <>
+                                                        {/* Payment Amount & Percentage */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Fixed Amount</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={phase.paymentAmount || ''}
+                                                                    onChange={e => {
+                                                                        const val = parseFloat(e.target.value);
+                                                                        updatePhaseField(idx, 'paymentAmount', val > 0 ? val : 0);
+                                                                    }}
+                                                                    placeholder="0"
+                                                                    min="0"
+                                                                    className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>% of Budget</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={phase.paymentPercentage || ''}
+                                                                    onChange={e => {
+                                                                        let val = parseFloat(e.target.value);
+                                                                        if (isNaN(val) || val < 0) val = 0;
+                                                                        const maxAllowed = getMaxAllowedPaymentPercentage(idx);
+                                                                        if (val > maxAllowed) val = maxAllowed;
+                                                                        updatePhaseField(idx, 'paymentPercentage', val);
+                                                                        // Auto-populate fixed amount from percentage
+                                                                        if (project.budget && project.budget > 0 && val > 0) {
+                                                                            const calculatedAmount = (project.budget * val) / 100;
+                                                                            updatePhaseField(idx, 'paymentAmount', calculatedAmount);
+                                                                        } else if (val === 0) {
+                                                                            // Clear fixed amount if percentage is 0
+                                                                            updatePhaseField(idx, 'paymentAmount', 0);
+                                                                        }
+                                                                    }}
+                                                                    placeholder="0"
+                                                                    max={getMaxAllowedPaymentPercentage(idx)}
+                                                                    min="0"
+                                                                    step="0.1"
+                                                                    className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                />
+                                                                {/* Show calculated amount or budget warning */}
+                                                                {phase.paymentPercentage > 0 && (
+                                                                    <div className="mt-1">
+                                                                        {project.budget && project.budget > 0 ? (
+                                                                            <p className="text-[10px] font-medium" style={{ color: 'var(--color-success)' }}>
+                                                                                ≈ {phase.paymentCurrency || project.currency || 'INR'} {((project.budget * phase.paymentPercentage) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                                            </p>
+                                                                        ) : (
+                                                                            <p className="text-[10px] font-medium flex items-center gap-1" style={{ color: 'var(--color-warning)' }}>
+                                                                                <AlertTriangle size={10} />
+                                                                                Set project budget first
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Currency & Payment Due Date */}
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Currency</label>
+                                                                <select
+                                                                    value={phase.paymentCurrency || project.currency || 'INR'}
+                                                                    onChange={e => updatePhaseField(idx, 'paymentCurrency', e.target.value)}
+                                                                    className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                >
+                                                                    <option value="INR">INR</option>
+                                                                    <option value="USD">USD</option>
+                                                                    <option value="EUR">EUR</option>
+                                                                    <option value="GBP">GBP</option>
+                                                                    <option value="AED">AED</option>
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Payment Due</label>
+                                                                <input
+                                                                    type="date"
+                                                                    value={phase.paymentDueDate ? new Date(phase.paymentDueDate).toISOString().split('T')[0] : ''}
+                                                                    onChange={e => updatePhaseField(idx, 'paymentDueDate', e.target.value)}
+                                                                    className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* GST & TDS */}
+                                                        <div className="space-y-2">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={phase.gstApplicable !== false}
+                                                                    onChange={e => updatePhaseField(idx, 'gstApplicable', e.target.checked)}
+                                                                    className="w-4 h-4 rounded border-gray-300"
+                                                                />
+                                                                <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                    GST Applicable
+                                                                </span>
+                                                            </label>
+
+                                                            {phase.gstApplicable !== false && (
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>GST Rate (%)</label>
+                                                                        <select
+                                                                            value={phase.gstRate || 18}
+                                                                            onChange={e => updatePhaseField(idx, 'gstRate', parseInt(e.target.value))}
+                                                                            className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                        >
+                                                                            <option value="0">0%</option>
+                                                                            <option value="5">5%</option>
+                                                                            <option value="12">12%</option>
+                                                                            <option value="18">18%</option>
+                                                                            <option value="28">28%</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>TDS Deducted</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={phase.tdsDeducted || ''}
+                                                                            onChange={e => updatePhaseField(idx, 'tdsDeducted', parseFloat(e.target.value) || 0)}
+                                                                            placeholder="0"
+                                                                            className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Mark Payment Received Button */}
+                                                        {phase._id && phase.paymentStatus !== 'received' && Number(phase.paymentReceivedAmount || 0) <= 0 && (
+                                                            <div className="pt-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setPaymentDialogPhase({ ...phase, _id: phase._id || `temp-${idx}` });
+                                                                    }}
+                                                                    className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-green-50"
+                                                                    style={{
+                                                                        borderColor: 'var(--color-success)',
+                                                                        color: 'var(--color-success)',
+                                                                        backgroundColor: 'var(--color-success-bg)'
+                                                                    }}
+                                                                >
+                                                                    <DollarSign size={12} />
+                                                                    Mark Payment Received
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -922,7 +1344,7 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                                 </button>
                                 <button
                                     onClick={savePhases}
-                                    disabled={isSavingPhases}
+                                    disabled={isSavingPhases || totalPaymentAllocation > 100}
                                     className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors"
                                     style={{ backgroundColor: 'var(--color-primary)' }}
                                 >
@@ -934,6 +1356,18 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                     </div>
                 </>,
                 document.body
+            )}
+
+            {/* Phase Payment Dialog */}
+            {paymentDialogPhase && (
+                <PhasePaymentDialog
+                    phase={paymentDialogPhase}
+                    projectCurrency={project.currency}
+                    projectBudget={project.budget}
+                    defaultBankAccount={project.defaultBankAccount}
+                    onClose={() => setPaymentDialogPhase(null)}
+                    onConfirm={handleMarkPaymentReceived}
+                />
             )}
         </div>
     );

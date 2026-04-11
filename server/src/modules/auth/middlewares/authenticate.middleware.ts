@@ -38,10 +38,20 @@ export const authenticate = async (
                 return next(new AppError('User account is deactivated', 403));
             }
 
+            let partnerId: string | undefined;
+            if ((user.role as any)?.name === 'partner') {
+                const { Partner } = await import('../../partners/models/Partner.model');
+                const partner = await Partner.findOne({ userId: user._id }).select('_id').lean();
+                if (partner?._id) {
+                    partnerId = partner._id.toString();
+                }
+            }
+
             (req as any).user = {
                 id: (user._id as any).toString(),
                 email: user.email,
                 role: (user.role as any).name,
+                ...(partnerId ? { partnerId } : {}),
             };
 
             return next();
@@ -64,6 +74,7 @@ export const authenticate = async (
             email: partnerEmployee.email,
             role: 'partner',
             isPartnerEmployee: true,
+            partnerId: partnerEmployee.partnerId?.toString(),
         };
 
         next();

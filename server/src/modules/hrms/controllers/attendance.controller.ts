@@ -62,8 +62,8 @@ export const getEmployeeAttendance = asyncHandler(async (req: Request, res: Resp
 
 // ── Admin: Bulk mark attendance ──────────────────────────────────────
 export const bulkMarkAttendance = asyncHandler(async (req: Request, res: Response) => {
-    const { date, records } = req.body;
-    const result = await AttendanceService.bulkMarkAttendance(date, records);
+    const { date, records, onlyUnmarked } = req.body;
+    const result = await AttendanceService.bulkMarkAttendance(date, records, { onlyUnmarked });
     res.status(200).json({ status: 'success', data: result });
 });
 

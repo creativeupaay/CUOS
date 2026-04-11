@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import { useGetMeQuery } from './features/auth/authApi';
 import { setInitialized, setUser } from './features/auth/slices/authSlice';
@@ -75,6 +75,8 @@ const HiringInterviewSchedulePage = lazy(() => import('./pages/HiringInterviewSc
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'));
 const FinanceRevenuePage = lazy(() => import('./pages/FinanceRevenuePage'));
 const FinanceExpensesPage = lazy(() => import('./pages/FinanceExpensesPage'));
+const FinanceCashInBankPage = lazy(() => import('./pages/FinanceCashInBankPage'));
+const FinanceSalariesPayrollPage = lazy(() => import('./pages/FinanceSalariesPayrollPage'));
 
 function RouteFallback() {
   return (
@@ -110,14 +112,12 @@ function hasPartnerEmployeeModuleAccess(
 
 function CrmRootRedirect() {
   const user = useAppSelector((state) => state.auth.user);
-  const roleName = getRoleNameFromUser(user);
-  const isPartner = roleName === 'partner';
 
   if (!hasPartnerEmployeeModuleAccess(user, 'crm')) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Navigate to={isPartner ? '/crm/clients' : '/crm/pipeline'} replace />;
+  return <Navigate to="/crm/pipeline" replace />;
 }
 
 function PartnerEmployeeModuleRoute({
@@ -176,25 +176,15 @@ function AnnouncementRedirect() {
   return <Navigate to={isAdminOrHr ? '/hrms/announcements' : '/my-hrms/announcements'} replace />;
 }
 
-
-function App() {
-  const dispatch = useAppDispatch();
-  const { data: userData, isLoading: isAuthLoading } = useGetMeQuery();
+function AppRoutes() {
+  const location = useLocation();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const user = useAppSelector((state) => state.auth.user);
-
-  useEffect(() => {
-    if (!isAuthLoading) {
-      if (userData?.data) {
-        dispatch(setUser(userData.data));
-      }
-      dispatch(setInitialized(true));
-    }
-  }, [userData, isAuthLoading, dispatch]);
+  const backgroundLocation = (location.state as { backgroundLocation?: typeof location } | null)?.backgroundLocation;
 
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <Routes location={backgroundLocation || location}>
         {/* Public routes */}
         <Route
           path="/login"
@@ -274,8 +264,10 @@ function App() {
 
           {/* Finance Module */}
           <Route path="/finance" element={<PartnerRestrictedRoute>{loadable(<FinanceDashboardPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/cash-in-bank" element={<PartnerRestrictedRoute>{loadable(<FinanceCashInBankPage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/revenue" element={<PartnerRestrictedRoute>{loadable(<FinanceRevenuePage />)}</PartnerRestrictedRoute>} />
           <Route path="/finance/expenses" element={<PartnerRestrictedRoute>{loadable(<FinanceExpensesPage />)}</PartnerRestrictedRoute>} />
+          <Route path="/finance/salaries-payrolls" element={<PartnerRestrictedRoute>{loadable(<FinanceSalariesPayrollPage />)}</PartnerRestrictedRoute>} />
 
           {/* HRMS Module — Admin/HR only */}
           <Route path="/hrms" element={<HrmsRedirect>{loadable(<HrmsDashboardPage />)}</HrmsRedirect>} />
@@ -345,6 +337,36 @@ function App() {
           <Route path="/client-portal/projects/:id" element={loadable(<ClientPortalProjectDetailPage />)} />
         </Route>
       </Routes>
+
+      {backgroundLocation && (
+        <Routes>
+          <Route path="/crm/leads/new" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/leads/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<CrmLeadFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/clients/new" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientFormPage />)}</PartnerEmployeeModuleRoute>} />
+          <Route path="/crm/clients/:id/edit" element={<PartnerEmployeeModuleRoute moduleKey="crm">{loadable(<ClientFormPage />)}</PartnerEmployeeModuleRoute>} />
+        </Routes>
+      )}
+    </>
+  );
+}
+
+
+function App() {
+  const dispatch = useAppDispatch();
+  const { data: userData, isLoading: isAuthLoading } = useGetMeQuery();
+
+  useEffect(() => {
+    if (!isAuthLoading) {
+      if (userData?.data) {
+        dispatch(setUser(userData.data));
+      }
+      dispatch(setInitialized(true));
+    }
+  }, [userData, isAuthLoading, dispatch]);
+
+  return (
+    <BrowserRouter>
+      <AppRoutes />
     </BrowserRouter>
   );
 }

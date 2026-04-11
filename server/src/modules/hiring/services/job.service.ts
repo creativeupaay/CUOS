@@ -152,11 +152,36 @@ function normalizeCreateScheduling(input?: InterviewSchedulingInput) {
 
 function slugifyFieldKey(value: string) {
     return value
+    .normalize('NFKC')
         .toLowerCase()
         .trim()
-        .replace(/[^a-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
         .replace(/^_+|_+$/g, '')
         .slice(0, 60);
+}
+
+function ensureFieldKey(value: string) {
+    const key = slugifyFieldKey(value);
+    if (key) return key;
+    return `field_${Date.now().toString(36)}`;
+}
+
+function ensureHiringSettings(hiring: any) {
+    return {
+        applicationFieldLibrary: hiring?.applicationFieldLibrary || [],
+        publicJobPage: hiring?.publicJobPage || {
+            showAboutCompany: true,
+            aboutCompanyText: DEFAULT_ABOUT_COMPANY_TEXT,
+        },
+    };
+}
+
+function ensureHiringSettingsOnDocument(settings: any) {
+    const currentHiring = settings.get('hiring');
+    const normalizedHiring = ensureHiringSettings(currentHiring);
+    settings.set('hiring.applicationFieldLibrary', normalizedHiring.applicationFieldLibrary || []);
+    settings.set('hiring.publicJobPage', normalizedHiring.publicJobPage);
+    return normalizedHiring;
 }
 
 const DEFAULT_STANDARD_FIELD_SETTINGS: Record<
@@ -220,6 +245,7 @@ function normalizeApplicationForm(input?: JobApplicationFormInput) {
                 String(matchingInput?.placeholder || defaults.placeholder || '').trim() || undefined,
             helpText:
                 String(matchingInput?.helpText || defaults.helpText || '').trim() || undefined,
+            required: Boolean(matchingInput?.required),
         };
     });
 
@@ -231,6 +257,7 @@ function normalizeApplicationForm(input?: JobApplicationFormInput) {
                   type: field.type,
                   placeholder: String(field.placeholder || '').trim() || undefined,
                   helpText: String(field.helpText || '').trim() || undefined,
+                  required: Boolean(field.required),
               }))
               .filter((field) => field.key && field.label)
         : [];
@@ -616,6 +643,12 @@ export class JobService {
             settings = await OrgSettings.create({});
         }
 
+        const hadPublicJobPage = Boolean(settings.get('hiring.publicJobPage'));
+        ensureHiringSettingsOnDocument(settings);
+        if (!hadPublicJobPage) {
+            await settings.save();
+        }
+
         return settings.hiring?.applicationFieldLibrary || [];
     }
 
@@ -632,7 +665,7 @@ export class JobService {
         }
 
         const nextField = {
-            key: slugifyFieldKey(field.key || field.label),
+            key: ensureFieldKey(field.key || field.label),
             label: String(field.label || '').trim(),
             type: field.type,
             placeholder: String(field.placeholder || '').trim() || undefined,
@@ -644,12 +677,10 @@ export class JobService {
             throw new AppError('Field name is required', 400);
         }
 
-        const existingFields = settings.hiring?.applicationFieldLibrary || [];
+        const hiring = ensureHiringSettingsOnDocument(settings);
+        const existingFields = hiring.applicationFieldLibrary || [];
         const deduped = existingFields.filter((item: any) => item.key !== nextField.key);
-        settings.hiring = {
-            ...(settings.hiring || { applicationFieldLibrary: [] }),
-            applicationFieldLibrary: [...deduped, nextField],
-        };
+        settings.set('hiring.applicationFieldLibrary', [...deduped, nextField]);
         await settings.save();
         return settings.hiring.applicationFieldLibrary;
     }
@@ -660,12 +691,11 @@ export class JobService {
             return [];
         }
 
-        settings.hiring = {
-            ...(settings.hiring || { applicationFieldLibrary: [] }),
-            applicationFieldLibrary: (settings.hiring?.applicationFieldLibrary || []).filter(
-                (field: any) => field.key !== key
-            ),
-        };
+        ensureHiringSettingsOnDocument(settings);
+        settings.set(
+            'hiring.applicationFieldLibrary',
+            (settings.hiring?.applicationFieldLibrary || []).filter((field: any) => field.key !== key)
+        );
         await settings.save();
         return settings.hiring.applicationFieldLibrary;
     }

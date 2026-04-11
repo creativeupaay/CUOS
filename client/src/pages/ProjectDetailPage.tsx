@@ -2,6 +2,8 @@ import { useParams, Link, Outlet, useLocation, useNavigate, Navigate } from 'rea
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import { useGetProjectByIdQuery } from '@/features/project';
+import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import {
     LayoutDashboard,
     ListTodo,
@@ -12,10 +14,11 @@ import {
     StickyNote,
     Loader2,
     AlertCircle,
-    ChevronRight,
     Pencil,
     Handshake,
+    X,
 } from 'lucide-react';
+import ProjectFormPage from './ProjectFormPage';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
@@ -38,6 +41,8 @@ export default function ProjectDetailPage() {
     const navigate = useNavigate();
     const { data, isLoading, error } = useGetProjectByIdQuery(id!);
     const project = data?.data;
+    const [showEditProjectPanel, setShowEditProjectPanel] = useState(false);
+    const [isClosingEditProjectPanel, setIsClosingEditProjectPanel] = useState(false);
 
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const roleName = currentUser?.role
@@ -48,6 +53,44 @@ export default function ProjectDetailPage() {
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
     const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
     const isPartner = roleName === 'partner';
+
+    useEffect(() => {
+        if (!showEditProjectPanel) {
+            return;
+        }
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const handleEsc = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsClosingEditProjectPanel(true);
+            }
+        };
+
+        window.addEventListener('keydown', handleEsc);
+        return () => {
+            window.removeEventListener('keydown', handleEsc);
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [showEditProjectPanel]);
+
+    useEffect(() => {
+        if (!isClosingEditProjectPanel) {
+            return;
+        }
+
+        const closeTimer = window.setTimeout(() => {
+            setShowEditProjectPanel(false);
+            setIsClosingEditProjectPanel(false);
+        }, 280);
+
+        return () => window.clearTimeout(closeTimer);
+    }, [isClosingEditProjectPanel]);
+
+    const handleCloseEditProjectPanel = () => {
+        setIsClosingEditProjectPanel(true);
+    };
 
     if (isLoading) {
         return (
@@ -117,19 +160,6 @@ export default function ProjectDetailPage() {
 
     return (
         <div className="px-8 py-6" style={{ maxWidth: '1280px' }}>
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-1.5 text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                <Link
-                    to="/projects"
-                    className="transition-colors hover:underline"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                >
-                    Projects
-                </Link>
-                <ChevronRight size={12} />
-                <span style={{ color: 'var(--color-text-primary)' }}>{project.name}</span>
-            </div>
-
             {/* Header */}
             <div className="flex justify-between items-start mb-6">
                 <div>
@@ -173,8 +203,9 @@ export default function ProjectDetailPage() {
                         {project.priority}
                     </span>
                     {isSuperAdmin && location.pathname === `/projects/${id}` && (
-                        <Link
-                            to={`/projects/${id}/edit?mode=details`}
+                        <button
+                            type="button"
+                            onClick={() => setShowEditProjectPanel(true)}
                             className="flex items-center gap-1.5 px-3.5 py-2 ml-2 text-sm font-semibold rounded-lg transition-colors"
                             style={{
                                 backgroundColor: 'var(--color-primary)',
@@ -183,7 +214,7 @@ export default function ProjectDetailPage() {
                         >
                             <Pencil size={14} />
                             Edit Project
-                        </Link>
+                        </button>
                     )}
                 </div>
             </div>
@@ -225,6 +256,49 @@ export default function ProjectDetailPage() {
 
             {/* Tab Content */}
             <Outlet context={{ project }} />
+
+            {showEditProjectPanel && createPortal(
+                <>
+                    <div
+                        className="fixed inset-0 z-[200]"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.22)' }}
+                        onClick={handleCloseEditProjectPanel}
+                    />
+                    <div
+                        className="fixed top-0 right-0 h-full z-[201] flex flex-col"
+                        style={{
+                            width: 'min(860px, 100vw)',
+                            backgroundColor: 'var(--color-bg-surface)',
+                            borderLeft: '1px solid var(--color-border-default)',
+                            boxShadow: '-16px 0 48px rgba(0,0,0,0.13)',
+                            animation: isClosingEditProjectPanel
+                                ? 'slideOutRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both'
+                                : 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+                        }}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Project Details</h2>
+                            <button
+                                type="button"
+                                onClick={handleCloseEditProjectPanel}
+                                className="p-1.5 rounded transition-colors hover:bg-black/5"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <ProjectFormPage
+                                embedded
+                                modeOverride="details"
+                                onClose={handleCloseEditProjectPanel}
+                                onSaved={handleCloseEditProjectPanel}
+                            />
+                        </div>
+                    </div>
+                </>,
+                document.body
+            )}
         </div>
     );
 }

@@ -18,6 +18,14 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
+const PAYOUT_ACCOUNT_OPTIONS = [
+    { value: 'hdfc_gst', label: 'HDFC (GST)' },
+    { value: 'sbi_non_gst', label: 'SBI (non GST)' },
+    { value: 'cash', label: 'Cash in Company' },
+] as const;
+
+type PayoutAccountKey = (typeof PAYOUT_ACCOUNT_OPTIONS)[number]['value'];
+
 // ── Status badge helper ──────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
     const cfg: Record<string, { bg: string; color: string }> = {
@@ -214,7 +222,9 @@ export default function HrmsEmployeeDetailPage() {
     // ── Salary modal ─────────────────────────────────────────────────
     const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
     const [salaryForm, setSalaryForm] = useState({
-        basic: 0, hra: 0, da: 0, specialAllowance: 0,
+        basic: 0,
+        specialAllowance: 0,
+        payoutAccountKey: 'hdfc_gst' as PayoutAccountKey,
         effectiveFrom: new Date().toISOString().split('T')[0],
     });
 
@@ -222,9 +232,8 @@ export default function HrmsEmployeeDetailPage() {
         if (salary && isSalaryModalOpen) {
             setSalaryForm({
                 basic: salary.basic || 0,
-                hra: salary.hra || 0,
-                da: salary.da || 0,
                 specialAllowance: salary.specialAllowance || 0,
+                payoutAccountKey: salary.payoutAccountKey || 'hdfc_gst',
                 effectiveFrom: salary.effectiveFrom
                     ? salary.effectiveFrom.split('T')[0]
                     : new Date().toISOString().split('T')[0],
@@ -552,15 +561,18 @@ export default function HrmsEmployeeDetailPage() {
                             <div className="grid grid-cols-3 gap-4">
                                 {[
                                     { label: 'Basic', value: salary.basic },
-                                    { label: 'HRA', value: salary.hra },
-                                    { label: 'DA', value: salary.da },
                                     { label: 'Special Allowance', value: salary.specialAllowance },
                                     {
+                                        label: 'Payout Account',
+                                        value: PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === salary.payoutAccountKey)?.label || 'HDFC (GST)',
+                                        isText: true,
+                                    },
+                                    {
                                         label: 'Gross Total',
-                                        value: salary.basic + salary.hra + salary.da + salary.specialAllowance,
+                                        value: salary.basic + salary.specialAllowance,
                                         highlight: true,
                                     },
-                                ].map(({ label, value, highlight }) => (
+                                ].map(({ label, value, highlight, isText }) => (
                                     <div
                                         key={label}
                                         className="rounded-lg p-3"
@@ -571,7 +583,7 @@ export default function HrmsEmployeeDetailPage() {
                                             className="text-base font-semibold tabular-nums"
                                             style={{ color: highlight ? 'var(--color-primary)' : 'var(--color-text-primary)' }}
                                         >
-                                            ₹{value.toLocaleString('en-IN')}
+                                            {isText ? value : `₹${Number(value).toLocaleString('en-IN')}`}
                                         </div>
                                     </div>
                                 ))}
@@ -809,8 +821,6 @@ export default function HrmsEmployeeDetailPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 {([
                                     ['basic', 'Basic (₹)', true],
-                                    ['hra', 'HRA (₹)', true],
-                                    ['da', 'DA (₹)', false],
                                     ['specialAllowance', 'Special Allowance (₹)', false],
                                 ] as const).map(([key, label, required]) => (
                                     <div key={key}>
@@ -837,6 +847,28 @@ export default function HrmsEmployeeDetailPage() {
                                 ))}
                             </div>
 
+                            <div>
+                                <label
+                                    className="block text-xs font-medium mb-1.5"
+                                    style={{ color: 'var(--color-text-secondary)' }}
+                                >
+                                    Salary Paid From *
+                                </label>
+                                <select
+                                    required
+                                    value={salaryForm.payoutAccountKey}
+                                    onChange={(e) => setSalaryForm({ ...salaryForm, payoutAccountKey: e.target.value as typeof salaryForm.payoutAccountKey })}
+                                    className="w-full px-3 py-2.5 text-sm rounded-lg border"
+                                    style={inputStyle}
+                                >
+                                    {PAYOUT_ACCOUNT_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* Gross preview */}
                             <div
                                 className="rounded-lg px-4 py-3 flex justify-between items-center"
@@ -846,7 +878,7 @@ export default function HrmsEmployeeDetailPage() {
                                     Gross Total
                                 </span>
                                 <span className="text-base font-bold tabular-nums" style={{ color: '#16A34A' }}>
-                                    ₹{(salaryForm.basic + salaryForm.hra + salaryForm.da + salaryForm.specialAllowance).toLocaleString('en-IN')}
+                                    ₹{(salaryForm.basic + salaryForm.specialAllowance).toLocaleString('en-IN')}
                                 </span>
                             </div>
 

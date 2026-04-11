@@ -57,6 +57,7 @@ export interface IJobApplicationCustomField {
     type: JobApplicationFieldType;
     placeholder?: string;
     helpText?: string;
+    required?: boolean;
 }
 
 export interface IJobApplicationStandardFieldSetting {
@@ -64,6 +65,7 @@ export interface IJobApplicationStandardFieldSetting {
     label: string;
     placeholder?: string;
     helpText?: string;
+    required?: boolean;
 }
 
 export interface IJobApplicationFormConfig {
@@ -191,6 +193,7 @@ const JobApplicationCustomFieldSchema = new Schema<IJobApplicationCustomField>(
         },
         placeholder: { type: String, trim: true },
         helpText: { type: String, trim: true },
+        required: { type: Boolean, default: false },
     },
     { _id: false }
 );
@@ -201,6 +204,7 @@ const JobApplicationStandardFieldSettingSchema = new Schema<IJobApplicationStand
         label: { type: String, required: true, trim: true },
         placeholder: { type: String, trim: true },
         helpText: { type: String, trim: true },
+        required: { type: Boolean, default: false },
     },
     { _id: false }
 );

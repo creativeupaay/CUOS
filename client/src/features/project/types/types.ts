@@ -5,6 +5,27 @@ export interface ProjectPhase {
     status: 'pending' | 'in-progress' | 'completed';
     startDate?: string;
     endDate?: string;
+
+    // Payment tracking
+    hasPayment?: boolean;
+    paymentAmount?: number;
+    paymentPercentage?: number;
+    paymentCurrency?: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+    paymentStatus?: 'pending' | 'received' | 'partial';
+    paymentReceivedAmount?: number;
+    paymentDueDate?: string;
+    paymentBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+
+    // Finance links
+    revenueId?: string;
+    bankTransactionId?: string;
+
+    // GST and TDS
+    gstApplicable?: boolean;
+    gstRate?: number;
+    tdsDeducted?: number;
+
+    completedAt?: string;
 }
 
 export interface Project {
@@ -19,11 +40,13 @@ export interface Project {
     startDate: string;
     endDate?: string;
     deadline?: string;
+    overdueDate?: string;
 
     budget?: number;
     currency: string;
     billingType: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
+    defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
 
     invoiceDetails?: InvoiceDetails;
 
@@ -40,7 +63,7 @@ export interface Project {
     docAdmins?: (string | User)[];
 
     /** Partner relationship */
-    partnerId?: string;
+    partnerId?: string | any;
 
     createdBy: string | User;
     createdAt: string;

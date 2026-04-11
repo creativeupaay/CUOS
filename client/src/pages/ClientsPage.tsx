@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useGetClientsQuery, useDeleteClientMutation, useUpdateClientMutation } from '@/features/client/clientApi';
-import { Plus, Search, Building2, Mail, Phone, Trash2, Edit, Eye, Loader2, ChevronDown } from 'lucide-react';
+import { Plus, Search, Building2, Mail, Phone, Trash2, Edit, Eye, Loader2, ChevronDown, Users, Sparkles } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
 export default function ClientsPage() {
+    const location = useLocation();
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'archived' | ''>('');
     const [partnerFilter, setPartnerFilter] = useState('');
@@ -27,6 +29,15 @@ export default function ClientsPage() {
 
     const [deleteClient, { isLoading: isDeleting }] = useDeleteClientMutation();
     const [updateClient] = useUpdateClientMutation();
+
+    const clientStats = useMemo(() => {
+        const clients = data?.data.clients || [];
+        return {
+            total: data?.data.total || 0,
+            active: clients.filter((client) => client.status === 'active').length,
+            inactive: clients.filter((client) => client.status === 'inactive').length,
+        };
+    }, [data]);
 
     const handleDelete = async () => {
         if (!deleteConfirm) return;
@@ -60,13 +71,15 @@ export default function ClientsPage() {
         <>
         <div className="p-8">
             {/* Header */}
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-8 rounded-2xl border border-neutral-200 bg-gradient-to-r from-slate-50 via-white to-blue-50 p-6">
+                <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-neutral-900">Clients</h1>
-                    <p className="text-neutral-600 mt-1">Manage your client relationships</p>
+                    <p className="text-neutral-600 mt-1">Manage and nurture every client relationship in one place</p>
                 </div>
                 <Link
                     to="/crm/clients/new"
+                    state={{ backgroundLocation: location, returnTo: location.pathname }}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
                     <Plus size={20} />
@@ -74,8 +87,24 @@ export default function ClientsPage() {
                 </Link>
             </div>
 
+                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Total Clients</p>
+                        <p className="mt-1 text-2xl font-bold text-neutral-900">{clientStats.total}</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">Active</p>
+                        <p className="mt-1 text-2xl font-bold text-emerald-900">{clientStats.active}</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-amber-700">Inactive</p>
+                        <p className="mt-1 text-2xl font-bold text-amber-900">{clientStats.inactive}</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Filters */}
-            <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-6">
+            <div className="bg-white rounded-2xl border border-neutral-200 p-4 mb-6 shadow-sm">
                 <div className="flex gap-4">
                     <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={20} />
@@ -128,6 +157,7 @@ export default function ClientsPage() {
                     <p className="text-neutral-600 mb-6">Get started by adding your first client</p>
                     <Link
                         to="/crm/clients/new"
+                        state={{ backgroundLocation: location, returnTo: location.pathname }}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                     >
                         <Plus size={20} />
@@ -139,7 +169,7 @@ export default function ClientsPage() {
                     {data?.data.clients.map((client) => (
                         <div
                             key={client._id}
-                            className="bg-white rounded-lg border border-neutral-200 p-6 hover:shadow-lg transition-shadow flex flex-col h-full"
+                            className="bg-white rounded-2xl border border-neutral-200 p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all flex flex-col h-full overflow-hidden"
                         >
                             {/* Card body — grows to fill available height */}
                             <div className="flex-1">
@@ -151,6 +181,16 @@ export default function ClientsPage() {
                                         </h3>
                                         {client.companyName && (
                                             <p className="text-sm text-neutral-600">{client.companyName}</p>
+                                        )}
+                                        {isAdminUser && client.partnerId && (
+                                            <span
+                                                className="mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                                style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}
+                                            >
+                                                Referred By: {typeof client.partnerId === 'object'
+                                                    ? client.partnerId.contactPerson || client.partnerId.companyName || client.partnerId.email || 'Partner'
+                                                    : 'Partner'}
+                                            </span>
                                         )}
                                     </div>
                                     <span
@@ -189,37 +229,28 @@ export default function ClientsPage() {
                                     </div>
                                 )}
 
-                                {isAdminUser && client.partnerId && (
-                                    <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                                        <p className="text-xs text-blue-700 mb-1">Referred By</p>
-                                        <p className="text-sm font-medium text-blue-900">
-                                            {typeof client.partnerId === 'object'
-                                                ? client.partnerId.contactPerson || client.partnerId.companyName || client.partnerId.email || 'Partner'
-                                                : 'Partner'}
-                                        </p>
-                                    </div>
-                                )}
                             </div>
 
                             {/* Actions — always at bottom */}
-                            <div className="flex gap-2 pt-4 border-t border-neutral-200 mt-auto">
+                            <div className="flex gap-2 pt-4 border-t border-neutral-200 mt-auto min-w-0">
                                 <Link
                                     to={`/crm/clients/${client._id}`}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 transition-colors"
+                                    className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 transition-colors"
                                 >
                                     <Eye size={16} />
                                     View
                                 </Link>
                                 <Link
                                     to={`/crm/clients/${client._id}/edit`}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-primary-light text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
+                                    state={{ backgroundLocation: location, returnTo: location.pathname }}
+                                    className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 text-sm bg-primary-light text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
                                 >
                                     <Edit size={16} />
                                     Edit
                                 </Link>
                                 {isAdminUser && !isPartnerUser && (
                                     <>
-                                        <div className="relative">
+                                        <div className="relative shrink-0">
                                             <select
                                                 value={client.status}
                                                 onClick={(e) => e.stopPropagation()}
@@ -235,7 +266,7 @@ export default function ClientsPage() {
                                         </div>
                                         <button
                                             onClick={() => setDeleteConfirm({ id: client._id, name: client.name })}
-                                            className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                            className="shrink-0 h-9 w-9 flex items-center justify-center text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                                             title="Delete client"
                                         >
                                             <Trash2 size={16} />
@@ -251,13 +282,17 @@ export default function ClientsPage() {
             {/* Pagination Info */}
             {data && data.data.clients.length > 0 && (
                 <div className="mt-6 text-center text-sm text-neutral-600">
-                    Showing {data.data.clients.length} of {data.data.total} clients
+                    <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1">
+                        <Users size={14} className="text-neutral-500" />
+                        Showing {data.data.clients.length} of {data.data.total} clients
+                        <Sparkles size={14} className="text-amber-500" />
+                    </span>
                 </div>
             )}
         </div>
 
         {/* Delete Client Confirmation Modal */}
-        {deleteConfirm && (
+        {deleteConfirm && typeof document !== 'undefined' && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
                     <h3 className="text-base font-semibold mb-2 text-neutral-900">Delete Client</h3>
@@ -284,7 +319,8 @@ export default function ClientsPage() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
     </>
     );

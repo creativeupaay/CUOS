@@ -65,6 +65,16 @@ export const updatePayrollStatus = asyncHandler(async (req: Request, res: Respon
     });
 });
 
+export const updatePayroll = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.user as any).id;
+    const payroll = await payrollService.updatePayroll(req.params.id, req.body, userId);
+
+    res.json({
+        status: 'success',
+        data: { payroll },
+    });
+});
+
 // ── Dashboard Stats ─────────────────────────────────────────────────
 export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
     const stats = await analyticsService.getDashboardStats();
@@ -137,4 +147,3 @@ export const getMyPayrolls = asyncHandler(async (req: Request, res: Response) =>
         data: { payrolls },
     });
 });
-

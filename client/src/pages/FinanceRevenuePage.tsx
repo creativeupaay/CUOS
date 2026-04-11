@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     TrendingUp, IndianRupee, Clock, Receipt, Plus, X,
     Search, Calendar, Building2, Edit2, Trash2,
@@ -655,14 +656,17 @@ export default function FinanceRevenuePage() {
             )}
 
             {/* ── Fixed Add Revenue Button ────────────────────────────────── */}
-            <button
-                onClick={openAddModal}
-                className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium transition-all hover:shadow-lg transform hover:scale-105 z-40"
-                style={{ background: 'var(--color-primary)', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-            >
-                <Plus size={18} />
-                Add Revenue Entry
-            </button>
+            {typeof document !== 'undefined' && createPortal(
+                <button
+                    onClick={openAddModal}
+                    className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium transition-all hover:shadow-lg transform hover:scale-105 z-50"
+                    style={{ background: 'var(--color-primary)', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                >
+                    <Plus size={18} />
+                    Add Revenue Entry
+                </button>,
+                document.body
+            )}
         </div>
     );
 }

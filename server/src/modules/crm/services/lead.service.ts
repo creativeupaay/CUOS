@@ -2,6 +2,7 @@ import { Lead, ILead } from '../models/Lead.model';
 import { Proposal } from '../models/Proposal.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
+import { uploadDocument } from '../../../utils/cloudinary.util';
 import type {
     CreateLeadInput,
     UpdateLeadInput,
@@ -31,7 +32,7 @@ export class LeadService {
         page: number;
         totalPages: number;
     }> {
-        const { stage, source, priority, assignedTo, search, page = 1, limit = 20 } = filters;
+        const { stage, source, priority, assignedTo, partnerId, search, page = 1, limit = 20 } = filters as ListLeadsInput & { partnerId?: string };
 
         const query: any = {};
 
@@ -39,6 +40,7 @@ export class LeadService {
         if (source) query.source = source;
         if (priority) query.priority = priority;
         if (assignedTo) query.assignedTo = assignedTo;
+        if (partnerId) query.partnerId = partnerId;
 
         if (search) {
             query.$or = [
@@ -57,6 +59,7 @@ export class LeadService {
                 .skip(skip)
                 .limit(limit)
                 .populate('assignedTo', 'name email')
+                .populate('partnerId', 'companyName contactPerson userId')
                 .populate('createdBy', 'name email'),
             Lead.countDocuments(query),
         ]);
@@ -75,10 +78,12 @@ export class LeadService {
     async getLeadById(id: string): Promise<ILead> {
         const lead = await Lead.findById(id)
             .populate('assignedTo', 'name email')
+            .populate('partnerId', 'companyName contactPerson userId')
             .populate('createdBy', 'name email')
             .populate('convertedClientId', 'name email')
             .populate('activities.createdBy', 'name email')
-            .populate('meetings.createdBy', 'name email');
+            .populate('meetings.createdBy', 'name email')
+            .populate('documents.uploadedBy', 'name email');
 
         if (!lead) {
             throw new AppError('Lead not found', 404);
@@ -112,7 +117,9 @@ export class LeadService {
             { new: true, runValidators: true }
         )
             .populate('assignedTo', 'name email')
-            .populate('createdBy', 'name email');
+            .populate('partnerId', 'companyName contactPerson userId')
+            .populate('createdBy', 'name email')
+            .populate('documents.uploadedBy', 'name email');
 
         return updated!;
     }
@@ -185,6 +192,81 @@ export class LeadService {
     }
 
     /**
+     * Upload a lead document
+     */
+    async uploadLeadDocument(
+        leadId: string,
+        fileBuffer: Buffer,
+        fileName: string,
+        mimeType: string,
+        fileSize: number,
+        uploadedBy: Types.ObjectId
+    ): Promise<ILead> {
+        const lead = await Lead.findById(leadId);
+
+        if (!lead) {
+            throw new AppError('Lead not found', 404);
+        }
+
+        const cloudFolder = `crm/leads/${leadId}`;
+        const uploadResult = await uploadDocument(fileBuffer, cloudFolder, fileName);
+
+        lead.documents.push({
+            name: fileName,
+            url: uploadResult.url,
+            cloudinaryId: uploadResult.cloudinaryId,
+            size: uploadResult.size || fileSize,
+            mimeType,
+            uploadedAt: new Date(),
+            uploadedBy,
+        });
+
+        await lead.save();
+
+        return this.getLeadById(leadId);
+    }
+
+    /**
+     * Upload multiple lead documents
+     */
+    async uploadLeadDocuments(
+        leadId: string,
+        files: Array<{
+            buffer: Buffer;
+            originalname: string;
+            mimetype: string;
+            size: number;
+        }>,
+        uploadedBy: Types.ObjectId
+    ): Promise<ILead> {
+        const lead = await Lead.findById(leadId);
+
+        if (!lead) {
+            throw new AppError('Lead not found', 404);
+        }
+
+        const cloudFolder = `crm/leads/${leadId}`;
+
+        for (const file of files) {
+            const uploadResult = await uploadDocument(file.buffer, cloudFolder, file.originalname);
+
+            lead.documents.push({
+                name: file.originalname,
+                url: uploadResult.url,
+                cloudinaryId: uploadResult.cloudinaryId,
+                size: uploadResult.size || file.size,
+                mimeType: file.mimetype,
+                uploadedAt: new Date(),
+                uploadedBy,
+            });
+        }
+
+        await lead.save();
+
+        return this.getLeadById(leadId);
+    }
+
+    /**
      * Close lead — locks the lead so the user can create a client from it.
      * Client creation is now a separate step done via the client form page.
      */
@@ -238,13 +320,14 @@ export class LeadService {
     /**
      * Pipeline summary — count leads per stage
      */
-    async getPipelineSummary(assignedTo?: string): Promise<{
+    async getPipelineSummary(assignedTo?: string, partnerId?: string): Promise<{
         stages: { stage: string; count: number; totalValue: number }[];
         totalLeads: number;
         totalValue: number;
     }> {
         const match: any = {};
         if (assignedTo) match.assignedTo = new Types.ObjectId(assignedTo);
+        if (partnerId) match.partnerId = new Types.ObjectId(partnerId);
 
         const pipeline = await Lead.aggregate([
             { $match: match },

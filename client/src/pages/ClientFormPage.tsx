@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { useCreateClientMutation, useUpdateClientMutation, useGetClientQuery } from '@/features/client/clientApi';
-import type { ClientContact, ClientPhone, ClientCustomDetail } from '@/features/client/types/types';
-import { ArrowLeft, Plus, X, Trash2, Info } from 'lucide-react';
+import type { ClientContact, ClientPhone, ClientCustomDetail, ClientDocument, ClientLink } from '@/features/client/types/types';
+import { Plus, X, Trash2, Info } from 'lucide-react';
 import SelectCurrency from '@/components/ui/CurrencySelect';
 import { useGetLeadByIdQuery } from '@/features/crm';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams] = useSearchParams();
     const fromLeadId = searchParams.get('fromLead') || undefined;
     const isEdit = !!id;
+    const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+    const [serverError, setServerError] = useState<string | null>(null);
     const user = useAppSelector((state) => state.auth.user);
     const roleName = user?.role
         ? typeof user.role === 'object'
@@ -63,6 +67,63 @@ export default function ClientFormPage() {
     });
 
     const [hasGst, setHasGst] = useState(false);
+
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
+    const fallbackReturnPath = isEdit && id ? `/crm/clients/${id}` : '/crm/clients';
+    const closeTarget = returnTo || fallbackReturnPath;
+
+    useBodyScrollLock(true);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => setIsDrawerVisible(true), 12);
+        return () => window.clearTimeout(timer);
+    }, []);
+
+    const handleClose = () => {
+        setIsDrawerVisible(false);
+        window.setTimeout(() => {
+            navigate(closeTarget, { replace: true });
+        }, 280);
+    };
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                handleClose();
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [closeTarget]);
+
+    const normalizeLeadDocumentsForClient = (): ClientDocument[] | undefined => {
+        const lead = leadData?.data.lead;
+        if (!lead?.documents?.length) return undefined;
+        return lead.documents
+            .filter((doc) => doc?.name && doc?.url)
+            .map((doc) => ({
+                name: doc.name,
+                url: doc.url,
+                cloudinaryId: doc.cloudinaryId,
+                size: doc.size,
+                mimeType: doc.mimeType,
+                uploadedAt: doc.uploadedAt,
+                uploadedBy: typeof doc.uploadedBy === 'object' ? (doc.uploadedBy as any)?._id : doc.uploadedBy,
+            }));
+    };
+
+    const normalizeLeadLinksForClient = (): ClientLink[] | undefined => {
+        const lead = leadData?.data.lead;
+        if (!lead?.links?.length) return undefined;
+        return lead.links
+            .filter((link) => link?.name && link?.url)
+            .map((link) => ({
+                name: link.name,
+                url: link.url,
+                addedAt: link.addedAt || new Date().toISOString(),
+            }));
+    };
 
     useEffect(() => {
         if (clientData?.data.client) {
@@ -142,6 +203,7 @@ export default function ClientFormPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setServerError(null);
 
         try {
             if (isEdit) {
@@ -152,20 +214,25 @@ export default function ClientFormPage() {
                         partnerId: isPartnerUser ? String(userPartnerId || '') : formData.partnerId || undefined,
                     },
                 }).unwrap();
-                navigate(`/crm/clients/${id}`);
+                navigate(closeTarget, { replace: true });
             } else {
+                const leadDocuments = fromLeadId ? normalizeLeadDocumentsForClient() : undefined;
+                const leadLinks = fromLeadId ? normalizeLeadLinksForClient() : undefined;
                 const result = await createClient({
                     ...formData,
                     partnerId: isPartnerUser ? String(userPartnerId || '') : formData.partnerId || undefined,
                     ...(fromLeadId ? { leadId: fromLeadId } : {}),
+                    ...(leadDocuments ? { documents: leadDocuments } : {}),
+                    ...(leadLinks ? { links: leadLinks } : {}),
                     sendOnboardingForm,
                 }).unwrap();
-                navigate(`/crm/clients/${result.data.client._id}`);
+                const createTarget = returnTo || `/crm/clients/${result.data.client._id}`;
+                navigate(createTarget, { replace: true });
             }
         } catch (err: any) {
             console.error('Failed to save client:', err);
             const errorMessage = err.data?.message || err.message || 'Failed to save client. Please try again.';
-            alert(errorMessage);
+            setServerError(errorMessage);
         }
     };
 
@@ -241,20 +308,45 @@ export default function ClientFormPage() {
     };
 
     return (
-        <div className="p-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="flex items-center gap-4 mb-8">
+        <div className="fixed inset-0 z-[220] flex justify-end overflow-hidden">
+            <button
+                onClick={handleClose}
+                className={`fixed inset-0 bg-slate-950/10 backdrop-blur-[1px] transition-opacity duration-200 ${isDrawerVisible ? 'opacity-100' : 'opacity-0'}`}
+                aria-label="Close client form"
+            />
+
+            <aside
+                className={`relative h-full w-full max-w-[980px] bg-white border-l border-neutral-200 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${isDrawerVisible ? 'translate-x-0' : 'translate-x-full'}`}
+                role="dialog"
+                aria-modal="true"
+                aria-label={isEdit ? 'Edit client' : 'Create client'}
+            >
+                <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-neutral-50">
+                    <div>
+                        <h1 className="text-xl font-bold text-neutral-900">
+                            {isEdit ? 'Edit Client' : fromLeadId ? 'Convert Lead to Client' : 'New Client'}
+                        </h1>
+                        <p className="text-sm text-neutral-600 mt-1">
+                            {isEdit ? 'Update client profile details' : 'Add and onboard a new client record'}
+                        </p>
+                    </div>
                     <button
-                        onClick={() => navigate('/crm/clients')}
-                        className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                        onClick={handleClose}
+                        className="p-2 rounded-lg text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+                        aria-label="Close"
                     >
-                        <ArrowLeft size={24} />
+                        <X size={18} />
                     </button>
-                    <h1 className="text-3xl font-bold text-neutral-900">
-                        {isEdit ? 'Edit Client' : fromLeadId ? 'Convert Lead to Client' : 'New Client'}
-                    </h1>
                 </div>
+
+                <div className="flex-1 overflow-y-auto px-6 py-6">
+                    <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                {serverError && (
+                    <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {serverError}
+                    </div>
+                )}
 
                 {/* Lead conversion info banner */}
                 {fromLeadId && !isEdit && (
@@ -769,7 +861,7 @@ export default function ClientFormPage() {
                     <div className="flex gap-4">
                         <button
                             type="button"
-                            onClick={() => navigate('/crm/clients')}
+                            onClick={handleClose}
                             className="px-6 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
                         >
                             Cancel
@@ -784,6 +876,8 @@ export default function ClientFormPage() {
                     </div>
                 </form>
             </div>
+        </div>
+            </aside>
         </div>
     );
 }

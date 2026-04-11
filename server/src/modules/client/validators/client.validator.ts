@@ -18,6 +18,22 @@ const clientCustomDetailSchema = z.object({
     value: z.string().min(1, 'Value is required').trim(),
 });
 
+const clientDocumentSchema = z.object({
+    name: z.string().min(1, 'Document name is required').trim(),
+    url: z.string().url('Invalid document URL').trim(),
+    cloudinaryId: z.string().optional(),
+    size: z.number().min(0).optional(),
+    mimeType: z.string().optional(),
+    uploadedAt: z.string().optional(),
+    uploadedBy: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid uploader ID').optional(),
+});
+
+const clientLinkSchema = z.object({
+    name: z.string().min(1, 'Link name is required').trim(),
+    url: z.string().url('Invalid URL').trim(),
+    addedAt: z.string().optional(),
+});
+
 const clientAddressSchema = z.object({
     street: z.string().optional(),
     city: z.string().optional(),
@@ -44,6 +60,8 @@ export const createClientSchema = z.object({
         gstNumber: z.string().optional(),
         vatNumber: z.string().optional(),
         customDetails: z.array(clientCustomDetailSchema).optional(),
+        documents: z.array(clientDocumentSchema).optional(),
+        links: z.array(clientLinkSchema).optional(),
         address: clientAddressSchema.optional(),
         billingDetails: clientBillingDetailsSchema.optional(),
         contacts: z.array(clientContactSchema).default([]),
@@ -69,6 +87,8 @@ export const updateClientSchema = z.object({
         gstNumber: z.string().optional(),
         vatNumber: z.string().optional(),
         customDetails: z.array(clientCustomDetailSchema).optional(),
+        documents: z.array(clientDocumentSchema).optional(),
+        links: z.array(clientLinkSchema).optional(),
         address: clientAddressSchema.optional(),
         billingDetails: clientBillingDetailsSchema.optional(),
         contacts: z.array(clientContactSchema).optional(),

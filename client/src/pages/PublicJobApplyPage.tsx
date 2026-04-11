@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import {
     AlertCircle,
     Briefcase,
@@ -69,6 +70,26 @@ const STANDARD_FIELD_META: Record<
     },
 };
 
+const JOB_CONTENT_MARKDOWN_COMPONENTS = {
+    p: ({ children }: any) => <p className="mb-3 last:mb-0">{children}</p>,
+    strong: ({ children }: any) => <strong className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{children}</strong>,
+    em: ({ children }: any) => <em className="italic">{children}</em>,
+    ul: ({ children }: any) => <ul className="mb-3 list-disc pl-5">{children}</ul>,
+    ol: ({ children }: any) => <ol className="mb-3 list-decimal pl-5">{children}</ol>,
+    li: ({ children }: any) => <li className="mb-1">{children}</li>,
+    a: ({ href, children }: any) => (
+        <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+            style={{ color: 'var(--color-primary)' }}
+        >
+            {children}
+        </a>
+    ),
+};
+
 function isValidUrl(value: string): boolean {
     if (!value.trim()) return true;
     try {
@@ -117,6 +138,7 @@ function renderStandardInput(
     value: string,
     setValue: (value: string) => void,
     overrideMeta?: Partial<{ label: string; placeholder: string; helpText: string }>,
+    required?: boolean,
     error?: string
 ) {
     const meta = {
@@ -131,6 +153,7 @@ function renderStandardInput(
             <div key={fieldId}>
                 <label className="mb-2 ml-1 block text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                     {meta.label}
+                    {required ? ' *' : ''}
                 </label>
                 <textarea
                     value={value}
@@ -153,6 +176,7 @@ function renderStandardInput(
             <div key={fieldId}>
                 <label className="mb-2 ml-1 block text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                     {meta.label}
+                    {required ? ' *' : ''}
                 </label>
                 <div className="relative">
                     {meta.icon}
@@ -176,6 +200,7 @@ function renderStandardInput(
         <div key={fieldId}>
             <label className="mb-2 ml-1 block text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                 {meta.label}
+                {required ? ' *' : ''}
             </label>
             <input
                 value={value}
@@ -198,11 +223,13 @@ function renderCustomField(
     file: File | null,
     setValue: (value: string) => void,
     setFile: (file: File | null) => void,
+    required?: boolean,
     error?: string
 ) {
     const sharedLabel = (
         <label className="mb-2 ml-1 block text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
             {field.label}
+            {required ? ' *' : ''}
         </label>
     );
 
@@ -314,6 +341,19 @@ export default function PublicJobApplyPage() {
     const selectedStandardFields = (job?.applicationForm?.selectedStandardFields || []) as StandardApplicationFieldId[];
     const standardFieldSettings = (job?.applicationForm?.standardFieldSettings || []) as ApplicationStandardFieldSetting[];
     const customFields = (job?.applicationForm?.customFields || []) as ApplicationCustomFieldDefinition[];
+    const requiredStandardFields = useMemo(
+        () =>
+            new Set(
+                standardFieldSettings
+                    .filter((field) => field.required && selectedStandardFields.includes(field.key))
+                    .map((field) => field.key)
+            ),
+        [standardFieldSettings, selectedStandardFields]
+    );
+    const requiredCustomFields = useMemo(
+        () => new Set(customFields.filter((field) => field.required).map((field) => field.key)),
+        [customFields]
+    );
 
     // Split standard fields into regular fields and bottom fields (experience, coverLetter)
     const bottomFieldIds = ['experience', 'coverLetter'] as const;
@@ -402,9 +442,35 @@ export default function PublicJobApplyPage() {
             }
         });
 
+        const requiredStandardFieldMessages: Record<StandardApplicationFieldId, string> = {
+            portfolio: 'Portfolio URL is required for this job.',
+            github: 'GitHub URL is required for this job.',
+            linkedin: 'LinkedIn URL is required for this job.',
+            experience: 'Relevant Experience is required for this job.',
+            coverLetter: 'Cover Letter is required for this job.',
+            figmaUrl: 'Figma URL is required for this job.',
+        };
+        (Object.keys(requiredStandardFieldMessages) as StandardApplicationFieldId[]).forEach((fieldId) => {
+            if (!requiredStandardFields.has(fieldId)) return;
+            if (!String(standardValues[fieldId] || '').trim()) {
+                nextErrors[fieldId] = requiredStandardFieldMessages[fieldId];
+            }
+        });
+
         customFields.forEach((field) => {
             const value = customFieldValues[field.key] || '';
             const file = customFieldFiles[field.key];
+
+            if (requiredCustomFields.has(field.key)) {
+                if (field.type === 'attachment' && !file) {
+                    nextErrors[`custom.${field.key}`] = `${field.label} is required.`;
+                    return;
+                }
+                if (field.type !== 'attachment' && !String(value).trim()) {
+                    nextErrors[`custom.${field.key}`] = `${field.label} is required.`;
+                    return;
+                }
+            }
 
             if (field.type === 'url' && value && !isValidUrl(value)) {
                 nextErrors[`custom.${field.key}`] = `Please enter a valid ${field.label}.`;
@@ -589,8 +655,10 @@ export default function PublicJobApplyPage() {
                                         <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
                                             About the Company
                                         </h3>
-                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {pageSections.aboutCompany || DEFAULT_ABOUT_COMPANY_TEXT}
+                                        <div className="text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            <ReactMarkdown components={JOB_CONTENT_MARKDOWN_COMPONENTS}>
+                                                {pageSections.aboutCompany || DEFAULT_ABOUT_COMPANY_TEXT}
+                                            </ReactMarkdown>
                                         </div>
                                     </div>
                                 )}
@@ -600,8 +668,10 @@ export default function PublicJobApplyPage() {
                                         <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
                                             About the Role
                                         </h3>
-                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {job?.description || 'No description provided.'}
+                                        <div className="text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            <ReactMarkdown components={JOB_CONTENT_MARKDOWN_COMPONENTS}>
+                                                {job?.description || 'No description provided.'}
+                                            </ReactMarkdown>
                                         </div>
                                     </div>
                                 )}
@@ -609,8 +679,10 @@ export default function PublicJobApplyPage() {
                                 {pageSections.showRequirements && job?.requirements && (
                                     <div className="border-t pt-6" style={{ borderColor: 'var(--color-border-subtle)' }}>
                                         <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Requirements & Qualifications</h3>
-                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {job.requirements}
+                                        <div className="text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            <ReactMarkdown components={JOB_CONTENT_MARKDOWN_COMPONENTS}>
+                                                {job.requirements}
+                                            </ReactMarkdown>
                                         </div>
                                     </div>
                                 )}
@@ -620,8 +692,10 @@ export default function PublicJobApplyPage() {
                                         <h3 className="mb-4 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
                                             What you get
                                         </h3>
-                                        <div className="whitespace-pre-line text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {pageSections.whatYouGet}
+                                        <div className="text-base leading-relaxed md:text-lg" style={{ color: 'var(--color-text-secondary)' }}>
+                                            <ReactMarkdown components={JOB_CONTENT_MARKDOWN_COMPONENTS}>
+                                                {pageSections.whatYouGet}
+                                            </ReactMarkdown>
                                         </div>
                                     </div>
                                 )}
@@ -776,6 +850,7 @@ export default function PublicJobApplyPage() {
                                                 (value) =>
                                                     setStandardValues((prev) => ({ ...prev, [fieldId]: value })),
                                                 standardFieldMetaById[fieldId],
+                                                requiredStandardFields.has(fieldId),
                                                 fieldErrors[fieldId]
                                             );
                                         })}
@@ -795,6 +870,7 @@ export default function PublicJobApplyPage() {
                                                                 ...prev,
                                                                 [field.key]: file,
                                                             })),
+                                                        requiredCustomFields.has(field.key),
                                                         fieldErrors[`custom.${field.key}`]
                                                     )
                                                 )}
@@ -819,6 +895,7 @@ export default function PublicJobApplyPage() {
                                                         (value) =>
                                                             setStandardValues((prev) => ({ ...prev, [fieldId]: value })),
                                                         standardFieldMetaById[fieldId],
+                                                        requiredStandardFields.has(fieldId),
                                                         fieldErrors[fieldId]
                                                     );
                                                 })}

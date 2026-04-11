@@ -1,4 +1,4 @@
-import type { Client, ClientContact, ClientAddress, ClientBillingDetails, ClientPhone, ClientCustomDetail } from './types';
+import type { Client, ClientContact, ClientAddress, ClientBillingDetails, ClientPhone, ClientCustomDetail, ClientDocument, ClientLink } from './types';
 
 export interface CreateClientRequest {
     name: string;
@@ -15,6 +15,8 @@ export interface CreateClientRequest {
     contacts?: ClientContact[];
     status?: 'active' | 'inactive' | 'archived';
     notes?: string;
+    documents?: ClientDocument[];
+    links?: ClientLink[];
     // Lead conversion link
     leadId?: string;
     // Send onboarding form email to client
@@ -38,6 +40,13 @@ export interface UpdateClientRequest {
     status?: 'active' | 'inactive' | 'archived';
     notes?: string;
     partnerId?: string;
+    documents?: ClientDocument[];
+    links?: ClientLink[];
+}
+
+export interface UploadClientDocumentsRequest {
+    clientId: string;
+    files: File[];
 }
 
 export interface ListClientsRequest {

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useGetClientQuery, useGetClientProjectsQuery, useAddClientActivityMutation, useSendClientOnboardingMutation, useGeneratePortalTokenMutation, useRevokePortalTokenMutation, useTogglePortalMutation } from '@/features/client/clientApi';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useGetClientQuery, useGetClientProjectsQuery, useAddClientActivityMutation, useSendClientOnboardingMutation, useGeneratePortalTokenMutation, useRevokePortalTokenMutation, useTogglePortalMutation, useUpdateClientMutation, useUploadClientDocumentsMutation } from '@/features/client/clientApi';
 import {
     ArrowLeft,
     Mail,
@@ -26,19 +26,30 @@ import {
     Copy,
     RefreshCw,
     Trash2,
+    Link2,
+    Upload,
 } from 'lucide-react';
 import type { Project } from '@/features/project/types/types';
+import type { ClientLink } from '@/features/client/types/types';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 
-type Tab = 'info' | 'projects' | 'activity';
+type Tab = 'info' | 'projects' | 'activity' | 'documents' | 'links';
 
 export default function ClientDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const [activeTab, setActiveTab] = useState<Tab>('info');
     const [activityType, setActivityType] = useState<'note' | 'call' | 'email' | 'meeting'>('note');
     const [activityDesc, setActivityDesc] = useState('');
+    const [linkName, setLinkName] = useState('');
+    const [linkUrl, setLinkUrl] = useState('');
+    const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
+    const [confirmingDocumentIndex, setConfirmingDocumentIndex] = useState<string | null>(null);
+    const [confirmingLinkIndex, setConfirmingLinkIndex] = useState<number | null>(null);
+    const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+    const [editingDocumentName, setEditingDocumentName] = useState('');
     const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
     const [portalLinkCopied, setPortalLinkCopied] = useState(false);
     const [generatePortalToken, { isLoading: isGenerating }] = useGeneratePortalTokenMutation();
@@ -56,7 +67,15 @@ export default function ClientDetailPage() {
     const { data: projectsData } = useGetClientProjectsQuery(id!);
     const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
     const [addActivity, { isLoading: isAddingActivity }] = useAddClientActivityMutation();
+    const [updateClient, { isLoading: isUpdatingClient }] = useUpdateClientMutation();
+    const [uploadClientDocuments, { isLoading: isUploadingDocuments }] = useUploadClientDocumentsMutation();
     const [sendOnboarding] = useSendClientOnboardingMutation();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        setConfirmingDocumentIndex(null);
+        setConfirmingLinkIndex(null);
+    }, [activeTab]);
+
 
     const handleResendOnboarding = async () => {
         if (!id) return;
@@ -116,6 +135,186 @@ export default function ClientDetailPage() {
         }
     };
 
+    const currentUserId = (user as any)?._id || (user as any)?.id || '';
+
+    const normalizeLinksForPayload = (links: ClientLink[]) => {
+        return links.map((link) => ({
+            name: link.name,
+            url: link.url,
+            addedAt: link.addedAt,
+        }));
+    };
+
+    const handleRequestDeleteDocument = (documentId: string) => {
+        setConfirmingLinkIndex(null);
+        setConfirmingDocumentIndex((prev) => (prev === documentId ? null : documentId));
+    };
+
+    const splitFileName = (name: string) => {
+        const lastDotIndex = name.lastIndexOf('.');
+        if (lastDotIndex <= 0) return { base: name, extension: '' };
+        return { base: name.slice(0, lastDotIndex), extension: name.slice(lastDotIndex) };
+    };
+
+    const handleUploadDocuments = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (!id || files.length === 0) return;
+
+        try {
+            await uploadClientDocuments({ clientId: id, files }).unwrap();
+        } catch (error) {
+            console.error('Failed to upload documents:', error);
+            alert('Failed to upload documents. Please try again.');
+        } finally {
+            e.target.value = '';
+        }
+    };
+
+    const handleStartRenameDocument = (documentId: string, currentName: string) => {
+        const { base } = splitFileName(currentName);
+        setEditingDocumentId(documentId);
+        setEditingDocumentName(base);
+    };
+
+    const handleCancelRenameDocument = () => {
+        setEditingDocumentId(null);
+        setEditingDocumentName('');
+    };
+
+    const handleSaveRenameDocument = async (documentId: string) => {
+        if (!id || !client) return;
+
+        const currentDocument = (client.documents || []).find((doc) => doc._id === documentId);
+        if (!currentDocument) return;
+
+        const trimmedBaseName = editingDocumentName.trim();
+        if (!trimmedBaseName) {
+            alert('Document name cannot be empty.');
+            return;
+        }
+
+        const { extension } = splitFileName(currentDocument.name);
+        const renamedFileName = `${trimmedBaseName}${extension}`;
+
+        const renamedDocuments = (client.documents || [])
+            .map((doc) => (doc._id === documentId ? { ...doc, name: renamedFileName } : doc))
+            .map((doc) => ({
+                name: doc.name,
+                url: doc.url,
+                cloudinaryId: doc.cloudinaryId,
+                size: doc.size,
+                mimeType: doc.mimeType,
+                uploadedAt: doc.uploadedAt,
+                uploadedBy: typeof doc.uploadedBy === 'object' ? (doc.uploadedBy as any)?._id : doc.uploadedBy || currentUserId,
+            }));
+
+        try {
+            await updateClient({ id, data: { documents: renamedDocuments } }).unwrap();
+            handleCancelRenameDocument();
+        } catch (error) {
+            console.error('Failed to rename document:', error);
+            alert('Failed to rename document. Please try again.');
+        }
+    };
+
+    const handleDeleteDocument = async (documentId: string) => {
+        if (!id || !client) return;
+
+        const filteredDocuments = (client.documents || [])
+            .filter((doc) => doc._id !== documentId)
+            .map((doc) => ({
+                name: doc.name,
+                url: doc.url,
+                cloudinaryId: doc.cloudinaryId,
+                size: doc.size,
+                mimeType: doc.mimeType,
+                uploadedAt: doc.uploadedAt,
+                uploadedBy: typeof doc.uploadedBy === 'object' ? (doc.uploadedBy as any)?._id : doc.uploadedBy || currentUserId,
+            }));
+
+        try {
+            await updateClient({ id, data: { documents: filteredDocuments } }).unwrap();
+            setConfirmingDocumentIndex(null);
+            if (editingDocumentId === documentId) {
+                handleCancelRenameDocument();
+            }
+        } catch (error) {
+            console.error('Failed to delete document:', error);
+            alert('Failed to delete document. Please try again.');
+        }
+    };
+
+    const handleSaveLink = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !linkName.trim() || !linkUrl.trim()) return;
+
+        const existingLinks = [...(client.links || [])] as ClientLink[];
+        const nextLink: ClientLink = {
+            name: linkName.trim(),
+            url: linkUrl.trim(),
+            addedAt: new Date().toISOString(),
+        };
+
+        if (editingLinkIndex !== null) {
+            const prev = existingLinks[editingLinkIndex];
+            existingLinks[editingLinkIndex] = {
+                ...prev,
+                ...nextLink,
+                addedAt: prev?.addedAt || nextLink.addedAt,
+            };
+        } else {
+            existingLinks.push(nextLink);
+        }
+
+        try {
+            await updateClient({
+                id,
+                data: {
+                    links: normalizeLinksForPayload(existingLinks),
+                },
+            }).unwrap();
+            setLinkName('');
+            setLinkUrl('');
+            setEditingLinkIndex(null);
+        } catch (error) {
+            console.error('Failed to save link:', error);
+        }
+    };
+
+    const handleEditLink = (index: number) => {
+        const link = (client.links || [])[index];
+        if (!link) return;
+        setLinkName(link.name || '');
+        setLinkUrl(link.url || '');
+        setEditingLinkIndex(index);
+    };
+
+    const handleDeleteLink = async (index: number) => {
+        if (!id) return;
+        const existingLinks = [...(client.links || [])] as ClientLink[];
+        const nextLinks = existingLinks.filter((_, i) => i !== index);
+        try {
+            await updateClient({
+                id,
+                data: {
+                    links: normalizeLinksForPayload(nextLinks),
+                },
+            }).unwrap();
+            if (editingLinkIndex === index) {
+                setLinkName('');
+                setLinkUrl('');
+                setEditingLinkIndex(null);
+            }
+        } catch (error) {
+            console.error('Failed to delete link:', error);
+        }
+    };
+
+    const handleRequestDeleteLink = (index: number) => {
+        setConfirmingDocumentIndex(null);
+        setConfirmingLinkIndex((prev) => (prev === index ? null : index));
+    };
+
     const activityIcons = {
         note: MessageSquare,
         call: Phone,
@@ -139,6 +338,12 @@ export default function ClientDetailPage() {
     };
 
     const regInfo = getRegistrationLabel();
+    const sortedDocuments = [...(client.documents || [])]
+        .sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
+    const sortedLinks = (client.links || [])
+        .map((link, originalIndex) => ({ link, originalIndex }))
+        .sort((a, b) => new Date(b.link.addedAt || 0).getTime() - new Date(a.link.addedAt || 0).getTime());
+
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
@@ -208,6 +413,7 @@ export default function ClientDetailPage() {
                 )}
                 <Link
                     to={`/crm/clients/${id}/edit`}
+                    state={{ backgroundLocation: location, returnTo: location.pathname }}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
                     <Edit size={20} />
@@ -244,6 +450,24 @@ export default function ClientDetailPage() {
                             }`}
                     >
                         Activity Logged
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('documents')}
+                        className={`pb-3 px-1 text-sm font-medium transition-colors border-b-2 ${activeTab === 'documents'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                            }`}
+                    >
+                        Documents ({client.documents?.length || 0})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('links')}
+                        className={`pb-3 px-1 text-sm font-medium transition-colors border-b-2 ${activeTab === 'links'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                            }`}
+                    >
+                        Links ({client.links?.length || 0})
                     </button>
                 </div>
             </div>
@@ -613,6 +837,310 @@ export default function ClientDetailPage() {
                             ))}
                         </div>
                     )}
+                </div>
+            ) : activeTab === 'documents' ? (
+                <div className="space-y-6 max-w-5xl">
+                    <div className="bg-gradient-to-br from-white via-slate-50/70 to-blue-50/50 rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium mb-2">
+                                    <FileText size={12} />
+                                    Documents
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-900">Client Documents</h3>
+                                <p className="text-sm text-slate-600 mt-1">
+                                    Upload one or more files, rename document names, and keep all references organized.
+                                </p>
+                            </div>
+                            <div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    multiple
+                                    className="hidden"
+                                    onChange={handleUploadDocuments}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingDocuments}
+                                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-50"
+                                >
+                                    {isUploadingDocuments ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    Upload Documents
+                                </button>
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-3">Tip: Hold Cmd/Ctrl to select multiple files before uploading.</p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible">
+                        {sortedDocuments.length > 0 ? (
+                            <div className="divide-y divide-slate-100">
+                                {sortedDocuments.map((doc) => (
+                                    <div key={doc._id || doc.url} className="p-4 md:p-5">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                <FileText size={16} />
+                                            </div>
+
+                                            <div className="min-w-0 flex-1">
+                                                {editingDocumentId === doc._id ? (
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={editingDocumentName}
+                                                                onChange={(e) => setEditingDocumentName(e.target.value)}
+                                                                className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                                                placeholder="Document name"
+                                                            />
+                                                            <span className="text-xs text-slate-500 shrink-0">{splitFileName(doc.name).extension || 'no ext'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSaveRenameDocument(doc._id as string)}
+                                                                disabled={isUpdatingClient}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-white disabled:opacity-50"
+                                                            >
+                                                                Save Name
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCancelRenameDocument}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-sm font-semibold text-slate-900 break-all">{doc.name}</p>
+                                                        <div className="mt-1 text-xs text-slate-500 flex flex-wrap items-center gap-2">
+                                                            <span>{doc.mimeType || 'file'}</span>
+                                                            <span>•</span>
+                                                            <span>{Math.max(1, Math.round((doc.size || 0) / 1024))} KB</span>
+                                                            <span>•</span>
+                                                            <span>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString() : '—'}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            <div className="shrink-0 relative">
+                                                <div className="flex items-center gap-2">
+                                                    <a
+                                                        href={doc.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                        Open
+                                                    </a>
+                                                    {editingDocumentId !== doc._id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleStartRenameDocument(doc._id as string, doc.name)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+                                                        >
+                                                            <Edit size={12} />
+                                                            Rename
+                                                        </button>
+                                                    )}
+                                                    {editingDocumentId !== doc._id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRequestDeleteDocument(doc._id as string)}
+                                                            disabled={isUpdatingClient}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                            Delete
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {confirmingDocumentIndex === doc._id && (
+                                                    <div className="absolute right-0 bottom-full mb-2 w-64 bg-white border border-red-100 rounded-xl shadow-lg p-3 z-20">
+                                                        <p className="text-xs text-slate-700">Delete this document?</p>
+                                                        <p className="text-[11px] text-slate-500 mt-0.5">This action cannot be undone.</p>
+                                                        <div className="mt-2 flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmingDocumentIndex(null)}
+                                                                className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteDocument(doc._id as string)}
+                                                                disabled={isUpdatingClient}
+                                                                className="px-2.5 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                                                            >
+                                                                {isUpdatingClient ? 'Deleting...' : 'Delete'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-10 text-center text-sm text-slate-500">
+                                No documents uploaded yet.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : activeTab === 'links' ? (
+                <div className="space-y-6 max-w-5xl">
+                    <div className="bg-gradient-to-br from-white via-slate-50/60 to-emerald-50/50 rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium mb-2">
+                            <Link2 size={12} />
+                            Links
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-900">Reference Links</h3>
+                        <p className="text-sm text-slate-600 mt-1 mb-4">
+                            Save useful links like PRDs, Figma, spreadsheets, and drive folders.
+                        </p>
+
+                        <form onSubmit={handleSaveLink} className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <input
+                                type="text"
+                                value={linkName}
+                                onChange={(e) => setLinkName(e.target.value)}
+                                placeholder="Link title"
+                                className="md:col-span-4 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                            <input
+                                type="url"
+                                value={linkUrl}
+                                onChange={(e) => setLinkUrl(e.target.value)}
+                                placeholder="https://..."
+                                className="md:col-span-6 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isUpdatingClient || !linkName.trim() || !linkUrl.trim()}
+                                className="md:col-span-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
+                            >
+                                {editingLinkIndex !== null ? 'Update' : 'Add'}
+                            </button>
+                        </form>
+
+                        {editingLinkIndex !== null && (
+                            <div className="mt-3 flex items-center gap-2">
+                                <p className="text-xs text-slate-500">Editing selected link</p>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditingLinkIndex(null);
+                                        setLinkName('');
+                                        setLinkUrl('');
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible">
+                        {sortedLinks.length > 0 ? (
+                            <div className="divide-y divide-slate-100">
+                                {sortedLinks.map(({ link, originalIndex }) => (
+                                    <div key={link._id || `${link.url}-${originalIndex}`} className="p-4 md:p-5">
+                                        <div className="flex items-start gap-3">
+                                            <span className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                <Link2 size={13} />
+                                            </span>
+
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-semibold text-slate-900 break-all">{link.name}</p>
+                                                <a
+                                                    href={link.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-xs text-blue-600 hover:underline break-all mt-1 inline-block"
+                                                >
+                                                    {link.url}
+                                                </a>
+                                                <p className="text-[11px] text-slate-500 mt-1">
+                                                    Added {link.addedAt ? new Date(link.addedAt).toLocaleString() : '—'}
+                                                </p>
+                                            </div>
+
+                                            <div className="shrink-0 relative">
+                                                <div className="flex items-center gap-2">
+                                                    <a
+                                                        href={link.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                        Visit
+                                                    </a>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleEditLink(originalIndex)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+                                                    >
+                                                        <Edit size={12} />
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRequestDeleteLink(originalIndex)}
+                                                        disabled={isUpdatingClient}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                        Delete
+                                                    </button>
+                                                </div>
+
+                                                {confirmingLinkIndex === originalIndex && (
+                                                    <div className="absolute right-0 bottom-full mb-2 w-64 bg-white border border-red-100 rounded-xl shadow-lg p-3 z-20">
+                                                        <p className="text-xs text-slate-700">Delete this link?</p>
+                                                        <p className="text-[11px] text-slate-500 mt-0.5">This action cannot be undone.</p>
+                                                        <div className="mt-2 flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmingLinkIndex(null)}
+                                                                className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteLink(originalIndex)}
+                                                                disabled={isUpdatingClient}
+                                                                className="px-2.5 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                                                            >
+                                                                {isUpdatingClient ? 'Deleting...' : 'Delete'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-10 text-center text-sm text-slate-500">
+                                No links available for this client.
+                            </div>
+                        )}
+                    </div>
                 </div>
             ) : (
                 // ACTIVITY TAB

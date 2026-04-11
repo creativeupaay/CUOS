@@ -31,8 +31,10 @@ export interface IExpense extends Document {
     // Vendor & Payment
     vendor?: string;
     paidBy?: string;
+    sourceAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     paymentMethod?: 'cash' | 'bank_transfer' | 'credit_card' | 'upi' | 'cheque';
     transactionRef?: string;
+    bankTransactionId?: Types.ObjectId;
 
     // Recurring
     isRecurring: boolean;
@@ -111,11 +113,16 @@ const ExpenseSchema = new Schema<IExpense>(
         // Vendor & Payment
         vendor: { type: String, trim: true },
         paidBy: { type: String, trim: true },
+        sourceAccountKey: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+        },
         paymentMethod: {
             type: String,
             enum: ['cash', 'bank_transfer', 'credit_card', 'upi', 'cheque'],
         },
         transactionRef: { type: String, trim: true },
+        bankTransactionId: { type: Schema.Types.ObjectId, ref: 'BankTransaction' },
 
         // Recurring
         isRecurring: { type: Boolean, default: false },
@@ -143,6 +150,7 @@ ExpenseSchema.index({ type: 1 });
 ExpenseSchema.index({ category: 1 });
 ExpenseSchema.index({ projectId: 1 });
 ExpenseSchema.index({ employeeId: 1 });
+ExpenseSchema.index({ sourceAccountKey: 1 });
 ExpenseSchema.index({ createdAt: -1 });
 ExpenseSchema.index({ date: 1, level: 1, type: 1 }); // For dashboard queries
 ExpenseSchema.index({ payrollId: 1 }, { sparse: true }); // For synced expenses

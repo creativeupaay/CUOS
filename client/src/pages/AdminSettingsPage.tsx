@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 import { Settings, Save, Building2 } from 'lucide-react';
 import {
     useGetOrgSettingsQuery,
@@ -91,6 +91,29 @@ export default function AdminSettingsPage() {
         setDepartments((prev) =>
             prev.filter((department) => department !== departmentToRemove)
         );
+    };
+
+    const handleBoldShortcut = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b') return;
+        e.preventDefault();
+
+        const textarea = e.currentTarget;
+
+        const currentValue = textarea.value;
+        const start = textarea.selectionStart ?? currentValue.length;
+        const end = textarea.selectionEnd ?? currentValue.length;
+        const selectedText = currentValue.slice(start, end);
+        const wrappedText = selectedText ? `**${selectedText}**` : '****';
+        const nextValue = `${currentValue.slice(0, start)}${wrappedText}${currentValue.slice(end)}`;
+
+        setHiringContent((prev) => ({ ...prev, aboutCompanyText: nextValue }));
+
+        window.requestAnimationFrame(() => {
+            const nextStart = start + 2;
+            const nextEnd = selectedText ? end + 2 : start + 2;
+            textarea.focus();
+            textarea.setSelectionRange(nextStart, nextEnd);
+        });
     };
 
     const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
@@ -263,6 +286,7 @@ export default function AdminSettingsPage() {
                                     aboutCompanyText: e.target.value,
                                 }))
                             }
+                            onKeyDown={handleBoldShortcut}
                             rows={8}
                             className="w-full px-3 py-2 rounded-lg border text-sm"
                             style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}

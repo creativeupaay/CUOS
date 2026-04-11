@@ -1,9 +1,11 @@
 import { useGetProjectsQuery, useDeleteProjectMutation, useUpdateProjectMutation } from '@/features/project';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical, X } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import ProjectFormPage from './ProjectFormPage';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -34,24 +36,33 @@ const PRIORITY_BORDER: Record<string, string> = {
 
 /* ── Main Page ───────────────────────────────────────────── */
 export default function ProjectsPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const scopeParam = searchParams.get('scope');
+    const partnerParam = searchParams.get('partnerId') || '';
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
-    const [partnerFilter, setPartnerFilter] = useState('');
+    const [partnerFilter, setPartnerFilter] = useState(partnerParam);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
     const [statusModal, setStatusModal] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
     const [selectedStatus, setSelectedStatus] = useState('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [showCreateProjectPanel, setShowCreateProjectPanel] = useState(false);
+    const [renderCreateProjectPanel, setRenderCreateProjectPanel] = useState(false);
+    const [isCreateProjectPanelVisible, setIsCreateProjectPanelVisible] = useState(false);
     const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const user = useAppSelector((state) => state.auth.user);
 
     const { data, isLoading, error } = useGetProjectsQuery({
         status: statusFilter,
         priority: priorityFilter,
-        partnerId: partnerFilter || undefined,
+        partnerId: scopeParam === 'internal' ? undefined : partnerFilter || undefined,
     });
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
-    const projects = data?.data || [];
+    const allLoadedProjects = data?.data || [];
+    const projects = scopeParam === 'internal'
+        ? allLoadedProjects.filter((project) => !project.partnerId)
+        : allLoadedProjects;
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -63,6 +74,53 @@ export default function ProjectsPage() {
         return () => document.removeEventListener('mousedown', handler);
     }, [openMenuId]);
 
+    useEffect(() => {
+        if (showCreateProjectPanel) {
+            if (!renderCreateProjectPanel) {
+                setRenderCreateProjectPanel(true);
+            }
+            const id = window.setTimeout(() => setIsCreateProjectPanelVisible(true), 12);
+            return () => window.clearTimeout(id);
+        }
+
+        setIsCreateProjectPanelVisible(false);
+
+        if (!renderCreateProjectPanel) {
+            return;
+        }
+
+        const id = window.setTimeout(() => setRenderCreateProjectPanel(false), 280);
+        return () => window.clearTimeout(id);
+    }, [showCreateProjectPanel, renderCreateProjectPanel]);
+
+    useEffect(() => {
+        if (!renderCreateProjectPanel) return;
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const handleEsc = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setShowCreateProjectPanel(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleEsc);
+        return () => {
+            window.removeEventListener('keydown', handleEsc);
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [renderCreateProjectPanel]);
+
+    const openCreateProjectPanel = () => {
+        setRenderCreateProjectPanel(true);
+        setShowCreateProjectPanel(true);
+    };
+
+    const closeCreateProjectPanel = () => {
+        setShowCreateProjectPanel(false);
+    };
+
     const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
     const isAdmin = ['super-admin', 'admin', 'super_admin'].includes((roleName as string).toLowerCase());
     const isPartner = (roleName as string).toLowerCase() === 'partner';
@@ -71,10 +129,35 @@ export default function ProjectsPage() {
     const hasProjectAccess = isAdmin || isPartner || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
     const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdmin });
     const partners = partnersData?.data?.partners || [];
+
+    useEffect(() => {
+        setPartnerFilter(scopeParam === 'internal' ? '' : partnerParam);
+    }, [partnerParam, scopeParam]);
+
+    const getProjectPartnerId = (project: any) => typeof project.partnerId === 'object' ? project.partnerId?._id : project.partnerId;
+    const getProjectPartnerName = (project: any) => {
+        const partner = typeof project.partnerId === 'object' ? project.partnerId : undefined;
+        if (partner) return partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner';
+        return getPartnerName(project.partnerId);
+    };
     const getPartnerName = (partnerId?: string) => {
         if (!partnerId) return '';
         const partner = partners.find((p: any) => p._id === partnerId);
         return partner?.userId?.name || partner?.contactPerson || partner?.companyName || 'Partner';
+    };
+    const dashboardTitle = scopeParam === 'internal'
+        ? 'Projects'
+        : partnerFilter
+            ? `${getPartnerName(partnerFilter)} Projects`
+            : 'Projects';
+
+    const updatePartnerFilter = (value: string) => {
+        setPartnerFilter(value);
+        const next = new URLSearchParams(searchParams);
+        next.delete('scope');
+        if (value) next.set('partnerId', value);
+        else next.delete('partnerId');
+        setSearchParams(next, { replace: true });
     };
 
     const handleDeleteProject = async () => {
@@ -130,7 +213,7 @@ export default function ProjectsPage() {
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold mb-0.5" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                        Projects
+                        {dashboardTitle}
                     </h1>
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         {projects.length} project{projects.length !== 1 ? 's' : ''} {statusFilter ? `· ${statusFilter}` : ''}
@@ -166,7 +249,7 @@ export default function ProjectsPage() {
                     {isAdmin && (
                         <select
                             value={partnerFilter}
-                            onChange={(e) => setPartnerFilter(e.target.value)}
+                            onChange={(e) => updatePartnerFilter(e.target.value)}
                             className="rounded-lg border px-3 py-2 text-sm outline-none transition-colors w-full md:w-auto"
                             style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                         >
@@ -188,7 +271,8 @@ export default function ProjectsPage() {
                         const sc = STATUS_CONFIG[project.status] || STATUS_CONFIG.planning;
                         const pc = PRIORITY_CONFIG[project.priority] || PRIORITY_CONFIG.low;
                         const borderAccent = PRIORITY_BORDER[project.priority] || '#10B981';
-                        const isOverdue = project.deadline && new Date(project.deadline) < new Date() && project.status !== 'completed';
+                        const displayDeadline = project.overdueDate || project.endDate || project.deadline;
+                        const isOverdue = displayDeadline && new Date(displayDeadline) < new Date() && project.status !== 'completed';
 
                         return (
                             <div key={project._id} className="relative group">
@@ -242,9 +326,9 @@ export default function ProjectsPage() {
                                             </p>
                                         )}
 
-                                        {isAdmin && project.partnerId && (
+                                        {isAdmin && getProjectPartnerId(project) && (
                                             <p className="text-[11px] mb-2" style={{ color: 'var(--color-text-muted)' }}>
-                                                Created by Partner: {getPartnerName(project.partnerId)}
+                                                Created by Partner: {getProjectPartnerName(project)}
                                             </p>
                                         )}
 
@@ -263,13 +347,13 @@ export default function ProjectsPage() {
                                             </span>
 
                                             {/* Deadline / Internal Deadline */}
-                                            {(project.endDate || project.deadline) && (
+                                            {displayDeadline && (
                                                 <span
                                                     className="flex items-center gap-1 ml-auto font-medium"
                                                     style={{ color: isOverdue ? 'var(--color-danger)' : 'var(--color-text-muted)' }}
                                                 >
                                                     <Calendar size={11} />
-                                                    {new Date((project.endDate || project.deadline) as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    {new Date(displayDeadline as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                                                     {isOverdue && ' · Overdue'}
                                                 </span>
                                             )}
@@ -280,7 +364,7 @@ export default function ProjectsPage() {
                                 {/* 3-dot menu — super admin only, visible on hover */}
                                 {isSuperAdmin && (
                                     <div
-                                        className="absolute top-2.5 right-2.5 z-10"
+                                        className="absolute top-1 right-1 z-10"
                                         ref={(el) => { menuRefs.current[project._id] = el; }}
                                     >
                                         <button
@@ -355,9 +439,14 @@ export default function ProjectsPage() {
                         {isAdmin ? 'Create your first project to get started' : 'No projects have been assigned to you yet'}
                     </p>
                     {(isAdmin || isPartner) && (
-                        <Link to="/projects/new" className="btn btn-primary mt-5" style={{ gap: '6px' }}>
+                        <button
+                            type="button"
+                            onClick={openCreateProjectPanel}
+                            className="btn btn-primary mt-5"
+                            style={{ gap: '6px' }}
+                        >
                             <Plus size={15} /> Create Project
-                        </Link>
+                        </button>
                     )}
                 </div>
             )}
@@ -365,7 +454,7 @@ export default function ProjectsPage() {
 
         {/* ── Delete project confirmation modal ─────────────────── */}
         {/* ── Status change modal ──────────────────────────────── */}
-        {statusModal && (
+        {statusModal && typeof document !== 'undefined' && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
                     <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>
@@ -405,11 +494,12 @@ export default function ProjectsPage() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
 
         {/* ── Delete project confirmation modal ─────────────────── */}
-        {deleteConfirm && (
+        {deleteConfirm && typeof document !== 'undefined' && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
                     <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
@@ -437,18 +527,20 @@ export default function ProjectsPage() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
         {/* ── Floating Action Button (New Project) ────────────────── */}
-        {(isAdmin || isPartner) && (
-            <Link
-                to="/projects/new"
+        {(isAdmin || isPartner) && typeof document !== 'undefined' && createPortal(
+            <button
+                type="button"
+                onClick={openCreateProjectPanel}
                 className="fixed bottom-6 right-6 btn btn-primary shadow-2xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-                style={{ 
-                    zIndex: 60, 
-                    gap: '8px', 
-                    padding: '0 24px', 
-                    height: '48px', 
+                style={{
+                    zIndex: 90,
+                    gap: '8px',
+                    padding: '0 24px',
+                    height: '48px',
                     borderRadius: '999px',
                     fontSize: '14.5px',
                     boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4), 0 8px 10px -6px rgba(16, 185, 129, 0.1)'
@@ -456,7 +548,46 @@ export default function ProjectsPage() {
             >
                 <Plus size={18} />
                 New Project
-            </Link>
+            </button>,
+            document.body
+        )}
+        {renderCreateProjectPanel && createPortal(
+            <>
+                <div
+                    className={`fixed inset-0 z-[200] transition-opacity duration-300 ${isCreateProjectPanelVisible ? 'opacity-100' : 'opacity-0'}`}
+                    style={{ backgroundColor: 'rgba(0,0,0,0.22)' }}
+                    onClick={closeCreateProjectPanel}
+                />
+                <div
+                    className={`fixed top-0 right-0 h-full z-[201] flex flex-col transition-transform duration-300 ease-in-out ${isCreateProjectPanelVisible ? 'translate-x-0' : 'translate-x-full'}`}
+                    style={{
+                        width: 'min(860px, 100vw)',
+                        backgroundColor: 'var(--color-bg-surface)',
+                        borderLeft: '1px solid var(--color-border-default)',
+                        boxShadow: '-16px 0 48px rgba(0,0,0,0.13)',
+                    }}
+                >
+                    <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Create New Project</h2>
+                        <button
+                            type="button"
+                            onClick={closeCreateProjectPanel}
+                            className="p-1.5 rounded transition-colors hover:bg-black/5"
+                            style={{ color: 'var(--color-text-muted)' }}
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        <ProjectFormPage
+                            embedded
+                            onClose={closeCreateProjectPanel}
+                            onSaved={closeCreateProjectPanel}
+                        />
+                    </div>
+                </div>
+            </>,
+            document.body
         )}
         </>)
 

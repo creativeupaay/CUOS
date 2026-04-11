@@ -8,6 +8,7 @@ export interface IRevenue extends Document {
     clientId?: Types.ObjectId; // Link to CRM client if exists
     project?: string;
     projectId?: Types.ObjectId; // Link to project if applicable
+    phaseId?: Types.ObjectId; // Link to specific project phase if applicable
 
     // Amount details
     amount: number;
@@ -53,6 +54,7 @@ const RevenueSchema = new Schema<IRevenue>(
         clientId: { type: Schema.Types.ObjectId, ref: 'Client' },
         project: { type: String, trim: true },
         projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
+        phaseId: { type: Schema.Types.ObjectId },
 
         // Amount details
         amount: { type: Number, required: true, min: 0 },

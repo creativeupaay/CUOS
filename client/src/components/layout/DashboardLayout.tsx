@@ -20,7 +20,9 @@ import { useNotificationSocket } from '@/features/notification/hooks/useNotifica
 const ROUTE_TITLES: Record<string, string> = {
     '/projects': 'Projects',
     '/finance': 'Finance',
+    '/finance/cash-in-bank': 'Cash in Bank',
     '/finance/expenses': 'Expenses',
+    '/finance/salaries-payrolls': 'Salaries & Payrolls',
     '/finance/invoices': 'Invoices',
     '/finance/reports': 'Reports',
     '/crm/pipeline': 'Pipeline',
@@ -100,7 +102,9 @@ function resolveTitle(pathname: string): string {
 export default function DashboardLayout() {
     const location = useLocation();
     const user = useAppSelector((state) => state.auth.user);
-    const pageTitle = resolveTitle(location.pathname);
+    const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string } } | null)?.backgroundLocation;
+    const effectivePathname = backgroundLocation?.pathname || location.pathname;
+    const pageTitle = resolveTitle(effectivePathname);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
     const initials = user?.name
@@ -122,7 +126,7 @@ export default function DashboardLayout() {
 
     useEffect(() => {
         setMobileSidebarOpen(false);
-    }, [location.pathname]);
+    }, [effectivePathname]);
 
     return (
         <div

@@ -1,12 +1,26 @@
 import { Payroll, IPayroll } from '../models/Payroll.model';
-import { Leave } from '../models/Leave.model';
 import { Employee } from '../models/Employee.model';
 import { SalaryStructure } from '../models/SalaryStructure.model';
 import { Attendance } from '../models/Attendance.model';
 import { Task } from '../../project/models/Task.model';
+import { Types } from 'mongoose';
+import { BankTransaction } from '../../finance/models/BankTransaction.model';
+import { BankTransactionService } from '../../finance/services/bankTransaction.service';
+import { ExpenseService } from '../../finance/services/expense.service';
 import AppError from '../../../utils/appError';
 
 class PayrollService {
+    private calculateNetSalary(payroll: IPayroll): number {
+        const totalDeductions = (payroll.deductions.pf || 0)
+            + (payroll.deductions.esi || 0)
+            + (payroll.deductions.tax || 0)
+            + (payroll.deductions.leaves || 0)
+            + (payroll.deductions.penalties || 0)
+            + (payroll.deductions.other || 0);
+
+        return Math.round((payroll.grossSalary + (payroll.incentiveAmount || 0) - totalDeductions) * 100) / 100;
+    }
+
     /**
      * Generate payroll for an employee for a given month/year.
      * Cross-links with:
@@ -67,39 +81,19 @@ class PayrollService {
         const incentiveAmount = 0;
         const penaltyAmount = 0;
 
-        // ── Leave deductions ────────────────────────────────────────
-        const unpaidLeaves = await Leave.aggregate([
-            {
-                $match: {
-                    employeeId: employee._id,
-                    type: 'unpaid',
-                    status: 'approved',
-                    startDate: { $gte: startDate, $lte: endDate },
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalDays: { $sum: '$days' },
-                },
-            },
-        ]);
-
-        const unpaidLeaveDays = unpaidLeaves.length > 0 ? unpaidLeaves[0].totalDays : 0;
-        const leaveDeduction = (employee.employmentType !== 'contract' && workingDays > 0)
-            ? (salary.basic / workingDays) * unpaidLeaveDays
-            : 0;
-
         // ── Calculate salary ────────────────────────────────────────
         let grossSalary = 0;
         let basicComponent = 0;
+        let payableDays = 30;
 
         if (employee.employmentType === 'contract' && salary.hourlyRate > 0) {
             grossSalary = totalHoursWorked * salary.hourlyRate;
             basicComponent = grossSalary;
         } else {
-            grossSalary = salary.basic + salary.hra + salary.da + salary.specialAllowance;
+            const monthlySalary = salary.basic + salary.specialAllowance;
             basicComponent = salary.basic;
+            payableDays = this.calculatePayableDays(employee.joiningDate, salary.effectiveFrom, month, year);
+            grossSalary = (monthlySalary / 30) * payableDays;
         }
 
         // Statutory deductions
@@ -107,8 +101,9 @@ class PayrollService {
         const pfDeduction = 0;
         const esiDeduction = 0;
         const taxDeduction = salary.deductions.tax || 0;
+        const otherDeduction = salary.deductions.other || 0;
 
-        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + leaveDeduction;
+        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + otherDeduction;
 
         const netSalary = grossSalary + incentiveAmount - totalDeductions;
 
@@ -121,18 +116,20 @@ class PayrollService {
             presentDays,
             totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
             overtime: Math.round(overtime * 100) / 100,
-            grossSalary,
+            grossSalary: Math.round(grossSalary * 100) / 100,
+            payableDays,
             incentiveAmount: Math.round(incentiveAmount * 100) / 100,
             penaltyAmount: Math.round(penaltyAmount * 100) / 100,
             deductions: {
                 pf: Math.round(pfDeduction * 100) / 100,
                 esi: Math.round(esiDeduction * 100) / 100,
                 tax: Math.round(taxDeduction * 100) / 100,
-                leaves: Math.round(leaveDeduction * 100) / 100,
+                leaves: 0,
                 penalties: Math.round(penaltyAmount * 100) / 100,
-                other: salary.deductions.other || 0,
+                other: Math.round(otherDeduction * 100) / 100,
             },
             netSalary: Math.round(netSalary * 100) / 100,
+            payoutAccountKey: salary.payoutAccountKey || 'hdfc_gst',
             generatedBy,
         });
 
@@ -268,6 +265,43 @@ class PayrollService {
         return workingDays;
     }
 
+    private calculatePayableDays(
+        joiningDate: Date,
+        salaryEffectiveFrom: Date,
+        month: number,
+        year: number
+    ): number {
+        const periodStart = new Date(year, month - 1, 1);
+        const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
+        const payableFrom = new Date(
+            Math.max(
+                new Date(joiningDate).getTime(),
+                new Date(salaryEffectiveFrom).getTime(),
+                periodStart.getTime()
+            )
+        );
+
+        if (payableFrom > periodEnd) {
+            return 0;
+        }
+
+        if (payableFrom.getMonth() !== month - 1 || payableFrom.getFullYear() !== year) {
+            return 30;
+        }
+
+        const effectiveDay = payableFrom.getDate();
+        if (effectiveDay <= 1) {
+            return 30;
+        }
+
+        // Company payroll uses a 30-day basis and expects 15th -> 15 payable days.
+        return Math.max(1, 30 - effectiveDay);
+    }
+
+    private getMonthLabel(month: number): string {
+        return new Date(2000, month - 1, 1).toLocaleString('en-US', { month: 'short' });
+    }
+
     async getPayrolls(filters: {
         month?: number;
         year?: number;
@@ -329,9 +363,115 @@ class PayrollService {
 
         payroll.status = status;
         if (status === 'approved') payroll.approvedBy = userId as any;
-        if (status === 'paid') payroll.paidAt = new Date();
+        if (status === 'paid') {
+            payroll.paidAt = new Date();
+
+            const employee = await Employee.findById(payroll.employeeId).populate('userId', 'name');
+            const employeeName = (employee?.userId as any)?.name || employee?.employeeId || 'Employee';
+
+            let payoutTransaction = await BankTransaction.findOne({ payrollId: payroll._id });
+            if (!payoutTransaction) {
+                const createdTransaction = await BankTransactionService.create({
+                    accountKey: payroll.payoutAccountKey || 'hdfc_gst',
+                    transactionType: 'debit',
+                    amount: payroll.netSalary,
+                    date: payroll.paidAt,
+                    description: `Salary payout - ${employeeName} (${this.getMonthLabel(payroll.month)} ${payroll.year})`,
+                    notes: `Payroll payment for ${this.getMonthLabel(payroll.month)} ${payroll.year}`,
+                    source: 'automatic',
+                    payrollId: payroll._id as Types.ObjectId,
+                    createdBy: new Types.ObjectId(userId),
+                });
+                payoutTransaction = await BankTransaction.findById(createdTransaction._id);
+            }
+
+            if (employee?._id) {
+                await ExpenseService.upsertPayrollSalaryExpense({
+                    payrollId: payroll._id as Types.ObjectId,
+                    employeeId: employee._id as Types.ObjectId,
+                    employeeName,
+                    month: payroll.month,
+                    year: payroll.year,
+                    amount: payroll.netSalary,
+                    paidAt: payroll.paidAt,
+                    sourceAccountKey: payroll.payoutAccountKey,
+                    bankTransactionId: payoutTransaction?._id as Types.ObjectId | undefined,
+                    createdBy: new Types.ObjectId(userId),
+                    updatedBy: new Types.ObjectId(userId),
+                });
+            }
+        }
 
         await payroll.save();
+        return payroll;
+    }
+
+    async updatePayroll(
+        id: string,
+        data: {
+            incentiveAmount?: number;
+            payoutAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+            deductions?: { tax?: number; other?: number };
+        },
+        userId: string
+    ): Promise<IPayroll> {
+        const payroll = await Payroll.findById(id);
+        if (!payroll) throw new AppError('Payroll not found', 404);
+
+        if (data.incentiveAmount !== undefined) {
+            payroll.incentiveAmount = Math.round(data.incentiveAmount * 100) / 100;
+        }
+
+        if (data.payoutAccountKey !== undefined) {
+            payroll.payoutAccountKey = data.payoutAccountKey;
+        }
+
+        if (data.deductions?.tax !== undefined) {
+            payroll.deductions.tax = Math.round(data.deductions.tax * 100) / 100;
+        }
+
+        if (data.deductions?.other !== undefined) {
+            payroll.deductions.other = Math.round(data.deductions.other * 100) / 100;
+        }
+
+        payroll.netSalary = this.calculateNetSalary(payroll);
+
+        await payroll.save();
+
+        if (payroll.status === 'paid') {
+            const employee = await Employee.findById(payroll.employeeId).populate('userId', 'name');
+            const employeeName = (employee?.userId as any)?.name || employee?.employeeId || 'Employee';
+            const linkedTransaction = await BankTransaction.findOne({ payrollId: payroll._id });
+            if (linkedTransaction) {
+                await BankTransactionService.update(linkedTransaction._id, {
+                    accountKey: payroll.payoutAccountKey,
+                    transactionType: 'debit',
+                    amount: payroll.netSalary,
+                    date: payroll.paidAt || new Date(),
+                    description: linkedTransaction.description,
+                    notes: `Payroll payment for ${this.getMonthLabel(payroll.month)} ${payroll.year}`,
+                    source: 'automatic',
+                    updatedBy: new Types.ObjectId(userId),
+                });
+            }
+
+            if (employee?._id) {
+                await ExpenseService.upsertPayrollSalaryExpense({
+                    payrollId: payroll._id as Types.ObjectId,
+                    employeeId: employee._id as Types.ObjectId,
+                    employeeName,
+                    month: payroll.month,
+                    year: payroll.year,
+                    amount: payroll.netSalary,
+                    paidAt: payroll.paidAt,
+                    sourceAccountKey: payroll.payoutAccountKey,
+                    bankTransactionId: linkedTransaction?._id as Types.ObjectId | undefined,
+                    createdBy: new Types.ObjectId(userId),
+                    updatedBy: new Types.ObjectId(userId),
+                });
+            }
+        }
+
         return payroll;
     }
 
@@ -350,4 +490,3 @@ class PayrollService {
 }
 
 export const payrollService = new PayrollService();
-

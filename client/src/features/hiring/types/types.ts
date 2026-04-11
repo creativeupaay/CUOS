@@ -17,6 +17,7 @@ export interface ApplicationCustomFieldDefinition {
     type: ApplicationFieldType;
     placeholder?: string;
     helpText?: string;
+    required?: boolean;
 }
 
 export interface ApplicationStandardFieldSetting {
@@ -24,6 +25,7 @@ export interface ApplicationStandardFieldSetting {
     label: string;
     placeholder?: string;
     helpText?: string;
+    required?: boolean;
 }
 
 export interface JobApplicationFormConfig {

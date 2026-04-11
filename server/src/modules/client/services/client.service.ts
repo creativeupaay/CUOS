@@ -3,6 +3,7 @@ import { IProject } from '../../project/models/Project.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import crypto from 'crypto';
+import { uploadDocument } from '../../../utils/cloudinary.util';
 import type { CreateClientInput, UpdateClientInput, ListClientsInput, AddClientActivityInput } from '../validators/client.validator';
 import { sendClientOnboardingEmail } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
@@ -43,6 +44,8 @@ export class ClientService {
         // Build proposal linkage if this client comes from a lead
         let proposalIds: Types.ObjectId[] = [];
         let leadActivities: any[] = [];
+        let leadDocuments: any[] = [];
+        let leadLinks: any[] = [];
 
         if (leadId) {
             const { Lead } = await import('../../crm/models/Lead.model');
@@ -60,6 +63,24 @@ export class ClientService {
                     date: act.date,
                     createdBy: act.createdBy,
                 }));
+
+                // Copy lead documents to client record
+                leadDocuments = (lead.documents || []).map((doc) => ({
+                    name: doc.name,
+                    url: doc.url,
+                    cloudinaryId: doc.cloudinaryId,
+                    size: doc.size,
+                    mimeType: doc.mimeType,
+                    uploadedAt: doc.uploadedAt,
+                    uploadedBy: doc.uploadedBy,
+                }));
+
+                // Copy lead links to client record
+                leadLinks = (lead.links || []).map((link) => ({
+                    name: link.name,
+                    url: link.url,
+                    addedAt: link.addedAt,
+                }));
             }
         }
 
@@ -69,6 +90,8 @@ export class ClientService {
             partnerId: partnerId ? new Types.ObjectId(partnerId) : undefined,
             proposalIds,
             activities: leadActivities,
+            documents: leadDocuments,
+            links: leadLinks,
             createdBy,
         });
 
@@ -173,7 +196,8 @@ export class ClientService {
         const client = await Client.findById(id)
             .populate('createdBy', 'name email')
             .populate('partnerId', 'companyName contactPerson email')
-            .populate('activities.createdBy', 'name email');
+            .populate('activities.createdBy', 'name email')
+            .populate('documents.uploadedBy', 'name email');
 
         if (!client) {
             throw new AppError('Client not found', 404);
@@ -221,6 +245,53 @@ export class ClientService {
         }
 
         return client;
+    }
+
+    /**
+     * Upload one or more documents for a client.
+     */
+    async uploadClientDocuments(
+        clientId: string,
+        files: Array<{
+            buffer: Buffer;
+            originalname: string;
+            mimetype: string;
+            size: number;
+        }>,
+        uploadedBy: Types.ObjectId,
+        context?: { requesterRole?: string; requesterPartnerId?: string }
+    ): Promise<IClient> {
+        const client = await Client.findById(clientId);
+
+        if (!client) {
+            throw new AppError('Client not found', 404);
+        }
+
+        this.assertPartnerClientAccess(client, context?.requesterPartnerId);
+
+        if (!context?.requesterPartnerId && !this.isAdminRole(context?.requesterRole) && client.partnerId) {
+            throw new AppError('You do not have access to this client', 403);
+        }
+
+        const cloudFolder = `crm/clients/${clientId}`;
+
+        for (const file of files) {
+            const uploadResult = await uploadDocument(file.buffer, cloudFolder, file.originalname);
+
+            client.documents.push({
+                name: file.originalname,
+                url: uploadResult.url,
+                cloudinaryId: uploadResult.cloudinaryId,
+                size: uploadResult.size || file.size,
+                mimeType: file.mimetype,
+                uploadedAt: new Date(),
+                uploadedBy,
+            });
+        }
+
+        await client.save();
+
+        return this.getClientById(clientId, context);
     }
 
     /**

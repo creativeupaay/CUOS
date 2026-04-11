@@ -19,6 +19,16 @@ export interface Lead {
     tags: string[];
 
     assignedTo?: string | User;
+    partnerId?: string | {
+        _id?: string;
+        companyName?: string;
+        contactPerson?: string;
+        userId?: {
+            _id?: string;
+            name?: string;
+            email?: string;
+        };
+    };
     convertedClientId?: string | Client;
 
     isLocked: boolean;
@@ -28,6 +38,8 @@ export interface Lead {
 
     activities: LeadActivity[];
     meetings: LeadMeeting[];
+    documents: LeadDocument[];
+    links: LeadLink[];
 
     createdBy: string | User;
     createdAt: string;
@@ -49,6 +61,24 @@ export interface LeadMeeting {
     notes: string;
     date: string;
     createdBy: string | User;
+}
+
+export interface LeadDocument {
+    _id: string;
+    name: string;
+    url: string;
+    cloudinaryId: string;
+    size: number;
+    mimeType: string;
+    uploadedAt: string;
+    uploadedBy: string | User;
+}
+
+export interface LeadLink {
+    _id?: string;
+    name: string;
+    url: string;
+    addedAt?: string;
 }
 
 // ============================================

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Plus,
     Search,
@@ -58,6 +58,12 @@ function LeadCard({
     };
     isDragging?: boolean;
 }) {
+    const partnerName = typeof lead.partnerId === 'object'
+        ? (lead.partnerId as any)?.userId?.name || (lead.partnerId as any)?.contactPerson || (lead.partnerId as any)?.companyName || 'Partner'
+        : lead.partnerId
+            ? 'Partner'
+            : '';
+
     return (
         <div
             ref={dragProps?.setNodeRef}
@@ -96,6 +102,12 @@ function LeadCard({
                 <div className="flex items-start gap-1 text-xs text-gray-400 mt-1.5 mb-1">
                     <MessageSquare size={10} className="shrink-0 mt-0.5" />
                     <span className="line-clamp-1">{lead.notes}</span>
+                </div>
+            )}
+
+            {lead.partnerId && (
+                <div className="mt-2 mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-blue-100 text-blue-700">
+                    Referred by: {partnerName}
                 </div>
             )}
 
@@ -164,10 +176,12 @@ function StageColumn({
     stage,
     leads,
     navigate,
+    returnTo,
 }: {
     stage: { id: string; label: string; color: string };
     leads: Lead[];
-    navigate: (path: string) => void;
+    navigate: (path: string, options?: any) => void;
+    returnTo: string;
 }) {
     const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
@@ -198,7 +212,7 @@ function StageColumn({
                     <DraggableLeadCard
                         key={lead._id}
                         lead={lead}
-                        onClick={() => navigate(`/crm/leads/${lead._id}`)}
+                        onClick={() => navigate(`/crm/leads/${lead._id}`, { state: { returnTo } })}
                     />
                 ))}
                 {leads.length === 0 && (
@@ -221,6 +235,7 @@ function StageColumn({
 // ============================================
 export default function CrmPipelinePage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [search, setSearch] = useState('');
     const [activeLead, setActiveLead] = useState<Lead | null>(null);
     const [activeLeadWidth, setActiveLeadWidth] = useState<number | null>(null);
@@ -296,9 +311,9 @@ export default function CrmPipelinePage() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-64px)]">
+        <div className="flex flex-col h-[calc(100vh-var(--topbar-height))] min-h-[calc(100vh-var(--topbar-height))] -mx-4 -mt-5 w-[calc(100%+2rem)] sm:-mx-6 sm:-mt-6 sm:w-[calc(100%+3rem)] lg:-mx-8 lg:-mt-7 lg:w-[calc(100%+4rem)]">
             {/* Header */}
-            <div className="flex-none px-6 py-4 bg-white border-b border-gray-200">
+            <div className="flex-none px-4 sm:px-6 py-4 bg-white border-b border-gray-200">
                 <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold text-gray-900">Deals Pipeline</h1>
                     <div className="flex items-center gap-3">
@@ -325,7 +340,14 @@ export default function CrmPipelinePage() {
                         </div>
                         <button
                             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-                            onClick={() => navigate('/crm/leads/new')}
+                            onClick={() =>
+                                navigate('/crm/leads/new', {
+                                    state: {
+                                        backgroundLocation: location,
+                                        returnTo: location.pathname,
+                                    },
+                                })
+                            }
                         >
                             <Plus size={16} />
                             New Deal
@@ -341,7 +363,7 @@ export default function CrmPipelinePage() {
                 onDragCancel={handleDragCancel}
                 onDragEnd={handleDragEnd}
             >
-                <div className="flex-1 overflow-x-auto p-6 bg-gray-50">
+                <div className="flex-1 min-h-0 overflow-x-auto px-4 sm:px-6 py-4 bg-gray-50">
                     <div className="flex h-full gap-4 min-w-max">
                         {columns.map((column) => (
                             <StageColumn
@@ -349,6 +371,7 @@ export default function CrmPipelinePage() {
                                 stage={column}
                                 leads={column.leads}
                                 navigate={navigate}
+                                returnTo={location.pathname}
                             />
                         ))}
                     </div>

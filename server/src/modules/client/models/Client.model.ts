@@ -7,6 +7,44 @@ export interface IClientActivity {
     createdBy: Types.ObjectId;
 }
 
+export interface IClientDocument {
+    name: string;
+    url: string;
+    cloudinaryId?: string;
+    size: number;
+    mimeType: string;
+    uploadedAt: Date;
+    uploadedBy: Types.ObjectId;
+}
+
+const ClientDocumentSchema = new Schema<IClientDocument>(
+    {
+        name: { type: String, required: true, trim: true },
+        url: { type: String, required: true, trim: true },
+        cloudinaryId: { type: String, trim: true },
+        size: { type: Number, default: 0 },
+        mimeType: { type: String, default: '' },
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    },
+    { _id: true, timestamps: false }
+);
+
+export interface IClientLink {
+    name: string;
+    url: string;
+    addedAt: Date;
+}
+
+const ClientLinkSchema = new Schema<IClientLink>(
+    {
+        name: { type: String, required: true, trim: true },
+        url: { type: String, required: true, trim: true },
+        addedAt: { type: Date, default: Date.now },
+    },
+    { _id: true, timestamps: false }
+);
+
 const ClientActivitySchema = new Schema<IClientActivity>(
     {
         type: {
@@ -78,6 +116,8 @@ export interface IClient extends Document {
     notes?: string;
 
     activities: IClientActivity[];
+    documents: IClientDocument[];
+    links: IClientLink[];
 
     // Onboarding form
     onboardingToken?: string;
@@ -171,6 +211,8 @@ const ClientSchema = new Schema<IClient>(
         notes: { type: String, trim: true },
 
         activities: [ClientActivitySchema],
+        documents: [ClientDocumentSchema],
+        links: [ClientLinkSchema],
 
         // Onboarding form
         onboardingToken: { type: String, sparse: true, index: true },

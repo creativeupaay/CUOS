@@ -537,6 +537,55 @@ export const projectApi = api.injectEndpoints({
                 };
             },
         }),
+
+        // ============================================
+        // PHASE PAYMENT ENDPOINTS
+        // ============================================
+
+        getProjectPaymentSummary: builder.query<ApiResponse<{
+            totalExpectedPayment: number;
+            totalReceivedPayment: number;
+            totalPendingPayment: number;
+            phasesWithPayment: number;
+            phasesPaymentReceived: number;
+            phaseDetails: Array<{
+                phaseId: string;
+                phaseName: string;
+                expectedAmount: number;
+                receivedAmount: number;
+                pendingAmount: number;
+                status: string;
+                dueDate: string | undefined;
+            }>;
+        }>, string>({
+            query: (projectId) => `/projects/${projectId}/payment-summary`,
+            providesTags: (_result, _error, projectId) => [{ type: 'Projects', id: projectId }],
+        }),
+
+        markPhasePaymentReceived: builder.mutation<ApiResponse<{
+            project: Project;
+            revenue: any;
+            bankTransaction: any;
+        }>, {
+            projectId: string;
+            phaseId: string;
+            receivedAmount: number;
+            bankAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+            receivedDate?: string;
+            notes?: string;
+        }>({
+            query: ({ projectId, phaseId, ...data }) => ({
+                url: `/projects/${projectId}/phases/${phaseId}/mark-payment-received`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: (_result, _error, { projectId }) => [
+                { type: 'Projects', id: projectId },
+                'Projects',
+                'Revenues',
+                'BankTransactions',
+            ],
+        }),
     }),
     overrideExisting: false,
 });
@@ -618,4 +667,8 @@ export const {
     useUpdateNoteMutation,
     useDeleteNoteMutation,
     useUploadNoteImageMutation,
+
+    // Phase Payments
+    useGetProjectPaymentSummaryQuery,
+    useMarkPhasePaymentReceivedMutation,
 } = projectApi;

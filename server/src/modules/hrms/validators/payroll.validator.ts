@@ -23,6 +23,19 @@ export const updatePayrollStatusSchema = z.object({
     params: z.object({ id: z.string() }),
 });
 
+export const updatePayrollSchema = z.object({
+    body: z.object({
+        incentiveAmount: z.number().min(0).optional(),
+        payoutAccountKey: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
+        deductions: z.object({
+            tax: z.number().min(0).optional(),
+            other: z.number().min(0).optional(),
+        }).optional(),
+    }),
+    params: z.object({ id: z.string() }),
+});
+
 export type GeneratePayrollInput = z.infer<typeof generatePayrollSchema>['body'];
 export type GenerateBulkPayrollInput = z.infer<typeof generateBulkPayrollSchema>['body'];
 export type UpdatePayrollStatusInput = z.infer<typeof updatePayrollStatusSchema>['body'];
+export type UpdatePayrollInput = z.infer<typeof updatePayrollSchema>['body'];

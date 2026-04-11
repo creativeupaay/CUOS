@@ -45,6 +45,7 @@ const customApplicationFieldSchema = z.object({
     type: z.enum(['text', 'url', 'number', 'note', 'date', 'attachment']),
     placeholder: z.string().trim().optional(),
     helpText: z.string().trim().optional(),
+    required: z.boolean().optional(),
 });
 
 const standardFieldSettingSchema = z.object({
@@ -52,6 +53,7 @@ const standardFieldSettingSchema = z.object({
     label: z.string().min(1).trim(),
     placeholder: z.string().trim().optional(),
     helpText: z.string().trim().optional(),
+    required: z.boolean().optional(),
 });
 
 const applicationFormSchema = z.object({

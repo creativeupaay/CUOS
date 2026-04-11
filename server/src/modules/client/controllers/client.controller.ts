@@ -89,6 +89,41 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
 });
 
 /**
+ * Upload client documents
+ */
+export const uploadClientDocuments = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    const singleFile = req.file as Express.Multer.File | undefined;
+    const normalizedFiles = files.length > 0 ? files : singleFile ? [singleFile] : [];
+
+    if (normalizedFiles.length === 0) {
+        res.status(400).json({ status: 'fail', message: 'No file uploaded.' });
+        return;
+    }
+
+    const client = await clientService.uploadClientDocuments(
+        id,
+        normalizedFiles.map((file) => ({
+            buffer: file.buffer,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+        })),
+        (req.user as any).id,
+        {
+            requesterRole: req.user?.role,
+            requesterPartnerId: req.partnerId,
+        }
+    );
+
+    res.status(201).json({
+        status: 'success',
+        data: { client },
+    });
+});
+
+/**
  * Delete client (archive)
  */
 export const deleteClient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {

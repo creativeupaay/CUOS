@@ -81,6 +81,27 @@ function formatLeaveDate(date: string) {
     });
 }
 
+function formatShortLeaveDate(date: string) {
+    return new Date(date).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+    });
+}
+
+function formatLeaveDateRange(startDate: string, endDate: string, includeYear = true) {
+    const sameDay = startDate === endDate || startDate.slice(0, 10) === endDate.slice(0, 10);
+    if (sameDay) {
+        return includeYear ? formatLeaveDate(startDate) : formatShortLeaveDate(startDate);
+    }
+
+    if (includeYear) {
+        return `${formatLeaveDate(startDate)} to ${formatLeaveDate(endDate)}`;
+    }
+
+    return `${formatShortLeaveDate(startDate)} → ${formatShortLeaveDate(endDate)}`;
+}
+
 function getLeaveEmployee(leave: any) {
     return leave.employeeId as any;
 }
@@ -167,7 +188,7 @@ function DeleteLeaveModal({
                 >
                     <div className="text-sm font-medium capitalize" style={{ color: 'var(--color-text-primary)' }}>{leave.type} leave</div>
                     <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                        {formatLeaveDate(leave.startDate)} to {formatLeaveDate(leave.endDate)} · {leave.days} day{leave.days !== 1 ? 's' : ''}
+                        {formatLeaveDateRange(leave.startDate, leave.endDate)} · {leave.days} day{leave.days !== 1 ? 's' : ''}
                     </div>
                 </div>
                 <div className="flex gap-3">
@@ -200,12 +221,20 @@ function EditLeaveStatusModal({
 }: {
     leave: any;
     onClose: () => void;
-    onConfirm: (id: string, status: 'approved' | 'rejected' | 'cancelled', reason: string) => void;
+    onConfirm: (
+        id: string,
+        status: 'approved' | 'rejected' | 'cancelled',
+        reason: string,
+        type: LeaveType,
+        isPaid: boolean
+    ) => void;
     isLoading: boolean;
 }) {
     const [status, setStatus] = useState<'approved' | 'rejected' | 'cancelled'>(
         leave.status === 'pending' ? 'approved' : leave.status
     );
+    const [type, setType] = useState<LeaveType>(leave.type as LeaveType);
+    const [isPaid, setIsPaid] = useState<boolean>(leave.isPaid !== false);
     const [reason, setReason] = useState(leave.rejectionReason || '');
     const emp = getLeaveEmployee(leave);
 
@@ -226,6 +255,79 @@ function EditLeaveStatusModal({
                 </div>
 
                 <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Leave Type
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            {LEAVE_TYPES.map((t) => {
+                                const c = typeCfg(t);
+                                const selected = type === t;
+                                return (
+                                    <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => {
+                                            setType(t);
+                                            if (t === 'unpaid') {
+                                                setIsPaid(false);
+                                            }
+                                        }}
+                                        className="px-3 py-1.5 text-xs font-medium rounded-full border cursor-pointer capitalize transition-all"
+                                        style={{
+                                            backgroundColor: selected ? c.bg : 'var(--color-bg-surface)',
+                                            color: selected ? c.color : 'var(--color-text-muted)',
+                                            borderColor: selected ? c.color + '60' : 'var(--color-border-default)',
+                                            fontWeight: selected ? 600 : 400,
+                                        }}
+                                    >
+                                        {t}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Leave Treatment
+                        </label>
+                        <div
+                            className="flex rounded-lg border overflow-hidden w-fit"
+                            style={{ borderColor: 'var(--color-border-default)' }}
+                        >
+                            {([true, false] as const).map((paid) => {
+                                const disabled = type === 'unpaid' && paid;
+                                return (
+                                    <button
+                                        key={String(paid)}
+                                        type="button"
+                                        onClick={() => {
+                                            if (!disabled) {
+                                                setIsPaid(paid);
+                                            }
+                                        }}
+                                        disabled={disabled}
+                                        className="px-4 py-2 text-sm font-medium cursor-pointer transition-all disabled:opacity-40"
+                                        style={{
+                                            backgroundColor: isPaid === paid
+                                                ? (paid ? 'var(--color-primary)' : '#EF4444')
+                                                : 'var(--color-bg-surface)',
+                                            color: isPaid === paid ? 'white' : 'var(--color-text-muted)',
+                                        }}
+                                    >
+                                        {paid ? 'Paid' : 'Unpaid'}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {type === 'unpaid' && (
+                            <p className="text-xs mt-1.5" style={{ color: '#EF4444' }}>
+                                Unpaid leave type is always treated as unpaid.
+                            </p>
+                        )}
+                    </div>
+
                     <div>
                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                             Status
@@ -269,7 +371,7 @@ function EditLeaveStatusModal({
                         style={{ backgroundColor: 'var(--color-bg-subtle)' }}
                     >
                         <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                            {formatLeaveDate(leave.startDate)} to {formatLeaveDate(leave.endDate)}
+                            {formatLeaveDateRange(leave.startDate, leave.endDate)}
                         </div>
                         <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
                             Changing the status will also update leave-linked attendance and paid leave balance.
@@ -279,7 +381,7 @@ function EditLeaveStatusModal({
 
                 <div className="flex gap-3 mt-5">
                     <button
-                        onClick={() => onConfirm(leave._id, status, reason)}
+                        onClick={() => onConfirm(leave._id, status, reason, type, isPaid)}
                         disabled={isLoading}
                         className="flex-1 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
                         style={{ backgroundColor: 'var(--color-primary)' }}
@@ -571,8 +673,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
                         >
                             <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                 <span className="font-medium capitalize">{form.type}</span> leave
-                                ·&nbsp;{new Date(form.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                &nbsp;→&nbsp;{new Date(form.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                ·&nbsp;{formatLeaveDateRange(form.startDate, form.endDate, false)}
                             </span>
                             <span
                                 className="text-base font-bold"
@@ -611,10 +712,18 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
 function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) {
     const { data, isLoading } = useGetLeavesQuery({ employeeId: emp._id });
     const leaves = (data?.data?.leaves || []) as any[];
+    const currentYear = new Date().getFullYear();
+    const approvedThisYear = leaves.filter((l: any) => l.status === 'approved' && new Date(l.startDate).getFullYear() === currentYear);
 
-    const totalPaid = leaves.filter(l => l.isPaid && l.status === 'approved').reduce((s: number, l: any) => s + l.days, 0);
-    const totalUnpaid = leaves.filter((l: any) => !l.isPaid && l.status === 'approved').reduce((s: number, l: any) => s + l.days, 0);
+    const totalPaid = approvedThisYear
+        .filter((l: any) => (l.isPaid !== false) && l.type !== 'unpaid')
+        .reduce((s: number, l: any) => s + l.days, 0);
+    const totalUnpaid = approvedThisYear
+        .filter((l: any) => (l.isPaid === false) || l.type === 'unpaid')
+        .reduce((s: number, l: any) => s + l.days, 0);
     const pending = leaves.filter((l: any) => l.status === 'pending').length;
+    const paidQuota = (emp as any).paidLeavesPerYear ?? 12;
+    const paidRemaining = Math.max(0, paidQuota - totalPaid);
 
     return (
         <div>
@@ -645,10 +754,11 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
             </div>
 
             {/* Summary stats */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-4 gap-4 mb-6">
                 {[
-                    { label: 'Paid Leaves Taken', value: totalPaid, color: '#16A34A' },
-                    { label: 'Unpaid Leaves Taken', value: totalUnpaid, color: '#EF4444' },
+                    { label: `Paid Leaves Remaining (${currentYear})`, value: `${paidRemaining}/${paidQuota}`, color: '#2563EB' },
+                    { label: `Paid Leaves Taken (${currentYear})`, value: totalPaid, color: '#16A34A' },
+                    { label: `Unpaid Leaves Taken (${currentYear})`, value: totalUnpaid, color: '#EF4444' },
                     { label: 'Pending Requests', value: pending, color: '#F59E0B' },
                 ].map(({ label, value, color }) => (
                     <div
@@ -691,9 +801,7 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
                                 <tr key={leave._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
                                     <td className="px-4 py-3"><LeaveBadge type={leave.type} /></td>
                                     <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
-                                        &nbsp;→&nbsp;
-                                        {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+                                        {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
                                     </td>
                                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                     <td className="px-4 py-3">
@@ -775,7 +883,9 @@ export default function HrmsLeavesPage() {
     const handleEditStatus = async (
         id: string,
         status: 'approved' | 'rejected' | 'cancelled',
-        reason: string
+        reason: string,
+        type: LeaveType,
+        isPaid: boolean
     ) => {
         try {
             await updateStatus({
@@ -783,6 +893,8 @@ export default function HrmsLeavesPage() {
                 data: {
                     status,
                     rejectionReason: status === 'rejected' ? reason : undefined,
+                    type,
+                    isPaid,
                 },
             }).unwrap();
             setEditingLeave(null);
@@ -921,9 +1033,7 @@ export default function HrmsLeavesPage() {
                                                 <div className="flex items-center gap-4 flex-wrap">
                                                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                                         📅&nbsp;
-                                                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                        &nbsp;→&nbsp;
-                                                        {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        {formatLeaveDateRange(leave.startDate, leave.endDate)}
                                                     </span>
                                                     <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         📝&nbsp;{leave.reason}
@@ -1037,9 +1147,7 @@ export default function HrmsLeavesPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
-                                                    &nbsp;→&nbsp;
-                                                    {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+                                                    {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                                 <td className="px-4 py-3 text-xs max-w-[160px] truncate" style={{ color: 'var(--color-text-muted)' }}>

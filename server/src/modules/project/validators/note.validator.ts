@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const checklistItemSchema = z.object({
     id: z.string().min(1),
-    text: z.string().max(500),
+    text: z.string(),
     checked: z.boolean().default(false),
 });
 
@@ -15,14 +15,14 @@ const contentBlockSchema = z.discriminatedUnion('type', [
     z.object({
         id: z.string().min(1),
         type: z.literal('checklist'),
-        items: z.array(checklistItemSchema).max(100).optional(),
+        items: z.array(checklistItemSchema).optional(),
     }),
     z.object({
         id: z.string().min(1),
         type: z.literal('image'),
         cloudinaryId: z.string().optional(),
         url: z.string().url().optional(),
-        caption: z.string().max(300).optional(),
+        caption: z.string().optional(),
     }),
 ]);
 

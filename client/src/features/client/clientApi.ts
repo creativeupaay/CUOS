@@ -7,6 +7,7 @@ import type {
     ClientsListResponse,
     ClientProjectsResponse,
     AddClientActivityRequest,
+    UploadClientDocumentsRequest,
 } from './types/apiTypes';
 
 export const clientApi = api.injectEndpoints({
@@ -48,6 +49,20 @@ export const clientApi = api.injectEndpoints({
                 body: data,
             }),
             invalidatesTags: (_result, _error, { id }) => [{ type: 'Clients', id }, 'Clients'],
+        }),
+
+        uploadClientDocuments: builder.mutation<ClientResponse, UploadClientDocumentsRequest>({
+            query: ({ clientId, files }) => {
+                const formData = new FormData();
+                files.forEach((file) => formData.append('files', file));
+
+                return {
+                    url: `/clients/${clientId}/documents/upload`,
+                    method: 'POST',
+                    body: formData,
+                };
+            },
+            invalidatesTags: (_result, _error, { clientId }) => [{ type: 'Clients', id: clientId }, 'Clients'],
         }),
 
         // Delete client
@@ -122,6 +137,7 @@ export const {
     useGetClientsQuery,
     useGetClientQuery,
     useUpdateClientMutation,
+    useUploadClientDocumentsMutation,
     useDeleteClientMutation,
     useGetClientProjectsQuery,
     useAddClientActivityMutation,

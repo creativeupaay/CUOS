@@ -13,7 +13,8 @@ export type NotificationType =
     | 'leave_status_updated'
     | 'credential_access_granted'
     | 'document_access_granted'
-    | 'note_mentioned';
+    | 'note_mentioned'
+    | 'fixed_expense_approval';
 
 export interface INotification extends Document {
     _id: Types.ObjectId;
@@ -53,6 +54,7 @@ const NotificationSchema = new Schema<INotification>(
                 'credential_access_granted',
                 'document_access_granted',
                 'note_mentioned',
+                'fixed_expense_approval',
             ],
             index: true,
         },

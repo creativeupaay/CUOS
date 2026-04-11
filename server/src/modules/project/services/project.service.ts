@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Project, IProject } from '../models/Project.model';
+import { Task } from '../models/Task.model';
 import { DocFolder } from '../models/DocFolder.model';
 import { User } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
@@ -158,6 +159,57 @@ function serializeProjectAssignees(project: any) {
         ...project,
         assignees: project.assignees.map((assignee: any) => serializeAssignee(assignee)),
     };
+}
+
+async function attachComputedOverdueDate(projects: any | any[]): Promise<any> {
+    const arr = Array.isArray(projects) ? projects : [projects];
+    if (arr.length === 0) return projects;
+
+    const projectIds = arr
+        .map((project) => project?._id?.toString())
+        .filter(Boolean);
+
+    if (projectIds.length === 0) return projects;
+
+    const taskDeadlines = await Task.aggregate([
+        {
+            $match: {
+                projectId: { $in: projectIds.map((id) => new Types.ObjectId(id)) },
+                deadline: { $ne: null },
+            },
+        },
+        {
+            $group: {
+                _id: '$projectId',
+                latestTaskDeadline: { $max: '$deadline' },
+            },
+        },
+    ]);
+
+    const taskDeadlineMap = new Map<string, string>(
+        taskDeadlines.map((entry: any) => [entry._id.toString(), entry.latestTaskDeadline?.toISOString?.() || String(entry.latestTaskDeadline)])
+    );
+
+    const withOverdueDate = arr.map((project) => {
+        const baseDeadline = project?.endDate || project?.deadline || null;
+        const latestTaskDeadline = taskDeadlineMap.get(project._id.toString());
+
+        let overdueDate = baseDeadline;
+        if (latestTaskDeadline) {
+            if (!overdueDate) {
+                overdueDate = latestTaskDeadline;
+            } else if (new Date(latestTaskDeadline).getTime() > new Date(overdueDate).getTime()) {
+                overdueDate = latestTaskDeadline;
+            }
+        }
+
+        return {
+            ...project,
+            overdueDate,
+        };
+    });
+
+    return Array.isArray(projects) ? withOverdueDate : withOverdueDate[0];
 }
 
 function normalizeLegacyAssignees(project: any) {
@@ -379,6 +431,11 @@ export const getProjects = async (
     const projects = await Project.find(query)
         .populate('clientId', 'name email')
         .populate({
+            path: 'partnerId',
+            select: 'companyName contactPerson userId',
+            populate: { path: 'userId', select: 'name email' }
+        })
+        .populate({
             path: 'assignees.employeeId',
             select: 'designation department',
             populate: { path: 'userId', select: 'name email role' } // Get user info through employee
@@ -394,7 +451,8 @@ export const getProjects = async (
         .sort({ createdAt: -1 })
         .lean();
 
-    return projects.map((project: any) => serializeProjectAssignees(project)) as any;
+    const serializedProjects = projects.map((project: any) => serializeProjectAssignees(project));
+    return attachComputedOverdueDate(serializedProjects) as any;
 };
 
 /**
@@ -426,7 +484,10 @@ export const getProjectById = async (
         .populate('documents.uploadedBy', 'name email')
         .lean();
 
-    return project ? (serializeProjectAssignees(project) as any) : null;
+    if (!project) return null;
+
+    const serializedProject = serializeProjectAssignees(project);
+    return attachComputedOverdueDate(serializedProject) as any;
 };
 
 /**

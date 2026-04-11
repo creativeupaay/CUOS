@@ -82,12 +82,13 @@ export interface SalaryDeductions {
     other: number;
 }
 
+export type SalaryPayoutAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+
 export interface SalaryRevision {
     _id: string;
     basic: number;
-    hra: number;
-    da: number;
     specialAllowance: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     effectiveFrom: string;
     revisedBy: string;
 }
@@ -96,9 +97,8 @@ export interface SalaryStructure {
     _id: string;
     employeeId: Employee | string;
     basic: number;
-    hra: number;
-    da: number;
     specialAllowance: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     deductions: SalaryDeductions;
     currency: string;
     effectiveFrom: string;
@@ -113,6 +113,7 @@ export interface Leave {
     _id: string;
     employeeId: Employee | string;
     type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    isPaid: boolean;
     startDate: string;
     endDate: string;
     days: number;
@@ -153,10 +154,12 @@ export interface Payroll {
     totalHoursWorked: number;
     overtime: number;
     grossSalary: number;
+    payableDays: number;
     incentiveAmount: number;
     penaltyAmount: number;
     deductions: PayrollDeductions;
     netSalary: number;
+    payoutAccountKey: SalaryPayoutAccountKey;
     status: 'draft' | 'approved' | 'paid';
     generatedBy: string;
     approvedBy?: string;

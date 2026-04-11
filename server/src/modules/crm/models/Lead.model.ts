@@ -50,6 +50,44 @@ const LeadMeetingSchema = new Schema<ILeadMeeting>(
     { _id: true, timestamps: false }
 );
 
+export interface ILeadDocument {
+    name: string;
+    url: string;
+    cloudinaryId: string;
+    size: number;
+    mimeType: string;
+    uploadedAt: Date;
+    uploadedBy: Types.ObjectId;
+}
+
+const LeadDocumentSchema = new Schema<ILeadDocument>(
+    {
+        name: { type: String, required: true, trim: true },
+        url: { type: String, required: true, trim: true },
+        cloudinaryId: { type: String, required: true, trim: true },
+        size: { type: Number, default: 0 },
+        mimeType: { type: String, default: '' },
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    },
+    { _id: true, timestamps: false }
+);
+
+export interface ILeadLink {
+    name: string;
+    url: string;
+    addedAt: Date;
+}
+
+const LeadLinkSchema = new Schema<ILeadLink>(
+    {
+        name: { type: String, required: true, trim: true },
+        url: { type: String, required: true, trim: true },
+        addedAt: { type: Date, default: Date.now },
+    },
+    { _id: true, timestamps: false }
+);
+
 // ============================================
 // LEAD SCHEMA
 // ============================================
@@ -71,6 +109,7 @@ export interface ILead extends Document {
     tags: string[];
 
     assignedTo?: Types.ObjectId;
+    partnerId?: Types.ObjectId;
     convertedClientId?: Types.ObjectId;
 
     isLocked: boolean;
@@ -80,6 +119,8 @@ export interface ILead extends Document {
 
     activities: ILeadActivity[];
     meetings: ILeadMeeting[];
+    documents: ILeadDocument[];
+    links: ILeadLink[];
 
     createdBy: Types.ObjectId;
     createdAt: Date;
@@ -120,6 +161,7 @@ const LeadSchema = new Schema<ILead>(
         tags: [{ type: String, trim: true, lowercase: true }],
 
         assignedTo: { type: Schema.Types.ObjectId, ref: 'User' },
+        partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
         convertedClientId: { type: Schema.Types.ObjectId, ref: 'Client' },
 
         isLocked: { type: Boolean, default: false },
@@ -129,6 +171,8 @@ const LeadSchema = new Schema<ILead>(
 
         activities: [LeadActivitySchema],
         meetings: [LeadMeetingSchema],
+        documents: [LeadDocumentSchema],
+        links: [LeadLinkSchema],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
@@ -140,6 +184,7 @@ const LeadSchema = new Schema<ILead>(
 // Indexes
 LeadSchema.index({ stage: 1 });
 LeadSchema.index({ assignedTo: 1 });
+LeadSchema.index({ partnerId: 1 });
 LeadSchema.index({ source: 1 });
 LeadSchema.index({ priority: 1 });
 LeadSchema.index({ createdAt: -1 });

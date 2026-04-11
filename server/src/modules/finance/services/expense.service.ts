@@ -1,4 +1,6 @@
 import { Expense, IExpense } from '../models/Expense.model';
+import { BankTransactionService } from './bankTransaction.service';
+import type { BankAccountKey } from '../models/BankTransaction.model';
 import { Payroll } from '../../hrms/models/Payroll.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { TimeLog } from '../../project/models/TimeLog.model';
@@ -18,6 +20,7 @@ interface CreateExpenseData {
     employeeName?: string;
     vendor?: string;
     paidBy?: string;
+    sourceAccountKey?: BankAccountKey;
     isRecurring?: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
     notes?: string;
@@ -33,17 +36,100 @@ interface ExpenseFilters {
     endDate?: Date;
     projectId?: Types.ObjectId;
     employeeId?: Types.ObjectId;
+    isRecurring?: boolean;
     page?: number;
     limit?: number;
 }
 
+interface UpdateExpenseData extends Partial<CreateExpenseData> {
+    updatedBy: Types.ObjectId;
+}
+
 export class ExpenseService {
+    static async upsertPayrollSalaryExpense(params: {
+        payrollId: Types.ObjectId;
+        employeeId: Types.ObjectId;
+        employeeName: string;
+        month: number;
+        year: number;
+        amount: number;
+        paidAt?: Date;
+        sourceAccountKey?: BankAccountKey;
+        bankTransactionId?: Types.ObjectId;
+        createdBy: Types.ObjectId;
+        updatedBy?: Types.ObjectId;
+    }): Promise<IExpense> {
+        const expenseDate = params.paidAt || new Date(params.year, params.month - 1, 28);
+        const description = `Salary payout - ${params.employeeName} (${new Date(params.year, params.month - 1, 1).toLocaleString('en-US', { month: 'short' })} ${params.year})`;
+
+        let expense = await Expense.findOne({
+            payrollId: params.payrollId,
+            level: 'company',
+            category: 'Salaries',
+        });
+
+        if (!expense) {
+            expense = await Expense.create({
+                date: expenseDate,
+                description,
+                category: 'Salaries',
+                level: 'company',
+                type: 'fixed',
+                amount: params.amount,
+                employeeId: params.employeeId,
+                employeeName: params.employeeName,
+                payrollId: params.payrollId,
+                sourceAccountKey: params.sourceAccountKey,
+                bankTransactionId: params.bankTransactionId,
+                isRecurring: false,
+                isSynced: true,
+                notes: `Auto-created from payroll ${params.month}/${params.year}`,
+                createdBy: params.createdBy,
+            });
+
+            return expense;
+        }
+
+        expense.date = expenseDate;
+        expense.description = description;
+        expense.amount = params.amount;
+        expense.employeeId = params.employeeId;
+        expense.employeeName = params.employeeName;
+        expense.sourceAccountKey = params.sourceAccountKey;
+        expense.bankTransactionId = params.bankTransactionId;
+        expense.isSynced = true;
+        expense.updatedBy = params.updatedBy || params.createdBy;
+        expense.notes = `Auto-synced from payroll ${params.month}/${params.year}`;
+        await expense.save();
+
+        return expense;
+    }
+
     /**
      * Create a new expense entry
      */
     static async create(data: CreateExpenseData): Promise<IExpense> {
         const expense = new Expense(data);
-        return expense.save();
+        await expense.save();
+
+        if (data.sourceAccountKey) {
+            const bankTransaction = await BankTransactionService.create({
+                accountKey: data.sourceAccountKey,
+                transactionType: 'debit',
+                amount: data.amount,
+                date: data.date,
+                description: data.description,
+                notes: data.notes,
+                source: 'automatic',
+                expenseId: expense._id,
+                createdBy: data.createdBy,
+            });
+
+            expense.bankTransactionId = bankTransaction._id;
+            await expense.save();
+        }
+
+        return expense;
     }
 
     /**
@@ -70,6 +156,10 @@ export class ExpenseService {
 
         if (filters.employeeId) {
             query.employeeId = filters.employeeId;
+        }
+
+        if (filters.isRecurring !== undefined) {
+            query.isRecurring = filters.isRecurring;
         }
 
         if (filters.startDate || filters.endDate) {
@@ -117,17 +207,61 @@ export class ExpenseService {
      */
     static async update(
         id: Types.ObjectId | string,
-        data: Partial<CreateExpenseData> & { updatedBy: Types.ObjectId }
+        data: UpdateExpenseData
     ): Promise<IExpense | null> {
-        return Expense.findByIdAndUpdate(id, data, { new: true }).lean();
+        const existing = await Expense.findById(id);
+        if (!existing) return null;
+
+        const previousTransactionId = existing.bankTransactionId;
+
+        Object.assign(existing, data);
+        await existing.save();
+
+        if (existing.sourceAccountKey) {
+            const transactionPayload = {
+                accountKey: existing.sourceAccountKey,
+                transactionType: 'debit' as const,
+                amount: existing.amount,
+                date: existing.date,
+                description: existing.description,
+                notes: existing.notes,
+                source: 'automatic' as const,
+                expenseId: existing._id,
+                updatedBy: data.updatedBy,
+                createdBy: existing.createdBy,
+            };
+
+            if (previousTransactionId) {
+                await BankTransactionService.update(previousTransactionId, transactionPayload);
+                existing.bankTransactionId = previousTransactionId as any;
+                await existing.save();
+            } else {
+                const bankTransaction = await BankTransactionService.create(transactionPayload);
+                existing.bankTransactionId = bankTransaction._id;
+                await existing.save();
+            }
+        } else if (previousTransactionId) {
+            await BankTransactionService.delete(previousTransactionId);
+            existing.bankTransactionId = undefined;
+            await existing.save();
+        }
+
+        return existing.toObject() as IExpense;
     }
 
     /**
      * Delete expense
      */
     static async delete(id: Types.ObjectId | string): Promise<boolean> {
-        const result = await Expense.findByIdAndDelete(id);
-        return !!result;
+        const result = await Expense.findById(id);
+        if (!result) return false;
+
+        if (result.bankTransactionId) {
+            await BankTransactionService.delete(result.bankTransactionId);
+        }
+
+        await result.deleteOne();
+        return true;
     }
 
     /**

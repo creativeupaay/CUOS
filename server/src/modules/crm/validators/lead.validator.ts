@@ -2,6 +2,22 @@ import { z } from 'zod';
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
+const leadLinkSchema = z.object({
+    name: z.string().min(1, 'Link name is required').trim(),
+    url: z.string().url('Invalid URL').trim(),
+    addedAt: z.string().optional(),
+});
+
+const leadDocumentSchema = z.object({
+    name: z.string().min(1, 'Document name is required').trim(),
+    url: z.string().url('Invalid document URL').trim(),
+    cloudinaryId: z.string().min(1, 'Document id is required').trim(),
+    size: z.number().min(0).optional(),
+    mimeType: z.string().optional(),
+    uploadedAt: z.string().optional(),
+    uploadedBy: z.string().regex(objectIdRegex, 'Invalid uploader ID').optional(),
+});
+
 // ============================================
 // LEAD VALIDATORS
 // ============================================
@@ -20,9 +36,15 @@ export const createLeadSchema = z.object({
         currency: z.string().default('INR'),
         notes: z.string().optional(),
         tags: z.array(z.string()).default([]),
+        documents: z.array(leadDocumentSchema).default([]),
+        links: z.array(leadLinkSchema).default([]),
         assignedTo: z
             .string()
             .regex(objectIdRegex, 'Invalid user ID')
+            .optional(),
+        partnerId: z
+            .string()
+            .regex(objectIdRegex, 'Invalid partner ID')
             .optional(),
         expectedCloseDate: z.string().datetime().optional().or(z.string().optional()),
     }),
@@ -43,9 +65,16 @@ export const updateLeadSchema = z.object({
         currency: z.string().optional(),
         notes: z.string().optional(),
         tags: z.array(z.string()).optional(),
+        documents: z.array(leadDocumentSchema).optional(),
+        links: z.array(leadLinkSchema).optional(),
         assignedTo: z
             .string()
             .regex(objectIdRegex, 'Invalid user ID')
+            .optional()
+            .nullable(),
+        partnerId: z
+            .string()
+            .regex(objectIdRegex, 'Invalid partner ID')
             .optional()
             .nullable(),
         lostReason: z.string().optional(),
@@ -67,6 +96,7 @@ export const listLeadsSchema = z.object({
         source: z.string().optional(),
         priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
         assignedTo: z.string().regex(objectIdRegex).optional(),
+        partnerId: z.string().regex(objectIdRegex).optional(),
         search: z.string().optional(),
         page: z
             .string()

@@ -9,7 +9,7 @@ import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '..
 import { createAnnouncementSchema, deleteAnnouncementSchema } from '../validators/announcement.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema, deleteLeaveSchema } from '../validators/leave.validator';
-import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
+import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollSchema, updatePayrollStatusSchema } from '../validators/payroll.validator';
 
 import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
 
@@ -184,6 +184,12 @@ router.post(
 router.get('/payroll', hrAdminOnly, payrollController.getPayrolls);
 router.get('/payroll/me', payrollController.getMyPayrolls);
 router.get('/payroll/:id', checkHrmsAccess(true), payrollController.getPayrollById);
+router.patch(
+    '/payroll/:id',
+    hrAdminOnly,
+    validateRequest(updatePayrollSchema),
+    payrollController.updatePayroll
+);
 router.patch(
     '/payroll/:id/status',
     hrAdminOnly,

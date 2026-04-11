@@ -19,6 +19,7 @@ export const createProjectSchema = z.object({
         currency: z.string().default('USD'),
         billingType: z.enum(['fixed', 'hourly', 'milestone']).default('fixed'),
         hourlyRate: z.number().positive().optional(),
+        defaultBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
 
         invoiceDetails: z.object({
             invoiceNumber: z.string().optional(),
@@ -47,6 +48,21 @@ export const createProjectSchema = z.object({
             status: z.enum(['pending', 'in-progress', 'completed']).optional().default('pending'),
             startDate: z.string().or(z.date()).optional(),
             endDate: z.string().or(z.date()).optional(),
+
+            // Payment tracking
+            hasPayment: z.boolean().optional().default(false),
+            paymentAmount: z.number().positive().optional(),
+            paymentPercentage: z.number().min(0).max(100).optional(),
+            paymentCurrency: z.enum(['INR', 'USD', 'EUR', 'GBP', 'AED']).optional(),
+            paymentStatus: z.enum(['pending', 'received', 'partial']).optional(),
+            paymentReceivedAmount: z.number().min(0).optional(),
+            paymentDueDate: z.string().or(z.date()).optional(),
+            paymentBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
+
+            // GST and TDS
+            gstApplicable: z.boolean().optional(),
+            gstRate: z.number().min(0).max(28).optional(),
+            tdsDeducted: z.number().min(0).optional(),
         })).optional(),
     }),
 });
@@ -70,6 +86,7 @@ export const updateProjectSchema = z.object({
         currency: z.string().optional(),
         billingType: z.enum(['fixed', 'hourly', 'milestone']).optional(),
         hourlyRate: z.number().positive().optional(),
+        defaultBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
 
         invoiceDetails: z.object({
             invoiceNumber: z.string().optional(),
@@ -84,6 +101,21 @@ export const updateProjectSchema = z.object({
             status: z.enum(['pending', 'in-progress', 'completed']).optional(),
             startDate: z.string().or(z.date()).optional(),
             endDate: z.string().or(z.date()).optional(),
+
+            // Payment tracking
+            hasPayment: z.boolean().optional(),
+            paymentAmount: z.number().positive().optional(),
+            paymentPercentage: z.number().min(0).max(100).optional(),
+            paymentCurrency: z.enum(['INR', 'USD', 'EUR', 'GBP', 'AED']).optional(),
+            paymentStatus: z.enum(['pending', 'received', 'partial']).optional(),
+            paymentReceivedAmount: z.number().min(0).optional(),
+            paymentDueDate: z.string().or(z.date()).optional(),
+            paymentBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
+
+            // GST and TDS
+            gstApplicable: z.boolean().optional(),
+            gstRate: z.number().min(0).max(28).optional(),
+            tdsDeducted: z.number().min(0).optional(),
         })).optional(),
     }),
 });
@@ -165,4 +197,33 @@ export const getProjectByIdSchema = z.object({
     params: z.object({
         id: z.string().min(1, 'Project ID is required'),
     }),
+});
+
+const validatePhasePaymentAllocation = (phases: Array<{ hasPayment?: boolean; paymentPercentage?: number }>) => {
+    const total = phases.reduce((sum, phase) => {
+        if (!phase.hasPayment) return sum;
+        return sum + Number(phase.paymentPercentage || 0);
+    }, 0);
+
+    return total <= 100;
+};
+
+export const createProjectSchemaWithAllocationCheck = createProjectSchema.superRefine((data, ctx) => {
+    if (data.body.phases && !validatePhasePaymentAllocation(data.body.phases as any)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Total payment allocation across phases cannot exceed 100%',
+            path: ['body', 'phases'],
+        });
+    }
+});
+
+export const updateProjectSchemaWithAllocationCheck = updateProjectSchema.superRefine((data, ctx) => {
+    if (data.body.phases && !validatePhasePaymentAllocation(data.body.phases as any)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Total payment allocation across phases cannot exceed 100%',
+            path: ['body', 'phases'],
+        });
+    }
 });

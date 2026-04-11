@@ -13,6 +13,8 @@ import type {
     ListProposalsParams,
     ListProposalsResponse,
     UpdateProposalStatusRequest,
+    UploadLeadDocumentRequest,
+    UploadLeadDocumentsRequest,
 } from './types/apiTypes';
 
 export const crmApi = api.injectEndpoints({
@@ -107,6 +109,46 @@ export const crmApi = api.injectEndpoints({
             }),
             invalidatesTags: (_result, _error, { leadId }) => [
                 { type: 'Leads', id: leadId },
+            ],
+        }),
+
+        uploadLeadDocument: builder.mutation<
+            ApiResponse<{ lead: Lead }>,
+            UploadLeadDocumentRequest
+        >({
+            query: ({ leadId, file }) => {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                return {
+                    url: `/crm/leads/${leadId}/documents/upload`,
+                    method: 'POST',
+                    body: formData,
+                };
+            },
+            invalidatesTags: (_result, _error, { leadId }) => [
+                { type: 'Leads', id: leadId },
+                'Leads',
+            ],
+        }),
+
+        uploadLeadDocuments: builder.mutation<
+            ApiResponse<{ lead: Lead }>,
+            UploadLeadDocumentsRequest
+        >({
+            query: ({ leadId, files }) => {
+                const formData = new FormData();
+                files.forEach((file) => formData.append('files', file));
+
+                return {
+                    url: `/crm/leads/${leadId}/documents/upload`,
+                    method: 'POST',
+                    body: formData,
+                };
+            },
+            invalidatesTags: (_result, _error, { leadId }) => [
+                { type: 'Leads', id: leadId },
+                'Leads',
             ],
         }),
 
@@ -218,6 +260,8 @@ export const {
     useDeleteLeadMutation,
     useAddLeadActivityMutation,
     useAddLeadMeetingMutation,
+    useUploadLeadDocumentMutation,
+    useUploadLeadDocumentsMutation,
     useCloseLeadDealMutation,
     useGetPipelineSummaryQuery,
 

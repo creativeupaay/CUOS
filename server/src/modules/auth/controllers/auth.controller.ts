@@ -156,7 +156,7 @@ export const getMe = asyncHandler(
 
 export const getUsers = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const users = await authService.getAllUsers();
+        const users = await authService.getAllUsers(req.user as any);
 
         res.status(200).json({
             success: true,

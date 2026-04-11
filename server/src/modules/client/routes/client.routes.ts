@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as clientController from '../controllers/client.controller';
 import * as onboardingController from '../controllers/clientOnboarding.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
@@ -14,6 +15,7 @@ import {
 import AppError from '../../../utils/appError';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 // All routes require authentication
 router.use(authenticate);
@@ -33,6 +35,7 @@ router.post('/', validateRequest(createClientSchema), clientController.createCli
 router.get('/', validateRequest(listClientsSchema), clientController.getClients);
 router.get('/:id', validateRequest(getClientSchema), clientController.getClient);
 router.patch('/:id', validateRequest(getClientSchema), validateRequest(updateClientSchema), clientController.updateClient);
+router.post('/:id/documents/upload', validateRequest(getClientSchema), upload.any(), clientController.uploadClientDocuments);
 router.delete('/:id', validateRequest(getClientSchema), requireAdmin, clientController.deleteClient);
 
 // Client projects

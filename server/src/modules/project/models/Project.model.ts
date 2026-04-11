@@ -1,10 +1,32 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface IProjectPhase {
+    _id?: Types.ObjectId;
     name: string;
     status: 'pending' | 'in-progress' | 'completed';
     startDate?: Date;
     endDate?: Date;
+
+    // Payment tracking
+    hasPayment: boolean; // Whether this phase has a payment
+    paymentAmount?: number; // Fixed payment amount
+    paymentPercentage?: number; // Percentage of project budget
+    paymentCurrency?: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+    paymentStatus?: 'pending' | 'received' | 'partial';
+    paymentReceivedAmount?: number; // Actual amount received
+    paymentDueDate?: Date; // Expected payment date
+    paymentBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash'; // Bank account for this payment
+
+    // Finance integration
+    revenueId?: Types.ObjectId; // Link to Revenue entry
+    bankTransactionId?: Types.ObjectId; // Link to BankTransaction entry
+
+    // GST and TDS
+    gstApplicable?: boolean;
+    gstRate?: number;
+    tdsDeducted?: number;
+
+    completedAt?: Date; // When the phase was marked as completed
 }
 
 export interface IProjectDocument {
@@ -54,6 +76,7 @@ export interface IProject extends Document {
     currency: string;
     billingType: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
+    defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
 
     invoiceDetails?: IInvoiceDetails;
 
@@ -149,6 +172,37 @@ const ProjectPhaseSchema = new Schema<IProjectPhase>(
         },
         startDate: Date,
         endDate: Date,
+
+        // Payment tracking
+        hasPayment: { type: Boolean, default: false },
+        paymentAmount: { type: Number, min: 0 },
+        paymentPercentage: { type: Number, min: 0, max: 100 },
+        paymentCurrency: {
+            type: String,
+            enum: ['INR', 'USD', 'EUR', 'GBP', 'AED'],
+        },
+        paymentStatus: {
+            type: String,
+            enum: ['pending', 'received', 'partial'],
+            default: 'pending',
+        },
+        paymentReceivedAmount: { type: Number, default: 0, min: 0 },
+        paymentDueDate: Date,
+        paymentBankAccount: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+        },
+
+        // Finance integration
+        revenueId: { type: Schema.Types.ObjectId, ref: 'Revenue' },
+        bankTransactionId: { type: Schema.Types.ObjectId, ref: 'BankTransaction' },
+
+        // GST and TDS
+        gstApplicable: { type: Boolean, default: true },
+        gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
+        tdsDeducted: { type: Number, default: 0, min: 0 },
+
+        completedAt: Date,
     },
     { _id: true }
 );
@@ -182,6 +236,10 @@ const ProjectSchema = new Schema<IProject>(
             default: 'fixed',
         },
         hourlyRate: Number,
+        defaultBankAccount: {
+            type: String,
+            enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
+        },
 
         invoiceDetails: InvoiceDetailsSchema,
 

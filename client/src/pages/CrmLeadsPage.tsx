@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Plus,
     Search,
@@ -17,6 +18,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useGetLeadsQuery, useGetPipelineSummaryQuery, useDeleteLeadMutation } from '@/features/crm';
+import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 const stageColors: Record<string, { bg: string; text: string }> = {
     new: { bg: 'var(--color-info-soft)', text: 'var(--color-info)' },
@@ -39,6 +41,7 @@ const priorityColors: Record<string, string> = {
 
 export default function CrmLeadsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
@@ -69,8 +72,17 @@ export default function CrmLeadsPage() {
     const { data: pipelineData } = useGetPipelineSummaryQuery();
     const [deleteLead, { isLoading: isDeletingLead }] = useDeleteLeadMutation();
 
+    useBodyScrollLock(Boolean(deleteConfirm));
+
     const leads = data?.data.leads || [];
     const summary = pipelineData?.data;
+
+    const getLeadPartnerName = (lead: any) => {
+        const partner = lead?.partnerId;
+        if (!partner) return '';
+        if (typeof partner === 'string') return 'Partner';
+        return partner?.userId?.name || partner?.contactPerson || partner?.companyName || 'Partner';
+    };
 
     const handleDeleteLead = async () => {
         if (!deleteConfirm) return;
@@ -117,40 +129,42 @@ export default function CrmLeadsPage() {
         <>
         <div className="px-8 py-6 max-w-[1600px] mx-auto">
             {/* Header */}
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                        CRM & Leads
-                    </h1>
-                    <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                        Manage your sales pipeline and customer relationships
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex bg-white rounded-lg border p-1" style={{ borderColor: 'var(--color-border-default)' }}>
+            <div className="mb-8 rounded-2xl border bg-gradient-to-r from-cyan-50 via-white to-indigo-50 p-6" style={{ borderColor: 'var(--color-border-default)' }}>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                            CRM Leads
+                        </h1>
+                        <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                            Track conversations, opportunities, and conversions with clarity
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="flex bg-white rounded-lg border p-1" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <button
+                                className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
+                                onClick={() => setViewMode('list')}
+                                title="List View"
+                            >
+                                <List size={18} style={{ color: 'var(--color-text-primary)' }} />
+                            </button>
+                            <button
+                                className={`p-2 rounded-md transition-colors ${viewMode === 'pipeline' ? 'bg-gray-100' : ''}`}
+                                onClick={() => navigate('/crm/pipeline')} // Navigate to separate pipeline page for Kanban
+                                title="Pipeline View"
+                            >
+                                <LayoutDashboard size={18} style={{ color: 'var(--color-text-primary)' }} />
+                            </button>
+                        </div>
                         <button
-                            className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
-                            onClick={() => setViewMode('list')}
-                            title="List View"
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg btn-premium"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                            onClick={() => navigate('/crm/leads/new', { state: { backgroundLocation: location, returnTo: location.pathname } })}
                         >
-                            <List size={18} style={{ color: 'var(--color-text-primary)' }} />
-                        </button>
-                        <button
-                            className={`p-2 rounded-md transition-colors ${viewMode === 'pipeline' ? 'bg-gray-100' : ''}`}
-                            onClick={() => navigate('/crm/pipeline')} // Navigate to separate pipeline page for Kanban
-                            title="Pipeline View"
-                        >
-                            <LayoutDashboard size={18} style={{ color: 'var(--color-text-primary)' }} />
+                            <Plus size={18} />
+                            New Lead
                         </button>
                     </div>
-                    <button
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg btn-premium"
-                        style={{ backgroundColor: 'var(--color-primary)' }}
-                        onClick={() => navigate('/crm/leads/new')}
-                    >
-                        <Plus size={18} />
-                        New Lead
-                    </button>
                 </div>
             </div>
 
@@ -159,11 +173,11 @@ export default function CrmLeadsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     {[
                         { label: 'Total Leads', value: summary.totalLeads, subtext: 'All stages' },
-                        { label: 'Pipeline Value', value: formatCurrency(summary.totalValue, 'INR'), subtext: 'Total estimated value' },
+                        // { label: 'Pipeline Value', value: formatCurrency(summary.totalValue, 'INR'), subtext: 'Total estimated value' },
                         { label: 'New Leads', value: summary.stages.find(s => s.stage === 'new')?.count || 0, subtext: 'Needs attention' },
                         { label: 'Closed Deals', value: summary.stages.find(s => s.stage === 'closed')?.count || 0, subtext: 'Successfully closed' }
                     ].map((card, idx) => (
-                        <div key={idx} className="p-4 rounded-[1rem] bg-white shadow-premium border-0">
+                        <div key={idx} className="p-4 rounded-2xl bg-white border shadow-sm" style={{ borderColor: 'var(--color-border-default)' }}>
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>{card.label}</p>
                             <p className="text-2xl font-bold mt-2" style={{ color: 'var(--color-text-primary)' }}>{card.value}</p>
                             <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{card.subtext}</p>
@@ -222,7 +236,7 @@ export default function CrmLeadsPage() {
             </div>
 
             {/* Leads List Table */}
-            <div className="bg-white rounded-[1rem] shadow-premium overflow-hidden border-0">
+            <div className="bg-white rounded-2xl overflow-visible border shadow-sm" style={{ borderColor: 'var(--color-border-default)' }}>
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="border-b" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
@@ -240,7 +254,7 @@ export default function CrmLeadsPage() {
                             <tr
                                 key={lead._id}
                                 className="group hover:bg-gray-50 transition-colors cursor-pointer"
-                                onClick={() => navigate(`/crm/leads/${lead._id}`)}
+                                onClick={() => navigate(`/crm/leads/${lead._id}`, { state: { returnTo: location.pathname } })}
                             >
                                 <td className="px-6 py-4">
                                     <div className="flex flex-col">
@@ -249,6 +263,14 @@ export default function CrmLeadsPage() {
                                             <span className="flex items-center gap-1.5 text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                                                 <Building size={12} />
                                                 {lead.company}
+                                            </span>
+                                        )}
+                                        {lead.partnerId && (
+                                            <span
+                                                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mt-2 w-fit"
+                                                style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}
+                                            >
+                                                Referred by: {getLeadPartnerName(lead)}
                                             </span>
                                         )}
                                     </div>
@@ -321,9 +343,9 @@ export default function CrmLeadsPage() {
                                             <MoreVertical size={16} />
                                         </button>
                                         {openMenuId === lead._id && (
-                                            <div className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-lg border border-gray-200 z-20 py-1">
+                                            <div className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-lg border border-gray-200 z-[80] py-1">
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); navigate(`/crm/leads/${lead._id}/edit`); }}
+                                                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); navigate(`/crm/leads/${lead._id}/edit`, { state: { backgroundLocation: location, returnTo: location.pathname } }); }}
                                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl"
                                                 >
                                                     <Pencil size={14} />
@@ -368,7 +390,7 @@ export default function CrmLeadsPage() {
         </div>
 
         {/* Delete Lead Confirmation Modal */}
-        {deleteConfirm && (
+        {deleteConfirm && typeof document !== 'undefined' && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
                     <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
@@ -395,7 +417,8 @@ export default function CrmLeadsPage() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
     </>
     );

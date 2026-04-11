@@ -1,5 +1,6 @@
 import { Leave, ILeave } from '../models/Leave.model';
 import { LeaveBalance } from '../models/LeaveBalance.model';
+import { Types } from 'mongoose';
 import { CreateLeaveInput, UpdateLeaveStatusInput } from '../validators/leave.validator';
 import { Employee } from '../models/Employee.model';
 import { Attendance } from '../models/Attendance.model';
@@ -10,6 +11,10 @@ import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/dep
 class LeaveService {
     private shouldConsumePaidLeave(leave: ILeave): boolean {
         return leave.type !== 'unpaid' && leave.isPaid;
+    }
+
+    private shouldConsumePaidLeaveByValues(type: ILeave['type'], isPaid: boolean): boolean {
+        return type !== 'unpaid' && isPaid;
     }
 
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
@@ -44,8 +49,11 @@ class LeaveService {
             throw new AppError('Leave dates overlap with an existing leave request', 400);
         }
 
+        const normalizedIsPaid = data.type === 'unpaid' ? false : data.isPaid;
+
         const leave = await Leave.create({
             ...data,
+            isPaid: normalizedIsPaid,
             employeeId: employee._id,
             startDate: startDateUtc,
             endDate: endDateUtc,
@@ -156,11 +164,35 @@ class LeaveService {
 
         const previousStatus = leave.status;
         const nextStatus = data.status;
+        const previousType = leave.type;
+        const previousIsPaid = leave.isPaid;
+
+        const nextType = data.type ?? previousType;
+        const requestedIsPaid = data.isPaid ?? previousIsPaid;
+        const nextIsPaid = nextType === 'unpaid' ? false : requestedIsPaid;
+
+        const previousConsumesPaidBalance = this.shouldConsumePaidLeaveByValues(previousType, previousIsPaid);
+        const nextConsumesPaidBalance = this.shouldConsumePaidLeaveByValues(nextType, nextIsPaid);
+
+        leave.type = nextType;
+        leave.isPaid = nextIsPaid;
 
         if (previousStatus === nextStatus) {
+            if (previousStatus === 'approved' && nextStatus === 'approved' && previousConsumesPaidBalance !== nextConsumesPaidBalance) {
+                const year = leave.startDate.getUTCFullYear();
+                if (previousConsumesPaidBalance && !nextConsumesPaidBalance) {
+                    await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
+                } else if (!previousConsumesPaidBalance && nextConsumesPaidBalance) {
+                    await this.ensureLeaveBalance(leave.employeeId.toString(), year);
+                    await this.consumePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
+                }
+            }
+
             if (nextStatus === 'rejected') {
                 leave.rejectionReason = data.rejectionReason;
                 leave.approvedBy = approvedBy as any;
+                await leave.save();
+            } else {
                 await leave.save();
             }
 
@@ -169,7 +201,7 @@ class LeaveService {
 
         if (previousStatus === 'approved' && nextStatus !== 'approved') {
             const year = leave.startDate.getUTCFullYear();
-            if (this.shouldConsumePaidLeave(leave)) {
+            if (previousConsumesPaidBalance) {
                 await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
             }
             await this.rollbackApprovedLeaveAttendance(leave);
@@ -192,7 +224,7 @@ class LeaveService {
             const year = leave.startDate.getUTCFullYear();
             await this.ensureLeaveBalance(leave.employeeId.toString(), year);
 
-            if (this.shouldConsumePaidLeave(leave)) {
+            if (nextConsumesPaidBalance) {
                 await this.consumePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
             }
         }
@@ -374,6 +406,83 @@ class LeaveService {
         return balance;
     }
 
+    private async syncEarnedUsageFromApprovedLeaves(employeeId: Types.ObjectId | string, year: number) {
+        const startOfYear = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+        const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+
+        const result = await Leave.aggregate<{ total: number }>([
+            {
+                $match: {
+                    employeeId,
+                    status: 'approved',
+                    startDate: { $gte: startOfYear, $lte: endOfYear },
+                    type: { $ne: 'unpaid' },
+                    $or: [{ isPaid: true }, { isPaid: { $exists: false } }, { isPaid: null }],
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: '$days' },
+                },
+            },
+        ]);
+
+        return result[0]?.total ?? 0;
+    }
+
+    private async getApprovedLeaveYearSummary(employeeId: Types.ObjectId | string, year: number) {
+        const startOfYear = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+        const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+
+        const rows = await Leave.aggregate<{ _id: 'paid' | 'unpaid'; requests: number; days: number }>([
+            {
+                $match: {
+                    employeeId,
+                    status: 'approved',
+                    startDate: { $gte: startOfYear, $lte: endOfYear },
+                },
+            },
+            {
+                $project: {
+                    days: '$days',
+                    bucket: {
+                        $cond: [
+                            {
+                                $or: [{ $eq: ['$type', 'unpaid'] }, { $eq: ['$isPaid', false] }],
+                            },
+                            'unpaid',
+                            'paid',
+                        ],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: '$bucket',
+                    requests: { $sum: 1 },
+                    days: { $sum: '$days' },
+                },
+            },
+        ]);
+
+        const paid = rows.find((r) => r._id === 'paid');
+        const unpaid = rows.find((r) => r._id === 'unpaid');
+
+        return {
+            paid: {
+                requests: paid?.requests ?? 0,
+                days: paid?.days ?? 0,
+            },
+            unpaid: {
+                requests: unpaid?.requests ?? 0,
+                days: unpaid?.days ?? 0,
+            },
+            totalApprovedRequests: (paid?.requests ?? 0) + (unpaid?.requests ?? 0),
+            totalApprovedDays: (paid?.days ?? 0) + (unpaid?.days ?? 0),
+        };
+    }
+
     async getLeaveBalance(userId: string, year: number) {
         const employee = await Employee.findOne({ userId });
         if (!employee) {
@@ -403,7 +512,30 @@ class LeaveService {
             balance = (await LeaveBalance.findById(balance._id))!;
         }
 
-        return balance.balances;
+        // Reconcile from leave history to include legacy approved paid leaves
+        // that were created before balance tracking was introduced.
+        const reconciledUsed = await this.syncEarnedUsageFromApprovedLeaves(employee._id, year);
+        const refreshedEarned = balance.balances.find((b) => b.type === 'earned');
+        if (refreshedEarned && refreshedEarned.used !== reconciledUsed) {
+            const newPending = Math.max(0, refreshedEarned.quota - reconciledUsed);
+            await LeaveBalance.updateOne(
+                { _id: balance._id, 'balances.type': 'earned' },
+                {
+                    $set: {
+                        'balances.$.used': reconciledUsed,
+                        'balances.$.pending': newPending,
+                    },
+                }
+            );
+            balance = (await LeaveBalance.findById(balance._id))!;
+        }
+
+        const leaveSummary = await this.getApprovedLeaveYearSummary(employee._id, year);
+
+        return {
+            balance: balance.balances,
+            leaveSummary,
+        };
     }
 }
 

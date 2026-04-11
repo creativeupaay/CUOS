@@ -62,9 +62,8 @@ export interface ListEmployeesParams {
 export interface CreateSalaryRequest {
     employeeId: string;
     basic: number;
-    hra: number;
-    da?: number;
     specialAllowance?: number;
+    payoutAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     deductions?: { pf?: number; esi?: number; tax?: number; other?: number };
     currency?: string;
     effectiveFrom: string;
@@ -72,9 +71,8 @@ export interface CreateSalaryRequest {
 
 export interface UpdateSalaryRequest {
     basic?: number;
-    hra?: number;
-    da?: number;
     specialAllowance?: number;
+    payoutAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     deductions?: { pf?: number; esi?: number; tax?: number; other?: number };
     effectiveFrom?: string;
 }
@@ -93,6 +91,8 @@ export interface CreateLeaveRequest {
 export interface UpdateLeaveStatusRequest {
     status: 'approved' | 'rejected' | 'cancelled';
     rejectionReason?: string;
+    type?: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    isPaid?: boolean;
 }
 
 // ── Payroll API Types ───────────────────────────────────────────────
@@ -104,6 +104,15 @@ export interface GeneratePayrollRequest {
 
 export interface UpdatePayrollStatusRequest {
     status: 'approved' | 'paid';
+}
+
+export interface UpdatePayrollRequest {
+    incentiveAmount?: number;
+    payoutAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    deductions?: {
+        tax?: number;
+        other?: number;
+    };
 }
 
 // ── Attendance API Types ──────────────────────────────────────────────

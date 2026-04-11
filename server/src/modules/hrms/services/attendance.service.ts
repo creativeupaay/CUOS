@@ -104,7 +104,8 @@ export class AttendanceService {
     // ── Admin: Bulk mark attendance for a single date ─────────────────
     static async bulkMarkAttendance(
         date: string,
-        records: Array<{ employeeId: string; status: string; notes?: string }>
+        records: Array<{ employeeId: string; status: string; notes?: string }>,
+        options: { onlyUnmarked?: boolean } = {}
     ) {
         // Always use Date.UTC so the date is stored as UTC midnight,
         // regardless of the server's local timezone (e.g. IST = UTC+5:30)
@@ -117,7 +118,27 @@ export class AttendanceService {
         const clearIds: Types.ObjectId[] = [];
         const upsertOps: any[] = [];
 
+        const existingEmployeeIds = new Set<string>();
+        if (options.onlyUnmarked && records.length > 0) {
+            const employeeIds = records.map((r) => new Types.ObjectId(r.employeeId));
+            const existingRecords = await Attendance.find({
+                employeeId: { $in: employeeIds },
+                date: dateObj,
+            }).select('employeeId').lean();
+
+            existingRecords.forEach((record) => {
+                existingEmployeeIds.add(record.employeeId.toString());
+            });
+        }
+
+        let skipped = 0;
+
         for (const r of records) {
+            if (options.onlyUnmarked && existingEmployeeIds.has(r.employeeId)) {
+                skipped += 1;
+                continue;
+            }
+
             if (r.status === 'clear') {
                 clearIds.push(new Types.ObjectId(r.employeeId));
             } else {
@@ -155,7 +176,7 @@ export class AttendanceService {
             await Attendance.bulkWrite(upsertOps);
         }
 
-        return { saved: upsertOps.length, cleared: deleted };
+        return { saved: upsertOps.length, cleared: deleted, skipped };
     }
 
     // ── Admin: Today's overview — all employees + their status ────────

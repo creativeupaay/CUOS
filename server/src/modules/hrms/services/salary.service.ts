@@ -12,6 +12,9 @@ class SalaryService {
 
         const salary = await SalaryStructure.create({
             ...data,
+            hra: 0,
+            da: 0,
+            payoutAccountKey: data.payoutAccountKey || 'hdfc_gst',
         });
 
         return salary;
@@ -68,6 +71,7 @@ class SalaryService {
         // Push current values to revision history before updating
         salary.revisionHistory.push({
             basic: salary.basic,
+            payoutAccountKey: salary.payoutAccountKey,
             hra: salary.hra,
             da: salary.da,
             hourlyRate: salary.hourlyRate,
@@ -78,13 +82,17 @@ class SalaryService {
 
         // Apply updates
         if (data.basic !== undefined) salary.basic = data.basic;
-        if (data.hra !== undefined) salary.hra = data.hra;
-        if (data.da !== undefined) salary.da = data.da;
         if (data.specialAllowance !== undefined) salary.specialAllowance = data.specialAllowance;
+        if (data.payoutAccountKey !== undefined) salary.payoutAccountKey = data.payoutAccountKey;
+        if (data.hra !== undefined) salary.hra = 0;
+        if (data.da !== undefined) salary.da = 0;
         if (data.deductions) {
             salary.deductions = { ...JSON.parse(JSON.stringify(salary.deductions)), ...data.deductions } as any;
         }
         if (data.effectiveFrom) salary.effectiveFrom = new Date(data.effectiveFrom);
+
+        salary.hra = 0;
+        salary.da = 0;
 
         await salary.save();
         return salary;

@@ -8,6 +8,24 @@ export interface ClientActivity {
     createdBy: User | string;
 }
 
+export interface ClientDocument {
+    _id?: string;
+    name: string;
+    url: string;
+    cloudinaryId?: string;
+    size?: number;
+    mimeType?: string;
+    uploadedAt?: string;
+    uploadedBy?: User | string;
+}
+
+export interface ClientLink {
+    _id?: string;
+    name: string;
+    url: string;
+    addedAt?: string;
+}
+
 export interface Client {
     _id: string;
     name: string;
@@ -27,6 +45,8 @@ export interface Client {
 
     leadId?: string;
     activities?: ClientActivity[];
+    documents?: ClientDocument[];
+    links?: ClientLink[];
 
     // Onboarding form
     onboardingStatus?: 'pending' | 'submitted';

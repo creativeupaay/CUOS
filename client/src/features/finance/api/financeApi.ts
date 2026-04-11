@@ -38,9 +38,62 @@ export interface Expense {
     projectName?: string;
     vendor?: string;
     paidBy?: string;
+    sourceAccountKey?: BankAccountKey;
     notes?: string;
     isRecurring: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface FixedExpense {
+    _id: string;
+    title: string;
+    description: string;
+    category: string;
+    level: 'company' | 'project';
+    type: 'fixed';
+    amount: number;
+    expenseDate?: string;
+    dueDay: number;
+    frequency: 'monthly' | 'quarterly' | 'yearly';
+    startDate: string;
+    projectId?: string;
+    projectName?: string;
+    vendor?: string;
+    paidBy?: string;
+    sourceAccountKey?: BankAccountKey;
+    notes?: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface FixedExpenseApproval {
+    _id: string;
+    fixedExpenseId: string;
+    periodKey: string;
+    dueDate: string;
+    status: 'pending' | 'approved' | 'rejected';
+    title: string;
+    description: string;
+    category: string;
+    level: 'company' | 'project';
+    type: 'fixed';
+    amount: number;
+    frequency: 'monthly' | 'quarterly' | 'yearly';
+    dueDay: number;
+    projectId?: string;
+    projectName?: string;
+    vendor?: string;
+    paidBy?: string;
+    sourceAccountKey?: BankAccountKey;
+    notes?: string;
+    responseNotes?: string;
+    paidDate?: string;
+    approvedExpenseId?: string;
+    actedBy?: string;
+    actedAt?: string;
     createdAt: string;
     updatedAt: string;
 }
@@ -75,6 +128,50 @@ export interface DashboardResponse {
     metrics: DashboardMetrics;
     monthlyData: MonthlyData[];
     breakdownData: BreakdownData[];
+}
+
+export type BankAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+export type BankTransactionType = 'credit' | 'debit';
+
+export interface BankTransaction {
+    _id: string;
+    bankAccountId: string;
+    accountKey: BankAccountKey;
+    accountName: string;
+    transactionType: BankTransactionType;
+    amount: number;
+    date: string;
+    description: string;
+    referenceNumber?: string;
+    notes?: string;
+    source: 'manual' | 'automatic';
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface BankTransactionSummary {
+    totalCashInBank: number;
+    totalCredit: number;
+    totalDebit: number;
+    accountBalances: Record<BankAccountKey, number>;
+}
+
+export interface BankAccountDetail {
+    _id: string;
+    accountKey?: BankAccountKey;
+    accountName: string;
+    bankName: string;
+    accountNumber: string;
+    ifscCode?: string;
+    swiftCode?: string;
+    accountType: 'current' | 'savings' | 'cash';
+    currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+    currentBalance: number;
+    isActive: boolean;
+    isPrimary: boolean;
+    notes?: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 // ── API Slice ─────────────────────────────────────────────────────────────
@@ -187,6 +284,102 @@ export const financeApi = api.injectEndpoints({
             invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
+        getFixedExpenses: builder.query<{ data: FixedExpense[] }, { isActive?: boolean } | void>({
+            query: (params) => ({
+                url: '/finance/fixed-expenses',
+                params: params || undefined,
+            }),
+            providesTags: ['FixedExpenses'],
+        }),
+
+        createFixedExpense: builder.mutation<{ data: FixedExpense }, Partial<FixedExpense>>({
+            query: (body) => ({
+                url: '/finance/fixed-expenses',
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['FixedExpenses'],
+        }),
+
+        updateFixedExpense: builder.mutation<{ data: FixedExpense }, { id: string } & Partial<FixedExpense>>({
+            query: ({ id, ...body }) => ({
+                url: `/finance/fixed-expenses/${id}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['FixedExpenses'],
+        }),
+
+        deleteFixedExpense: builder.mutation<void, string>({
+            query: (id) => ({
+                url: `/finance/fixed-expenses/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['FixedExpenses'],
+        }),
+
+        getFixedExpenseApprovals: builder.query<
+            { data: { approvals: FixedExpenseApproval[]; pendingCount: number } },
+            { status?: 'all' | 'pending' | 'approved' | 'rejected' } | void
+        >({
+            query: (params) => ({
+                url: '/finance/fixed-expenses/approvals',
+                params: params || undefined,
+            }),
+            providesTags: ['FixedExpenses', 'Expenses'],
+        }),
+
+        getFixedExpenseTransactions: builder.query<{ data: Expense[] }, void>({
+            query: () => ({
+                url: '/finance/fixed-expenses/transactions',
+            }),
+            providesTags: ['FixedExpenses', 'Expenses', 'BankTransactions'],
+        }),
+
+        approveFixedExpense: builder.mutation<
+            { data: FixedExpenseApproval },
+            {
+                id: string;
+                amount?: number;
+                paidDate?: string;
+                responseNotes?: string;
+                description?: string;
+                vendor?: string;
+                paidBy?: string;
+                sourceAccountKey?: BankAccountKey;
+                notes?: string;
+            }
+        >({
+            query: ({ id, ...body }) => ({
+                url: `/finance/fixed-expenses/approvals/${id}/approve`,
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['FixedExpenses', 'Expenses', 'FinanceDashboard', 'BankTransactions'],
+        }),
+
+        rejectFixedExpense: builder.mutation<
+            { data: FixedExpenseApproval },
+            {
+                id: string;
+                amount?: number;
+                paidDate?: string;
+                responseNotes?: string;
+                description?: string;
+                vendor?: string;
+                paidBy?: string;
+                sourceAccountKey?: BankAccountKey;
+                notes?: string;
+            }
+        >({
+            query: ({ id, ...body }) => ({
+                url: `/finance/fixed-expenses/approvals/${id}/reject`,
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['FixedExpenses', 'Expenses'],
+        }),
+
         // Salary Expense Sync (from HRMS)
         syncSalaryExpenses: builder.mutation<{ data: { synced: number } }, { month: number; year: number }>({
             query: (body) => ({
@@ -205,6 +398,63 @@ export const financeApi = api.injectEndpoints({
             }),
             providesTags: ['Expenses'],
         }),
+
+        // Cash in Bank / Bank Transactions
+        getBankTransactions: builder.query<{ data: { transactions: BankTransaction[]; total: number; summary: BankTransactionSummary } }, {
+            accountKey?: BankAccountKey;
+            transactionType?: BankTransactionType;
+            search?: string;
+            startDate?: string;
+            endDate?: string;
+            page?: number;
+            limit?: number;
+        }>({
+            query: (params) => ({
+                url: '/finance/bank-transactions',
+                params,
+            }),
+            providesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        getBankAccounts: builder.query<{ data: BankAccountDetail[] }, void>({
+            query: () => '/finance/bank-accounts',
+            providesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        createBankTransaction: builder.mutation<{ data: BankTransaction }, Partial<BankTransaction>>({
+            query: (body) => ({
+                url: '/finance/bank-transactions',
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        updateBankTransaction: builder.mutation<{ data: BankTransaction }, { id: string } & Partial<BankTransaction>>({
+            query: ({ id, ...body }) => ({
+                url: `/finance/bank-transactions/${id}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        updateBankAccount: builder.mutation<{ data: BankAccountDetail }, { accountKey: BankAccountKey } & Partial<BankAccountDetail>>({
+            query: ({ accountKey, ...body }) => ({
+                url: `/finance/bank-accounts/${accountKey}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        deleteBankTransaction: builder.mutation<void, string>({
+            query: (id) => ({
+                url: `/finance/bank-transactions/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
     }),
 });
 
@@ -220,6 +470,20 @@ export const {
     useCreateExpenseMutation,
     useUpdateExpenseMutation,
     useDeleteExpenseMutation,
+    useGetFixedExpensesQuery,
+    useCreateFixedExpenseMutation,
+    useUpdateFixedExpenseMutation,
+    useDeleteFixedExpenseMutation,
+    useGetFixedExpenseApprovalsQuery,
+    useGetFixedExpenseTransactionsQuery,
+    useApproveFixedExpenseMutation,
+    useRejectFixedExpenseMutation,
     useSyncSalaryExpensesMutation,
     useGetProjectExpenseSummaryQuery,
+    useGetBankTransactionsQuery,
+    useGetBankAccountsQuery,
+    useCreateBankTransactionMutation,
+    useUpdateBankTransactionMutation,
+    useUpdateBankAccountMutation,
+    useDeleteBankTransactionMutation,
 } = financeApi;

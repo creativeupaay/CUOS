@@ -5,6 +5,11 @@ import type { Payroll } from '@/features/hrms/types/types';
 import ModalPortal from '@/components/ui/ModalPortal';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PAYOUT_ACCOUNT_LABELS: Record<string, string> = {
+    hdfc_gst: 'HDFC (GST)',
+    sbi_non_gst: 'SBI (non GST)',
+    cash: 'Cash in Company',
+};
 
 const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> = {
     draft: { label: 'Draft', bg: '#F3F4F6', color: '#6B7280' },
@@ -59,6 +64,12 @@ function PayslipModal({ payroll, onClose }: { payroll: Payroll; onClose: () => v
                             <p className="text-white/60 text-xs">Status</p>
                             <p className="text-white font-semibold capitalize mt-0.5">{payroll.status}</p>
                         </div>
+                        <div>
+                            <p className="text-white/60 text-xs">Paid From</p>
+                            <p className="text-white font-semibold mt-0.5">
+                                {PAYOUT_ACCOUNT_LABELS[payroll.payoutAccountKey] || 'HDFC (GST)'}
+                            </p>
+                        </div>
                         {payroll.paidAt && (
                             <div>
                                 <p className="text-white/60 text-xs">Paid On</p>
@@ -76,10 +87,11 @@ function PayslipModal({ payroll, onClose }: { payroll: Payroll; onClose: () => v
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-wide mb-2"
                             style={{ color: 'var(--color-text-muted)' }}>Attendance</p>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                             {[
                                 { label: 'Working Days', value: payroll.workingDays },
                                 { label: 'Present Days', value: payroll.presentDays },
+                                { label: 'Payable Days', value: payroll.payableDays },
                                 { label: 'Hours Worked', value: `${(payroll.totalHoursWorked || 0).toFixed(1)}h` },
                             ].map(({ label, value }) => (
                                 <div key={label} className="rounded-xl p-3 text-center border"
@@ -99,7 +111,7 @@ function PayslipModal({ payroll, onClose }: { payroll: Payroll; onClose: () => v
                             style={{ borderColor: 'var(--color-border-default)' }}>
                             {[
                                 { label: 'Gross Salary', value: payroll.grossSalary },
-                                ...(payroll.incentiveAmount ? [{ label: '🏆 Incentive Bonus', value: payroll.incentiveAmount }] : []),
+                                ...(payroll.incentiveAmount ? [{ label: 'Bonus', value: payroll.incentiveAmount }] : []),
                             ].map(({ label, value }, i) => (
                                 <div key={i} className="flex justify-between items-center px-4 py-3"
                                     style={{ borderTop: i > 0 ? '1px solid var(--color-border-default)' : undefined }}>
@@ -206,7 +218,7 @@ export default function EmployeePayrollPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                {['Period', 'Working Days', 'Gross Salary', 'Deductions', 'Net Pay', 'Status', ''].map(h => (
+                                {['Period', 'Payable Days', 'Gross Salary', 'Deductions', 'Net Pay', 'Status', ''].map(h => (
                                     <th key={h} className="px-4 py-3 text-left font-medium"
                                         style={{ color: 'var(--color-text-secondary)' }}>{h}</th>
                                 ))}
@@ -221,7 +233,7 @@ export default function EmployeePayrollPage() {
                                             {MONTHS[p.month - 1]} {p.year}
                                         </td>
                                         <td className="px-4 py-3" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {p.presentDays} / {p.workingDays}
+                                            {p.payableDays} / 30
                                         </td>
                                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>
                                             {fmt(p.grossSalary)}

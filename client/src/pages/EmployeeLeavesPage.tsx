@@ -58,6 +58,25 @@ function formatDate(iso: string) {
     });
 }
 
+function formatShortDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', timeZone: 'UTC',
+    });
+}
+
+function formatDateRange(startDate: string, endDate: string, includeYear = true) {
+    const sameDay = startDate === endDate || startDate.slice(0, 10) === endDate.slice(0, 10);
+    if (sameDay) {
+        return includeYear ? formatDate(startDate) : formatShortDate(startDate);
+    }
+
+    if (includeYear) {
+        return `${formatDate(startDate)} → ${formatDate(endDate)}`;
+    }
+
+    return `${formatShortDate(startDate)} → ${formatShortDate(endDate)}`;
+}
+
 // ── Apply Leave Modal ─────────────────────────────────────────────────
 function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
     const [createLeave, { isLoading }] = useCreateLeaveMutation();
@@ -221,8 +240,7 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
                             style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
                             <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                 <span className="font-medium capitalize">{form.type}</span> leave
-                                &nbsp;·&nbsp;{new Date(form.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                &nbsp;→&nbsp;{new Date(form.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                &nbsp;·&nbsp;{formatDateRange(form.startDate, form.endDate, false)}
                             </span>
                             <span className="text-base font-bold"
                                 style={{ color: form.isPaid ? 'var(--color-primary)' : '#EF4444' }}>
@@ -268,7 +286,12 @@ export default function EmployeeLeavesPage() {
     const approvedThisYear = leaves.filter(l =>
         l.status === 'approved' && new Date(l.startDate).getFullYear() === currentYear
     );
-    const totalTaken = approvedThisYear.reduce((sum, l) => sum + ((l as any).days || 1), 0);
+    const leaveSummary = (balanceData?.data as any)?.leaveSummary;
+    const fallbackPaidDays = approvedThisYear.filter((l: any) => (l.isPaid !== false) && l.type !== 'unpaid').reduce((sum, l: any) => sum + ((l as any).days || 1), 0);
+    const fallbackUnpaidDays = approvedThisYear.filter((l: any) => (l.isPaid === false) || l.type === 'unpaid').reduce((sum, l: any) => sum + ((l as any).days || 1), 0);
+    const approvedPaidDays = leaveSummary?.paid?.days ?? fallbackPaidDays;
+    const approvedUnpaidDays = leaveSummary?.unpaid?.days ?? fallbackUnpaidDays;
+    const totalTaken = leaveSummary?.totalApprovedDays ?? approvedThisYear.reduce((sum, l) => sum + ((l as any).days || 1), 0);
     const pendingCount = leaves.filter(l => l.status === 'pending').length;
 
     // Paid leaves: quota and remaining from 'earned' bucket
@@ -303,7 +326,7 @@ export default function EmployeeLeavesPage() {
                     {
                         label: `Total Leaves Taken (${currentYear})`,
                         value: totalTaken,
-                        sub: `${approvedThisYear.length} approved request${approvedThisYear.length !== 1 ? 's' : ''}`,
+                        sub: `${approvedPaidDays} paid day${approvedPaidDays !== 1 ? 's' : ''} • ${approvedUnpaidDays} unpaid day${approvedUnpaidDays !== 1 ? 's' : ''}`,
                         icon: TrendingDown,
                         color: '#C2410C', bg: '#FFEDD5',
                     },
@@ -331,7 +354,7 @@ export default function EmployeeLeavesPage() {
                 ))}
             </div>
 
-            {/* Leave History Table */
+            {/* Leave History Table */}
             <div className="rounded-xl border overflow-hidden"
                 style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
                 <div className="px-5 py-4 border-b flex items-center justify-between"
@@ -359,7 +382,7 @@ export default function EmployeeLeavesPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                {['Type', 'Start Date', 'End Date', 'Days', 'Reason', 'Status'].map(h => (
+                                {['Type', 'Dates', 'Days', 'Reason', 'Status'].map(h => (
                                     <th key={h} className="px-4 py-3 text-left font-medium"
                                         style={{ color: 'var(--color-text-secondary)' }}>{h}</th>
                                 ))}
@@ -377,10 +400,7 @@ export default function EmployeeLeavesPage() {
                                         />
                                     </td>
                                     <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
-                                        {formatDate(leave.startDate)}
-                                    </td>
-                                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>
-                                        {formatDate(leave.endDate)}
+                                        {formatDateRange(leave.startDate, leave.endDate)}
                                     </td>
                                     <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                                         {(leave as any).days ?? 1}
@@ -397,7 +417,6 @@ export default function EmployeeLeavesPage() {
                     </table>
                 )}
             </div>
-}
             {/* FAB — Apply for Leave  */}
             <button
                 onClick={() => setShowModal(true)}

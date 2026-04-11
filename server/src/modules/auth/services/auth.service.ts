@@ -28,6 +28,13 @@ export interface AuthResponse {
     refreshToken: string;
 }
 
+type UserListRequester = {
+    id?: string;
+    role?: string;
+    partnerId?: string;
+    isPartnerEmployee?: boolean;
+};
+
 const buildPartnerEmployeeModulePermissions = (modulePermissions?: {
     projectManagement?: boolean;
     crm?: boolean;
@@ -450,11 +457,86 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
 /**
  * Get all users
  */
-export const getAllUsers = async (): Promise<IUser[]> => {
-    const users = await User.find()
+export const getAllUsers = async (requester?: UserListRequester): Promise<any[]> => {
+    const requesterRole = String(requester?.role || '').toLowerCase();
+
+    if (requesterRole !== 'partner') {
+        const users = await User.find()
+            .select('name email role department isActive')
+            .populate('role', 'name');
+        return users;
+    }
+
+    const { Partner } = await import('../../partners/models/Partner.model');
+    const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
+
+    let partnerId = requester?.partnerId;
+
+    if (!partnerId && requester?.id && !requester?.isPartnerEmployee) {
+        const partnerRecord = await Partner.findOne({ userId: requester.id }).select('_id').lean();
+        partnerId = partnerRecord?._id?.toString();
+    }
+
+    const superAdminRoles = await Role.find({
+        name: { $in: ['super-admin', 'super_admin'] },
+    }).select('_id');
+
+    const superAdminRoleIds = superAdminRoles.map((role) => role._id);
+
+    const superAdmins = await User.find({
+        role: { $in: superAdminRoleIds },
+        isActive: true,
+    })
         .select('name email role department isActive')
-        .populate('role', 'name');
-    return users;
+        .populate('role', 'name')
+        .lean();
+
+    const partnerMainUser: any[] = [];
+    const partnerTeamMembers: any[] = [];
+
+    if (partnerId) {
+        const partner = await Partner.findById(partnerId)
+            .populate({
+                path: 'userId',
+                select: 'name email role department isActive',
+                populate: { path: 'role', select: 'name' },
+            })
+            .select('userId')
+            .lean();
+
+        const partnerUser = (partner as any)?.userId;
+        if (partnerUser?._id) {
+            partnerMainUser.push(partnerUser);
+        }
+
+        const partnerEmployees = await PartnerEmployee.find({
+            partnerId,
+            isActive: true,
+        })
+            .select('_id name email isActive')
+            .lean();
+
+        for (const member of partnerEmployees) {
+            partnerTeamMembers.push({
+                _id: member._id,
+                name: member.name,
+                email: member.email,
+                isActive: member.isActive,
+                department: 'partner-team',
+                role: { name: 'partner-employee' },
+            });
+        }
+    }
+
+    const merged = [...superAdmins, ...partnerMainUser, ...partnerTeamMembers];
+    const seen = new Set<string>();
+
+    return merged.filter((user: any) => {
+        const id = user?._id?.toString?.() || String(user?._id || '');
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
 };
 
 /**

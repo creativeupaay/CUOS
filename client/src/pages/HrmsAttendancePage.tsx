@@ -409,6 +409,7 @@ export default function HrmsAttendancePage() {
             await bulkMark({
                 date: todayIST,
                 records: employees,
+                onlyUnmarked: true,
             }).unwrap();
             await Promise.all([refetchGrid(), refetchOverview()]);
         } catch (err: any) {

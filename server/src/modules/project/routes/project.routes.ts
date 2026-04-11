@@ -7,6 +7,7 @@ import * as meetingController from '../controllers/meeting.controller';
 import * as credentialController from '../controllers/credential.controller';
 import * as docController from '../controllers/doc.controller';
 import * as noteController from '../controllers/note.controller';
+import * as phasePaymentController from '../controllers/phasePayment.controller';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     checkProjectAccess,
@@ -54,6 +55,7 @@ router.get(
 router.patch(
     '/timelogs/:id',
     validateRequest(timeLogValidators.updateTimeLogSchema),
+    checkAdmin,
     timeLogController.updateTimeLog
 );
 
@@ -71,7 +73,7 @@ router.delete(
 // Create project
 router.post(
     '/',
-    validateRequest(projectValidators.createProjectSchema),
+    validateRequest(projectValidators.createProjectSchemaWithAllocationCheck),
     isPartnerOrAdmin,
     projectController.createProject
 );
@@ -90,7 +92,7 @@ router.get(
 // Update project
 router.patch(
     '/:id',
-    validateRequest(projectValidators.updateProjectSchema),
+    validateRequest(projectValidators.updateProjectSchemaWithAllocationCheck),
     checkProjectManager,
     projectController.updateProject
 );
@@ -194,6 +196,24 @@ router.get(
     validateRequest(projectValidators.getProjectByIdSchema),
     checkProjectManager,
     require('../controllers/projectCost.controller').getProjectCost
+);
+
+// ============================================
+// PHASE PAYMENT ROUTES
+// ============================================
+
+// Get project payment summary
+router.get(
+    '/:id/payment-summary',
+    checkProjectAccess,
+    phasePaymentController.getProjectPaymentSummary
+);
+
+// Mark phase payment as received
+router.post(
+    '/:id/phases/:phaseId/mark-payment-received',
+    checkProjectManager,
+    phasePaymentController.markPhasePaymentReceived
 );
 
 // ============================================

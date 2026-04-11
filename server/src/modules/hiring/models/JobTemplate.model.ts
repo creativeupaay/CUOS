@@ -28,6 +28,7 @@ const JobApplicationCustomFieldSchema = new Schema(
         },
         placeholder: { type: String, trim: true },
         helpText: { type: String, trim: true },
+        required: { type: Boolean, default: false },
     },
     { _id: false }
 );
@@ -38,6 +39,7 @@ const JobApplicationStandardFieldSettingSchema = new Schema(
         label: { type: String, required: true, trim: true },
         placeholder: { type: String, trim: true },
         helpText: { type: String, trim: true },
+        required: { type: Boolean, default: false },
     },
     { _id: false }
 );

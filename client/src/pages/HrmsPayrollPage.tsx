@@ -13,6 +13,11 @@ import {
 import ModalPortal from '@/components/ui/ModalPortal';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PAYOUT_ACCOUNT_LABELS: Record<string, string> = {
+    hdfc_gst: 'HDFC (GST)',
+    sbi_non_gst: 'SBI (non GST)',
+    cash: 'Cash in Company',
+};
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
     draft: { bg: '#FEF9C3', color: '#92400E', label: 'Draft' },
@@ -22,14 +27,17 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 export default function HrmsPayrollPage() {
     const currentDate = new Date();
-    const [month, setMonth] = useState(currentDate.getMonth() + 1);
-    const [year, setYear] = useState(currentDate.getFullYear());
+    const defaultPayrollDate = new Date(currentDate);
+    defaultPayrollDate.setMonth(defaultPayrollDate.getMonth() - 1);
+
+    const [month, setMonth] = useState(defaultPayrollDate.getMonth() + 1);
+    const [year, setYear] = useState(defaultPayrollDate.getFullYear());
     const [showSingleModal, setShowSingleModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
-    const [bulkMonth, setBulkMonth] = useState(currentDate.getMonth() + 1);
-    const [bulkYear, setBulkYear] = useState(currentDate.getFullYear());
+    const [bulkMonth, setBulkMonth] = useState(defaultPayrollDate.getMonth() + 1);
+    const [bulkYear, setBulkYear] = useState(defaultPayrollDate.getFullYear());
     const [bulkResult, setBulkResult] = useState<{ generated: number; skipped: number; failed: number; errors: string[] } | null>(null);
-    const [genForm, setGenForm] = useState({ employeeId: '', month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
+    const [genForm, setGenForm] = useState({ employeeId: '', month: defaultPayrollDate.getMonth() + 1, year: defaultPayrollDate.getFullYear() });
 
     const { data, isLoading } = useGetPayrollsQuery({ month, year });
     const { data: empData } = useGetEmployeesQuery({ limit: 200 });
@@ -100,7 +108,7 @@ export default function HrmsPayrollPage() {
                         Payroll
                     </h1>
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                        Generate, approve, and track salary payouts
+                        Generate, approve, and track salary payouts. Payroll month is the salary month being paid.
                     </p>
                 </div>
 
@@ -173,7 +181,7 @@ export default function HrmsPayrollPage() {
                     <table className="w-full">
                         <thead>
                             <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                {['Employee', 'Working Days', 'Hours', 'Gross', 'Deductions', 'Net Salary', 'Status', 'Actions'].map((h) => (
+                                {['Employee', 'Payable Days', 'Hours', 'Gross', 'Deductions', 'Net Salary', 'Paid From', 'Status', 'Actions'].map((h) => (
                                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{h}</th>
                                 ))}
                             </tr>
@@ -188,7 +196,10 @@ export default function HrmsPayrollPage() {
                                             {typeof p.employeeId === 'object' ? ((p.employeeId as any)?.userId?.name || '—') : '—'}
                                         </td>
                                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {p.presentDays}/{p.workingDays}
+                                            {p.payableDays}/30
+                                            <span className="ml-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                ({p.presentDays}/{p.workingDays} attendance)
+                                            </span>
                                         </td>
                                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                             {p.totalHoursWorked}h
@@ -202,6 +213,9 @@ export default function HrmsPayrollPage() {
                                         </td>
                                         <td className="px-4 py-3 text-sm font-bold" style={{ color: 'var(--color-success)' }}>
                                             ₹{p.netSalary.toLocaleString()}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {PAYOUT_ACCOUNT_LABELS[p.payoutAccountKey] || 'HDFC (GST)'}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: ss.bg, color: ss.color }}>
@@ -355,7 +369,7 @@ export default function HrmsPayrollPage() {
                                     className="rounded-xl p-3 text-xs"
                                     style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary-darker)' }}
                                 >
-                                    Payroll will be generated for all <strong>active</strong> and <strong>probation</strong> employees who have a salary structure set up. Already-generated records for this period will be skipped.
+                                    Payroll will be generated for all <strong>active</strong> employees who have a salary structure set up. Leaves do not reduce salary, and mid-month joins/effective dates are prorated on a 30-day payroll basis.
                                 </div>
 
                                 <div className="flex gap-3">
