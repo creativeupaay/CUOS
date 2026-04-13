@@ -197,15 +197,66 @@ export default function FinanceDashboardPage() {
         };
     };
 
+    const filterParams = useMemo(() => getFilterParams(), [
+        filterType,
+        selectedFiscalYear,
+        selectedMonth,
+        selectedQuarter,
+        dateRange.from,
+        dateRange.to,
+    ]);
+
     // Fetch dashboard data from API
-    const { data: dashboardData, isLoading } = useGetFinanceDashboardQuery(getFilterParams());
+    const {
+        data: dashboardData,
+        currentData: currentDashboardData,
+        isLoading,
+        isFetching,
+    } = useGetFinanceDashboardQuery(filterParams, { refetchOnMountOrArgChange: true });
     // Keep cash metric aligned with Cash in Bank page summary source.
-    const { data: cashSummaryData } = useGetBankTransactionsQuery({ page: 1, limit: 1 });
+    const {
+        data: cashSummaryData,
+        currentData: currentCashSummaryData,
+        isFetching: isCashSummaryFetching,
+    } = useGetBankTransactionsQuery({ page: 1, limit: 1 }, { refetchOnMountOrArgChange: true });
     const { data: revenuesData } = useGetRevenuesQuery({ page: 1, limit: 500 });
     const { data: projectsData } = useGetProjectsQuery({});
-    const cashInBank = cashSummaryData?.data?.summary?.totalCashInBank ?? dashboardData?.data?.metrics?.cashInBank ?? 0;
 
-    const metrics = dashboardData?.data?.metrics || {
+    // Do not render cached values while a fresh request for the current filters is in flight.
+    const [hasFreshDashboardResponse, setHasFreshDashboardResponse] = useState(false);
+    const [hasFreshCashSummaryResponse, setHasFreshCashSummaryResponse] = useState(false);
+
+    useEffect(() => {
+        setHasFreshDashboardResponse(false);
+    }, [filterParams.startDate, filterParams.endDate]);
+
+    useEffect(() => {
+        if (!isFetching && (currentDashboardData || dashboardData)) {
+            setHasFreshDashboardResponse(true);
+        }
+    }, [isFetching, currentDashboardData, dashboardData]);
+
+    useEffect(() => {
+        setHasFreshCashSummaryResponse(false);
+    }, [filterParams.startDate, filterParams.endDate]);
+
+    useEffect(() => {
+        if (!isCashSummaryFetching && (currentCashSummaryData || cashSummaryData)) {
+            setHasFreshCashSummaryResponse(true);
+        }
+    }, [isCashSummaryFetching, currentCashSummaryData, cashSummaryData]);
+
+    const visibleDashboardData = hasFreshDashboardResponse
+        ? (currentDashboardData ?? dashboardData)
+        : undefined;
+    const visibleCashSummaryData = hasFreshCashSummaryResponse
+        ? (currentCashSummaryData ?? cashSummaryData)
+        : undefined;
+    const cashInBank = visibleCashSummaryData?.data?.summary?.totalCashInBank
+        ?? visibleDashboardData?.data?.metrics?.cashInBank
+        ?? 0;
+
+    const metrics = visibleDashboardData?.data?.metrics || {
         totalRevenue: 0,
         totalExpense: 0,
         ebidta: 0,
@@ -214,8 +265,8 @@ export default function FinanceDashboardPage() {
         receivables: 0,
     };
 
-    const monthlyData = dashboardData?.data?.monthlyData || [];
-    const breakdownData = dashboardData?.data?.breakdownData || [];
+    const monthlyData = visibleDashboardData?.data?.monthlyData || [];
+    const breakdownData = visibleDashboardData?.data?.breakdownData || [];
 
     const projectPhaseReceivables = useMemo(() => {
         const projects = projectsData?.data || [];
@@ -543,7 +594,9 @@ export default function FinanceDashboardPage() {
         }
     };
 
-    if (isLoading) {
+    const isDashboardPending = isLoading || !hasFreshDashboardResponse;
+
+    if (isDashboardPending) {
         return (
             <div className="flex items-center justify-center py-24">
                 <div className="text-center">

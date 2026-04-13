@@ -32,7 +32,8 @@ class PayrollService {
         employeeId: string,
         month: number,
         year: number,
-        generatedBy: string
+        generatedBy: string,
+        payDate?: string | Date
     ): Promise<IPayroll> {
         // Check if payroll already exists
         const existing = await Payroll.findOne({ employeeId, month, year });
@@ -108,10 +109,13 @@ class PayrollService {
         const netSalary = grossSalary + incentiveAmount - totalDeductions;
 
         // ── Create payroll record ───────────────────────────────────
+        const resolvedPayDate = payDate ? new Date(payDate) : new Date(year, month, 1);
+
         const payroll = await Payroll.create({
             employeeId,
             month,
             year,
+            payDate: resolvedPayDate,
             workingDays,
             presentDays,
             totalHoursWorked: Math.round(totalHoursWorked * 100) / 100,
@@ -143,7 +147,8 @@ class PayrollService {
     async generateBulkPayroll(
         month: number,
         year: number,
-        generatedBy: string
+        generatedBy: string,
+        payDate?: string | Date
     ): Promise<{ generated: number; skipped: number; failed: number; errors: string[] }> {
         // Fetch all active employees
         const employees = await Employee.find({ status: { $in: ['active', 'probation'] } });
@@ -163,7 +168,7 @@ class PayrollService {
                 const salary = await SalaryStructure.findOne({ employeeId: emp._id });
                 if (!salary) { skipped++; continue; }
 
-                await this.generatePayroll(emp._id.toString(), month, year, generatedBy);
+                await this.generatePayroll(emp._id.toString(), month, year, generatedBy, payDate);
                 generated++;
             } catch (err: any) {
                 failed++;

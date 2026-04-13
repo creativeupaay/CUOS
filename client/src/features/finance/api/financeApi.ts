@@ -174,6 +174,20 @@ export interface BankAccountDetail {
     updatedAt: string;
 }
 
+export interface OtherBankAccountRequest {
+    accountName: string;
+    bankName: string;
+    accountNumber: string;
+    ifscCode?: string;
+    swiftCode?: string;
+    accountType: 'current' | 'savings' | 'cash';
+    currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
+    currentBalance?: number;
+    isPrimary?: boolean;
+    isActive?: boolean;
+    notes?: string;
+}
+
 // ── API Slice ─────────────────────────────────────────────────────────────
 export const financeApi = api.injectEndpoints({
     endpoints: (builder) => ({
@@ -421,6 +435,37 @@ export const financeApi = api.injectEndpoints({
             providesTags: ['BankTransactions', 'FinanceDashboard'],
         }),
 
+        getOtherBankAccounts: builder.query<{ data: BankAccountDetail[] }, void>({
+            query: () => '/finance/bank-accounts/other',
+            providesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        createOtherBankAccount: builder.mutation<{ data: BankAccountDetail }, OtherBankAccountRequest>({
+            query: (body) => ({
+                url: '/finance/bank-accounts/other',
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        updateOtherBankAccount: builder.mutation<{ data: BankAccountDetail }, { id: string } & Partial<OtherBankAccountRequest>>({
+            query: ({ id, ...body }) => ({
+                url: `/finance/bank-accounts/other/${id}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
+        deleteOtherBankAccount: builder.mutation<void, string>({
+            query: (id) => ({
+                url: `/finance/bank-accounts/other/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
+        }),
+
         createBankTransaction: builder.mutation<{ data: BankTransaction }, Partial<BankTransaction>>({
             query: (body) => ({
                 url: '/finance/bank-transactions',
@@ -482,6 +527,10 @@ export const {
     useGetProjectExpenseSummaryQuery,
     useGetBankTransactionsQuery,
     useGetBankAccountsQuery,
+    useGetOtherBankAccountsQuery,
+    useCreateOtherBankAccountMutation,
+    useUpdateOtherBankAccountMutation,
+    useDeleteOtherBankAccountMutation,
     useCreateBankTransactionMutation,
     useUpdateBankTransactionMutation,
     useUpdateBankAccountMutation,

@@ -8,7 +8,7 @@ import type {
     CreateEmployeeRequest, UpdateEmployeeRequest, ListEmployeesParams,
     CreateSalaryRequest, UpdateSalaryRequest,
     CreateLeaveRequest, UpdateLeaveStatusRequest,
-    GeneratePayrollRequest, UpdatePayrollRequest, UpdatePayrollStatusRequest,
+    GeneratePayrollRequest, GenerateBulkPayrollRequest, UpdatePayrollRequest, UpdatePayrollStatusRequest,
     CheckInRequest, CheckOutRequest,
     CreateAnnouncementRequest,
 } from './types/apiTypes';
@@ -270,7 +270,7 @@ export const hrmsApi = api.injectEndpoints({
 
         generateBulkPayroll: builder.mutation<
             ApiResponse<{ generated: number; skipped: number; failed: number; errors: string[] }>,
-            { month: number; year: number }
+            GenerateBulkPayrollRequest
         >({
             query: (data) => ({
                 url: '/hrms/payroll/bulk',

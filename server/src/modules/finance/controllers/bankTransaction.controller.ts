@@ -66,6 +66,129 @@ export class BankTransactionController {
         }
     }
 
+    static async getOtherAccounts(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = getAuthenticatedUserId(req);
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Not authenticated' });
+                return;
+            }
+
+            const accounts = await BankTransactionService.getOtherAccountDetails(new Types.ObjectId(userId));
+            res.status(200).json({ success: true, data: accounts });
+        } catch (error: any) {
+            console.error('Error fetching other bank accounts:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to fetch other bank accounts',
+                error: error.message,
+            });
+        }
+    }
+
+    static async createOtherAccount(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = getAuthenticatedUserId(req);
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Not authenticated' });
+                return;
+            }
+
+            const account = await BankTransactionService.createOtherAccount({
+                accountName: req.body.accountName,
+                bankName: req.body.bankName,
+                accountNumber: req.body.accountNumber,
+                ifscCode: req.body.ifscCode,
+                swiftCode: req.body.swiftCode,
+                notes: req.body.notes,
+                accountType: req.body.accountType,
+                currency: req.body.currency,
+                currentBalance: req.body.currentBalance !== undefined ? Number(req.body.currentBalance) : undefined,
+                isPrimary: req.body.isPrimary,
+                isActive: req.body.isActive,
+                createdBy: new Types.ObjectId(userId),
+            });
+
+            res.status(201).json({
+                success: true,
+                message: 'Other bank account created successfully',
+                data: account,
+            });
+        } catch (error: any) {
+            console.error('Error creating other bank account:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to create other bank account',
+                error: error.message,
+            });
+        }
+    }
+
+    static async updateOtherAccount(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = getAuthenticatedUserId(req);
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Not authenticated' });
+                return;
+            }
+
+            const account = await BankTransactionService.updateOtherAccount(req.params.id, {
+                accountName: req.body.accountName,
+                bankName: req.body.bankName,
+                accountNumber: req.body.accountNumber,
+                ifscCode: req.body.ifscCode,
+                swiftCode: req.body.swiftCode,
+                notes: req.body.notes,
+                accountType: req.body.accountType,
+                currency: req.body.currency,
+                currentBalance: req.body.currentBalance !== undefined ? Number(req.body.currentBalance) : undefined,
+                isPrimary: req.body.isPrimary,
+                isActive: req.body.isActive,
+                updatedBy: new Types.ObjectId(userId),
+            });
+
+            if (!account) {
+                res.status(404).json({ success: false, message: 'Bank account not found' });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Other bank account updated successfully',
+                data: account,
+            });
+        } catch (error: any) {
+            console.error('Error updating other bank account:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to update other bank account',
+                error: error.message,
+            });
+        }
+    }
+
+    static async deleteOtherAccount(req: Request, res: Response): Promise<void> {
+        try {
+            const deleted = await BankTransactionService.deleteOtherAccount(req.params.id);
+            if (!deleted) {
+                res.status(404).json({ success: false, message: 'Bank account not found' });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Other bank account deleted successfully',
+            });
+        } catch (error: any) {
+            console.error('Error deleting other bank account:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to delete other bank account',
+                error: error.message,
+            });
+        }
+    }
+
     static async create(req: Request, res: Response): Promise<void> {
         try {
             const userId = getAuthenticatedUserId(req);

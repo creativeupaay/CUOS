@@ -59,6 +59,20 @@ const getSignedAmount = (transactionType: BankTransactionType, amount: number) =
     transactionType === 'credit' ? amount : -amount
 );
 
+const sanitizeAccountPayload = (data: Partial<Pick<IBankAccount, 'accountName' | 'bankName' | 'accountNumber' | 'ifscCode' | 'swiftCode' | 'notes' | 'accountType' | 'currency' | 'currentBalance' | 'isPrimary' | 'isActive'>>) => ({
+    accountName: data.accountName?.trim(),
+    bankName: data.bankName?.trim(),
+    accountNumber: data.accountNumber?.trim(),
+    ifscCode: data.ifscCode?.trim() || undefined,
+    swiftCode: data.swiftCode?.trim() || undefined,
+    notes: data.notes?.trim() || undefined,
+    accountType: data.accountType,
+    currency: data.currency,
+    currentBalance: data.currentBalance,
+    isPrimary: data.isPrimary,
+    isActive: data.isActive,
+});
+
 export class BankTransactionService {
     static async ensureManagedAccounts(createdBy: Types.ObjectId): Promise<Record<BankAccountKey, IBankAccount>> {
         const accounts = {} as Record<BankAccountKey, IBankAccount>;
@@ -156,6 +170,69 @@ export class BankTransactionService {
 
         await account.save();
         return account;
+    }
+
+    static async getOtherAccountDetails(userId: Types.ObjectId): Promise<IBankAccount[]> {
+        await this.ensureManagedAccounts(userId);
+
+        return BankAccount.find({
+            $or: [{ accountKey: { $exists: false } }, { accountKey: null }],
+        })
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .exec();
+    }
+
+    static async createOtherAccount(
+        data: Partial<Pick<IBankAccount, 'accountName' | 'bankName' | 'accountNumber' | 'ifscCode' | 'swiftCode' | 'notes' | 'accountType' | 'currency' | 'currentBalance' | 'isPrimary' | 'isActive'>> & { createdBy: Types.ObjectId }
+    ): Promise<IBankAccount> {
+        const account = await BankAccount.create({
+            ...sanitizeAccountPayload(data),
+            accountName: data.accountName?.trim(),
+            bankName: data.bankName?.trim(),
+            accountNumber: data.accountNumber?.trim(),
+            accountType: data.accountType || 'current',
+            currency: data.currency || 'USD',
+            currentBalance: data.currentBalance ?? 0,
+            isPrimary: data.isPrimary ?? false,
+            isActive: data.isActive ?? true,
+            createdBy: data.createdBy,
+        });
+
+        return account;
+    }
+
+    static async updateOtherAccount(
+        id: string,
+        data: Partial<Pick<IBankAccount, 'accountName' | 'bankName' | 'accountNumber' | 'ifscCode' | 'swiftCode' | 'notes' | 'accountType' | 'currency' | 'currentBalance' | 'isPrimary' | 'isActive'>> & { updatedBy: Types.ObjectId }
+    ): Promise<IBankAccount | null> {
+        const account = await BankAccount.findOne({ _id: id, $or: [{ accountKey: { $exists: false } }, { accountKey: null }] });
+
+        if (!account) {
+            return null;
+        }
+
+        const payload = sanitizeAccountPayload(data);
+
+        if (payload.accountName !== undefined) account.accountName = payload.accountName;
+        if (payload.bankName !== undefined) account.bankName = payload.bankName;
+        if (payload.accountNumber !== undefined) account.accountNumber = payload.accountNumber;
+        if (payload.ifscCode !== undefined) account.ifscCode = payload.ifscCode;
+        if (payload.swiftCode !== undefined) account.swiftCode = payload.swiftCode;
+        if (payload.notes !== undefined) account.notes = payload.notes;
+        if (payload.accountType !== undefined) account.accountType = payload.accountType;
+        if (payload.currency !== undefined) account.currency = payload.currency;
+        if (payload.currentBalance !== undefined) account.currentBalance = payload.currentBalance;
+        if (payload.isPrimary !== undefined) account.isPrimary = payload.isPrimary;
+        if (payload.isActive !== undefined) account.isActive = payload.isActive;
+
+        account.updatedBy = data.updatedBy;
+        await account.save();
+        return account;
+    }
+
+    static async deleteOtherAccount(id: string): Promise<boolean> {
+        const deleted = await BankAccount.deleteOne({ _id: id, $or: [{ accountKey: { $exists: false } }, { accountKey: null }] });
+        return deleted.deletedCount > 0;
     }
 
     static async create(data: CreateBankTransactionData): Promise<IBankTransaction> {

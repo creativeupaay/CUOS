@@ -5,6 +5,7 @@ import {
     Building2,
     Check,
     CreditCard,
+    ChevronDown,
     IndianRupee,
     Landmark,
     Loader2,
@@ -48,17 +49,22 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 0,
 }).format(value);
 
+const buildPayDate = (month: number, year: number) => new Date(Date.UTC(year, month, 1)).toISOString().split('T')[0];
+
 export default function FinanceSalariesPayrollPage() {
     const currentDate = new Date();
     const defaultPayrollDate = new Date(currentDate);
     defaultPayrollDate.setMonth(defaultPayrollDate.getMonth() - 1);
+    const defaultPayrollMonth = defaultPayrollDate.getMonth() + 1;
+    const defaultPayrollYear = defaultPayrollDate.getFullYear();
 
-    const [month, setMonth] = useState(defaultPayrollDate.getMonth() + 1);
-    const [year, setYear] = useState(defaultPayrollDate.getFullYear());
+    const [month, setMonth] = useState(defaultPayrollMonth);
+    const [year, setYear] = useState(defaultPayrollYear);
     const [showSalaryModal, setShowSalaryModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [showGenerateAllModal, setShowGenerateAllModal] = useState(false);
     const [showPayrollEditModal, setShowPayrollEditModal] = useState(false);
+    const [showSalaryStructures, setShowSalaryStructures] = useState(false);
     const [editingSalary, setEditingSalary] = useState<any | null>(null);
     const [editingPayroll, setEditingPayroll] = useState<any | null>(null);
     const [salaryForm, setSalaryForm] = useState({
@@ -70,12 +76,14 @@ export default function FinanceSalariesPayrollPage() {
     });
     const [genForm, setGenForm] = useState({
         employeeId: '',
-        month: defaultPayrollDate.getMonth() + 1,
-        year: defaultPayrollDate.getFullYear(),
+        month: defaultPayrollMonth,
+        year: defaultPayrollYear,
+        payDate: buildPayDate(defaultPayrollMonth, defaultPayrollYear),
     });
     const [bulkForm, setBulkForm] = useState({
-        month: defaultPayrollDate.getMonth() + 1,
-        year: defaultPayrollDate.getFullYear(),
+        month: defaultPayrollMonth,
+        year: defaultPayrollYear,
+        payDate: buildPayDate(defaultPayrollMonth, defaultPayrollYear),
     });
     const [payrollEditForm, setPayrollEditForm] = useState({
         incentiveAmount: 0,
@@ -222,7 +230,17 @@ export default function FinanceSalariesPayrollPage() {
 
                 <div className="flex flex-wrap gap-2">
                     <button
-                        onClick={() => setShowGenerateModal(true)}
+                        onClick={() => {
+                            const nextGenMonth = defaultPayrollMonth;
+                            const nextGenYear = defaultPayrollYear;
+                            setGenForm({
+                                employeeId: '',
+                                month: nextGenMonth,
+                                year: nextGenYear,
+                                payDate: buildPayDate(nextGenMonth, nextGenYear),
+                            });
+                            setShowGenerateModal(true);
+                        }}
                         className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
                         style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
                     >
@@ -231,7 +249,7 @@ export default function FinanceSalariesPayrollPage() {
                     </button>
                     <button
                         onClick={() => {
-                            setBulkForm({ month, year });
+                            setBulkForm({ month, year, payDate: buildPayDate(month, year) });
                             setShowGenerateAllModal(true);
                         }}
                         disabled={isGeneratingBulk}
@@ -271,71 +289,7 @@ export default function FinanceSalariesPayrollPage() {
                 })}
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.1fr,1.4fr]">
-                <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
-                    <div className="border-b px-5 py-4" style={{ borderColor: 'var(--color-border-default)' }}>
-                        <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structures</h2>
-                        <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            Only `Basic`, `Special Allowance`, and payout account are used now.
-                        </p>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                    {['Employee', 'Basic', 'Special', 'Gross', 'Paid From', 'Effective', ''].map((header) => (
-                                        <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-                                            {header}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {isLoadingSalaries ? (
-                                    <tr>
-                                        <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                            <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
-                                            Loading salary structures...
-                                        </td>
-                                    </tr>
-                                ) : salaries.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                            No salary structures found.
-                                        </td>
-                                    </tr>
-                                ) : salaries.map((salary) => (
-                                    <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                                        <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                            {typeof salary.employeeId === 'object' ? (salary.employeeId as any)?.userId?.name || 'Employee' : 'Employee'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
-                                        <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
-                                        <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                            {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === salary.payoutAccountKey)?.label || 'HDFC (GST)'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <button
-                                                onClick={() => openEditSalaryModal(salary)}
-                                                className="rounded-lg px-3 py-1.5 text-xs font-semibold border"
-                                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
-                                            >
-                                                Edit
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
+            <div className="space-y-6">
                 <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
                     <div className="border-b px-5 py-4" style={{ borderColor: 'var(--color-border-default)' }}>
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -371,7 +325,7 @@ export default function FinanceSalariesPayrollPage() {
                         <table className="w-full">
                             <thead>
                                 <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                    {['Employee', 'Payable', 'Gross', 'Bonus', 'Net', 'Paid From', 'Status', ''].map((header) => (
+                                    {['Employee', 'Payable', 'Gross', 'Bonus', 'Net', 'Paid From', 'Pay Date', 'Status', ''].map((header) => (
                                         <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
                                             {header}
                                         </th>
@@ -381,14 +335,14 @@ export default function FinanceSalariesPayrollPage() {
                             <tbody>
                                 {isLoadingPayrolls ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                        <td colSpan={9} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                             <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
                                             Loading payroll...
                                         </td>
                                     </tr>
                                 ) : payrolls.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                        <td colSpan={9} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                             No payroll entries for {MONTHS[month - 1]} {year}.
                                         </td>
                                     </tr>
@@ -407,6 +361,9 @@ export default function FinanceSalariesPayrollPage() {
                                             <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(payroll.netSalary)}</td>
                                             <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                                 {PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === payroll.payoutAccountKey)?.label || 'HDFC (GST)'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {payroll.payDate ? new Date(payroll.payDate).toLocaleDateString('en-IN') : '—'}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: statusMeta.bg, color: statusMeta.color }}>
@@ -452,6 +409,91 @@ export default function FinanceSalariesPayrollPage() {
                             </tbody>
                         </table>
                     </div>
+                </section>
+
+                <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
+                    <button
+                        type="button"
+                        onClick={() => setShowSalaryStructures((current) => !current)}
+                        className="flex w-full items-center justify-between gap-4 border-b px-5 py-4 text-left"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structures</h2>
+                                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: '#EFF6FF', color: '#2563EB' }}>
+                                    {salaries.length}
+                                </span>
+                            </div>
+                            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Folded by default so the payroll ledger stays in focus.
+                            </p>
+                        </div>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                            <ChevronDown size={16} className={`transition-transform ${showSalaryStructures ? 'rotate-180' : ''}`} />
+                        </span>
+                    </button>
+                    {showSalaryStructures ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
+                                        {['Employee', 'Basic', 'Special', 'Gross', 'Paid From', 'Effective', ''].map((header) => (
+                                            <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                                                {header}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {isLoadingSalaries ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
+                                                Loading salary structures...
+                                            </td>
+                                        </tr>
+                                    ) : salaries.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                No salary structures found.
+                                            </td>
+                                        </tr>
+                                    ) : salaries.map((salary) => (
+                                        <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                            <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                {typeof salary.employeeId === 'object' ? (salary.employeeId as any)?.userId?.name || 'Employee' : 'Employee'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
+                                            <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
+                                            <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === salary.payoutAccountKey)?.label || 'HDFC (GST)'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    onClick={() => openEditSalaryModal(salary)}
+                                                    className="rounded-lg px-3 py-1.5 text-xs font-semibold border"
+                                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                                >
+                                                    Edit
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="px-5 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            Salary structures are hidden. Expand this section when you need to review or edit them.
+                        </div>
+                    )}
                 </section>
             </div>
 
@@ -582,12 +624,15 @@ export default function FinanceSalariesPayrollPage() {
                                     ))}
                                 </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div>
                                     <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Month</label>
                                     <select
                                         value={genForm.month}
-                                        onChange={(event) => setGenForm((current) => ({ ...current, month: Number(event.target.value) }))}
+                                        onChange={(event) => setGenForm((current) => {
+                                            const nextMonth = Number(event.target.value);
+                                            return { ...current, month: nextMonth, payDate: buildPayDate(nextMonth, current.year) };
+                                        })}
                                         className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                     >
@@ -598,7 +643,10 @@ export default function FinanceSalariesPayrollPage() {
                                     <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Year</label>
                                     <select
                                         value={genForm.year}
-                                        onChange={(event) => setGenForm((current) => ({ ...current, year: Number(event.target.value) }))}
+                                        onChange={(event) => setGenForm((current) => {
+                                            const nextYear = Number(event.target.value);
+                                            return { ...current, year: nextYear, payDate: buildPayDate(current.month, nextYear) };
+                                        })}
                                         className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                     >
@@ -607,9 +655,19 @@ export default function FinanceSalariesPayrollPage() {
                                         ))}
                                     </select>
                                 </div>
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pay Date</label>
+                                    <input
+                                        type="date"
+                                        value={genForm.payDate}
+                                        onChange={(event) => setGenForm((current) => ({ ...current, payDate: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                    />
+                                </div>
                             </div>
                             <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                This creates payroll for the selected salary month. On 1 April 2026, generate March 2026 payroll.
+                                This creates payroll for the selected salary month and schedules a pay date for the payout.
                             </div>
                             <button
                                 type="submit"
@@ -635,12 +693,15 @@ export default function FinanceSalariesPayrollPage() {
                             </button>
                         </div>
                         <form onSubmit={handleGenerateAll} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div>
                                     <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Month</label>
                                     <select
                                         value={bulkForm.month}
-                                        onChange={(event) => setBulkForm((current) => ({ ...current, month: Number(event.target.value) }))}
+                                        onChange={(event) => setBulkForm((current) => {
+                                            const nextMonth = Number(event.target.value);
+                                            return { ...current, month: nextMonth, payDate: buildPayDate(nextMonth, current.year) };
+                                        })}
                                         className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                     >
@@ -651,7 +712,10 @@ export default function FinanceSalariesPayrollPage() {
                                     <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Year</label>
                                     <select
                                         value={bulkForm.year}
-                                        onChange={(event) => setBulkForm((current) => ({ ...current, year: Number(event.target.value) }))}
+                                        onChange={(event) => setBulkForm((current) => {
+                                            const nextYear = Number(event.target.value);
+                                            return { ...current, year: nextYear, payDate: buildPayDate(current.month, nextYear) };
+                                        })}
                                         className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                     >
@@ -659,6 +723,16 @@ export default function FinanceSalariesPayrollPage() {
                                             <option key={optionYear} value={optionYear}>{optionYear}</option>
                                         ))}
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pay Date</label>
+                                    <input
+                                        type="date"
+                                        value={bulkForm.payDate}
+                                        onChange={(event) => setBulkForm((current) => ({ ...current, payDate: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                    />
                                 </div>
                             </div>
                             <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>

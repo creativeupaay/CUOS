@@ -15,6 +15,7 @@ export interface IPayroll extends Document {
     employeeId: Types.ObjectId;
     month: number;
     year: number;
+    payDate?: Date;
     workingDays: number;
     presentDays: number;
     totalHoursWorked: number;
@@ -55,6 +56,7 @@ const PayrollSchema = new Schema<IPayroll>(
         },
         month: { type: Number, required: true, min: 1, max: 12 },
         year: { type: Number, required: true },
+        payDate: Date,
         workingDays: { type: Number, required: true, min: 0 },
         presentDays: { type: Number, required: true, min: 0 },
         totalHoursWorked: { type: Number, default: 0, min: 0 },

@@ -149,6 +149,7 @@ export interface Payroll {
     employeeId: Employee | string;
     month: number;
     year: number;
+    payDate?: string;
     workingDays: number;
     presentDays: number;
     totalHoursWorked: number;

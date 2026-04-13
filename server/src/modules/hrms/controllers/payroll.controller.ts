@@ -6,8 +6,8 @@ import asyncHandler from '../../../utils/asyncHandler';
 // ── Generate Payroll ────────────────────────────────────────────────
 export const generatePayroll = asyncHandler(async (req: Request, res: Response) => {
     const generatedBy = (req.user as any).id;
-    const { employeeId, month, year } = req.body;
-    const payroll = await payrollService.generatePayroll(employeeId, month, year, generatedBy);
+    const { employeeId, month, year, payDate } = req.body;
+    const payroll = await payrollService.generatePayroll(employeeId, month, year, generatedBy, payDate);
 
     res.status(201).json({
         status: 'success',
@@ -18,8 +18,8 @@ export const generatePayroll = asyncHandler(async (req: Request, res: Response) 
 // ── Bulk Generate Payroll ────────────────────────────────────────────
 export const generateBulkPayroll = asyncHandler(async (req: Request, res: Response) => {
     const generatedBy = (req.user as any).id;
-    const { month, year } = req.body;
-    const result = await payrollService.generateBulkPayroll(month, year, generatedBy);
+    const { month, year, payDate } = req.body;
+    const result = await payrollService.generateBulkPayroll(month, year, generatedBy, payDate);
 
     res.status(201).json({
         status: 'success',

@@ -100,6 +100,13 @@ export interface GeneratePayrollRequest {
     employeeId: string;
     month: number;
     year: number;
+    payDate?: string;
+}
+
+export interface GenerateBulkPayrollRequest {
+    month: number;
+    year: number;
+    payDate?: string;
 }
 
 export interface UpdatePayrollStatusRequest {

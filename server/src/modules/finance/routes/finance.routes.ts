@@ -50,6 +50,10 @@ router.get('/project-expenses', ExpenseController.getProjectExpenseSummary);
 // ── Cash In Bank / Bank Transactions ─────────────────────────────────────
 router.get('/bank-accounts', BankTransactionController.getManagedAccounts);
 router.put('/bank-accounts/:accountKey', BankTransactionController.updateManagedAccount);
+router.get('/bank-accounts/other', BankTransactionController.getOtherAccounts);
+router.post('/bank-accounts/other', BankTransactionController.createOtherAccount);
+router.put('/bank-accounts/other/:id', BankTransactionController.updateOtherAccount);
+router.delete('/bank-accounts/other/:id', BankTransactionController.deleteOtherAccount);
 router.post('/bank-transactions', BankTransactionController.create);
 router.get('/bank-transactions', BankTransactionController.getAll);
 router.get('/bank-transactions/:id', BankTransactionController.getById);
