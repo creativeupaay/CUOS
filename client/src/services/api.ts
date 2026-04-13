@@ -77,6 +77,13 @@ export const api = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Documents', 'Notes', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Salary', 'Leaves', 'Payroll', 'Holidays', 'Announcements', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Jobs', 'Applications', 'Assignments', 'AssignmentSubmissions', 'Interviews', 'Partners', 'PartnerEmployees', 'Notifications', 'Revenues', 'Expenses', 'FixedExpenses', 'FinanceDashboard', 'BankTransactions'],
   endpoints: () => ({}),
+  // Keep cached data for 5 minutes after the last component unmounts.
+  // This means navigating back to a page within 5 min uses cached data instantly.
+  keepUnusedDataFor: 300,
+  // Do NOT refetch when the user alt-tabs back to the window — reduces unnecessary traffic.
+  refetchOnFocus: false,
+  // DO refetch when the network reconnects — ensures fresh data after connectivity loss.
+  refetchOnReconnect: true,
 });
 
 export default api;

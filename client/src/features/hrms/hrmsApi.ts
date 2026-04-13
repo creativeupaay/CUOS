@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import toast from 'react-hot-toast';
 import type {
     Employee, SalaryStructure, Leave, Payroll, LeaveBalance,
     DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance, Announcement
@@ -101,6 +102,25 @@ export const hrmsApi = api.injectEndpoints({
                 url: `/hrms/employees/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting employee...',
+                    success: 'Employee deleted successfully',
+                    error: 'Failed to delete employee',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getEmployees' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.employees) {
+                           draft.data.employees = draft.data.employees.filter((e: any) => e._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Employees'],
         }),
 
@@ -134,6 +154,25 @@ export const hrmsApi = api.injectEndpoints({
                 url: `/hrms/announcements/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting announcement...',
+                    success: 'Announcement deleted successfully',
+                    error: 'Failed to delete announcement',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getAnnouncements' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.announcements) {
+                           draft.data.announcements = draft.data.announcements.filter((a: any) => a._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Announcements'],
         }),
 
@@ -253,6 +292,25 @@ export const hrmsApi = api.injectEndpoints({
                 url: `/hrms/leaves/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting leave...',
+                    success: 'Leave deleted successfully',
+                    error: 'Failed to delete leave',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getLeaves' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.leaves) {
+                           draft.data.leaves = draft.data.leaves.filter((l: any) => l._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Leaves'],
         }),
 
@@ -498,6 +556,25 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
 
         deleteHoliday: builder.mutation<{ status: string }, string>({
             query: (id) => ({ url: `/hrms/holidays/${id}`, method: 'DELETE' }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting holiday...',
+                    success: 'Holiday deleted successfully',
+                    error: 'Failed to delete holiday',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getHolidays' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.holidays) {
+                           draft.data.holidays = draft.data.holidays.filter((h: any) => h._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
         }),
     }),
     overrideExisting: false,

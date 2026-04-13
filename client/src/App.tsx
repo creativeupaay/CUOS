@@ -80,8 +80,25 @@ const FinanceSalariesPayrollPage = lazy(() => import('./pages/FinanceSalariesPay
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center text-sm text-gray-500">
-      Loading...
+    <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 space-y-5 animate-pulse">
+      {/* Page title + action button row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-7 w-48 rounded-lg bg-gray-200" />
+          <div className="mt-2 h-4 w-64 rounded-md bg-gray-100" />
+        </div>
+        <div className="h-9 w-36 rounded-lg bg-gray-200" />
+      </div>
+      {/* Summary cards row */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-28 rounded-xl border border-gray-100 bg-gray-100" />
+        ))}
+      </div>
+      {/* Main content block (table / list / chart) */}
+      <div className="h-64 rounded-xl border border-gray-100 bg-gray-100" />
+      {/* Secondary content block */}
+      <div className="h-40 rounded-xl border border-gray-100 bg-gray-50" />
     </div>
   );
 }

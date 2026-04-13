@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import toast from 'react-hot-toast';
 import type { Lead, Proposal, PipelineSummary } from './types/types';
 import type {
     ApiResponse,
@@ -81,6 +82,25 @@ export const crmApi = api.injectEndpoints({
                 url: `/crm/leads/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting lead...',
+                    success: 'Lead deleted successfully',
+                    error: 'Failed to delete lead',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getLeads' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.leads) {
+                           draft.data.leads = draft.data.leads.filter((l: any) => l._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Leads', 'Pipeline'],
         }),
 
@@ -228,6 +248,25 @@ export const crmApi = api.injectEndpoints({
                 url: `/crm/proposals/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting proposal...',
+                    success: 'Proposal deleted successfully',
+                    error: 'Failed to delete proposal',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getProposals' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.proposals) {
+                           draft.data.proposals = draft.data.proposals.filter((p: any) => p._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Proposals'],
         }),
 

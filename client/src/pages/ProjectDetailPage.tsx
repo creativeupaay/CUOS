@@ -39,7 +39,7 @@ export default function ProjectDetailPage() {
     const { id } = useParams<{ id: string }>();
     const location = useLocation();
     const navigate = useNavigate();
-    const { data, isLoading, error } = useGetProjectByIdQuery(id!);
+    const { data, isLoading, error } = useGetProjectByIdQuery(id!, { refetchOnMountOrArgChange: 30 });
     const project = data?.data;
     const [showEditProjectPanel, setShowEditProjectPanel] = useState(false);
     const [isClosingEditProjectPanel, setIsClosingEditProjectPanel] = useState(false);

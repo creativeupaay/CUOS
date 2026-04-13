@@ -1,6 +1,7 @@
 import express from "express";
 import http from "http";
 import dotenv from "dotenv";
+import compression from "compression";
 
 
 
@@ -76,6 +77,9 @@ const corsOptions: CorsOptions = {
 
 app.use(cors(corsOptions));
 
+// Gzip compress all responses > 1 KB — typically 70-80% size reduction on JSON
+app.use(compression());
+
 app.use(cookieParser());
 // Apply express.json() to all other routes
 app.use(express.json({ limit: '50mb' }));
@@ -98,9 +102,24 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 if (env.NODE_ENV === "production") {
   const buildPath = path.join(__dirname, "..", "..", "client", "dist");
-  app.use(express.static(buildPath));
 
-  app.get("*", (req, res) => {
+  // Serve static assets with long-term caching.
+  // Vite fingerprints all JS/CSS filenames, so they can safely be cached forever.
+  // Only HTML must be no-cache so the browser always fetches the latest index.html.
+  app.use(
+    express.static(buildPath, {
+      maxAge: "1y",
+      etag: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        }
+      },
+    })
+  );
+
+  app.get("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(path.resolve(buildPath, "index.html"));
   });
 }

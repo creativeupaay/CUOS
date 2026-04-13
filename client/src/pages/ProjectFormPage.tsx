@@ -277,7 +277,7 @@ export default function ProjectFormPage({
     const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName.toLowerCase());
     const userPartnerId = typeof user?.partnerId === 'object' ? (user.partnerId as any)?._id : user?.partnerId;
 
-    const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id });
+    const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id, refetchOnMountOrArgChange: 30 });
     const project = projectData?.data;
     const [showPartnerModal, setShowPartnerModal] = useState(false);
     const [showClientModal, setShowClientModal] = useState(false);

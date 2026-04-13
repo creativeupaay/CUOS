@@ -148,7 +148,7 @@ export default function ProjectTasksTab() {
         setEstMins(totalMins % 60);
     };
 
-    const { data: projectData } = useGetProjectByIdQuery(projectId!);
+    const { data: projectData } = useGetProjectByIdQuery(projectId!, { refetchOnMountOrArgChange: 30 });
     const projectMembers = projectData?.data?.assignees || [];
 
     const { data, isLoading } = useGetTasksQuery({ projectId: projectId! });
@@ -685,7 +685,7 @@ function TaskCard({
         : '';
     const isSuperAdmin = hasAdminRole(roleName);
 
-    const { data: projectData } = useGetProjectByIdQuery(projectId);
+    const { data: projectData } = useGetProjectByIdQuery(projectId, { refetchOnMountOrArgChange: 30 });
     const project = projectData?.data;
     const currentUserId = getEntityId((currentUser as any)?._id || (currentUser as any)?.id);
 

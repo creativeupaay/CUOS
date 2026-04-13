@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import toast from 'react-hot-toast';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 export interface Revenue {
@@ -245,6 +246,27 @@ export const financeApi = api.injectEndpoints({
                 url: `/finance/revenues/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting revenue...',
+                    success: 'Revenue deleted successfully',
+                    error: 'Failed to delete revenue',
+                });
+                
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getRevenues' as never, undefined as never, (draft: any) => {
+                       // We do our best to optimistically remove if possible
+                       if (draft?.data?.revenues) {
+                           draft.data.revenues = draft.data.revenues.filter((r: any) => r._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Revenues', 'FinanceDashboard'],
         }),
 
@@ -295,6 +317,26 @@ export const financeApi = api.injectEndpoints({
                 url: `/finance/expenses/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting expense...',
+                    success: 'Expense deleted successfully',
+                    error: 'Failed to delete expense',
+                });
+                
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getExpenses' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.expenses) {
+                           draft.data.expenses = draft.data.expenses.filter((e: any) => e._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Expenses', 'FinanceDashboard'],
         }),
 
@@ -498,6 +540,25 @@ export const financeApi = api.injectEndpoints({
                 url: `/finance/bank-transactions/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting transaction...',
+                    success: 'Transaction deleted successfully',
+                    error: 'Failed to delete transaction',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getBankTransactions' as never, undefined as never, (draft: any) => {
+                       if (draft?.data?.transactions) {
+                           draft.data.transactions = draft.data.transactions.filter((t: any) => t._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
         }),
     }),

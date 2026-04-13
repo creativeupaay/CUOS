@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import toast from 'react-hot-toast';
 import type {
     Project,
     Task,
@@ -72,6 +73,25 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting project...',
+                    success: 'Project deleted successfully',
+                    error: 'Failed to delete project',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getProjects' as never, undefined as never, (draft: any) => {
+                       if (draft?.data) {
+                           draft.data = draft.data.filter((p: any) => p._id !== id);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: ['Projects'],
         }),
 
@@ -178,6 +198,25 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/tasks/${taskId}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted({ projectId, taskId }, { dispatch, queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Deleting task...',
+                    success: 'Task deleted successfully',
+                    error: 'Failed to delete task',
+                });
+                const patchResult = dispatch(
+                    api.util.updateQueryData('getTasks' as never, { projectId } as never, (draft: any) => {
+                       if (draft?.data) {
+                           draft.data = draft.data.filter((t: any) => t._id !== taskId);
+                       }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Tasks', id: projectId }],
         }),
 

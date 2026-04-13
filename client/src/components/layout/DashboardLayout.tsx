@@ -8,6 +8,8 @@ import NotificationBell from '@/features/notification/components/NotificationBel
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
 
+import { Toaster } from 'react-hot-toast';
+
 /**
  * DashboardLayout
  *
@@ -137,6 +139,33 @@ export default function DashboardLayout() {
                     : 'var(--color-bg-app)'
             }}
         >
+
+
+            {/* Global toast notifications for mutations (success / error) */}
+            <Toaster
+                position="bottom-right"
+                gutter={10}
+                toastOptions={{
+                    duration: 3500,
+                    style: {
+                        fontFamily: 'Outfit, system-ui, sans-serif',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+                        maxWidth: '380px',
+                    },
+                    success: {
+                        iconTheme: { primary: '#16A34A', secondary: '#fff' },
+                        style: { background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' },
+                    },
+                    error: {
+                        iconTheme: { primary: '#DC2626', secondary: '#fff' },
+                        style: { background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' },
+                    },
+                }}
+            />
             <div className="hidden lg:block">
                 <Sidebar />
             </div>
