@@ -207,52 +207,39 @@ export default function FinanceDashboardPage() {
     ]);
 
     // Fetch dashboard data from API
+    //
+    // RTK Query provides two data fields:
+    //   - `data`        → last successful response for ANY arg combination (may be stale/different filter)
+    //   - `currentData` → response for the CURRENT args only; undefined until this specific arg-set
+    //                     has received at least one successful response.
+    //
+    // We deliberately use `currentData` to display metrics. This means:
+    //   • On first open (no cache) → currentData is undefined → full-page spinner via isLoading.
+    //   • On filter change → currentData is undefined until the new request completes → we show
+    //     a subtle inline spinner overlay WITHOUT flashing stale data from a different filter.
+    //   • Revisiting the same filter → currentData is immediately available from cache, no spinner.
+    //
+    // This eliminates the old manual state-machine (hasFreshDashboardResponse / 4 useEffects)
+    // that caused the "wrong data flash then swap" bug.
     const {
-        data: dashboardData,
         currentData: currentDashboardData,
         isLoading,
         isFetching,
     } = useGetFinanceDashboardQuery(filterParams, { refetchOnMountOrArgChange: true });
-    // Keep cash metric aligned with Cash in Bank page summary source.
+
+    // Cash summary has FIXED args (no date filter) so `data` is always correct once loaded.
+    // We never need to gate it behind filter changes.
     const {
         data: cashSummaryData,
-        currentData: currentCashSummaryData,
-        isFetching: isCashSummaryFetching,
+        isLoading: isCashSummaryLoading,
     } = useGetBankTransactionsQuery({ page: 1, limit: 1 }, { refetchOnMountOrArgChange: true });
+
     const { data: revenuesData } = useGetRevenuesQuery({ page: 1, limit: 500 });
     const { data: projectsData } = useGetProjectsQuery({});
 
-    // Do not render cached values while a fresh request for the current filters is in flight.
-    const [hasFreshDashboardResponse, setHasFreshDashboardResponse] = useState(false);
-    const [hasFreshCashSummaryResponse, setHasFreshCashSummaryResponse] = useState(false);
-
-    useEffect(() => {
-        setHasFreshDashboardResponse(false);
-    }, [filterParams.startDate, filterParams.endDate]);
-
-    useEffect(() => {
-        if (!isFetching && (currentDashboardData || dashboardData)) {
-            setHasFreshDashboardResponse(true);
-        }
-    }, [isFetching, currentDashboardData, dashboardData]);
-
-    useEffect(() => {
-        setHasFreshCashSummaryResponse(false);
-    }, [filterParams.startDate, filterParams.endDate]);
-
-    useEffect(() => {
-        if (!isCashSummaryFetching && (currentCashSummaryData || cashSummaryData)) {
-            setHasFreshCashSummaryResponse(true);
-        }
-    }, [isCashSummaryFetching, currentCashSummaryData, cashSummaryData]);
-
-    const visibleDashboardData = hasFreshDashboardResponse
-        ? (currentDashboardData ?? dashboardData)
-        : undefined;
-    const visibleCashSummaryData = hasFreshCashSummaryResponse
-        ? (currentCashSummaryData ?? cashSummaryData)
-        : undefined;
-    const cashInBank = visibleCashSummaryData?.data?.summary?.totalCashInBank
+    // Use currentData directly — undefined until a fresh response for the current filter set arrives.
+    const visibleDashboardData = currentDashboardData;
+    const cashInBank = cashSummaryData?.data?.summary?.totalCashInBank
         ?? visibleDashboardData?.data?.metrics?.cashInBank
         ?? 0;
 
@@ -594,9 +581,25 @@ export default function FinanceDashboardPage() {
         }
     };
 
-    const isDashboardPending = isLoading || !hasFreshDashboardResponse;
+    // Only block the entire UI on true first-load (no cache exists at all).
+    // For filter changes, isFetching=true but currentData may still be undefined —
+    // we handle that inline in the render below with a subtle overlay.
+    const isDashboardPending = isLoading || isCashSummaryLoading;
 
     if (isDashboardPending) {
+        return (
+            <div className="flex items-center justify-center py-24">
+                <div className="text-center">
+                    <Loader2 size={36} className="mx-auto mb-3 animate-spin" style={{ color: 'var(--color-primary)' }} />
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Loading financial data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // If filter changed and we're waiting for the first response for the new filter,
+    // show a full-page spinner (same as initial load) so no stale data is ever shown.
+    if (isFetching && !visibleDashboardData) {
         return (
             <div className="flex items-center justify-center py-24">
                 <div className="text-center">
