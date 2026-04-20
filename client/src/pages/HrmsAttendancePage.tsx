@@ -424,7 +424,7 @@ export default function HrmsAttendancePage() {
         <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
 
             {/* ── Header ─────────────────────────────────────────── */}
-            <div className="flex items-center justify-between mb-7">
+            <div className="flex flex-col gap-4 mb-7 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <div className="flex items-center gap-2.5 mb-1">
                         <Clock3 size={21} style={{ color: 'var(--color-primary)' }} />
@@ -437,29 +437,42 @@ export default function HrmsAttendancePage() {
                     </p>
                 </div>
 
-                {/* Tab switcher */}
-                <div
-                    className="flex rounded-xl p-1"
-                    style={{ backgroundColor: 'var(--color-bg-subtle)' }}
-                >
-                    {([
-                        { key: 'grid', label: 'Mark Attendance', icon: LayoutGrid },
-                        { key: 'overview', label: 'Today\'s Overview', icon: Eye },
-                    ] as const).map(({ key, label, icon: Icon }) => (
-                        <button
-                            key={key}
-                            onClick={() => setTab(key)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-all"
-                            style={{
-                                backgroundColor: tab === key ? 'var(--color-bg-surface)' : 'transparent',
-                                color: tab === key ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                boxShadow: tab === key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            }}
-                        >
-                            <Icon size={15} />
-                            {label}
-                        </button>
-                    ))}
+                <div className="flex items-center gap-3 self-start lg:self-auto">
+                    <button
+                        onClick={handleMarkAllPresent}
+                        disabled={tab !== 'grid' || isSaving || gridLoading || grid.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-50"
+                        style={{ backgroundColor: '#16A34A' }}
+                        title="Mark all unmarked employees present for today"
+                    >
+                        {isSaving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                        Mark Today's Present All
+                    </button>
+
+                    {/* Tab switcher */}
+                    <div
+                        className="flex rounded-xl p-1"
+                        style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+                    >
+                        {([
+                            { key: 'grid', label: 'Mark Attendance', icon: LayoutGrid },
+                            { key: 'overview', label: 'Today\'s Overview', icon: Eye },
+                        ] as const).map(({ key, label, icon: Icon }) => (
+                            <button
+                                key={key}
+                                onClick={() => setTab(key)}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-all"
+                                style={{
+                                    backgroundColor: tab === key ? 'var(--color-bg-surface)' : 'transparent',
+                                    color: tab === key ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                    boxShadow: tab === key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                }}
+                            >
+                                <Icon size={15} />
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -509,26 +522,6 @@ export default function HrmsAttendancePage() {
                                         : <><Save size={15} /> Save{pendingEditCount > 0 ? ` (${pendingEditCount})` : ''}</>}
                             </button>
                         </div>
-                    </div>
-
-                    <div
-                        className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-2xl border p-3 shadow-xl"
-                        style={{
-                            borderColor: 'var(--color-border-default)',
-                            backgroundColor: 'var(--color-bg-surface)',
-                            boxShadow: '0 14px 34px rgba(15, 23, 42, 0.18)',
-                        }}
-                    >
-                        <button
-                            onClick={handleMarkAllPresent}
-                            disabled={isSaving || gridLoading || grid.length === 0}
-                            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-xl cursor-pointer disabled:opacity-50"
-                            style={{ backgroundColor: '#16A34A' }}
-                            title="Mark all employees present for today"
-                        >
-                            {isSaving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                            Mark Today's Present All
-                        </button>
                     </div>
 
                     {/* Grid */}
