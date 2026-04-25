@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     Plus,
@@ -837,14 +838,15 @@ export default function HiringJobsPage() {
             )}
 
             {/* ── Copied toast ─────────────────────────── */}
-            {copiedId && (
+            {copiedId && typeof document !== 'undefined' && createPortal(
                 <div
                     className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium text-white z-50 pointer-events-none"
                     style={{ backgroundColor: 'var(--color-primary)' }}
                 >
                     <Link size={14} />
                     Application link copied!
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

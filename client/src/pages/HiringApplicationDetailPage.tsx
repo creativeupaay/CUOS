@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     AlertCircle,
@@ -494,14 +495,22 @@ export default function HiringApplicationDetailPage() {
                             ))}
                             <button
                                 onClick={handleCopyAssignmentLink}
-                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    color: 'var(--color-text-secondary)',
-                                }}
+                                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border transition-colors duration-200"
+                                style={
+                                    assignmentLinkCopied
+                                        ? {
+                                              borderColor: '#166534',
+                                              color: '#166534',
+                                              backgroundColor: '#DCFCE7',
+                                          }
+                                        : {
+                                              borderColor: 'var(--color-border-default)',
+                                              color: 'var(--color-text-secondary)',
+                                          }
+                                }
                             >
-                                Copy Assignment Link
-                                <Link size={11} />
+                                {assignmentLinkCopied ? 'Copied!' : 'Copy Assignment Link'}
+                                {assignmentLinkCopied ? <CheckCircle2 size={11} /> : <Link size={11} />}
                             </button>
                         </div>
 
@@ -1060,16 +1069,24 @@ export default function HiringApplicationDetailPage() {
                             <button
                                 onClick={handleCopyBookingLink}
                                 disabled={!candidateBookingUrl}
-                                className="w-full h-8 rounded-lg text-xs inline-flex items-center justify-center gap-1 border"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                    opacity: candidateBookingUrl ? 1 : 0.6,
-                                }}
+                                className="w-full h-8 rounded-lg text-xs inline-flex items-center justify-center gap-1 border transition-colors duration-200"
+                                style={
+                                    bookingLinkCopied
+                                        ? {
+                                              borderColor: '#166534',
+                                              color: '#166534',
+                                              backgroundColor: '#DCFCE7',
+                                          }
+                                        : {
+                                              borderColor: 'var(--color-border-default)',
+                                              color: 'var(--color-text-secondary)',
+                                              backgroundColor: 'var(--color-bg-surface)',
+                                              opacity: candidateBookingUrl ? 1 : 0.6,
+                                          }
+                                }
                             >
-                                <Link size={12} />
-                                Copy Candidate Booking Link
+                                {bookingLinkCopied ? <CheckCircle2 size={12} /> : <Link size={12} />}
+                                {bookingLinkCopied ? 'Copied Booking Link!' : 'Copy Candidate Booking Link'}
                             </button>
                         </div>
 
@@ -1193,14 +1210,15 @@ export default function HiringApplicationDetailPage() {
                 </div>
             </div>
 
-            {assignmentLinkCopied && (
+            {assignmentLinkCopied && typeof document !== 'undefined' && createPortal(
                 <div
                     className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium text-white z-50 pointer-events-none"
                     style={{ backgroundColor: 'var(--color-primary)' }}
                 >
                     <CheckCircle2 size={14} />
                     Assignment link copied
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
