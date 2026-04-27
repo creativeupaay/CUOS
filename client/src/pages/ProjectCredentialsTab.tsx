@@ -110,6 +110,15 @@ function CopyBtn({ text, id, copied, onCopy, label }: { text: string; id: string
     );
 }
 
+function normalizeCredentialUrl(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
+    if (/^(localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i.test(trimmed)) return `http://${trimmed}`;
+    return `https://${trimmed}`;
+}
+
 const inputCls = 'w-full px-3 rounded text-sm outline-none border transition-colors';
 const inputStyle = {
     height: '38px',
@@ -1007,7 +1016,7 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
                         <div className="flex flex-wrap gap-x-6 gap-y-2 items-center">
                             {creds.url && (
                                 <FieldChip icon={<Link size={12} />} label="URL" value={creds.url}
-                                    copyId={`${credential._id}-url`} copied={copied} onCopy={copy} />
+                                    copyId={`${credential._id}-url`} copied={copied} onCopy={copy} isUrl />
                             )}
                             <FieldChip icon={<User size={12} />} label="Username" value={creds.username ?? ''}
                                 copyId={`${credential._id}-user`} copied={copied} onCopy={copy} />
@@ -1029,7 +1038,7 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
                             )}
                             {creds.url && (
                                 <FieldChip icon={<Link size={12} />} label="URL" value={creds.url}
-                                    copyId={`${credential._id}-url`} copied={copied} onCopy={copy} />
+                                    copyId={`${credential._id}-url`} copied={copied} onCopy={copy} isUrl />
                             )}
                             {creds.username && (
                                 <FieldChip icon={<User size={12} />} label="Username" value={creds.username}
@@ -1070,20 +1079,33 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
 }
 
 // ─── Field Chip sub-component ─────────────────────────────────────────────────
-function FieldChip({ icon, label, value, mono, copyId, copied, onCopy }: {
-    icon: React.ReactNode; label: string; value: string; mono?: boolean;
+function FieldChip({ icon, label, value, mono, copyId, copied, onCopy, isUrl }: {
+    icon: React.ReactNode; label: string; value: string; mono?: boolean; isUrl?: boolean;
     copyId: string; copied: string | null; onCopy: (t: string, id: string) => void;
 }) {
+    const href = isUrl ? normalizeCredentialUrl(value) : '';
     return (
         <div className="flex flex-col gap-0.5 min-w-[120px]">
             <div className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                 {icon} {label}
             </div>
             <div className="flex items-center gap-1.5">
-                <span className={`text-sm select-text break-all ${mono ? 'font-mono' : ''}`}
-                    style={{ color: 'var(--color-text-primary)' }}>
-                    {value}
-                </span>
+                {href ? (
+                    <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`text-sm select-text break-all hover:underline ${mono ? 'font-mono' : ''}`}
+                        style={{ color: 'var(--color-primary)' }}
+                    >
+                        {value}
+                    </a>
+                ) : (
+                    <span className={`text-sm select-text break-all ${mono ? 'font-mono' : ''}`}
+                        style={{ color: 'var(--color-text-primary)' }}>
+                        {value}
+                    </span>
+                )}
                 <CopyBtn text={value} id={copyId} copied={copied} onCopy={onCopy} />
             </div>
         </div>
