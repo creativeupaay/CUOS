@@ -535,9 +535,10 @@ export default function AdminPermissionsPage() {
     const { data } = useGetAdminUsersQuery({ search, limit: 100 });
     const [updateUser] = useUpdateAdminUserMutation();
     const getRoleName = (role: any) => role ? (typeof role === 'object' ? role.name : role) : '—';
+    const isPartnerUser = (user: any) => getRoleName(user?.role).toLowerCase() === 'partner' || !!user?.isPartnerEmployee;
     const users = (data?.data?.users || []).filter((user: any) => {
         const rName = getRoleName(user.role).toLowerCase();
-        return rName !== 'super-admin' && rName !== 'superadmin';
+        return rName !== 'super-admin' && rName !== 'superadmin' && !isPartnerUser(user);
     });
 
     const handleSelect = (user: any) => {
