@@ -3,6 +3,7 @@ import * as projectService from '../services/project.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
 import { User } from '../../auth/models/User.model';
+import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
 
 export const createProject = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -37,12 +38,14 @@ export const getProjects = asyncHandler(
         const projectPermissions: any[] = pmPerms?.projectPermissions ?? [];
         const projectIds: string[] = projectPermissions.map((p: any) => p.projectId);
 
+        const accessMode = hasModuleAdminAccess(req.user, 'projectManagement') ? 'all' : 'assigned';
+
         const projects = await projectService.getProjects(userId, userRole, {
             status: req.query.status as string,
             clientId: req.query.clientId as string,
             priority: req.query.priority as string,
             partnerId: req.query.partnerId as string,
-        }, 'custom', projectIds, req.partnerId, req.isPartnerEmployee);
+        }, accessMode, projectIds, req.partnerId, req.isPartnerEmployee);
 
         res.status(200).json({
             success: true,

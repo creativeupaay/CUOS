@@ -70,6 +70,17 @@ const buildPartnerEmployeeModulePermissions = (modulePermissions?: {
     },
 });
 
+const buildDefaultInternalModulePermissions = () => ({
+    accessControlVersion: 2,
+    projectManagement: { enabled: true, adminAccess: false, projectPermissions: [] },
+    finance: { enabled: false, adminAccess: false, subModules: { dashboard: false, revenue: false, cashInBank: false, expenses: false, salariesPayrolls: false, invoices: false, reports: false } },
+    crm: { enabled: false, adminAccess: false, subModules: { pipeline: false, leads: false, proposals: false, clients: false } },
+    hrms: { enabled: true, adminAccess: false, subModules: { dashboard: false, employees: false, attendance: true, leaves: true, holidays: true, payroll: true, announcements: true } },
+    overallAdmin: { enabled: false, adminAccess: false, subModules: { users: false, permissions: false, settings: false, auditLogs: false } },
+    partners: { enabled: false, adminAccess: false },
+    hiring: { enabled: false, adminAccess: false },
+});
+
 /**
  * Register a new user
  */
@@ -103,6 +114,7 @@ export const register = async (data: RegisterData): Promise<IUser> => {
         password: data.password,
         role: role._id,
         department: resolveDepartmentValue(data.department, departmentCatalog) || undefined,
+        modulePermissions: buildDefaultInternalModulePermissions(),
     });
 
     // Populate role

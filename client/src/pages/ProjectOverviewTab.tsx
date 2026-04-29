@@ -201,7 +201,7 @@ export default function ProjectOverviewTab() {
     return (
         <div className="space-y-5">
             {/* Project Progress */}
-            <ProjectProgress project={project} isSuperAdmin={isSuperAdmin} />
+            <ProjectProgress project={project} isSuperAdmin={isSuperAdmin} canViewPaymentDetails={isAdminUser} />
 
             {/* Project Info - Admin */}
             {isAdminUser && (
@@ -687,11 +687,12 @@ function InfoItem({ label, value, capitalize }: { label: string; value: string; 
     );
 }
 
-function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperAdmin?: boolean }) {
+function ProjectProgress({ project, isSuperAdmin, canViewPaymentDetails }: { project: Project, isSuperAdmin?: boolean, canViewPaymentDetails?: boolean }) {
     const phases = project.phases || [];
     const totalPhases = phases.length;
     const completedPhases = phases.filter(p => p.status === 'completed').length;
     const progressPercentage = totalPhases === 0 ? 0 : Math.round((completedPhases / totalPhases) * 100);
+    const showPaymentDetails = Boolean(canViewPaymentDetails);
 
     const [showPhasePanel, setShowPhasePanel] = useState(false);
     const [localPhases, setLocalPhases] = useState<any[]>([]);
@@ -959,7 +960,7 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{phase.name}</p>
-                                        {hasPayment && (
+                                        {showPaymentDetails && hasPayment && (
                                             <DollarSign size={12} style={{ color: isPaymentReceived ? 'var(--color-success)' : 'var(--color-warning)' }} />
                                         )}
                                     </div>
@@ -972,7 +973,7 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
                                             </>
                                         )}
                                     </div>
-                                    {hasPayment && (
+                                    {showPaymentDetails && hasPayment && (
                                         <div className="mt-1.5 flex items-center gap-2">
                                             <span
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
@@ -1359,7 +1360,7 @@ function ProjectProgress({ project, isSuperAdmin }: { project: Project, isSuperA
             )}
 
             {/* Phase Payment Dialog */}
-            {paymentDialogPhase && (
+            {showPaymentDetails && paymentDialogPhase && (
                 <PhasePaymentDialog
                     phase={paymentDialogPhase}
                     projectCurrency={project.currency}

@@ -68,8 +68,8 @@ export interface UpdateProjectData {
 const defaultProjectPerm = (projectId: string) => ({
     projectId,
     subModules: {
-        overview: false, tasks: false, timeLogs: false,
-        meetings: false, credentials: false, documents: false, notes: false,
+        overview: true, tasks: true, timeLogs: true,
+        meetings: true, credentials: true, documents: true, notes: true,
     },
 });
 

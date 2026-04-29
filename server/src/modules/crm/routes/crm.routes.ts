@@ -26,6 +26,9 @@ import {
 import * as clientController from '../../client/controllers/client.controller';
 import { listClientsSchema, getClientSchema } from '../../client/validators/client.validator';
 import { requirePartnerEmployeeModuleAccess } from '../../partners/middlewares/partnerEmployeeModuleAccess.middleware';
+import AppError from '../../../utils/appError';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
+import { NextFunction, Request, Response } from 'express';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,6 +36,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 // All CRM routes require authentication
 router.use(authenticate);
 router.use(requirePartnerEmployeeModuleAccess('crm'));
+router.use((req: Request, _res: Response, next: NextFunction) => {
+    if (hasModuleViewAccess(req.user, 'crm')) return next();
+    return next(new AppError('You do not have permission to access CRM', 403));
+});
+
+const crmAdminOnly = (req: Request, _res: Response, next: NextFunction) => {
+    if (hasModuleAdminAccess(req.user, 'crm')) return next();
+    return next(new AppError('CRM admin access is required', 403));
+};
 
 // CRM access: super-admin, admin, manager, employee (with dept=crm)
 const crmRoles = ['super-admin', 'admin', 'manager', 'employee', 'partner'];
@@ -53,6 +65,7 @@ router.get(
 router.post(
     '/leads',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(createLeadSchema),
     leadController.createLead
 );
@@ -75,6 +88,7 @@ router.get(
 router.patch(
     '/leads/:id',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     validateRequest(updateLeadSchema),
     checkLeadAccess,
@@ -84,6 +98,7 @@ router.patch(
 router.delete(
     '/leads/:id',
     authorize(crmManagers),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     leadController.deleteLead
 );
@@ -91,6 +106,7 @@ router.delete(
 router.post(
     '/leads/:id/activities',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     validateRequest(addActivitySchema),
     checkLeadAccess,
@@ -100,6 +116,7 @@ router.post(
 router.post(
     '/leads/:id/meetings',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     validateRequest(addMeetingSchema),
     checkLeadAccess,
@@ -109,6 +126,7 @@ router.post(
 router.post(
     '/leads/:id/documents/upload',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     checkLeadAccess,
     upload.any(),
@@ -118,6 +136,7 @@ router.post(
 router.post(
     '/leads/:id/close',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getLeadSchema),
     checkLeadAccess,
     leadController.closeLead
@@ -129,6 +148,7 @@ router.post(
 router.post(
     '/proposals',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(createProposalSchema),
     proposalController.createProposal
 );
@@ -151,6 +171,7 @@ router.get(
 router.patch(
     '/proposals/:id',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getProposalSchema),
     validateRequest(updateProposalSchema),
     checkProposalAccess,
@@ -160,6 +181,7 @@ router.patch(
 router.delete(
     '/proposals/:id',
     authorize(crmManagers),
+    crmAdminOnly,
     validateRequest(getProposalSchema),
     proposalController.deleteProposal
 );
@@ -167,6 +189,7 @@ router.delete(
 router.patch(
     '/proposals/:id/status',
     authorize(crmRoles),
+    crmAdminOnly,
     validateRequest(getProposalSchema),
     validateRequest(updateStatusSchema),
     checkProposalAccess,

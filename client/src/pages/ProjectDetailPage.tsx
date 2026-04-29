@@ -19,6 +19,7 @@ import {
     X,
 } from 'lucide-react';
 import ProjectFormPage from './ProjectFormPage';
+import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'var(--color-success-soft)', text: 'var(--color-success)' },
@@ -50,9 +51,8 @@ export default function ProjectDetailPage() {
             ? (currentUser.role as any).name?.toLowerCase()
             : String(currentUser.role).toLowerCase()
         : '';
-    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
-    const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
     const isPartner = roleName === 'partner';
+    const canManageProjectModule = hasModuleAdminAccess(currentUser, 'projectManagement') || isPartner;
 
     useEffect(() => {
         if (!showEditProjectPanel) {
@@ -123,7 +123,16 @@ export default function ProjectDetailPage() {
     const pmPerms = currentUser?.modulePermissions?.projectManagement;
     // Find THIS project's specific permission entry
     const projectEntry = pmPerms?.projectPermissions?.find(p => p.projectId === id);
-    const pmSubs = projectEntry?.subModules;
+    const currentUserId = currentUser?._id;
+    const currentAssignee = project.assignees?.find((assignee: any) => {
+        const assigneeUserId = typeof assignee.userId === 'object' ? assignee.userId?._id : assignee.userId;
+        const employeeUserId = typeof assignee.employeeId === 'object'
+            ? (typeof assignee.employeeId?.userId === 'object' ? assignee.employeeId?.userId?._id : assignee.employeeId?.userId)
+            : undefined;
+
+        return assigneeUserId === currentUserId || employeeUserId === currentUserId;
+    });
+    const pmSubs = projectEntry?.subModules || currentAssignee?.subModules;
 
     const allTabs = [
         { name: 'Overview', path: `/projects/${id}`, icon: <LayoutDashboard size={15} />, exact: true, permKey: 'overview' },
@@ -134,18 +143,18 @@ export default function ProjectDetailPage() {
         { name: 'Documents', path: `/projects/${id}/documents`, icon: <FileText size={15} />, exact: false, permKey: 'documents' },
         { name: 'Notes', path: `/projects/${id}/notes`, icon: <StickyNote size={15} />, exact: false, permKey: 'notes' },
     ];
-    const tabs = isSuperAdmin || isPartner
+    const tabs = canManageProjectModule
         ? allTabs
         : allTabs.filter(t => pmSubs ? (pmSubs as Record<string, boolean>)[t.permKey] === true : false);
 
     // Redirect to first allowed tab if no overview access
     const isOnBasePath = location.pathname === `/projects/${id}`;
-    if (!isSuperAdmin && !isPartner && isOnBasePath && pmSubs && !pmSubs.overview && tabs.length > 0) {
+    if (!canManageProjectModule && isOnBasePath && pmSubs && !pmSubs.overview && tabs.length > 0) {
         return <Navigate to={tabs[0].path} replace />;
     }
 
     // No tabs at all or project not assigned = access denied
-    if (!isSuperAdmin && !isPartner && tabs.length === 0) {
+    if (!canManageProjectModule && tabs.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#FEF2F2' }}>
@@ -156,6 +165,13 @@ export default function ProjectDetailPage() {
                 <button onClick={() => navigate('/dashboard')} className="mt-4 px-4 py-2 text-sm rounded-lg text-white" style={{ backgroundColor: 'var(--color-primary)' }}>Back to Dashboard</button>
             </div>
         );
+    }
+
+    const currentTabAllowed = tabs.some((tab) =>
+        tab.exact ? location.pathname === tab.path : location.pathname.startsWith(tab.path)
+    );
+    if (!canManageProjectModule && !currentTabAllowed && tabs.length > 0) {
+        return <Navigate to={tabs[0].path} replace />;
     }
 
     return (
@@ -177,7 +193,7 @@ export default function ProjectDetailPage() {
                             {project.description}
                         </p>
                     )}
-                    {isAdmin && projectPartnerId && projectPartnerName && (
+                    {canManageProjectModule && !isPartner && projectPartnerId && projectPartnerName && (
                         <Link
                             to={`/admin/partners/manage/${projectPartnerId}`}
                             className="inline-flex items-center gap-2 mt-2 text-sm hover:underline"
@@ -202,7 +218,7 @@ export default function ProjectDetailPage() {
                     >
                         {project.priority}
                     </span>
-                    {isSuperAdmin && location.pathname === `/projects/${id}` && (
+                    {canManageProjectModule && location.pathname === `/projects/${id}` && (
                         <button
                             type="button"
                             onClick={() => setShowEditProjectPanel(true)}

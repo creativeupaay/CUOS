@@ -29,12 +29,19 @@ import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { filterPartnerData } from '../../partners/middlewares/filterPartnerData.middleware';
 import { isPartnerOrAdmin } from '../../partners/middlewares/isPartner.middleware';
 import { requirePartnerEmployeeModuleAccess } from '../../partners/middlewares/partnerEmployeeModuleAccess.middleware';
+import AppError from '../../../utils/appError';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
+import { NextFunction, Request, Response } from 'express';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
 router.use(requirePartnerEmployeeModuleAccess('projectManagement'));
+router.use((req: Request, _res: Response, next: NextFunction) => {
+    if (hasModuleViewAccess(req.user, 'projectManagement')) return next();
+    return next(new AppError('You do not have permission to access project management', 403));
+});
 router.use(filterPartnerData);
 
 // Configure multer for file uploads (memory storage)
@@ -74,7 +81,10 @@ router.delete(
 router.post(
     '/',
     validateRequest(projectValidators.createProjectSchemaWithAllocationCheck),
-    isPartnerOrAdmin,
+    (req: Request, res: Response, next: NextFunction) => {
+        if (hasModuleAdminAccess(req.user, 'projectManagement')) return next();
+        return isPartnerOrAdmin(req, res, next);
+    },
     projectController.createProject
 );
 

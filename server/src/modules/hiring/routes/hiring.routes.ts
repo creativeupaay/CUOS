@@ -7,7 +7,6 @@ import * as interviewController from '../controllers/interview.controller';
 import * as reportController from '../controllers/report.controller';
 import * as jobTemplateController from '../controllers/jobTemplate.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
-import { authorize } from '../../auth/middlewares/authorize.middleware';
 import {
     authorizeHiringView,
     authorizeHiringManage,
@@ -162,11 +161,6 @@ router.get(
 // ============================================
 router.use(authenticate);
 
-// Roles allowed to view jobs
-const viewRoles = ['super-admin', 'admin', 'hr', 'hr-admin', 'hr-manager', 'manager'];
-// Roles allowed to create/update/delete jobs
-const manageRoles = ['super-admin', 'admin', 'hr', 'hr-admin', 'hr-manager'];
-
 // ── Job Manager status check (must be before other hiring routes)
 router.get(
     '/job-manager-status',
@@ -176,7 +170,7 @@ router.get(
 // ── Employees list for manager picker
 router.get(
     '/employees-list',
-    authorize(manageRoles),
+    authorizeHiringManage,
     jobController.getEmployeesList
 );
 

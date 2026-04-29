@@ -96,6 +96,15 @@ export interface ProjectAssignee {
     displayDesignation?: string;
     protectedFromRemoval?: boolean;
     isSystemManaged?: boolean;
+    subModules?: {
+        overview?: boolean;
+        tasks?: boolean;
+        timeLogs?: boolean;
+        meetings?: boolean;
+        credentials?: boolean;
+        documents?: boolean;
+        notes?: boolean;
+    };
     role: 'admin' | 'manager' | 'developer' | 'designer' | 'qa' | 'viewer' | 'member';
     assignedAt: string;
     assignedBy: string | User;

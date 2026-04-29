@@ -3,6 +3,7 @@ import { Role } from '../../auth/models/Role.model';
 import AppError from '../../../utils/appError';
 import { AuditLog } from '../models/AuditLog.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { Job } from '../../hiring/models/Job.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerService } from '../../partners/services/partner.service';
 import {
@@ -36,6 +37,101 @@ export interface UpdateUserData {
     isActive?: boolean;
     modulePermissions?: Record<string, any>;
 }
+
+const createDefaultModulePermissions = () => ({
+    accessControlVersion: 2,
+    projectManagement: { enabled: true, adminAccess: false, projectPermissions: [] },
+    finance: {
+        enabled: false,
+        adminAccess: false,
+        subModules: {
+            dashboard: false,
+            revenue: false,
+            cashInBank: false,
+            expenses: false,
+            salariesPayrolls: false,
+            invoices: false,
+            reports: false,
+        },
+    },
+    crm: {
+        enabled: false,
+        adminAccess: false,
+        subModules: { pipeline: false, leads: false, proposals: false, clients: false },
+    },
+    hrms: {
+        enabled: true,
+        adminAccess: false,
+        subModules: { dashboard: false, employees: false, attendance: true, leaves: true, holidays: true, payroll: true, announcements: true },
+    },
+    overallAdmin: {
+        enabled: false,
+        adminAccess: false,
+        subModules: { users: false, permissions: false, settings: false, auditLogs: false },
+    },
+    partners: { enabled: false, adminAccess: false },
+    hiring: { enabled: false, adminAccess: false },
+});
+
+const normalizeModulePermissionsForSave = (modulePermissions: Record<string, any>) => {
+    const defaults = createDefaultModulePermissions();
+    const merged: any = {
+        ...defaults,
+        ...modulePermissions,
+        accessControlVersion: 2,
+    };
+
+    Object.keys(defaults).forEach((key) => {
+        if (key === 'accessControlVersion') return;
+        const current = modulePermissions?.[key] || {};
+        merged[key] = {
+            ...(defaults as any)[key],
+            ...current,
+            adminAccess: current.adminAccess === true,
+        };
+        if ((defaults as any)[key].subModules) {
+            merged[key].subModules = {
+                ...(defaults as any)[key].subModules,
+                ...(current.subModules || {}),
+            };
+        }
+        if (merged[key].adminAccess) {
+            merged[key].enabled = true;
+        }
+    });
+
+    return merged;
+};
+
+const attachDerivedAccess = async (users: any[]) => {
+    const plainUsers = users.map((user) => user?.toObject ? user.toObject() : user);
+    const userIds = plainUsers.map((user) => user._id?.toString()).filter(Boolean);
+
+    if (userIds.length === 0) return plainUsers;
+
+    const employees = await Employee.find({ userId: { $in: userIds } }).select('_id userId').lean();
+    const employeeIdToUserId = new Map<string, string>();
+    employees.forEach((employee: any) => {
+        employeeIdToUserId.set(employee._id.toString(), employee.userId.toString());
+    });
+
+    const managedEmployeeIds = await Job.distinct('managers', {
+        managers: { $in: employees.map((employee: any) => employee._id) },
+    });
+    const hiringManagerUserIds = new Set<string>();
+    managedEmployeeIds.forEach((employeeId: any) => {
+        const userId = employeeIdToUserId.get(employeeId.toString());
+        if (userId) hiringManagerUserIds.add(userId);
+    });
+
+    return plainUsers.map((user) => ({
+        ...user,
+        derivedAccess: {
+            ...(user.derivedAccess || {}),
+            hiringJobManager: hiringManagerUserIds.has(user._id?.toString()),
+        },
+    }));
+};
 
 /**
  * Get all users with filters and pagination
@@ -75,9 +171,10 @@ export const getAllUsers = async (filters: UserFilters) => {
             .limit(limit),
         User.countDocuments(query),
     ]);
+    const usersWithDerivedAccess = await attachDerivedAccess(users);
 
     return {
-        users,
+        users: usersWithDerivedAccess,
         pagination: {
             page,
             limit,
@@ -102,7 +199,8 @@ export const getUserById = async (id: string) => {
         throw new AppError('User not found', 404);
     }
 
-    return user;
+    const [userWithDerivedAccess] = await attachDerivedAccess([user]);
+    return userWithDerivedAccess;
 };
 
 /**
@@ -126,6 +224,7 @@ export const createUser = async (data: CreateUserData, adminId: string) => {
         password: data.password,
         role: role._id,
         department: resolveDepartmentValue(data.department, departmentCatalog) || undefined,
+        modulePermissions: createDefaultModulePermissions(),
     });
 
     await user.populate('role', 'name level');
@@ -176,6 +275,9 @@ export const updateUser = async (id: string, data: UpdateUserData, adminId: stri
     }
     if (shouldToggleActive) {
         delete updatePayload.isActive;
+    }
+    if (updatePayload.modulePermissions) {
+        updatePayload.modulePermissions = normalizeModulePermissionsForSave(updatePayload.modulePermissions);
     }
 
     if (Object.keys(updatePayload).length > 0) {

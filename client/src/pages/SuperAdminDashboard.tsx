@@ -13,6 +13,7 @@ import NotificationBell from '@/features/notification/components/NotificationBel
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
+import { hasModuleViewAccess } from '@/utils/modulePermissions';
 
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -146,7 +147,6 @@ export default function SuperAdminDashboard() {
             ? (user.role as any).name?.toLowerCase()
             : String(user.role).toLowerCase()
         : '';
-    const isAdminUser = ['super-admin', 'admin', 'super_admin'].includes(roleName);
     const isPartner = roleName === 'partner';
     const displayRole = user?.role
         ? typeof user.role === 'object'
@@ -281,13 +281,8 @@ export default function SuperAdminDashboard() {
 
     const nonAdminDepartments = allDepartments
         .filter(d => {
-            if (d.key === 'partners') return false;
-            const perm = mp?.[d.key as keyof typeof mp] as any;
-            if (d.key === 'hiring' && isJobManager) return true;
-            if (!perm?.enabled) return false;
-            if (d.key === 'projectManagement') {
-                return Array.isArray(perm.projectPermissions) && perm.projectPermissions.length > 0;
-            }
+            if (!['projectManagement', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring'].includes(d.key)) return false;
+            if (!hasModuleViewAccess(user, d.key as any, { isJobManager })) return false;
             return true;
         })
         .map(d => ({
@@ -297,14 +292,7 @@ export default function SuperAdminDashboard() {
             accentTo: MODULE_ACCENTS[d.key].to,
         }));
 
-    const departments: Department[] = isAdminUser
-        ? allDepartments.map(d => ({
-            ...d,
-            isActive: true,
-            accentFrom: MODULE_ACCENTS[d.key].from,
-            accentTo: MODULE_ACCENTS[d.key].to,
-        }))
-        : isPartner
+    const departments: Department[] = isPartner
             ? partnerDepartments
             : nonAdminDepartments;
 

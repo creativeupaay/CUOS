@@ -6,6 +6,7 @@ import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2,
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import ProjectFormPage from './ProjectFormPage';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -122,12 +123,10 @@ export default function ProjectsPage() {
     };
 
     const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
-    const isAdmin = ['super-admin', 'admin', 'super_admin'].includes((roleName as string).toLowerCase());
     const isPartner = (roleName as string).toLowerCase() === 'partner';
-    const isSuperAdmin = ['super-admin', 'super_admin'].includes((roleName as string).toLowerCase());
-    const mp = user?.modulePermissions?.projectManagement;
-    const hasProjectAccess = isAdmin || isPartner || (mp?.enabled && Array.isArray(mp?.projectPermissions) && mp.projectPermissions.length > 0);
-    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdmin });
+    const canManageProjects = hasModuleAdminAccess(user, 'projectManagement') || isPartner;
+    const canViewProjects = hasModuleViewAccess(user, 'projectManagement') || isPartner;
+    const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !canManageProjects || isPartner });
     const partners = partnersData?.data?.partners || [];
 
     useEffect(() => {
@@ -180,7 +179,7 @@ export default function ProjectsPage() {
         }
     };
 
-    if (!hasProjectAccess && !isLoading) return <Navigate to="/dashboard" replace />;
+    if (!canViewProjects && !isLoading) return <Navigate to="/dashboard" replace />;
 
     if (isLoading) {
         return (
@@ -246,7 +245,7 @@ export default function ProjectsPage() {
                         ))}
                     </select>
 
-                    {isAdmin && (
+                    {canManageProjects && !isPartner && (
                         <select
                             value={partnerFilter}
                             onChange={(e) => updatePartnerFilter(e.target.value)}
@@ -326,7 +325,7 @@ export default function ProjectsPage() {
                                             </p>
                                         )}
 
-                                        {isAdmin && getProjectPartnerId(project) && (
+                                        {canManageProjects && !isPartner && getProjectPartnerId(project) && (
                                             <p className="text-[11px] mb-2" style={{ color: 'var(--color-text-muted)' }}>
                                                 Created by Partner: {getProjectPartnerName(project)}
                                             </p>
@@ -362,7 +361,7 @@ export default function ProjectsPage() {
                                 </Link>
 
                                 {/* 3-dot menu — super admin only, visible on hover */}
-                                {isSuperAdmin && (
+                                {canManageProjects && (
                                     <div
                                         className="absolute top-1 right-1 z-10"
                                         ref={(el) => { menuRefs.current[project._id] = el; }}
@@ -436,9 +435,9 @@ export default function ProjectsPage() {
                         No projects found
                     </p>
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                        {isAdmin ? 'Create your first project to get started' : 'No projects have been assigned to you yet'}
+                        {canManageProjects ? 'Create your first project to get started' : 'No projects have been assigned to you yet'}
                     </p>
-                    {(isAdmin || isPartner) && (
+                    {canManageProjects && (
                         <button
                             type="button"
                             onClick={openCreateProjectPanel}
@@ -531,7 +530,7 @@ export default function ProjectsPage() {
             document.body
         )}
         {/* ── Floating Action Button (New Project) ────────────────── */}
-        {(isAdmin || isPartner) && typeof document !== 'undefined' && createPortal(
+        {canManageProjects && typeof document !== 'undefined' && createPortal(
             <button
                 type="button"
                 onClick={openCreateProjectPanel}

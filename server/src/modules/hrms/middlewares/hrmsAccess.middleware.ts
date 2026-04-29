@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import AppError from '../../../utils/appError';
 import { Employee } from '../models/Employee.model';
+import { hasHrmsSelfSubmoduleAccess, hasModuleAdminAccess, hasModuleViewAccess, type HrmsSelfSubmodule } from '../../../utils/moduleAccess.util';
 
 /**
  * HRMS access middleware.
@@ -18,7 +19,7 @@ export const checkHrmsAccess = (allowSelf = false) => {
             const { role } = req.user;
 
             // Full access roles
-            if (['super-admin', 'admin', 'hr'].includes(role)) {
+            if (hasModuleAdminAccess(req.user, 'hrms')) {
                 return next();
             }
 
@@ -66,8 +67,7 @@ export const hrAdminOnly = async (req: Request, res: Response, next: NextFunctio
         return next(new AppError('Authentication required', 401));
     }
 
-    const { role } = req.user;
-    if (['super-admin', 'admin', 'hr'].includes(role)) {
+    if (hasModuleAdminAccess(req.user, 'hrms')) {
         return next();
     }
 
@@ -86,5 +86,27 @@ export const internalHrmsOnly = async (req: Request, res: Response, next: NextFu
         return next(new AppError('Partners do not have access to HRMS', 403));
     }
 
+    if (!hasModuleViewAccess(req.user, 'hrms')) {
+        return next(new AppError('You do not have permission to access HRMS', 403));
+    }
+
     return next();
+};
+
+export const hrmsSelfSubmoduleOnly = (submodule: HrmsSelfSubmodule) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return next(new AppError('Authentication required', 401));
+        }
+
+        if (req.user.role === 'partner' || req.user.isPartnerEmployee) {
+            return next(new AppError('Partners do not have access to HRMS', 403));
+        }
+
+        if (!hasHrmsSelfSubmoduleAccess(req.user, submodule)) {
+            return next(new AppError('You do not have permission to access this HRMS section', 403));
+        }
+
+        return next();
+    };
 };

@@ -15,25 +15,47 @@ export interface IProjectPermission {
 }
 
 export interface IModulePermissions {
+    accessControlVersion?: number;
     projectManagement: {
         enabled: boolean;
+        adminAccess?: boolean;
         projectPermissions: IProjectPermission[];
     };
     finance: {
         enabled: boolean;
-        subModules: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean };
+        adminAccess?: boolean;
+        subModules: {
+            dashboard: boolean;
+            expenses: boolean;
+            invoices: boolean;
+            reports: boolean;
+            revenue?: boolean;
+            cashInBank?: boolean;
+            salariesPayrolls?: boolean;
+        };
     };
     crm: {
         enabled: boolean;
+        adminAccess?: boolean;
         subModules: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean };
     };
     hrms: {
         enabled: boolean;
-        subModules: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean };
+        adminAccess?: boolean;
+        subModules: { dashboard?: boolean; employees?: boolean; attendance: boolean; leaves: boolean; holidays?: boolean; payroll: boolean; announcements?: boolean };
     };
     overallAdmin: {
         enabled: boolean;
+        adminAccess?: boolean;
         subModules: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean };
+    };
+    partners?: {
+        enabled: boolean;
+        adminAccess?: boolean;
+    };
+    hiring?: {
+        enabled: boolean;
+        adminAccess?: boolean;
     };
 }
 
@@ -89,8 +111,10 @@ const UserSchema = new Schema<IUser>(
             type: Date,
         },
         modulePermissions: {
+            accessControlVersion: { type: Number },
             projectManagement: {
                 enabled: { type: Boolean, default: true },
+                adminAccess: { type: Boolean, default: false },
                 projectPermissions: [{
                     projectId: { type: String, required: true },
                     subModules: {
@@ -106,15 +130,20 @@ const UserSchema = new Schema<IUser>(
             },
             finance: {
                 enabled: { type: Boolean, default: false },
+                adminAccess: { type: Boolean, default: false },
                 subModules: {
                     dashboard: { type: Boolean, default: false },
                     expenses: { type: Boolean, default: false },
                     invoices: { type: Boolean, default: false },
                     reports: { type: Boolean, default: false },
+                    revenue: { type: Boolean, default: false },
+                    cashInBank: { type: Boolean, default: false },
+                    salariesPayrolls: { type: Boolean, default: false },
                 },
             },
             crm: {
                 enabled: { type: Boolean, default: false },
+                adminAccess: { type: Boolean, default: false },
                 subModules: {
                     pipeline: { type: Boolean, default: false },
                     leads: { type: Boolean, default: false },
@@ -124,22 +153,34 @@ const UserSchema = new Schema<IUser>(
             },
             hrms: {
                 enabled: { type: Boolean, default: true },
+                adminAccess: { type: Boolean, default: false },
                 subModules: {
-                    dashboard: { type: Boolean, default: true },
+                    dashboard: { type: Boolean, default: false },
                     employees: { type: Boolean, default: false },
                     attendance: { type: Boolean, default: true },
                     leaves: { type: Boolean, default: true },
-                    payroll: { type: Boolean, default: false },
+                    holidays: { type: Boolean, default: true },
+                    payroll: { type: Boolean, default: true },
+                    announcements: { type: Boolean, default: true },
                 },
             },
             overallAdmin: {
                 enabled: { type: Boolean, default: false },
+                adminAccess: { type: Boolean, default: false },
                 subModules: {
                     users: { type: Boolean, default: false },
                     permissions: { type: Boolean, default: false },
                     settings: { type: Boolean, default: false },
                     auditLogs: { type: Boolean, default: false },
                 },
+            },
+            partners: {
+                enabled: { type: Boolean, default: false },
+                adminAccess: { type: Boolean, default: false },
+            },
+            hiring: {
+                enabled: { type: Boolean, default: false },
+                adminAccess: { type: Boolean, default: false },
             },
         },
     },

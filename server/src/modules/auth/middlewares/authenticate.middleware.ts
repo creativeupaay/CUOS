@@ -51,6 +51,7 @@ export const authenticate = async (
                 id: (user._id as any).toString(),
                 email: user.email,
                 role: (user.role as any).name,
+                modulePermissions: user.modulePermissions,
                 ...(partnerId ? { partnerId } : {}),
             };
 
@@ -75,6 +76,11 @@ export const authenticate = async (
             role: 'partner',
             isPartnerEmployee: true,
             partnerId: partnerEmployee.partnerId?.toString(),
+            modulePermissions: {
+                projectManagement: { enabled: partnerEmployee.modulePermissions?.projectManagement ?? true },
+                crm: { enabled: partnerEmployee.modulePermissions?.crm ?? false },
+                teamManagement: { enabled: partnerEmployee.modulePermissions?.teamManagement ?? false },
+            },
         };
 
         next();

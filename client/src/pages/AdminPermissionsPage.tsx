@@ -3,37 +3,46 @@ import { ShieldCheck, Search, ChevronDown, ChevronRight, Check, Save, User, Info
 import { useGetAdminUsersQuery, useUpdateAdminUserMutation } from '@/features/overall-admin/api/adminApi';
 import { useGetProjectsQuery } from '@/features/project';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { hasModuleAdminAccess, hasModuleViewAccess, type ModuleKey } from '@/utils/modulePermissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ProjectSubModules {
     overview: boolean; tasks: boolean; timeLogs: boolean;
     meetings: boolean; credentials: boolean; documents: boolean;
+    notes: boolean;
 }
 
 interface ProjectPermission { projectId: string; subModules: ProjectSubModules }
 
 interface ModulePermissions {
-    projectManagement: { enabled: boolean; projectPermissions: ProjectPermission[] };
-    finance: { enabled: boolean; subModules: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean } };
-    crm: { enabled: boolean; subModules: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
-    hrms: { enabled: boolean; subModules: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean } };
-    overallAdmin: { enabled: boolean; subModules: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
+    accessControlVersion?: number;
+    projectManagement: { enabled: boolean; adminAccess: boolean; projectPermissions: ProjectPermission[] };
+    finance: { enabled: boolean; adminAccess: boolean; subModules: { dashboard: boolean; revenue: boolean; cashInBank: boolean; expenses: boolean; salariesPayrolls: boolean; invoices: boolean; reports: boolean } };
+    crm: { enabled: boolean; adminAccess: boolean; subModules: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
+    hrms: { enabled: boolean; adminAccess: boolean; subModules: { dashboard?: boolean; employees?: boolean; attendance: boolean; leaves: boolean; holidays: boolean; payroll: boolean; announcements: boolean } };
+    overallAdmin: { enabled: boolean; adminAccess: boolean; subModules: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
+    partners: { enabled: boolean; adminAccess: boolean };
+    hiring: { enabled: boolean; adminAccess: boolean };
 }
 
 const defaultSubModules = (): ProjectSubModules => ({
-    overview: false, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false,
+    overview: false, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false,
 });
 
 const defaultPermissions = (): ModulePermissions => ({
-    projectManagement: { enabled: false, projectPermissions: [] },
-    finance: { enabled: false, subModules: { dashboard: false, expenses: false, invoices: false, reports: false } },
-    crm: { enabled: false, subModules: { pipeline: false, leads: false, proposals: false, clients: false } },
-    hrms: { enabled: false, subModules: { dashboard: false, employees: false, attendance: false, leaves: false, payroll: false } },
-    overallAdmin: { enabled: false, subModules: { users: false, permissions: false, settings: false, auditLogs: false } },
+    accessControlVersion: 2,
+    projectManagement: { enabled: true, adminAccess: false, projectPermissions: [] },
+    finance: { enabled: false, adminAccess: false, subModules: { dashboard: false, revenue: false, cashInBank: false, expenses: false, salariesPayrolls: false, invoices: false, reports: false } },
+    crm: { enabled: false, adminAccess: false, subModules: { pipeline: false, leads: false, proposals: false, clients: false } },
+    hrms: { enabled: true, adminAccess: false, subModules: { dashboard: false, employees: false, attendance: true, leaves: true, holidays: true, payroll: true, announcements: true } },
+    overallAdmin: { enabled: false, adminAccess: false, subModules: { users: false, permissions: false, settings: false, auditLogs: false } },
+    partners: { enabled: false, adminAccess: false },
+    hiring: { enabled: false, adminAccess: false },
 });
 
-function loadPermissions(mp: any): ModulePermissions {
+function loadPermissions(user: any): ModulePermissions {
+    const mp = user?.modulePermissions;
     if (!mp) return defaultPermissions();
     const pps: ProjectPermission[] = (mp.projectManagement?.projectPermissions ?? []).map((p: any) => ({
         projectId: p.projectId,
@@ -44,14 +53,43 @@ function loadPermissions(mp: any): ModulePermissions {
             meetings: p.subModules?.meetings ?? false,
             credentials: p.subModules?.credentials ?? false,
             documents: p.subModules?.documents ?? false,
+            notes: p.subModules?.notes ?? false,
         },
     }));
+    const withEffectiveAccess = (moduleKey: ModuleKey, fallbackEnabled: boolean) => ({
+        enabled: hasModuleViewAccess(user, moduleKey) || fallbackEnabled,
+        adminAccess: hasModuleAdminAccess(user, moduleKey),
+    });
+    const pmAccess = withEffectiveAccess('projectManagement', mp.projectManagement?.enabled ?? true);
+    const financeAccess = withEffectiveAccess('finance', mp.finance?.enabled ?? false);
+    const crmAccess = withEffectiveAccess('crm', mp.crm?.enabled ?? false);
+    const hrmsAccess = withEffectiveAccess('hrms', mp.hrms?.enabled ?? true);
+    const overallAdminAccess = withEffectiveAccess('overallAdmin', mp.overallAdmin?.enabled ?? false);
+    const partnersAccess = withEffectiveAccess('partners', mp.partners?.enabled ?? false);
+    const hiringAccess = {
+        enabled: mp.hiring?.enabled ?? false,
+        adminAccess: hasModuleAdminAccess(user, 'hiring'),
+    };
     return {
-        projectManagement: { enabled: mp.projectManagement?.enabled ?? false, projectPermissions: pps },
-        finance: { enabled: mp.finance?.enabled ?? false, subModules: { dashboard: mp.finance?.subModules?.dashboard ?? false, expenses: mp.finance?.subModules?.expenses ?? false, invoices: mp.finance?.subModules?.invoices ?? false, reports: mp.finance?.subModules?.reports ?? false } },
-        crm: { enabled: mp.crm?.enabled ?? false, subModules: { pipeline: mp.crm?.subModules?.pipeline ?? false, leads: mp.crm?.subModules?.leads ?? false, proposals: mp.crm?.subModules?.proposals ?? false, clients: mp.crm?.subModules?.clients ?? false } },
-        hrms: { enabled: mp.hrms?.enabled ?? false, subModules: { dashboard: mp.hrms?.subModules?.dashboard ?? false, employees: mp.hrms?.subModules?.employees ?? false, attendance: mp.hrms?.subModules?.attendance ?? false, leaves: mp.hrms?.subModules?.leaves ?? false, payroll: mp.hrms?.subModules?.payroll ?? false } },
-        overallAdmin: { enabled: mp.overallAdmin?.enabled ?? false, subModules: { users: mp.overallAdmin?.subModules?.users ?? false, permissions: mp.overallAdmin?.subModules?.permissions ?? false, settings: mp.overallAdmin?.subModules?.settings ?? false, auditLogs: mp.overallAdmin?.subModules?.auditLogs ?? false } },
+        accessControlVersion: 2,
+        projectManagement: { ...pmAccess, projectPermissions: pps },
+        finance: { ...financeAccess, subModules: { dashboard: mp.finance?.subModules?.dashboard ?? false, revenue: mp.finance?.subModules?.revenue ?? mp.finance?.subModules?.dashboard ?? false, cashInBank: mp.finance?.subModules?.cashInBank ?? false, expenses: mp.finance?.subModules?.expenses ?? false, salariesPayrolls: mp.finance?.subModules?.salariesPayrolls ?? mp.finance?.subModules?.expenses ?? false, invoices: mp.finance?.subModules?.invoices ?? false, reports: mp.finance?.subModules?.reports ?? false } },
+        crm: { ...crmAccess, subModules: { pipeline: mp.crm?.subModules?.pipeline ?? false, leads: mp.crm?.subModules?.leads ?? false, proposals: mp.crm?.subModules?.proposals ?? false, clients: mp.crm?.subModules?.clients ?? false } },
+        hrms: {
+            ...hrmsAccess,
+            subModules: {
+                dashboard: mp.hrms?.subModules?.dashboard ?? false,
+                employees: mp.hrms?.subModules?.employees ?? false,
+                attendance: mp.hrms?.subModules?.attendance ?? true,
+                leaves: mp.hrms?.subModules?.leaves ?? true,
+                holidays: mp.hrms?.subModules?.holidays ?? true,
+                payroll: mp.hrms?.subModules?.payroll ?? true,
+                announcements: mp.hrms?.subModules?.announcements ?? true,
+            },
+        },
+        overallAdmin: { ...overallAdminAccess, subModules: { users: mp.overallAdmin?.subModules?.users ?? false, permissions: mp.overallAdmin?.subModules?.permissions ?? false, settings: mp.overallAdmin?.subModules?.settings ?? false, auditLogs: mp.overallAdmin?.subModules?.auditLogs ?? false } },
+        partners: partnersAccess,
+        hiring: hiringAccess,
     };
 }
 
@@ -70,20 +108,45 @@ function CB({ checked, onChange, label, disabled }: { checked: boolean; onChange
     );
 }
 
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={() => !disabled && onChange(!checked)}
+            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50"
+            style={{ backgroundColor: checked ? 'var(--color-primary)' : 'var(--color-border-default)' }}
+        >
+            <span
+                className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
+                style={{ transform: checked ? 'translateX(22px)' : 'translateX(2px)' }}
+            />
+        </button>
+    );
+}
+
 // ─── Module Section ───────────────────────────────────────────────────────────
 
-function ModuleSection({ title, desc, enabled, onToggle, children }: {
-    title: string; desc: string; enabled: boolean; onToggle: (v: boolean) => void; children?: React.ReactNode;
+function ModuleSection({ title, desc, viewAccess, adminAccess, onViewToggle, onAdminToggle, viewDisabled, viewNote, children }: {
+    title: string; desc: string; viewAccess: boolean; adminAccess: boolean; onViewToggle: (v: boolean) => void; onAdminToggle: (v: boolean) => void; viewDisabled?: boolean; viewNote?: string; children?: React.ReactNode;
 }) {
     const [open, setOpen] = useState(true);
     const cardSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' };
+    const enabled = viewAccess || adminAccess;
     return (
         <div className="rounded-[1rem] shadow-premium overflow-hidden border-0" style={cardSty}>
             <div className="flex items-center gap-4 px-5 py-4" style={{ backgroundColor: enabled ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)' }}>
-                <CB checked={enabled} onChange={onToggle} label="" />
                 <div className="flex-1">
                     <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{title}</div>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{desc}</div>
+                    {viewNote && <div className="text-[11px] mt-1" style={{ color: 'var(--color-primary)' }}>{viewNote}</div>}
+                </div>
+                <div className="flex items-center gap-5 shrink-0">
+                    <CB checked={viewAccess} onChange={onViewToggle} label="View Access" disabled={viewDisabled || adminAccess} />
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Admin Access</span>
+                        <Toggle checked={adminAccess} onChange={onAdminToggle} />
+                    </div>
                 </div>
                 {enabled && children && (
                     <button type="button" onClick={() => setOpen(o => !o)} className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: 'var(--color-text-muted)' }}>
@@ -207,6 +270,7 @@ const PM_SUB_TAB_LABELS = [
     { key: 'meetings', label: 'Meetings', desc: 'Schedule meetings' },
     { key: 'credentials', label: 'Credentials', desc: 'Project credentials' },
     { key: 'documents', label: 'Documents', desc: 'Project files' },
+    { key: 'notes', label: 'Notes', desc: 'Project notes' },
 ];
 
 function ProjectPermRow({ pp, projectName, onUpdateSubs, onRemove }: {
@@ -227,7 +291,7 @@ function ProjectPermRow({ pp, projectName, onUpdateSubs, onRemove }: {
                 <span className="text-sm font-medium flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{projectName}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full mr-1"
                     style={{ backgroundColor: enabledCount > 0 ? 'var(--color-primary-soft)' : 'var(--color-bg-subtle)', color: enabledCount > 0 ? 'var(--color-primary-dark)' : 'var(--color-text-muted)' }}>
-                    {enabledCount}/6 tabs
+                    {enabledCount}/7 tabs
                 </span>
                 <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }}
                     className="p-1 rounded hover:bg-red-50 flex-shrink-0" title="Remove project">
@@ -245,7 +309,7 @@ function ProjectPermRow({ pp, projectName, onUpdateSubs, onRemove }: {
                             onClick={() => {
                                 const allTrue = Object.values(pp.subModules).every(Boolean);
                                 const val = !allTrue;
-                                onUpdateSubs({ overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val });
+                                onUpdateSubs({ overview: val, tasks: val, timeLogs: val, meetings: val, credentials: val, documents: val, notes: val });
                             }}
                             className="text-xs font-medium" style={{ color: 'var(--color-primary)' }}>
                             {Object.values(pp.subModules).every(Boolean) ? 'Deselect All' : 'Select All'}
@@ -295,6 +359,12 @@ function PMPanel({ perms, onChange }: { perms: ModulePermissions; onChange: (p: 
 
     return (
         <div>
+            {perms.projectManagement.adminAccess && (
+                <div className="mb-3 rounded-lg border px-3 py-2 text-sm"
+                    style={{ borderColor: 'var(--color-primary)', backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary-dark)' }}>
+                    Admin access grants all projects and all project tabs. Assigned project access below is preserved for when admin access is turned off.
+                </div>
+            )}
             <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                     {pps.length === 0 ? 'No projects added yet.' : `${pps.length} project${pps.length !== 1 ? 's' : ''} with access`}
@@ -332,12 +402,22 @@ function PMPanel({ perms, onChange }: { perms: ModulePermissions; onChange: (p: 
 
 // ─── Full Permissions Panel ────────────────────────────────────────────────────
 
-function PermissionsPanel({ perms, onChange }: { perms: ModulePermissions; onChange: (p: ModulePermissions) => void }) {
+function PermissionsPanel({ perms, onChange, hiringViewDerived }: { perms: ModulePermissions; onChange: (p: ModulePermissions) => void; hiringViewDerived?: boolean }) {
     const setSub = (mod: 'finance' | 'crm' | 'hrms' | 'overallAdmin', field: string, val: boolean) =>
         onChange({ ...perms, [mod]: { ...perms[mod], subModules: { ...(perms[mod] as any).subModules, [field]: val } } });
 
-    const setEnabled = (mod: keyof ModulePermissions, val: boolean) =>
-        onChange({ ...perms, [mod]: { ...(perms[mod] as any), enabled: val } });
+    const setView = (mod: ModuleKey, val: boolean) => {
+        const current = { ...(perms as any)[mod] };
+        if (val && current.subModules && !Object.values(current.subModules).some(Boolean)) {
+            if (mod === 'finance') current.subModules = { ...current.subModules, dashboard: true };
+            if (mod === 'crm') current.subModules = { ...current.subModules, pipeline: true };
+            if (mod === 'hrms') current.subModules = { ...current.subModules, attendance: true, leaves: true, holidays: true, payroll: true, announcements: true };
+        }
+        onChange({ ...perms, [mod]: { ...current, enabled: val, adminAccess: val ? current.adminAccess : false } });
+    };
+
+    const setAdmin = (mod: ModuleKey, val: boolean) =>
+        onChange({ ...perms, [mod]: { ...(perms as any)[mod], enabled: val ? true : (perms as any)[mod].enabled, adminAccess: val } });
 
     const finSubs = perms.finance.subModules as Record<string, boolean>;
     const crmSubs = perms.crm.subModules as Record<string, boolean>;
@@ -347,27 +427,36 @@ function PermissionsPanel({ perms, onChange }: { perms: ModulePermissions; onCha
     return (
         <div className="space-y-3">
             {/* Project Management */}
-            <ModuleSection title="Project Management" desc="Assign specific projects and control which tabs are visible"
-                enabled={perms.projectManagement.enabled}
-                onToggle={v => onChange({ ...perms, projectManagement: { ...perms.projectManagement, enabled: v } })}>
+            <ModuleSection title="Project Management" desc="Assigned projects for view access; all projects for admin access"
+                viewAccess={perms.projectManagement.enabled}
+                adminAccess={perms.projectManagement.adminAccess}
+                onViewToggle={v => setView('projectManagement', v)}
+                onAdminToggle={v => setAdmin('projectManagement', v)}>
                 <PMPanel perms={perms} onChange={onChange} />
             </ModuleSection>
 
             {/* Finance */}
-            <ModuleSection title="Finance" desc="Financial dashboards, expenses, invoices and reports"
-                enabled={perms.finance.enabled} onToggle={v => setEnabled('finance', v)}>
+            <ModuleSection title="Finance" desc="Financial dashboards, revenue, expenses and cash tracking"
+                viewAccess={perms.finance.enabled}
+                adminAccess={perms.finance.adminAccess}
+                onViewToggle={v => setView('finance', v)}
+                onAdminToggle={v => setAdmin('finance', v)}>
                 <SubGrid values={finSubs} onChange={(k, v) => setSub('finance', k, v)}
                     items={[
                         { key: 'dashboard', label: 'Dashboard', desc: 'Finance overview' },
+                        { key: 'cashInBank', label: 'Cash In Bank', desc: 'Bank balances' },
+                        { key: 'revenue', label: 'Revenue', desc: 'Revenue records' },
                         { key: 'expenses', label: 'Expenses', desc: 'View & record expenses' },
-                        { key: 'invoices', label: 'Invoices', desc: 'Manage invoices' },
-                        { key: 'reports', label: 'Reports', desc: 'Financial reports' },
+                        { key: 'salariesPayrolls', label: 'Salaries & Payrolls', desc: 'Payroll finance' },
                     ]} />
             </ModuleSection>
 
             {/* CRM */}
             <ModuleSection title="CRM" desc="Customer relationship management"
-                enabled={perms.crm.enabled} onToggle={v => setEnabled('crm', v)}>
+                viewAccess={perms.crm.enabled}
+                adminAccess={perms.crm.adminAccess}
+                onViewToggle={v => setView('crm', v)}
+                onAdminToggle={v => setAdmin('crm', v)}>
                 <SubGrid values={crmSubs} onChange={(k, v) => setSub('crm', k, v)}
                     items={[
                         { key: 'pipeline', label: 'Pipeline', desc: 'Sales pipeline' },
@@ -378,22 +467,28 @@ function PermissionsPanel({ perms, onChange }: { perms: ModulePermissions; onCha
             </ModuleSection>
 
             {/* HRMS */}
-            <ModuleSection title="HRMS" desc="HR management — employees, attendance, leaves and payroll"
-                enabled={perms.hrms.enabled} onToggle={v => setEnabled('hrms', v)}>
+            <ModuleSection title="HRMS" desc="Employee self-service for view access; HR admin pages for admin access"
+                viewAccess={perms.hrms.enabled}
+                adminAccess={perms.hrms.adminAccess}
+                onViewToggle={v => setView('hrms', v)}
+                onAdminToggle={v => setAdmin('hrms', v)}>
                 <SubGrid values={hrmsSubs} onChange={(k, v) => setSub('hrms', k, v)}
-                    note="Tip: give employees Attendance + Leaves for basic self-service access."
+                    note="View access controls the employee self-service tabs. Admin access unlocks the HRMS admin sidebar."
                     items={[
-                        { key: 'dashboard', label: 'Dashboard', desc: 'HR overview' },
-                        { key: 'employees', label: 'Employees', desc: 'Manage records' },
-                        { key: 'attendance', label: 'Attendance', desc: 'Mark attendance' },
+                        { key: 'attendance', label: 'Attendance', desc: 'View attendance and check in/out' },
                         { key: 'leaves', label: 'Leaves', desc: 'Apply for leaves' },
-                        { key: 'payroll', label: 'Payroll', desc: 'View payroll' },
+                        { key: 'holidays', label: 'Holidays', desc: 'View company holidays' },
+                        { key: 'payroll', label: 'Payroll', desc: 'View own payroll' },
+                        { key: 'announcements', label: 'Announcements', desc: 'View company announcements' },
                     ]} />
             </ModuleSection>
 
             {/* Overall Admin */}
             <ModuleSection title="Overall Admin" desc="Admin controls — users, permissions, settings and logs"
-                enabled={perms.overallAdmin.enabled} onToggle={v => setEnabled('overallAdmin', v)}>
+                viewAccess={perms.overallAdmin.enabled}
+                adminAccess={perms.overallAdmin.adminAccess}
+                onViewToggle={v => setView('overallAdmin', v)}
+                onAdminToggle={v => setAdmin('overallAdmin', v)}>
                 <SubGrid values={adminSubs} onChange={(k, v) => setSub('overallAdmin', k, v)}
                     items={[
                         { key: 'users', label: 'Users', desc: 'Manage accounts' },
@@ -401,6 +496,28 @@ function PermissionsPanel({ perms, onChange }: { perms: ModulePermissions; onCha
                         { key: 'settings', label: 'Settings', desc: 'Org settings' },
                         { key: 'auditLogs', label: 'Audit Logs', desc: 'Audit trail' },
                     ]} />
+            </ModuleSection>
+
+            <ModuleSection title="Partners" desc="Partner dashboard and partner management"
+                viewAccess={perms.partners.enabled}
+                adminAccess={perms.partners.adminAccess}
+                onViewToggle={v => setView('partners', v)}
+                onAdminToggle={v => setAdmin('partners', v)}>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    View access opens partner dashboards. Admin access allows partner creation and management.
+                </p>
+            </ModuleSection>
+
+            <ModuleSection title="Hiring" desc="Job postings, applications, assignments and interviews"
+                viewAccess={perms.hiring.enabled || !!hiringViewDerived}
+                adminAccess={perms.hiring.adminAccess}
+                onViewToggle={v => setView('hiring', v)}
+                onAdminToggle={v => setAdmin('hiring', v)}
+                viewDisabled={!!hiringViewDerived}
+                viewNote={hiringViewDerived ? 'View access is active because this user manages at least one job.' : undefined}>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    Job managers can view their assigned hiring work. Admin access gives full hiring module control.
+                </p>
             </ModuleSection>
         </div>
     );
@@ -426,22 +543,28 @@ export default function AdminPermissionsPage() {
     const handleSelect = (user: any) => {
         setSelectedUser(user);
         setSaved(false);
-        setPerms(loadPermissions(user.modulePermissions));
+        setPerms(loadPermissions(user));
     };
 
     const handleSave = async () => {
         if (!selectedUser) return;
         setSaving(true);
         try {
-            await updateUser({ id: selectedUser._id, data: { modulePermissions: perms as any } }).unwrap();
-            setSelectedUser({ ...selectedUser, modulePermissions: perms });
+            const nextPerms = { ...perms, accessControlVersion: 2 };
+            await updateUser({ id: selectedUser._id, data: { modulePermissions: nextPerms as any } }).unwrap();
+            setSelectedUser({ ...selectedUser, modulePermissions: nextPerms });
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);
         } catch (err: any) { alert(err?.data?.message || 'Failed to save'); }
         finally { setSaving(false); }
     };
 
-    const countEnabled = (mp: any) => [mp?.projectManagement?.enabled, mp?.finance?.enabled, mp?.crm?.enabled, mp?.hrms?.enabled, mp?.overallAdmin?.enabled].filter(Boolean).length;
+    const countEnabled = (user: any) => {
+        const isJobManager = !!user?.derivedAccess?.hiringJobManager;
+        return (['projectManagement', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring'] as ModuleKey[])
+            .filter((key) => hasModuleViewAccess(user, key, { isJobManager }))
+            .length;
+    };
     const inputSty = { borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' };
 
     return (
@@ -473,7 +596,7 @@ export default function AdminPermissionsPage() {
                                 ? <div className="p-6 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>No users found</div>
                                 : users.map((user: any) => {
                                     const isSel = selectedUser?._id === user._id;
-                                    const n = countEnabled(user.modulePermissions);
+                                    const n = countEnabled(user);
                                     return (
                                         <button key={user._id} onClick={() => handleSelect(user)}
                                             className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b last:border-b-0"
@@ -526,7 +649,7 @@ export default function AdminPermissionsPage() {
                                     {saved ? <><Check size={16} /> Saved!</> : saving ? 'Saving…' : <><Save size={16} /> Save Permissions</>}
                                 </button>
                             </div>
-                            <PermissionsPanel perms={perms} onChange={setPerms} />
+                            <PermissionsPanel perms={perms} onChange={setPerms} hiringViewDerived={!!selectedUser?.derivedAccess?.hiringJobManager} />
                             <div className="mt-4 flex justify-end">
                                 <button onClick={handleSave} disabled={saving}
                                     className="flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg text-white disabled:opacity-60 btn-premium"

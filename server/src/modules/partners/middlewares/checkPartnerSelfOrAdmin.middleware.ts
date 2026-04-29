@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
 
 export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -20,8 +21,15 @@ export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next:
             return next();
         }
 
-        // 2. Regular Admin with 'users.manage' permission
+        // 2. Internal user with partner module access
         if (userObj.role !== 'partner') {
+            if (req.method === 'GET' && hasModuleViewAccess(userObj, 'partners')) {
+                return next();
+            }
+            if (hasModuleAdminAccess(userObj, 'partners')) {
+                return next();
+            }
+
             const user = await User.findById(userObj.id).populate({
                 path: 'role',
                 populate: { path: 'permissions' },

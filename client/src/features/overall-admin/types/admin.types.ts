@@ -15,15 +15,20 @@ export interface AdminUser {
     createdAt: string;
     updatedAt: string;
     modulePermissions?: {
+        accessControlVersion?: number;
         projectManagement?: {
             enabled: boolean;
-            projectPermissions?: Array<{ projectId: string; subModules?: { overview: boolean; tasks: boolean; timeLogs: boolean; meetings: boolean; credentials: boolean; documents: boolean } }>;
+            adminAccess?: boolean;
+            projectPermissions?: Array<{ projectId: string; subModules?: { overview: boolean; tasks: boolean; timeLogs: boolean; meetings: boolean; credentials: boolean; documents: boolean; notes?: boolean } }>;
         };
-        finance?: { enabled: boolean; subModules?: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean } };
-        crm?: { enabled: boolean; subModules?: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
-        hrms?: { enabled: boolean; subModules?: { dashboard: boolean; employees: boolean; attendance: boolean; leaves: boolean; payroll: boolean } };
-        overallAdmin?: { enabled: boolean; subModules?: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
+        finance?: { enabled: boolean; adminAccess?: boolean; subModules?: { dashboard: boolean; expenses: boolean; invoices: boolean; reports: boolean; revenue?: boolean; cashInBank?: boolean; salariesPayrolls?: boolean } };
+        crm?: { enabled: boolean; adminAccess?: boolean; subModules?: { pipeline: boolean; leads: boolean; proposals: boolean; clients: boolean } };
+        hrms?: { enabled: boolean; adminAccess?: boolean; subModules?: { dashboard?: boolean; employees?: boolean; attendance: boolean; leaves: boolean; holidays?: boolean; payroll: boolean; announcements?: boolean } };
+        overallAdmin?: { enabled: boolean; adminAccess?: boolean; subModules?: { users: boolean; permissions: boolean; settings: boolean; auditLogs: boolean } };
+        partners?: { enabled: boolean; adminAccess?: boolean };
+        hiring?: { enabled: boolean; adminAccess?: boolean };
     };
+    derivedAccess?: { hiringJobManager?: boolean };
 }
 
 export interface UserFilters {

@@ -7,6 +7,7 @@ import { Credential } from '../models/Credential.model';
 import { Meeting } from '../models/Meeting.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
+import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
 
 const normalizeRole = (role: any): string => {
     if (typeof role === 'string') return role.toLowerCase();
@@ -18,6 +19,8 @@ const isAdminRole = (role: any): boolean => {
     const normalized = normalizeRole(role);
     return ['super-admin', 'super_admin', 'admin'].includes(normalized);
 };
+
+const isProjectAdmin = (user: any): boolean => isAdminRole(user?.role) || hasModuleAdminAccess(user, 'projectManagement');
 
 const matchesPartnerProject = (project: any, partnerId?: string): boolean => {
     if (!project || !partnerId || !project.partnerId) return false;
@@ -78,7 +81,7 @@ export const checkProjectAccess = async (
         }
 
         // Check if user is super-admin
-        if (isAdminRole(req.user?.role)) {
+        if (isProjectAdmin(req.user)) {
             return next();
         }
 
@@ -145,7 +148,7 @@ export const checkProjectManager = async (
         }
 
         // Check if user is super-admin
-        if (isAdminRole(req.user?.role)) {
+        if (isProjectAdmin(req.user)) {
             return next();
         }
 
@@ -214,7 +217,7 @@ export const checkTaskAccess = async (
         }
 
         // Check if user is admin
-        if (isAdminRole(req.user?.role)) {
+        if (isProjectAdmin(req.user)) {
             return next();
         }
 
@@ -271,9 +274,7 @@ export const checkCredentialAccess = async (
 
         // super-admins and admins bypass all checks
         if (
-            req.user?.role === 'super-admin' ||
-            req.user?.role === 'super_admin' ||
-            req.user?.role === 'admin'
+            isProjectAdmin(req.user)
         ) {
             return next();
         }
@@ -330,9 +331,7 @@ export const checkCredentialAdmin = async (
 
         // super-admins and admins bypass
         if (
-            req.user?.role === 'super-admin' ||
-            req.user?.role === 'super_admin' ||
-            req.user?.role === 'admin'
+            isProjectAdmin(req.user)
         ) {
             return next();
         }
@@ -381,9 +380,7 @@ export const checkDocAdmin = async (
 
         // super-admins and admins bypass
         if (
-            req.user?.role === 'super-admin' ||
-            req.user?.role === 'super_admin' ||
-            req.user?.role === 'admin'
+            isProjectAdmin(req.user)
         ) {
             return next();
         }
@@ -450,7 +447,7 @@ export const checkMeetingAccess = async (
         }
 
         // Check if user is super-admin
-        if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
+        if (isProjectAdmin(req.user)) {
             return next();
         }
 
@@ -506,7 +503,7 @@ export const checkMeetingAccess = async (
  * Check if user is super-admin
  */
 export const checkAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (req.user?.role === 'super-admin' || req.user?.role === 'super_admin') {
+    if (isProjectAdmin(req.user)) {
         return next();
     }
     return next(new AppError('Super Admin access required', 403));

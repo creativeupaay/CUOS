@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
-import { checkHrmsAccess, hrAdminOnly, internalHrmsOnly } from '../middlewares/hrmsAccess.middleware';
+import { checkHrmsAccess, hrAdminOnly, hrmsSelfSubmoduleOnly, internalHrmsOnly } from '../middlewares/hrmsAccess.middleware';
 
 // Validators
 import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
@@ -74,7 +74,7 @@ router.patch(
 );
 
 // Company announcements
-router.get('/announcements', internalHrmsOnly, announcementController.getAnnouncements);
+router.get('/announcements', internalHrmsOnly, hrmsSelfSubmoduleOnly('announcements'), announcementController.getAnnouncements);
 router.post(
     '/announcements',
     hrAdminOnly,
@@ -97,15 +97,17 @@ router.get('/employees/:id/identity-document', hrAdminOnly, employeeController.g
 // ══════════════════════════════════════════════════════════════════════
 router.post(
     '/attendance/check-in',
+    hrmsSelfSubmoduleOnly('attendance'),
     validateRequest(checkInSchema),
     attendanceController.checkIn
 );
 router.post(
     '/attendance/check-out',
+    hrmsSelfSubmoduleOnly('attendance'),
     validateRequest(checkOutSchema),
     attendanceController.checkOut
 );
-router.get('/attendance/me', attendanceController.getMyAttendance);
+router.get('/attendance/me', hrmsSelfSubmoduleOnly('attendance'), attendanceController.getMyAttendance);
 router.get('/attendance/employee/:id', checkHrmsAccess(true), attendanceController.getEmployeeAttendance);
 // Admin attendance management
 router.post('/attendance/bulk', hrAdminOnly, attendanceController.bulkMarkAttendance);
@@ -137,11 +139,12 @@ router.delete('/salary/:id', hrAdminOnly, salaryController.deleteSalary);
 // ══════════════════════════════════════════════════════════════════════
 router.post(
     '/leaves',
+    hrmsSelfSubmoduleOnly('leaves'),
     validateRequest(createLeaveSchema),
     leaveController.createLeave
 );
-router.get('/leaves/me', leaveController.getMyLeaves);
-router.get('/leaves/balance', leaveController.getLeaveBalance);
+router.get('/leaves/me', hrmsSelfSubmoduleOnly('leaves'), leaveController.getMyLeaves);
+router.get('/leaves/balance', hrmsSelfSubmoduleOnly('leaves'), leaveController.getLeaveBalance);
 router.get('/leaves', hrAdminOnly, leaveController.getLeaves);
 router.get('/leaves/:id', leaveController.getLeaveById);
 router.patch(
@@ -161,7 +164,7 @@ router.delete(
 // HOLIDAY ROUTES
 // ══════════════════════════════════════════════════════════════════════
 router.post('/holidays', hrAdminOnly, holidayController.createHoliday);
-router.get('/holidays', holidayController.getHolidays);
+router.get('/holidays', hrmsSelfSubmoduleOnly('holidays'), holidayController.getHolidays);
 router.patch('/holidays/:id', hrAdminOnly, holidayController.updateHoliday);
 router.delete('/holidays/:id', hrAdminOnly, holidayController.deleteHoliday);
 
@@ -182,7 +185,7 @@ router.post(
 );
 
 router.get('/payroll', hrAdminOnly, payrollController.getPayrolls);
-router.get('/payroll/me', payrollController.getMyPayrolls);
+router.get('/payroll/me', hrmsSelfSubmoduleOnly('payroll'), payrollController.getMyPayrolls);
 router.get('/payroll/:id', checkHrmsAccess(true), payrollController.getPayrollById);
 router.patch(
     '/payroll/:id',

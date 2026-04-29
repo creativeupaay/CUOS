@@ -8,6 +8,7 @@ import { useGetProjectsQuery } from '@/features/project/projectApi';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
+import { hasHrmsSelfSubmoduleAccess, hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import {
     ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
@@ -98,9 +99,7 @@ function buildProjectFolderGroups(projects: SidebarProject[], partnerNameById?: 
 function getModuleConfig(
     pathname: string,
     user: any,
-    isAdmin: boolean,
     projects?: { _id: string; name: string }[],
-    isHrAdmin?: boolean,
     isJobManager?: boolean
 ): ModuleConfig | null {
     const mp = user?.modulePermissions;
@@ -113,11 +112,7 @@ function getModuleConfig(
     const isPartnerEmployee = !!user?.isPartnerEmployee;
 
     if (pathname.startsWith('/projects')) {
-        const pmPerms = mp?.projectManagement;
-        const hasAccess =
-            isAdmin ||
-            (isPartner && pmPerms?.enabled) ||
-            (pmPerms?.enabled && Array.isArray(pmPerms?.projectPermissions) && pmPerms.projectPermissions.length > 0);
+        const hasAccess = hasModuleViewAccess(user, 'projectManagement') || (isPartner && mp?.projectManagement?.enabled);
         if (!hasAccess) return null;
         const projectSubItems = projects?.map(p => ({ label: p.name, path: `/projects/${p._id}` })) || [];
         return {
@@ -127,26 +122,27 @@ function getModuleConfig(
     }
     if (pathname.startsWith('/finance')) {
         if (isPartner) return null;
+        if (!hasModuleViewAccess(user, 'finance')) return null;
         const finSubs = mp?.finance?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/finance', icon: <DollarSign size={18} />, matchPrefix: '/finance' },
+            { key: 'cashInBank', label: 'Cash In Bank', path: '/finance/cash-in-bank', icon: <Building2 size={18} />, matchPrefix: '/finance/cash-in-bank' },
             { key: 'revenue', label: 'Revenue', path: '/finance/revenue', icon: <TrendingUp size={18} />, matchPrefix: '/finance/revenue' },
             { key: 'expenses', label: 'Expenses', path: '/finance/expenses', icon: <Receipt size={18} />, matchPrefix: '/finance/expenses' },
             { key: 'salariesPayrolls', label: 'Salaries & Payrolls', path: '/finance/salaries-payrolls', icon: <Briefcase size={18} />, matchPrefix: '/finance/salaries-payrolls' },
         ];
         return {
             title: 'Finance',
-            items: isAdmin || !finSubs
+            items: hasModuleAdminAccess(user, 'finance') || !finSubs
                 ? allItems
                 : allItems.filter((item) => {
                     if ((finSubs as any)[item.key] === true) return true;
-                    if (item.key === 'salariesPayrolls') return (finSubs as any).expenses === true;
                     return false;
                 }),
         };
     }
     if (pathname.startsWith('/crm')) {
-        if (isPartnerEmployee && mp?.crm?.enabled !== true) {
+        if (!hasModuleViewAccess(user, 'crm')) {
             return null;
         }
         const crmSubs = mp?.crm?.subModules;
@@ -163,10 +159,10 @@ function getModuleConfig(
                 items: allItems.filter(i => i.key === 'pipeline' || i.key === 'leads' || i.key === 'clients')
             };
         }
-        return { title: 'CRM', items: isAdmin || !crmSubs ? allItems : allItems.filter(i => (crmSubs as any)[i.key] === true) };
+        return { title: 'CRM', items: hasModuleAdminAccess(user, 'crm') || !crmSubs ? allItems : allItems.filter(i => (crmSubs as any)[i.key] === true) };
     }
     if (pathname.startsWith('/hrms') && !pathname.startsWith('/my-hrms')) {
-        if (!isAdmin && !isHrAdmin) {
+        if (!hasModuleAdminAccess(user, 'hrms')) {
             // Regular employees shouldn't access /hrms - they'll be redirected by HrmsRedirect
             // Return null to hide sidebar during redirect
             return null;
@@ -183,13 +179,13 @@ function getModuleConfig(
         ];
         return {
             title: 'HRMS',
-            items: isAdmin || !hrmsSubs
+            items: hasModuleAdminAccess(user, 'hrms') || !hrmsSubs
                 ? allItems
                 : allItems.filter(i => i.key === 'announcements' || (hrmsSubs as any)[i.key] === true),
         };
     }
     if (pathname.startsWith('/my-hrms')) {
-        const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
+        const isHrmsAdmin = hasModuleAdminAccess(user, 'hrms');
 
         // Check if accessing settings pages (profile or change-password)
         const isSettingsPath = pathname === '/my-hrms/profile' || pathname === '/my-hrms/change-password';
@@ -201,16 +197,28 @@ function getModuleConfig(
             pathname.startsWith('/my-hrms/payroll') ||
             pathname.startsWith('/my-hrms/announcements');
 
+        const settingsItems = [
+            { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
+            { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
+        ];
+        const employeeHrmsItems = [
+            { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
+            { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
+            { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
+            { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+            { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
+        ];
+        const visibleEmployeeHrmsItems = isHrmsAdmin
+            ? employeeHrmsItems
+            : employeeHrmsItems.filter((item) => hasHrmsSelfSubmoduleAccess(user, item.key as any));
+
         // For regular employees
-        if (!isSuperAdmin) {
+        if (!isHrmsAdmin) {
             // If on settings pages, show only settings options
             if (isSettingsPath) {
                 return {
                     title: 'Settings',
-                    items: [
-                        { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
-                        { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
-                    ],
+                    items: settingsItems,
                 };
             }
 
@@ -218,33 +226,19 @@ function getModuleConfig(
             if (isHrmsDataPath) {
                 return {
                     title: 'My HRMS',
-                    items: [
-                        { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
-                        { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
-                        { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
-                        { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
-                        { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
-                    ],
+                    items: visibleEmployeeHrmsItems,
                 };
             }
         }
 
-        // For Super Admin - show all options always
+        // HRMS admins keep their own employee tabs under profile/settings.
         return {
             title: 'My HRMS',
-            items: [
-                { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
-                { key: 'changePassword', label: 'Change Password', path: '/my-hrms/change-password', icon: <Settings size={18} />, matchPrefix: '/my-hrms/change-password' },
-                { key: 'attendance', label: 'Attendance', path: '/my-hrms/attendance', icon: <Clock size={18} />, matchPrefix: '/my-hrms/attendance' },
-                { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
-                { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
-                { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
-                { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
-            ],
+            items: [...settingsItems, ...visibleEmployeeHrmsItems],
         };
     }
     if (pathname.startsWith('/admin/partners')) {
-        if (isPartner) return null;
+        if (isPartner || !hasModuleViewAccess(user, 'partners')) return null;
         return {
             title: 'Partners',
             items: [
@@ -254,7 +248,7 @@ function getModuleConfig(
         };
     }
     if (pathname.startsWith('/admin')) {
-        if (isPartner) return null;
+        if (isPartner || !hasModuleViewAccess(user, 'overallAdmin')) return null;
         const adminSubs = mp?.overallAdmin?.subModules;
         const allItems = [
             { key: 'dashboard', label: 'Dashboard', path: '/admin', icon: <BarChart3 size={18} />, matchPrefix: '/admin' },
@@ -263,13 +257,13 @@ function getModuleConfig(
             { key: 'settings', label: 'Settings', path: '/admin/settings', icon: <Settings size={18} />, matchPrefix: '/admin/settings' },
             { key: 'auditLogs', label: 'Audit Logs', path: '/admin/audit-logs', icon: <ScrollText size={18} />, matchPrefix: '/admin/audit-logs' },
         ];
-        const filteredItems = isAdmin || !adminSubs
+        const filteredItems = hasModuleAdminAccess(user, 'overallAdmin') || !adminSubs
             ? allItems
             : allItems.filter(i => i.key === 'dashboard' || (adminSubs as any)[i.key] === true);
         return { title: 'Admin Panel', items: filteredItems };
     }
     if (pathname.startsWith('/hiring')) {
-        const hasAccess = isAdmin || isHrAdmin || isJobManager;
+        const hasAccess = hasModuleViewAccess(user, 'hiring', { isJobManager });
         if (!hasAccess) return null;
 
         const allItems = [
@@ -731,10 +725,8 @@ export default function Sidebar({
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
         : '';
-    const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
-    const isAdmin = ['super-admin', 'admin', 'super_admin'].includes(roleName);
     const isPartner = roleName === 'partner';
-    const isHrAdmin = isAdmin || ['hr', 'hr-admin', 'hr_admin', 'hr-manager', 'hrmanager', 'human-resources'].includes(roleName);
+    const canManageProjects = hasModuleAdminAccess(user, 'projectManagement') && !isPartner;
     const displayRole = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : String(user.role)) : 'User';
 
     // Partner branding
@@ -753,7 +745,7 @@ export default function Sidebar({
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
     const { data: partnersResponse } = useGetPartnersQuery(
         { limit: 500 },
-        { skip: !(isPMRoute && isSuperAdmin) }
+        { skip: !(isPMRoute && canManageProjects) }
     );
     const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
     const isJobManager = !!jobManagerStatus?.data?.isJobManager;
@@ -765,8 +757,8 @@ export default function Sidebar({
         }
         return acc;
     }, {});
-    const moduleConfig = getModuleConfig(effectivePathname, user, isAdmin, projects, isHrAdmin, isJobManager);
-    const useProjectFoldersNav = isPMRoute && isSuperAdmin;
+    const moduleConfig = getModuleConfig(effectivePathname, user, projects, isJobManager);
+    const useProjectFoldersNav = isPMRoute && canManageProjects;
 
     if (!moduleConfig) return null;
 

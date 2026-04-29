@@ -3,9 +3,11 @@ import multer from 'multer';
 import * as partnerController from '../controllers/partner.controller';
 import * as partnerAuthController from '../controllers/partnerAuth.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
-import { checkPermission } from '../../overall-admin/middlewares/checkPermission.middleware';
 import { checkPartnerSelfOrAdmin } from '../middlewares/checkPartnerSelfOrAdmin.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
+import AppError from '../../../utils/appError';
+import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
+import { NextFunction, Request, Response } from 'express';
 import {
     createPartnerSchema,
     updatePartnerSchema,
@@ -20,7 +22,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.use(authenticate);
 
 // We define admin permission middleware separately to reuse on specific routes
-const adminOnly = checkPermission('users', 'manage');
+const adminOnly = (req: Request, _res: Response, next: NextFunction) => {
+    if (hasModuleAdminAccess(req.user, 'partners')) return next();
+    return next(new AppError('Partners admin access is required', 403));
+};
 
 // Partner CRUD
 router.post('/', adminOnly, validateRequest(createPartnerSchema), partnerController.createPartner);

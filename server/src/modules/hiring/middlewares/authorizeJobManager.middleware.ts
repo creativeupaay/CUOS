@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import AppError from '../../../utils/appError';
 import { JobService } from '../services/job.service';
+import { hasModuleAdminAccess, hasModuleViewAccess, usesVersionedModulePermissions } from '../../../utils/moduleAccess.util';
 
 const jobService = new JobService();
 
@@ -24,8 +25,14 @@ export const authorizeHiringView = async (
 
     const userRole = req.user.role;
 
+    if (hasModuleViewAccess(req.user, 'hiring')) {
+        (req as any).isJobManager = false;
+        (req as any).isHiringAdmin = hasModuleAdminAccess(req.user, 'hiring');
+        return next();
+    }
+
     // Admin/HR roles always have access
-    if (VIEW_ROLES.includes(userRole)) {
+    if (!usesVersionedModulePermissions(req.user) && VIEW_ROLES.includes(userRole)) {
         (req as any).isJobManager = false;
         (req as any).isHiringAdmin = true;
         return next();
@@ -60,8 +67,14 @@ export const authorizeHiringManage = async (
 
     const userRole = req.user.role;
 
+    if (hasModuleAdminAccess(req.user, 'hiring')) {
+        (req as any).isJobManager = false;
+        (req as any).isHiringAdmin = true;
+        return next();
+    }
+
     // Admin/HR roles always have manage access
-    if (MANAGE_ROLES.includes(userRole)) {
+    if (!usesVersionedModulePermissions(req.user) && MANAGE_ROLES.includes(userRole)) {
         (req as any).isJobManager = false;
         (req as any).isHiringAdmin = true;
         return next();
@@ -70,7 +83,7 @@ export const authorizeHiringManage = async (
     // Check if user is a job manager
     try {
         const isManager = await jobService.isUserJobManager(req.user.id);
-        if (isManager) {
+        if (isManager && !usesVersionedModulePermissions(req.user)) {
             (req as any).isJobManager = true;
             (req as any).isHiringAdmin = false;
             return next();
