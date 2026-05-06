@@ -35,6 +35,20 @@ import { NextFunction, Request, Response } from 'express';
 
 const router = Router();
 
+const credentialPerfLog = (label: string) => (req: Request, res: Response, next: NextFunction) => {
+    const startedAt = process.hrtime.bigint();
+    const requestPath = req.originalUrl || req.url;
+
+    res.on('finish', () => {
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+        console.log(
+            `[PERF][credentials] ${label} ${req.method} ${requestPath} status=${res.statusCode} durationMs=${elapsedMs.toFixed(2)}`
+        );
+    });
+
+    next();
+};
+
 // All routes require authentication
 router.use(authenticate);
 router.use(requirePartnerEmployeeModuleAccess('projectManagement'));
@@ -365,6 +379,7 @@ router.delete(
 // Create credential
 router.post(
     '/:projectId/credentials',
+    credentialPerfLog('create'),
     validateRequest(credentialValidators.createCredentialSchema),
     checkCredentialAdmin,
     credentialController.createCredential
@@ -373,6 +388,7 @@ router.post(
 // Get credentials (filtered by permission level)
 router.get(
     '/:projectId/credentials',
+    credentialPerfLog('list'),
     validateRequest(credentialValidators.getCredentialsSchema),
     checkProjectAccess,
     credentialController.getCredentials
@@ -381,6 +397,7 @@ router.get(
 // Share credentials (grant view access) — MUST be before /:id routes
 router.post(
     '/:projectId/credentials/share',
+    credentialPerfLog('share'),
     validateRequest(credentialValidators.shareCredentialsSchema),
     checkCredentialAdmin,
     credentialController.shareCredentials
@@ -389,6 +406,7 @@ router.post(
 // Revoke view access
 router.delete(
     '/:projectId/credentials/share',
+    credentialPerfLog('revoke'),
     validateRequest(credentialValidators.revokeCredentialAccessSchema),
     checkCredentialAdmin,
     credentialController.revokeCredentialAccess
@@ -397,6 +415,7 @@ router.delete(
 // Get credential by ID (decrypted)
 router.get(
     '/:projectId/credentials/:id',
+    credentialPerfLog('detail'),
     validateRequest(credentialValidators.getCredentialByIdSchema),
     checkCredentialAccess,
     credentialController.getCredentialById
@@ -405,6 +424,7 @@ router.get(
 // Update credential
 router.patch(
     '/:projectId/credentials/:id',
+    credentialPerfLog('update'),
     validateRequest(credentialValidators.updateCredentialSchema),
     checkCredentialAdmin,
     credentialController.updateCredential
@@ -413,6 +433,7 @@ router.patch(
 // Delete credential
 router.delete(
     '/:projectId/credentials/:id',
+    credentialPerfLog('delete'),
     validateRequest(credentialValidators.deleteCredentialSchema),
     checkCredentialAdmin,
     credentialController.deleteCredential

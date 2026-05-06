@@ -7,6 +7,7 @@ import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import ProjectFormPage from './ProjectFormPage';
 import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
+import { projectApi } from '@/features/project';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -58,6 +59,7 @@ export default function ProjectsPage() {
         priority: priorityFilter,
         partnerId: scopeParam === 'internal' ? undefined : partnerFilter || undefined,
     });
+    const prefetchProjectById = projectApi.usePrefetch('getProjectById');
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const allLoadedProjects = data?.data || [];
@@ -179,6 +181,10 @@ export default function ProjectsPage() {
         }
     };
 
+    const warmProjectDetail = (projectId: string) => {
+        prefetchProjectById(projectId, { ifOlderThan: 30 });
+    };
+
     if (!canViewProjects && !isLoading) return <Navigate to="/dashboard" replace />;
 
     if (isLoading) {
@@ -288,11 +294,14 @@ export default function ProjectsPage() {
                                         flexDirection: 'column',
                                     }}
                                     onMouseEnter={(e) => {
+                                        warmProjectDetail(project._id);
                                         e.currentTarget.style.transform = 'translateY(-2px)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-md)';
                                         e.currentTarget.style.borderColor = borderAccent + '60';
                                         e.currentTarget.style.borderLeftColor = borderAccent;
                                     }}
+                                    onFocus={() => warmProjectDetail(project._id)}
+                                    onMouseDown={() => warmProjectDetail(project._id)}
                                     onMouseLeave={(e) => {
                                         e.currentTarget.style.transform = 'translateY(0)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
