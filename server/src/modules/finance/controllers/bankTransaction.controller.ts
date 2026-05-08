@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { BankTransactionService } from '../services/bankTransaction.service';
 import { BankAccountKey, BankTransactionType } from '../models/BankTransaction.model';
+import { logger } from "../../../utils/logger";
 
 const getAuthenticatedUserId = (req: Request) => (req as any).user?.id ?? (req as any).user?._id;
 
@@ -17,7 +18,7 @@ export class BankTransactionController {
             const accounts = await BankTransactionService.getManagedAccountDetails(new Types.ObjectId(userId));
             res.status(200).json({ success: true, data: accounts });
         } catch (error: any) {
-            console.error('Error fetching managed bank accounts:', error);
+            logger.error({ context: error }, 'Error fetching managed bank accounts:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch managed bank accounts',
@@ -57,7 +58,7 @@ export class BankTransactionController {
                 data: account,
             });
         } catch (error: any) {
-            console.error('Error updating managed bank account:', error);
+            logger.error({ context: error }, 'Error updating managed bank account:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update bank account',
@@ -77,7 +78,7 @@ export class BankTransactionController {
             const accounts = await BankTransactionService.getOtherAccountDetails(new Types.ObjectId(userId));
             res.status(200).json({ success: true, data: accounts });
         } catch (error: any) {
-            console.error('Error fetching other bank accounts:', error);
+            logger.error({ context: error }, 'Error fetching other bank accounts:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch other bank accounts',
@@ -115,7 +116,7 @@ export class BankTransactionController {
                 data: account,
             });
         } catch (error: any) {
-            console.error('Error creating other bank account:', error);
+            logger.error({ context: error }, 'Error creating other bank account:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to create other bank account',
@@ -158,7 +159,7 @@ export class BankTransactionController {
                 data: account,
             });
         } catch (error: any) {
-            console.error('Error updating other bank account:', error);
+            logger.error({ context: error }, 'Error updating other bank account:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update other bank account',
@@ -180,7 +181,7 @@ export class BankTransactionController {
                 message: 'Other bank account deleted successfully',
             });
         } catch (error: any) {
-            console.error('Error deleting other bank account:', error);
+            logger.error({ context: error }, 'Error deleting other bank account:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to delete other bank account',
@@ -215,7 +216,7 @@ export class BankTransactionController {
                 data: transaction,
             });
         } catch (error: any) {
-            console.error('Error creating bank transaction:', error);
+            logger.error({ context: error }, 'Error creating bank transaction:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to create bank transaction',
@@ -244,7 +245,7 @@ export class BankTransactionController {
 
             res.status(200).json({ success: true, data: result });
         } catch (error: any) {
-            console.error('Error fetching bank transactions:', error);
+            logger.error({ context: error }, 'Error fetching bank transactions:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch bank transactions',
@@ -263,7 +264,7 @@ export class BankTransactionController {
 
             res.status(200).json({ success: true, data: transaction });
         } catch (error: any) {
-            console.error('Error fetching bank transaction:', error);
+            logger.error({ context: error }, 'Error fetching bank transaction:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch bank transaction',
@@ -303,7 +304,7 @@ export class BankTransactionController {
                 data: transaction,
             });
         } catch (error: any) {
-            console.error('Error updating bank transaction:', error);
+            logger.error({ context: error }, 'Error updating bank transaction:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update bank transaction',
@@ -325,7 +326,7 @@ export class BankTransactionController {
                 message: 'Bank transaction deleted successfully',
             });
         } catch (error: any) {
-            console.error('Error deleting bank transaction:', error);
+            logger.error({ context: error }, 'Error deleting bank transaction:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to delete bank transaction',

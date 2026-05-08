@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { RevenueService } from '../services/revenue.service';
 import { Types } from 'mongoose';
+import { logger } from "../../../utils/logger";
 
 const getAuthenticatedUserId = (req: Request) => (req as any).user?.id ?? (req as any).user?._id;
 
@@ -62,7 +63,7 @@ export class RevenueController {
                 data: revenue,
             });
         } catch (error: any) {
-            console.error('Error creating revenue:', error);
+            logger.error({ context: error }, 'Error creating revenue:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to create revenue entry',
@@ -95,7 +96,7 @@ export class RevenueController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Error fetching revenues:', error);
+            logger.error({ context: error }, 'Error fetching revenues:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch revenues',
@@ -124,7 +125,7 @@ export class RevenueController {
                 data: revenue,
             });
         } catch (error: any) {
-            console.error('Error fetching revenue:', error);
+            logger.error({ context: error }, 'Error fetching revenue:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch revenue',
@@ -198,7 +199,7 @@ export class RevenueController {
                 data: revenue,
             });
         } catch (error: any) {
-            console.error('Error updating revenue:', error);
+            logger.error({ context: error }, 'Error updating revenue:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update revenue',
@@ -227,7 +228,7 @@ export class RevenueController {
                 message: 'Revenue entry deleted successfully',
             });
         } catch (error: any) {
-            console.error('Error deleting revenue:', error);
+            logger.error({ context: error }, 'Error deleting revenue:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to delete revenue',

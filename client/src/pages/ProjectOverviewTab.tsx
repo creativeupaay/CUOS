@@ -320,12 +320,12 @@ export default function ProjectOverviewTab() {
                                     onChange={(e) => { setSelectedRole(e.target.value); setRoleError(false); }}
                                 >
                                     <option value="">Select role…</option>
-                                        <option value="admin">Admin</option>
-                                        <option value="manager">Manager</option>
-                                        <option value="developer">Developer</option>
-                                        <option value="designer">Designer</option>
-                                        <option value="qa">QA</option>
-                                        <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="developer">Developer</option>
+                                    <option value="designer">Designer</option>
+                                    <option value="qa">QA</option>
+                                    <option value="member">Member</option>
                                 </select>
                                 {roleError && (
                                     <p className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: 'var(--color-danger)' }}>
@@ -344,12 +344,12 @@ export default function ProjectOverviewTab() {
                                     Add Team Member
                                 </button>
                                 <button
-                                        onClick={() => {
-                                            setIsAddingMember(false);
-                                            setSelectedUserId('');
-                                            setSelectedMemberType(isPartnerOwnedProject ? 'partner-employee' : 'employee');
-                                            setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
-                                        }}
+                                    onClick={() => {
+                                        setIsAddingMember(false);
+                                        setSelectedUserId('');
+                                        setSelectedMemberType(isPartnerOwnedProject ? 'partner-employee' : 'employee');
+                                        setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
+                                    }}
                                     className="px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-gray-50 bg-white"
                                     style={{ borderColor: 'var(--color-border-default)' }}
                                     disabled={isAdding}
@@ -557,13 +557,13 @@ export default function ProjectOverviewTab() {
                                 <span className="flex-shrink-0">Team</span>
                                 <ChevronRight size={11} className="flex-shrink-0" />
                                 <span className="font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {(() => {
-                                                        const assignee = project.assignees.find((item: any) => getAssigneeMeta(item).memberId === editingUserId);
-                                                        return assignee ? getAssigneeMeta(assignee).displayName : 'Member';
-                                                    })()}
-                                                </span>
-                                            </div>
-                                        </div>
+                                    {(() => {
+                                        const assignee = project.assignees.find((item: any) => getAssigneeMeta(item).memberId === editingUserId);
+                                        return assignee ? getAssigneeMeta(assignee).displayName : 'Member';
+                                    })()}
+                                </span>
+                            </div>
+                        </div>
 
                         {/* Body */}
                         <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -981,13 +981,13 @@ function ProjectProgress({ project, isSuperAdmin, canViewPaymentDetails }: { pro
                                                     backgroundColor: isPaymentReceived
                                                         ? 'var(--color-success-bg)'
                                                         : paymentStatus === 'partial'
-                                                        ? 'var(--color-warning-bg)'
-                                                        : 'var(--color-bg-subtle)',
+                                                            ? 'var(--color-warning-bg)'
+                                                            : 'var(--color-bg-subtle)',
                                                     color: isPaymentReceived
                                                         ? 'var(--color-success)'
                                                         : paymentStatus === 'partial'
-                                                        ? 'var(--color-warning)'
-                                                        : 'var(--color-text-muted)',
+                                                            ? 'var(--color-warning)'
+                                                            : 'var(--color-text-muted)',
                                                 }}
                                             >
                                                 Payment: {isPaymentReceived ? 'received' : (paymentStatus || 'pending')}

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as credentialService from '../services/credential.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
+import { logger } from "../../../utils/logger";
 
 export const createCredential = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -188,11 +189,11 @@ export const getCredentialAdmins = asyncHandler(
         const { projectId } = req.params;
         const userId = req.user?.id!;
 
-        console.log('[getCredentialAdmins] Request from user:', userId, 'for project:', projectId);
+        logger.info({ context: { userId, projectId } }, '[getCredentialAdmins] Request from user for project');
 
         const admins = await credentialService.getCredentialAdmins(projectId);
 
-        console.log('[getCredentialAdmins] Returning credential admins:', admins);
+        logger.info({ context: admins }, '[getCredentialAdmins] Returning credential admins:');
 
         res.status(200).json({
             success: true,

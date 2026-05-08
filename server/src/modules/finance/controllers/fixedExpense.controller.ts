@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { FixedExpenseService } from '../services/fixedExpense.service';
+import { logger } from "../../../utils/logger";
 
 const getAuthenticatedUserId = (req: Request) => (req as any).user?.id ?? (req as any).user?._id;
 
@@ -52,7 +53,7 @@ export class FixedExpenseController {
                 data: fixedExpense,
             });
         } catch (error: any) {
-            console.error('Error creating fixed expense:', error);
+            logger.error({ context: error }, 'Error creating fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to create fixed expense',
@@ -75,7 +76,7 @@ export class FixedExpenseController {
                 data: fixedExpenses,
             });
         } catch (error: any) {
-            console.error('Error fetching fixed expenses:', error);
+            logger.error({ context: error }, 'Error fetching fixed expenses:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch fixed expenses',
@@ -123,7 +124,7 @@ export class FixedExpenseController {
                 data: fixedExpense,
             });
         } catch (error: any) {
-            console.error('Error updating fixed expense:', error);
+            logger.error({ context: error }, 'Error updating fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update fixed expense',
@@ -146,7 +147,7 @@ export class FixedExpenseController {
                 message: 'Fixed expense deleted successfully',
             });
         } catch (error: any) {
-            console.error('Error deleting fixed expense:', error);
+            logger.error({ context: error }, 'Error deleting fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to delete fixed expense',
@@ -165,7 +166,7 @@ export class FixedExpenseController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Error fetching fixed expense approvals:', error);
+            logger.error({ context: error }, 'Error fetching fixed expense approvals:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch fixed expense approvals',
@@ -183,7 +184,7 @@ export class FixedExpenseController {
                 data: transactions,
             });
         } catch (error: any) {
-            console.error('Error fetching fixed expense transactions:', error);
+            logger.error({ context: error }, 'Error fetching fixed expense transactions:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch fixed expense transactions',
@@ -225,7 +226,7 @@ export class FixedExpenseController {
                 data: approval,
             });
         } catch (error: any) {
-            console.error('Error approving fixed expense:', error);
+            logger.error({ context: error }, 'Error approving fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to approve fixed expense',
@@ -267,7 +268,7 @@ export class FixedExpenseController {
                 data: approval,
             });
         } catch (error: any) {
-            console.error('Error rejecting fixed expense:', error);
+            logger.error({ context: error }, 'Error rejecting fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to reject fixed expense',

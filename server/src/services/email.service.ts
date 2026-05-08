@@ -47,11 +47,17 @@ function getResend(): Resend {
     return resend;
 }
 
+/** Minimal shape of the object returned by Resend's emails.send() */
+interface ResendSendResult {
+    data?: { id?: string } | null;
+    error?: { message?: string } | string | null;
+}
+
 async function sendEmailOrThrow(
     client: Resend,
     payload: Parameters<Resend['emails']['send']>[0]
 ): Promise<string | undefined> {
-    const result: any = await client.emails.send(payload);
+    const result = await client.emails.send(payload) as unknown as ResendSendResult;
 
     if (result?.error) {
         throw new Error(
@@ -63,6 +69,7 @@ async function sendEmailOrThrow(
 
     return result?.data?.id;
 }
+
 
 // ============================================================
 // Send client onboarding form link

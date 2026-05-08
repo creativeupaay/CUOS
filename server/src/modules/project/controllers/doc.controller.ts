@@ -3,6 +3,7 @@ import * as docService from '../services/doc.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
 import { DocFolder } from '../models/DocFolder.model';
+import { logger } from "../../../utils/logger";
 
 // ─── Folders ─────────────────────────────────────────────────────────────────
 
@@ -169,11 +170,11 @@ export const getDocAdmins = asyncHandler(
         const projectId = req.params.id;
         const userId = req.user?.id!;
 
-        console.log('[getDocAdmins] Request from user:', userId, 'for project:', projectId);
+        logger.info({ context: { userId, projectId } }, '[getDocAdmins] Request from user for project');
 
         const docAdmins = await docService.getDocAdmins(projectId);
 
-        console.log('[getDocAdmins] Returning doc admins:', docAdmins);
+        logger.info({ context: docAdmins }, '[getDocAdmins] Returning doc admins:');
 
         res.status(200).json({ success: true, data: docAdmins });
     }

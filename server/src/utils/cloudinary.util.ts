@@ -1,4 +1,4 @@
-import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import path from 'path';
 
@@ -158,11 +158,11 @@ export const getSignedUrl = (
     // forbid type:'authenticated' programmatic delivery.  We generate a signed URL against the
     // 'upload' delivery type so the path actually exists on res.cloudinary.com.
     // `format` must be exactly string, otherwise it's skipped.
-    const urlOptions: any = {
+    const urlOptions: Record<string, unknown> = {
         secure: true,
         sign_url: true,
         type: 'upload',
-        resource_type: resourceType as any,
+        resource_type: resourceType,
         expires_at: expiresAt,
     };
 

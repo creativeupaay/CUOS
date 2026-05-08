@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { Types } from 'mongoose';
+import { Types, FilterQuery } from 'mongoose';
 import { Notification, INotification, NotificationType } from '../models/Notification.model';
 import { User } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
@@ -21,7 +21,7 @@ interface CreateNotificationInput {
     title: string;
     message: string;
     link?: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 class NotificationService {
@@ -119,12 +119,11 @@ class NotificationService {
             });
 
             if (filteredSuperadminIds.length > 0) {
-                await this.createBulkNotifications(filteredSuperadminIds as any, data);
+                await this.createBulkNotifications(filteredSuperadminIds, data);
             }
         } else {
             // For non-onboarding notifications, send to all superadmins
-            const superadminIdsFixed = superadminIds.map((u) => u as any);
-            await this.createBulkNotifications(superadminIdsFixed, data);
+            await this.createBulkNotifications(superadminIds, data);
         }
     }
 
@@ -146,7 +145,7 @@ class NotificationService {
             partnerDocs.map((partner) => partner.userId?.toString()).filter(Boolean)
         );
 
-        const query: any = { isActive: true };
+        const query: FilterQuery<INotification> = { isActive: true };
         if (partnerRole?._id) {
             query.role = { $ne: partnerRole._id };
         }
@@ -172,7 +171,7 @@ class NotificationService {
     ): Promise<{ notifications: INotification[]; unreadCount: number }> {
         const { limit = 50, offset = 0, unreadOnly = false } = options;
 
-        const query: any = { userId: new Types.ObjectId(userId) };
+        const query: FilterQuery<INotification> = { userId: new Types.ObjectId(userId) };
         if (unreadOnly) query.isRead = false;
 
         const [notifications, unreadCount] = await Promise.all([
@@ -200,7 +199,7 @@ class NotificationService {
      * Mark notification(s) as read
      */
     async markAsRead(userId: string, notificationIds?: string[]): Promise<void> {
-        const query: any = { userId: new Types.ObjectId(userId) };
+        const query: FilterQuery<INotification> = { userId: new Types.ObjectId(userId) };
         if (notificationIds?.length) {
             query._id = { $in: notificationIds.map((id) => new Types.ObjectId(id)) };
         }
@@ -216,7 +215,7 @@ class NotificationService {
      * Delete notification(s)
      */
     async deleteNotifications(userId: string, notificationIds?: string[]): Promise<void> {
-        const query: any = { userId: new Types.ObjectId(userId) };
+        const query: FilterQuery<INotification> = { userId: new Types.ObjectId(userId) };
         if (notificationIds?.length) {
             query._id = { $in: notificationIds.map((id) => new Types.ObjectId(id)) };
         }
@@ -231,7 +230,7 @@ class NotificationService {
     /**
      * Emit event to specific user's socket room
      */
-    private emitToUser(userId: string, event: string, data: any): void {
+    private emitToUser(userId: string, event: string, data: Record<string, unknown>): void {
         if (io) {
             io.to(`user:${userId}`).emit(event, data);
         }

@@ -14,6 +14,7 @@ import {
     resolveDepartmentValue,
 } from '../../../utils/department.util';
 import { generateNextEmployeeId } from '../utils/employeeId.util';
+import { logger } from "../../../utils/logger";
 
 class EmployeeService {
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
@@ -340,7 +341,7 @@ class EmployeeService {
                 });
                 emailSent = true;
             } catch (err) {
-                console.error('[generateFormToken] Email send failed:', err);
+                logger.error({ context: err }, '[generateFormToken] Email send failed:');
             }
         }
 

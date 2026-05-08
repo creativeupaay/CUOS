@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { DashboardService } from '../services/dashboard.service';
+import { logger } from "../../../utils/logger";
 
 export class DashboardController {
     /**
@@ -29,7 +30,7 @@ export class DashboardController {
                 data: dashboardData,
             });
         } catch (error: any) {
-            console.error('Error fetching dashboard data:', error);
+            logger.error({ context: error }, 'Error fetching dashboard data:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch dashboard data',
@@ -50,7 +51,7 @@ export class DashboardController {
                 data: stats,
             });
         } catch (error: any) {
-            console.error('Error fetching quick stats:', error);
+            logger.error({ context: error }, 'Error fetching quick stats:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch quick stats',
@@ -86,7 +87,7 @@ export class DashboardController {
                 data: topClients,
             });
         } catch (error: any) {
-            console.error('Error fetching top clients:', error);
+            logger.error({ context: error }, 'Error fetching top clients:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch top clients',
@@ -121,7 +122,7 @@ export class DashboardController {
                 data: breakdown,
             });
         } catch (error: any) {
-            console.error('Error fetching expense breakdown:', error);
+            logger.error({ context: error }, 'Error fetching expense breakdown:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch expense breakdown',

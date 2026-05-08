@@ -1,4 +1,5 @@
 import { NoteRoom, ROOM_CONFIG } from '../types/types';
+import { logger } from "../../../utils/logger";
 
 /**
  * Global storage for all note rooms
@@ -29,7 +30,7 @@ export const getOrCreateRoom = (noteId: string, projectId: string): NoteRoom => 
       saveScheduled: false,
     };
     noteRooms.set(noteId, room);
-    console.log(`[RoomManager] Created room for note ${noteId}`);
+    logger.info(`[RoomManager] Created room for note ${noteId}`);
   }
 
   // Clear inactivity timer if it exists
@@ -62,7 +63,7 @@ export const cleanupRoomIfEmpty = (noteId: string): void => {
       if (currentRoom && currentRoom.users.size === 0) {
         noteRooms.delete(noteId);
         inactivityTimers.delete(noteId);
-        console.log(`[RoomManager] Deleted inactive room for note ${noteId}`);
+        logger.info(`[RoomManager] Deleted inactive room for note ${noteId}`);
       }
     }, ROOM_CONFIG.INACTIVE_ROOM_TIMEOUT);
 

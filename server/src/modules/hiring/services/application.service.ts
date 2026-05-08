@@ -27,12 +27,13 @@ import {
 } from './activity.service';
 import { InterviewService } from './interview.service';
 import type { IJobApplicationCustomField, JobApplicationFieldType } from '../models/Job.model';
+import { logger } from "../../../utils/logger";
 
 async function runEmailSafely(label: string, fn: () => Promise<void>) {
     try {
         await fn();
     } catch (error) {
-        console.error(`[Hiring Email] ${label} failed:`, error);
+        logger.error({ context: error }, `[Hiring Email] ${label} failed:`);
     }
 }
 

@@ -668,13 +668,11 @@ export default function ClientDetailPage() {
                                         try { await togglePortal({ clientId: id, enabled: !client.portalEnabled }).unwrap(); } catch { }
                                     }}
                                     disabled={isTogglingPortal}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                                        client.portalEnabled ? 'bg-primary' : 'bg-neutral-300'
-                                    } ${isTogglingPortal ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${client.portalEnabled ? 'bg-primary' : 'bg-neutral-300'
+                                        } ${isTogglingPortal ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                        client.portalEnabled ? 'translate-x-6' : 'translate-x-1'
-                                    }`} />
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${client.portalEnabled ? 'translate-x-6' : 'translate-x-1'
+                                        }`} />
                                 </button>
                             </div>
 

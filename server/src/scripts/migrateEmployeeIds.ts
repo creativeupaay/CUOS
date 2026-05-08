@@ -6,6 +6,7 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 import { Employee } from '../modules/hrms/models/Employee.model';
+import { logger } from "../utils/logger";
 
 async function generateOfflineId(year: number, nextIndex: number): Promise<string> {
     const nextCount = (nextIndex % 99) + 1;
@@ -14,15 +15,16 @@ async function generateOfflineId(year: number, nextIndex: number): Promise<strin
 }
 
 async function migrate() {
-    console.log('Connecting to MongoDB...');
+    logger.info('Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGO_URI as string);
-    console.log('Connected.');
+    logger.info('Connected.');
 
     // Fetch all employees sorted chronologically
     const employees = await Employee.find({}).sort({ joiningDate: 1, createdAt: 1 });
-    console.log(`Found ${employees.length} employees to migrate.`);
+    logger.info(`Found ${employees.length} employees to migrate.`);
 
     // Group employees by joining year
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const yearGroups: Record<number, any[]> = {};
     for (const emp of employees) {
         const d = new Date(emp.joiningDate);
@@ -36,7 +38,7 @@ async function migrate() {
     for (const yearStr of Object.keys(yearGroups)) {
         const year = parseInt(yearStr, 10);
         const emps = yearGroups[year];
-        console.log(`Processing year ${year}: ${emps.length} employees`);
+        logger.info(`Processing year ${year}: ${emps.length} employees`);
 
         // Check which have valid IDs vs invalid IDs
         const pattern = new RegExp(`^EID${year}\\d{4}$`);
@@ -69,18 +71,18 @@ async function migrate() {
             maxIndexUsed++; // Calculate next sequentially mathematically correct index
             const newId = await generateOfflineId(year, maxIndexUsed);
             
-            console.log(`Migrating Employee [${emp.userId}] from ${emp.employeeId} -> ${newId}`);
+            logger.info(`Migrating Employee [${emp.userId}] from ${emp.employeeId} -> ${newId}`);
             emp.employeeId = newId;
             await emp.save({ validateBeforeSave: false }); // Skip other model validations
             updatedCount++;
         }
     }
 
-    console.log(`\nMigration completed successfully. Updated ${updatedCount} records.`);
+    logger.info(`\nMigration completed successfully. Updated ${updatedCount} records.`);
     process.exit(0);
 }
 
 migrate().catch(err => {
-    console.error('Migration failed:', err);
+    logger.error({ context: err }, 'Migration failed:');
     process.exit(1);
 });

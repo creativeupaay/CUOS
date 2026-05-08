@@ -3,8 +3,9 @@ import { User } from '../../auth/models/User.model';
 import { Client } from '../../client/models/Client.model';
 import { Project } from '../../project/models/Project.model';
 import AppError from '../../../utils/appError';
-import { Types } from 'mongoose';
+import { FilterQuery, Types } from 'mongoose';
 import crypto from 'crypto';
+import { logger } from "../../../utils/logger";
 
 // Minimal input for initial partner creation (just name and email)
 export interface CreatePartnerInput {
@@ -87,9 +88,9 @@ export class PartnerService {
             });
 
             return partnerRole;
-        } catch (error: any) {
+        } catch (error: unknown) {
             // If another request created it concurrently, fetch and proceed.
-            if (error?.code === 11000) {
+            if ((error as { code?: number })?.code === 11000) {
                 const existing = await Role.findOne({ name: /^partner$/i });
                 if (existing) {
                     return existing;
@@ -104,14 +105,14 @@ export class PartnerService {
      * Get all partners with optional filters
      */
     async getAllPartners(filters: ListPartnersFilters): Promise<{
-        partners: any[];
+        partners: Record<string, unknown>[];
         total: number;
         page: number;
         totalPages: number;
     }> {
         const { search, isActive, page = 1, limit = 20 } = filters;
 
-        const query: any = {};
+        const query: FilterQuery<IPartner> = {};
 
         if (isActive !== undefined) {
             query.isActive = isActive;
@@ -175,7 +176,7 @@ export class PartnerService {
     /**
      * Get partner by ID
      */
-    async getPartnerById(id: string): Promise<any> {
+    async getPartnerById(id: string): Promise<Record<string, unknown>> {
         const partner = await Partner.findById(id)
             .populate('userId', 'name email isActive')
             .populate('createdBy', 'name email');
@@ -297,8 +298,8 @@ export class PartnerService {
                 formUrl: registrationLink,
                 expiresAt: registrationTokenExpiry,
             });
-        } catch (emailError: any) {
-            console.error('Failed to send partner onboarding email:', emailError.message);
+        } catch (emailError: unknown) {
+            logger.error({ context: (emailError as Error).message }, 'Failed to send partner onboarding email:');
             // Don't fail partner creation if email fails
         }
 
@@ -427,8 +428,8 @@ export class PartnerService {
                 password: plainPassword,
                 loginUrl,
             });
-        } catch (emailError: any) {
-            console.error('Failed to send partner credentials email:', emailError.message);
+        } catch (emailError: unknown) {
+            logger.error({ context: (emailError as Error).message }, 'Failed to send partner credentials email:');
             // Don't fail onboarding if email fails
         }
 
@@ -565,7 +566,7 @@ export class PartnerService {
     /**
      * Get partner's clients
      */
-    async getPartnerClients(partnerId: string): Promise<any[]> {
+    async getPartnerClients(partnerId: string): Promise<ReturnType<typeof Client.find>['_mongooseOptions'] extends never ? object[] : object[]> {
         const clients = await Client.find({ partnerId })
             .sort({ createdAt: -1 })
             .populate('createdBy', 'name email')
@@ -582,7 +583,7 @@ export class PartnerService {
     /**
      * Get partner's projects
      */
-    async getPartnerProjects(partnerId: string): Promise<any[]> {
+    async getPartnerProjects(partnerId: string): Promise<object[]> {
         const projects = await Project.find({ partnerId })
             .sort({ createdAt: -1 })
             .populate('clientId', 'name companyName')

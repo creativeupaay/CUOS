@@ -1,12 +1,8 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
+import type { PortalClientInfo } from './clientPortalApi';
 
-interface PortalClientInfo {
-    clientId: string;
-    email: string;
-    name: string;
-    companyName?: string;
-}
+
 
 interface ClientPortalState {
     client: PortalClientInfo | null;

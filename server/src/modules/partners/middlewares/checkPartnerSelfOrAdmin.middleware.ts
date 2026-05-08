@@ -2,6 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
+import type { IPermission } from '../../auth/models/Permission.model';
+import type { Types } from 'mongoose';
+
+/** Shape of a fully populated role (role + permissions) */
+interface PopulatedRole {
+    _id: Types.ObjectId;
+    name: string;
+    permissions?: IPermission[];
+}
 
 export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -9,7 +18,7 @@ export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next:
             return next(new AppError('Authentication required', 401));
         }
 
-        const userObj = req.user as any;
+        const userObj = req.user;
         const requestedPartnerId = req.params.id;
 
         if (!requestedPartnerId) {
@@ -30,14 +39,16 @@ export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next:
                 return next();
             }
 
-            const user = await User.findById(userObj.id).populate({
+            const user = await User.findById(userObj.id).populate<{ role: PopulatedRole }>({
                 path: 'role',
                 populate: { path: 'permissions' },
             });
-            const role = user?.role as any;
-            const hasManageUsers = role?.permissions?.some(
-                (p: any) => (p.resource === 'users' && p.action === 'manage') || 
-                            (p.resource === 'partners' && p.action === 'manage')
+
+            const populatedRole = user?.role as PopulatedRole | undefined;
+            const hasManageUsers = populatedRole?.permissions?.some(
+                (p) =>
+                    (p.resource === 'users' && p.action === 'manage') ||
+                    (p.resource === 'partners' && p.action === 'manage')
             );
             if (hasManageUsers) {
                 return next();
@@ -48,7 +59,7 @@ export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next:
         if (userObj.role === 'partner' && !userObj.isPartnerEmployee) {
             const { Partner } = await import('../../partners/models/Partner.model');
             const partnerPortal = await Partner.findOne({ userId: userObj.id }).lean();
-            
+
             if (partnerPortal && partnerPortal._id.toString() === requestedPartnerId) {
                 return next();
             }
@@ -58,7 +69,7 @@ export const checkPartnerSelfOrAdmin = async (req: Request, res: Response, next:
         if (userObj.role === 'partner' && userObj.isPartnerEmployee) {
             const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
             const partnerEmployee = await PartnerEmployee.findById(userObj.id).lean();
-            
+
             if (partnerEmployee && partnerEmployee.partnerId.toString() === requestedPartnerId) {
                 // Allow read access, but deny write/PATCH access
                 if (req.method === 'GET') {

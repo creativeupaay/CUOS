@@ -26,6 +26,7 @@ import {
 import { logApplicationActivity } from './activity.service';
 import { calcomService } from './calcom.service';
 import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
+import { logger } from "../../../utils/logger";
 
 function getNested(obj: any, path: string): any {
     return path.split('.').reduce((acc, part) => (acc == null ? undefined : acc[part]), obj);
@@ -157,11 +158,11 @@ async function hydrateMeetingLinkFromCalcom(interview: IInterview): Promise<IInt
         interview.meetLink = recoveredMeetLink;
         await interview.save();
     } catch (error) {
-        console.error('Failed to hydrate meeting link from Cal.com booking:', {
-            interviewId: String(interview._id || ''),
-            bookingUid,
-            error,
-        });
+        logger.error({ context: {
+                        interviewId: String(interview._id || ''),
+                        bookingUid,
+                        error,
+                    } }, 'Failed to hydrate meeting link from Cal.com booking:');
     }
 
     return interview;
@@ -505,7 +506,7 @@ function scheduleInterviewReminder(input: {
 
     if (delay <= 0) {
         sendInterviewReminderEmailIfValid(input).catch((error) => {
-            console.error('Failed sending immediate interview reminder:', error);
+            logger.error({ context: error }, 'Failed sending immediate interview reminder:');
         });
         return;
     }
@@ -520,7 +521,7 @@ function scheduleInterviewReminder(input: {
     const timer = setTimeout(() => {
         sendInterviewReminderEmailIfValid(input)
             .catch((error) => {
-                console.error('Failed sending scheduled interview reminder:', error);
+                logger.error({ context: error }, 'Failed sending scheduled interview reminder:');
             })
             .finally(() => {
                 interviewReminderTimers.delete(timerKey);
@@ -639,7 +640,7 @@ export class InterviewService {
             jobTitle,
             bookingUrl,
         }).catch((err) => {
-            console.error('Failed to send interview invite email asynchronously:', err);
+            logger.error({ context: err }, 'Failed to send interview invite email asynchronously:');
         });
 
         await Application.findByIdAndUpdate(applicationId, { status: 'interview' });
@@ -708,7 +709,7 @@ export class InterviewService {
                     'Interview rescheduled by the hiring team'
                 );
             } catch (error: any) {
-                console.error('Failed to cancel previous Cal.com interview booking:', error);
+                logger.error({ context: error }, 'Failed to cancel previous Cal.com interview booking:');
                 throw new AppError(
                     error?.message || 'Could not cancel the previously scheduled interview booking',
                     422
@@ -784,9 +785,9 @@ export class InterviewService {
 
     async handleCalcomWebhook(payload: any, headers: IncomingHttpHeaders): Promise<void> {
         // Comprehensive webhook payload logging for debugging
-        console.log('=== CAL.COM WEBHOOK FULL PAYLOAD START ===');
-        console.log(JSON.stringify(payload, null, 2));
-        console.log('=== CAL.COM WEBHOOK FULL PAYLOAD END ===');
+        logger.info('=== CAL.COM WEBHOOK FULL PAYLOAD START ===');
+        logger.info(JSON.stringify(payload, null, 2));
+        logger.info('=== CAL.COM WEBHOOK FULL PAYLOAD END ===');
 
         const configuredSecret = env.CALCOM_WEBHOOK_SECRET?.trim();
         if (configuredSecret) {
@@ -902,10 +903,10 @@ export class InterviewService {
         }
 
         if (!applicationId) {
-            console.error('Cal.com webhook ignored: unable to map payload to application', {
-                ids,
-                rawEvent,
-            });
+            logger.error({ context: {
+                                ids,
+                                rawEvent,
+                            } }, 'Cal.com webhook ignored: unable to map payload to application');
             pushWebhookDebugEvent({
                 at: new Date().toISOString(),
                 stage: 'ignored',
@@ -921,9 +922,9 @@ export class InterviewService {
             .select('_id name email jobId')
             .populate('jobId', 'title interviewScheduling');
         if (!application) {
-            console.error('Cal.com webhook ignored: mapped application not found', {
-                applicationId,
-            });
+            logger.error({ context: {
+                                applicationId,
+                            } }, 'Cal.com webhook ignored: mapped application not found');
             pushWebhookDebugEvent({
                 at: new Date().toISOString(),
                 stage: 'ignored',
@@ -945,9 +946,9 @@ export class InterviewService {
 
         const appJobId = String((application.jobId as any)?._id || application.jobId || '');
         if (!appJobId) {
-            console.error('Cal.com webhook ignored: application has no jobId', {
-                applicationId,
-            });
+            logger.error({ context: {
+                                applicationId,
+                            } }, 'Cal.com webhook ignored: application has no jobId');
             pushWebhookDebugEvent({
                 at: new Date().toISOString(),
                 stage: 'ignored',
@@ -1067,10 +1068,10 @@ export class InterviewService {
             normalizeMeetingUrl(String(previousInterview?.meetLink || '').trim());
 
         if (!nextMeetLink) {
-            console.error('Cal.com webhook ignored: no meeting link could be derived', {
-                applicationId,
-                ids,
-            });
+            logger.error({ context: {
+                                applicationId,
+                                ids,
+                            } }, 'Cal.com webhook ignored: no meeting link could be derived');
             pushWebhookDebugEvent({
                 at: new Date().toISOString(),
                 stage: 'ignored',
@@ -1234,7 +1235,7 @@ export class InterviewService {
                 meetLink: nextMeetLink,
             });
         } catch (error) {
-            console.error('Failed sending interview confirmation to candidate:', error);
+            logger.error({ context: error }, 'Failed sending interview confirmation to candidate:');
         }
 
         if (updatedInterview?._id && reminderMinutesBefore.length > 0) {
@@ -1296,7 +1297,7 @@ export class InterviewService {
                 );
             }
         } catch (error) {
-            console.error('Failed sending HR interview notifications:', error);
+            logger.error({ context: error }, 'Failed sending HR interview notifications:');
         }
     }
 

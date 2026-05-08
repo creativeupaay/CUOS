@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.util';
 import AppError from '../../../utils/appError';
-import { User } from '../models/User.model';
+import { User, IModulePermissions } from '../models/User.model';
+import type { IRole } from '../models/Role.model';
+import type { AuthenticatedUser } from '../../../types/express.d';
 
 /**
  * Authenticate middleware - Verify JWT token from Cookie or Header
@@ -31,7 +33,7 @@ export const authenticate = async (
         const payload = verifyAccessToken(token);
 
         // 4. Get user from database
-        const user = await User.findById(payload.userId).populate('role');
+        const user = await User.findById(payload.userId).populate<{ role: IRole }>('role');
 
         if (user) {
             if (!user.isActive) {
@@ -39,7 +41,7 @@ export const authenticate = async (
             }
 
             let partnerId: string | undefined;
-            if ((user.role as any)?.name === 'partner') {
+            if (user.role.name === 'partner') {
                 const { Partner } = await import('../../partners/models/Partner.model');
                 const partner = await Partner.findOne({ userId: user._id }).select('_id').lean();
                 if (partner?._id) {
@@ -47,14 +49,15 @@ export const authenticate = async (
                 }
             }
 
-            (req as any).user = {
-                id: (user._id as any).toString(),
+            const authUser: AuthenticatedUser = {
+                id: (user._id as unknown as { toString(): string }).toString(),
                 email: user.email,
-                role: (user.role as any).name,
+                role: user.role.name,
                 modulePermissions: user.modulePermissions,
                 ...(partnerId ? { partnerId } : {}),
             };
 
+            req.user = authUser;
             return next();
         }
 
@@ -70,21 +73,20 @@ export const authenticate = async (
             return next(new AppError('User account is deactivated', 403));
         }
 
-        (req as any).user = {
-            id: (partnerEmployee._id as any).toString(),
+        req.user = {
+            id: (partnerEmployee._id as unknown as { toString(): string }).toString(),
             email: partnerEmployee.email,
             role: 'partner',
             isPartnerEmployee: true,
             partnerId: partnerEmployee.partnerId?.toString(),
             modulePermissions: {
-                projectManagement: { enabled: partnerEmployee.modulePermissions?.projectManagement ?? true },
-                crm: { enabled: partnerEmployee.modulePermissions?.crm ?? false },
-                teamManagement: { enabled: partnerEmployee.modulePermissions?.teamManagement ?? false },
-            },
+                projectManagement: { enabled: partnerEmployee.modulePermissions?.projectManagement ?? true, projectPermissions: [] },
+                crm: { enabled: partnerEmployee.modulePermissions?.crm ?? false, subModules: { pipeline: false, leads: false, proposals: false, clients: false } },
+            } as Partial<IModulePermissions>,
         };
 
         next();
-    } catch (error: any) {
+    } catch (error: unknown) {
         return next(new AppError('Invalid or expired token', 401));
     }
 };

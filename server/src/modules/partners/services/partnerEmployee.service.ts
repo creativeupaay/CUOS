@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { FilterQuery, Types } from 'mongoose';
 import { PartnerEmployee, IPartnerEmployee } from '../models/PartnerEmployee.model';
 import { Partner } from '../models/Partner.model';
 import AppError from '../../../utils/appError';
@@ -95,7 +95,7 @@ export class PartnerEmployeeService {
         const partnerId = await this.getPartnerIdFromUser(userId);
         const { search, isActive, page = 1, limit = 20 } = filters;
 
-        const query: any = { partnerId: new Types.ObjectId(partnerId) };
+        const query: FilterQuery<IPartnerEmployee> = { partnerId: new Types.ObjectId(partnerId) };
 
         if (isActive !== undefined) {
             query.isActive = isActive;

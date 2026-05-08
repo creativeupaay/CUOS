@@ -6,6 +6,7 @@
  */
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { logger } from "../utils/logger";
 
 dotenv.config();
 
@@ -13,11 +14,11 @@ async function migrate() {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/cuos';
 
     await mongoose.connect(mongoUri);
-    console.log('Connected to MongoDB');
+    logger.info('Connected to MongoDB');
 
     const db = mongoose.connection.db;
     if (!db) {
-        console.error('Database connection not established');
+        logger.error('Database connection not established');
         process.exit(1);
     }
 
@@ -34,34 +35,34 @@ async function migrate() {
             },
         }
     );
-    console.log(`Updated ${wonResult.modifiedCount} leads from 'won' to 'closed'`);
+    logger.info(`Updated ${wonResult.modifiedCount} leads from 'won' to 'closed'`);
 
     // Migrate 'lost' → 'lead-lost'
     const lostResult = await leadsCollection.updateMany(
         { stage: 'lost' },
         { $set: { stage: 'lead-lost' } }
     );
-    console.log(`Updated ${lostResult.modifiedCount} leads from 'lost' to 'lead-lost'`);
+    logger.info(`Updated ${lostResult.modifiedCount} leads from 'lost' to 'lead-lost'`);
 
     // Add isLocked:false to all leads that don't have it
     const lockedResult = await leadsCollection.updateMany(
         { isLocked: { $exists: false } },
         { $set: { isLocked: false } }
     );
-    console.log(`Set isLocked=false on ${lockedResult.modifiedCount} leads`);
+    logger.info(`Set isLocked=false on ${lockedResult.modifiedCount} leads`);
 
     // Add meetings:[] to all leads that don't have it
     const meetingsResult = await leadsCollection.updateMany(
         { meetings: { $exists: false } },
         { $set: { meetings: [] } }
     );
-    console.log(`Set empty meetings on ${meetingsResult.modifiedCount} leads`);
+    logger.info(`Set empty meetings on ${meetingsResult.modifiedCount} leads`);
 
     await mongoose.disconnect();
-    console.log('Migration complete!');
+    logger.info('Migration complete!');
 }
 
 migrate().catch((err) => {
-    console.error('Migration failed:', err);
+    logger.error({ context: err }, 'Migration failed:');
     process.exit(1);
 });

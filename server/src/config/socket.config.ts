@@ -5,6 +5,7 @@ import { setupNoteHandlers } from '../modules/collaboration/handlers/noteHandler
 import { setupNotificationHandlers } from '../modules/notification/handlers/notificationHandler';
 import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
+import { logger } from "../utils/logger";
 
 /**
  * Initialize Socket.io server
@@ -62,7 +63,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   // Handle connections
   io.on('connection', (socket: AuthenticatedSocket) => {
     const userId = socket.data.userId;
-    console.log(`[Socket.io] User ${userId} connected (${socket.id})`);
+    logger.info(`[Socket.io] User ${userId} connected (${socket.id})`);
 
     // Join user's personal room for notifications
     socket.join(`user:${userId}`);
@@ -75,22 +76,22 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
     // Handle connection errors
     socket.on('error', (error) => {
-      console.error(`[Socket.io] Error for socket ${socket.id}:`, error);
+      logger.error({ context: error }, `[Socket.io] Error for socket ${socket.id}:`);
     });
 
     // Handle disconnect
     socket.on('disconnect', () => {
       socket.leave(`user:${userId}`);
-      console.log(`[Socket.io] User ${userId} disconnected (${socket.id})`);
+      logger.info(`[Socket.io] User ${userId} disconnected (${socket.id})`);
     });
   });
 
   // Handle server errors
   io.engine.on('connection_error', (error) => {
-    console.error('[Socket.io] Connection error:', error);
+    logger.error({ context: error }, '[Socket.io] Connection error:');
   });
 
-  console.log('[Socket.io] Server initialized successfully');
+  logger.info('[Socket.io] Server initialized successfully');
 
   return io;
 };

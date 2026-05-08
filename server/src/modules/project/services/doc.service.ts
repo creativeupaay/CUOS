@@ -11,6 +11,7 @@ import {
 import AppError from '../../../utils/appError';
 import { ensureUnifiedSharedFolder } from './sharedFolder.service';
 import { notificationService } from '../../notification/services/notification.service';
+import { logger } from "../../../utils/logger";
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ const convertToUserIds = async (ids: string[]): Promise<string[]> => {
 const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
     if (userIds.length === 0) return [];
 
-    console.log('[convertToEmployeeData] Input User IDs:', userIds.map(id => id.toString()));
+    logger.info({ context: userIds.map(id => id.toString()) }, '[convertToEmployeeData] Input User IDs:');
 
     // Find employees whose userId matches the stored User IDs
     const employees = await Employee.find({
@@ -53,12 +54,12 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
     .select('_id userId')
     .lean();
 
-    console.log('[convertToEmployeeData] Found employees:', employees.length);
-    console.log('[convertToEmployeeData] Employee details:', employees.map(e => ({
-        employeeId: e._id.toString(),
-        userId: e.userId.toString(),
-        userDetails: (e.userId as any)
-    })));
+    logger.info({ context: employees.length }, '[convertToEmployeeData] Found employees:');
+    logger.info({ context: employees.map(e => ({
+                employeeId: e._id.toString(),
+                userId: e.userId.toString(),
+                userDetails: (e.userId as any)
+            })) }, '[convertToEmployeeData] Employee details:');
 
     // Return employee data with Employee ID and user details
     const result = employees.map(employee => ({
@@ -67,7 +68,7 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
         email: (employee.userId as any)?.email,
     }));
 
-    console.log('[convertToEmployeeData] Final result:', result);
+    logger.info({ context: result }, '[convertToEmployeeData] Final result:');
     return result;
 };
 
@@ -93,13 +94,13 @@ export const isDocAdmin = async (
     const isAdmin = docAdmins.some((id) => id.toString().trim() === normalizedUserId);
 
     // Debug logging (remove in production if needed)
-    console.log('[isDocAdmin] Debug Info:', {
-        projectId,
-        userId: normalizedUserId,
-        userRole,
-        docAdmins: docAdmins.map(id => id.toString()),
-        isAdmin,
-    });
+    logger.info({ context: {
+                projectId,
+                userId: normalizedUserId,
+                userRole,
+                docAdmins: docAdmins.map(id => id.toString()),
+                isAdmin,
+            } }, '[isDocAdmin] Debug Info:');
 
     return isAdmin;
 };
@@ -130,12 +131,12 @@ export const getFolders = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocFolder[]> => {
-    console.log('[getFolders] Starting with params:', { projectId, parentId, userId, userRole, isPartnerRequest });
+    logger.info({ context: { projectId, parentId, userId, userRole, isPartnerRequest } }, '[getFolders] Starting with params:');
 
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
 
-    console.log('[getFolders] Admin check result:', admin);
+    logger.info({ context: admin }, '[getFolders] Admin check result:');
 
     // Normalize legacy data so only one shared folder exists across CUOS/partner/client.
     if (!parentId) {
@@ -147,7 +148,7 @@ export const getFolders = async (
         parentId: parentId ? new Types.ObjectId(parentId) : null,
     };
 
-    console.log('[getFolders] Base query:', query);
+    logger.info({ context: query }, '[getFolders] Base query:');
 
     if (!admin) {
         if (isPartnerRequest && !parentId) {
@@ -163,9 +164,9 @@ export const getFolders = async (
                 { createdBy: userObjectId },
             ];
         }
-        console.log('[getFolders] Non-admin query with filters:', query);
+        logger.info({ context: query }, '[getFolders] Non-admin query with filters:');
     } else {
-        console.log('[getFolders] Admin query - NO FILTERS (should see all)');
+        logger.info('[getFolders] Admin query - NO FILTERS (should see all)');
     }
 
     let results = await DocFolder.find(query)
@@ -215,8 +216,8 @@ export const getFolders = async (
         }
     }
 
-    console.log('[getFolders] Final results count:', results.length);
-    console.log('[getFolders] Folder names:', results.map(f => f.name));
+    logger.info({ context: results.length }, '[getFolders] Final results count:');
+    logger.info({ context: results.map(f => f.name) }, '[getFolders] Folder names:');
 
     // Add access count to each folder
     const resultsWithCount = await Promise.all(
@@ -350,19 +351,19 @@ export const getDocItems = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocItem[]> => {
-    console.log('[getDocItems] Starting with params:', { projectId, folderId, userId, userRole, isPartnerRequest });
+    logger.info({ context: { projectId, folderId, userId, userRole, isPartnerRequest } }, '[getDocItems] Starting with params:');
 
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
 
-    console.log('[getDocItems] Admin check result:', admin);
+    logger.info({ context: admin }, '[getDocItems] Admin check result:');
 
     const query: Record<string, unknown> = {
         projectId: new Types.ObjectId(projectId),
         folderId: folderId ? new Types.ObjectId(folderId) : null,
     };
 
-    console.log('[getDocItems] Base query:', query);
+    logger.info({ context: query }, '[getDocItems] Base query:');
 
     if (!admin) {
         // Check if user has folder-level access
@@ -387,9 +388,9 @@ export const getDocItems = async (
                 { uploadedBy: userObjectId },      // Files they uploaded
             ];
         }
-        console.log('[getDocItems] Non-admin query with filters:', { hasFolderAccess, query });
+        logger.info({ context: { hasFolderAccess, query } }, '[getDocItems] Non-admin query with filters:');
     } else {
-        console.log('[getDocItems] Admin query - NO FILTERS (should see all)');
+        logger.info('[getDocItems] Admin query - NO FILTERS (should see all)');
     }
 
     const results = await DocItem.find(query)
@@ -398,8 +399,8 @@ export const getDocItems = async (
         .sort({ name: 1 })
         .lean();
 
-    console.log('[getDocItems] Final results count:', results.length);
-    console.log('[getDocItems] File names:', results.map(f => f.name));
+    logger.info({ context: results.length }, '[getDocItems] Final results count:');
+    logger.info({ context: results.map(f => f.name) }, '[getDocItems] File names:');
 
     return results;
 };
@@ -561,12 +562,12 @@ export const updateDocAdmins = async (
     projectId: string,
     userIds: string[]
 ): Promise<void> => {
-    console.log('[updateDocAdmins] Input:', { projectId, userIds });
+    logger.info({ context: { projectId, userIds } }, '[updateDocAdmins] Input:');
 
     // Convert Employee IDs to User IDs if needed
     const actualUserIds = await convertToUserIds(userIds);
 
-    console.log('[updateDocAdmins] Converted User IDs:', actualUserIds);
+    logger.info({ context: actualUserIds }, '[updateDocAdmins] Converted User IDs:');
 
     const project = await Project.findById(projectId)
         .select('name docAdmins')
@@ -603,5 +604,5 @@ export const updateDocAdmins = async (
         );
     }
 
-    console.log('[updateDocAdmins] Successfully updated doc admins for project:', projectId);
+    logger.info({ context: projectId }, '[updateDocAdmins] Successfully updated doc admins for project:');
 };

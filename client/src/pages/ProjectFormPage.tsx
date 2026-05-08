@@ -1033,7 +1033,7 @@ export default function ProjectFormPage({
                                                     type="date"
                                                     value={phase.endDate || ''}
                                                     onChange={(e) => handlePhaseChange(index, 'endDate', e.target.value)}
-                                                                        min={form.startDate || undefined}
+                                                    min={form.startDate || undefined}
                                                     className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
                                                     style={{ ...inputStyle, backgroundColor: 'white' }}
                                                 />

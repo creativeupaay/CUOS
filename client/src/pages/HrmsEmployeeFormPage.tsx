@@ -54,7 +54,7 @@ export default function HrmsEmployeeFormPage() {
         workSchedule: { workingDaysPerWeek: 5, hoursPerDay: 8 },
     });
 
-const [autoFilledDept, setAutoFilledDept] = useState(false);
+    const [autoFilledDept, setAutoFilledDept] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const configuredDepartments = orgSettingsData?.data?.departments?.length
         ? dedupeDepartments(orgSettingsData.data.departments)
@@ -174,16 +174,16 @@ const [autoFilledDept, setAutoFilledDept] = useState(false);
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Select User *</label>
                                 <select required value={form.userId} onChange={(e) => {
-                                        const selectedUser = availableUsers.find((u: any) => u._id === e.target.value);
-                                        const userDepartment = String(selectedUser?.department || '').trim();
-                                        const matchedDept =
-                                            departmentOptions.find(
-                                                (department) =>
-                                                    department.toLowerCase() === userDepartment.toLowerCase()
-                                            ) || resolveDepartmentValue(userDepartment, departmentOptions);
-                                        setAutoFilledDept(!!matchedDept);
-                                        setForm({ ...form, userId: e.target.value, ...(matchedDept ? { department: matchedDept } : {}) });
-                                    }}
+                                    const selectedUser = availableUsers.find((u: any) => u._id === e.target.value);
+                                    const userDepartment = String(selectedUser?.department || '').trim();
+                                    const matchedDept =
+                                        departmentOptions.find(
+                                            (department) =>
+                                                department.toLowerCase() === userDepartment.toLowerCase()
+                                        ) || resolveDepartmentValue(userDepartment, departmentOptions);
+                                    setAutoFilledDept(!!matchedDept);
+                                    setForm({ ...form, userId: e.target.value, ...(matchedDept ? { department: matchedDept } : {}) });
+                                }}
                                     className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
                                     <option value="">— Choose a user —</option>
                                     {availableUsers.map((u: any) => (

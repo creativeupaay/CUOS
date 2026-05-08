@@ -8,6 +8,7 @@ import type { CreateClientInput, UpdateClientInput, ListClientsInput, AddClientA
 import { sendClientOnboardingEmail } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
 import { notificationService } from '../../notification/services/notification.service';
+import { logger } from "../../../utils/logger";
 
 export class ClientService {
     private isAdminRole(role?: string): boolean {
@@ -398,7 +399,7 @@ export class ClientService {
             await sendClientOnboardingEmail({ to: email, clientName, formUrl, expiresAt });
         } catch (err) {
             // Email failure should not block the response — log and continue
-            console.error('[Onboarding Email] Failed to send:', err);
+            logger.error({ context: err }, '[Onboarding Email] Failed to send:');
         }
 
         return { token, expiresAt };
@@ -500,7 +501,7 @@ export class ClientService {
                 dashboardUrl: `${env.FRONTEND_URL}/crm/clients/${updated._id}`,
             });
         } catch (err) {
-            console.error('[Onboarding Notification] Failed to notify admins:', err);
+            logger.error({ context: err }, '[Onboarding Notification] Failed to notify admins:');
         }
 
         return updated;

@@ -2,6 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../../auth/models/User.model';
 import { Partner } from '../models/Partner.model';
 import AppError from '../../../utils/appError';
+import type { IRole } from '../../auth/models/Role.model';
+import { Types } from 'mongoose';
+
+/** Extract role name from a populated role field */
+function getRoleName(role: unknown): string {
+    if (!role || role instanceof Types.ObjectId) return '';
+    return ((role as IRole).name || '').toLowerCase();
+}
 
 /**
  * Middleware to attach partner information to request for data filtering
@@ -18,14 +26,13 @@ export const attachPartnerContext = async (
             return next(new AppError('Authentication required', 401));
         }
 
-        const user = await User.findById(req.user.id).populate('role');
+        const user = await User.findById(req.user.id).populate<{ role: IRole }>('role');
 
         if (!user) {
             return next(new AppError('User not found', 401));
         }
 
-        const role = user.role as any;
-        const roleName = role?.name?.toLowerCase();
+        const roleName = getRoleName(user.role);
 
         // If user is partner, find their partner record and attach partnerId
         if (roleName === 'partner') {
@@ -71,7 +78,7 @@ export const filterPartnerData = async (
             return next(new AppError('Authentication required', 401));
         }
 
-        const user = await User.findById(req.user.id).populate('role');
+        const user = await User.findById(req.user.id).populate<{ role: IRole }>('role');
 
         if (!user) {
             // Check if it's a partner employee
@@ -100,8 +107,7 @@ export const filterPartnerData = async (
             return next(new AppError('User not found', 401));
         }
 
-        const role = user.role as any;
-        const roleName = role?.name?.toLowerCase();
+        const roleName = getRoleName(user.role);
 
         // If user is a partner, enforce partnerId filtering
         if (roleName === 'partner') {

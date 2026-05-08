@@ -4,6 +4,7 @@ import { UserPresence, PRESENCE_COLORS, AuthenticatedSocket } from '../types/typ
 import { getRoom, getRoomName } from '../utils/roomManager';
 import { User } from '../../auth/models/User.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { logger } from "../../../utils/logger";
 
 /**
  * Get user data for presence (name and profile photo from Employee model)
@@ -28,7 +29,7 @@ export const getUserData = async (userId: string): Promise<{ name: string; photo
       photo: employee?.profilePhoto?.url || null,
     };
   } catch (error) {
-    console.error('[PresenceService] Error fetching user data:', error);
+    logger.error({ context: error }, '[PresenceService] Error fetching user data:');
     throw error;
   }
 };
@@ -84,12 +85,12 @@ export const addUserToRoom = (
   const room = getRoom(noteId);
 
   if (!room) {
-    console.error(`[PresenceService] Room not found for note ${noteId}`);
+    logger.error(`[PresenceService] Room not found for note ${noteId}`);
     return;
   }
 
   room.users.set(presence.socketId, presence);
-  console.log(`[PresenceService] User ${presence.userName} joined note ${noteId}`);
+  logger.info(`[PresenceService] User ${presence.userName} joined note ${noteId}`);
 };
 
 /**
@@ -109,7 +110,7 @@ export const removeUserFromRoom = (
 
   if (presence) {
     room.users.delete(socketId);
-    console.log(`[PresenceService] User ${presence.userName} left note ${noteId}`);
+    logger.info(`[PresenceService] User ${presence.userName} left note ${noteId}`);
   }
 
   return presence || null;

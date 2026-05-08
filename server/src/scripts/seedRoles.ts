@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { Role } from '../modules/auth/models/Role.model';
 import { Permission } from '../modules/auth/models/Permission.model';
 import { User } from '../modules/auth/models/User.model';
+import { logger } from "../utils/logger";
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ const MONGODB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/cuos';
 async function seedRolesAndPermissions() {
     try {
         await mongoose.connect(MONGODB_URI);
-        console.log('Connected to MongoDB');
+        logger.info('Connected to MongoDB');
 
         // Define all permissions
         const permissionsData = [
@@ -65,14 +66,14 @@ async function seedRolesAndPermissions() {
             upsertedPermissions.push(permission);
         }
 
-        console.log(`Upserted ${upsertedPermissions.length} permissions`);
+        logger.info(`Upserted ${upsertedPermissions.length} permissions`);
 
         // Get permission IDs for role creation
         const allPermissions = upsertedPermissions.map((p) => p._id);
         const projectPerms = upsertedPermissions.filter((p) => p.resource === 'projects').map((p) => p._id);
         const userPerms = upsertedPermissions.filter((p) => p.resource === 'users').map((p) => p._id);
         const financePerms = upsertedPermissions.filter((p) => p.resource === 'finance').map((p) => p._id);
-        const crmPerms = upsertedPermissions.filter((p) => p.resource === 'crm').map((p) => p._id);
+        // const crmPerms = upsertedPermissions.filter((p) => p.resource === 'crm').map((p) => p._id);
         const hrmsPerms = upsertedPermissions.filter((p) => p.resource === 'hrms').map((p) => p._id);
 
         // Define roles
@@ -141,7 +142,7 @@ async function seedRolesAndPermissions() {
             upsertedRoles.push(role);
         }
 
-        console.log(`Upserted ${upsertedRoles.length} roles`);
+        logger.info(`Upserted ${upsertedRoles.length} roles`);
 
         // Create super admin user if not exists
         const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@creativeupaay.com';
@@ -160,23 +161,23 @@ async function seedRolesAndPermissions() {
                 isActive: true,
             });
 
-            console.log(`\nCreated super admin user: ${superAdminEmail}`);
+            logger.info(`\nCreated super admin user: ${superAdminEmail}`);
         } else {
-            console.log(`\nSuper admin user already exists: ${superAdminEmail}`);
-            console.log('Existing users\' roles have been preserved.');
+            logger.info(`\nSuper admin user already exists: ${superAdminEmail}`);
+            logger.info('Existing users\' roles have been preserved.');
         }
 
-        console.log('\n✅ Seeding completed successfully!');
-        console.log('\n⚠️  NOTE: All existing user role assignments have been preserved.');
-        console.log('This script only creates/updates role and permission definitions.');
-        console.log('\nRoles upserted:');
+        logger.info('\n✅ Seeding completed successfully!');
+        logger.info('\n⚠️  NOTE: All existing user role assignments have been preserved.');
+        logger.info('This script only creates/updates role and permission definitions.');
+        logger.info('\nRoles upserted:');
         upsertedRoles.forEach((role) => {
-            console.log(`  - ${role.name} (Level ${role.level})`);
+            logger.info(`  - ${role.name} (Level ${role.level})`);
         });
 
         await mongoose.disconnect();
     } catch (error) {
-        console.error('Error seeding database:', error);
+        logger.error({ context: error }, 'Error seeding database:');
         process.exit(1);
     }
 }

@@ -3,6 +3,7 @@ import { ExtendedError } from 'socket.io/dist/namespace';
 import { verifyAccessToken } from '../../auth/utils/jwt.util';
 import { AuthenticatedSocket } from '../types/types';
 import { User } from '../../auth/models/User.model';
+import { logger } from "../../../utils/logger";
 
 const getCookieValue = (cookieHeader: string | undefined, name: string): string | null => {
   if (!cookieHeader) return null;
@@ -83,7 +84,7 @@ export const socketAuthMiddleware = async (
 
     next();
   } catch (error: any) {
-    console.error('Socket authentication error:', error.message);
+    logger.error({ context: error.message }, 'Socket authentication error:');
     next(new Error('Authentication failed'));
   }
 };

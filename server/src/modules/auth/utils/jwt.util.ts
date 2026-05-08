@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import {env} from '../../../config/env.config';
+import { logger } from "../../../utils/logger";
 
 
 const ACCESS_SECRET = env.JWT_ACCESS_SECRET || '';
@@ -27,9 +28,9 @@ const stripReservedJwtClaims = (payload: Record<string, unknown>): Record<string
  */
 export const generateAccessToken = (payload: TokenPayload): string => {
     const safePayload = stripReservedJwtClaims({ ...payload });
-    return jwt.sign(safePayload, ACCESS_SECRET as any, {
-        expiresIn: ACCESS_EXPIRY,
-    } as any);
+    return jwt.sign(safePayload, ACCESS_SECRET, {
+        expiresIn: ACCESS_EXPIRY as jwt.SignOptions['expiresIn'],
+    });
 };
 
 /**
@@ -37,9 +38,9 @@ export const generateAccessToken = (payload: TokenPayload): string => {
  */
 export const generateRefreshToken = (payload: TokenPayload): string => {
     const safePayload = stripReservedJwtClaims({ ...payload });
-    return jwt.sign(safePayload, REFRESH_SECRET as any, {
-        expiresIn: REFRESH_EXPIRY,
-    } as any);
+    return jwt.sign(safePayload, REFRESH_SECRET, {
+        expiresIn: REFRESH_EXPIRY as jwt.SignOptions['expiresIn'],
+    });
 };
 
 /**
@@ -60,7 +61,7 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
     try {
         return jwt.verify(token, REFRESH_SECRET) as TokenPayload;
     } catch (error) {
-        console.log('Refresh token verification failed:', error);
+        logger.info({ context: error }, 'Refresh token verification failed:');
         throw new Error('Invalid or expired refresh token');
     }
 };
@@ -68,6 +69,6 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
 /**
  * Decode token without verification (for debugging)
  */
-export const decodeToken = (token: string): any => {
-    return jwt.decode(token);
+export const decodeToken = (token: string): TokenPayload | null => {
+    return jwt.decode(token) as TokenPayload | null;
 };
