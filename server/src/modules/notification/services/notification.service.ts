@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
 import { Types, FilterQuery } from 'mongoose';
+import { logger } from '../../../utils/logger';
 import { Notification, INotification, NotificationType } from '../models/Notification.model';
 import { User } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
@@ -76,7 +77,7 @@ class NotificationService {
         }).select('_id');
 
         if (superadminRoles.length === 0) {
-            console.warn('[NotificationService] No superadmin roles found');
+            logger.warn('[NotificationService] No superadmin roles found');
             return;
         }
 

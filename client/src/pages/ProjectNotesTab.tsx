@@ -26,6 +26,7 @@ import { PresenceAvatars } from '@/features/collaboration/components/PresenceAva
 import { BlockPresenceIndicator } from '@/features/collaboration/components/BlockPresenceIndicator';
 import { CollaborationStatus } from '@/features/collaboration/components/CollaborationStatus';
 import type { NoteBroadcastResponse, UserPresence } from '@/features/collaboration/types/types';
+import { logger } from '@/utils/logger';
 
 const NOTE_COLORS = [
     { label: 'White', value: '#FFFFFF' },
@@ -831,7 +832,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
             const cached = localStorage.getItem(OFFLINE_CACHE_KEY);
             if (cached) cachedRef.current = JSON.parse(cached);
         } catch (error) {
-            console.error('Failed to parse offline cache', error);
+            logger.error('Failed to parse offline cache', error);
         }
     }
 
@@ -888,7 +889,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
         try {
             localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify({ title, color, isPinned, blocks }));
         } catch (error) {
-            console.error('Failed to save to offline cache', error);
+            logger.error('Failed to save to offline cache', error);
         }
     }, [OFFLINE_CACHE_KEY, title, color, isPinned, blocks]);
 
@@ -933,7 +934,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
     }, []);
 
     const handleSyncRequired = useCallback((version: number) => {
-        console.warn('Sync required, version:', version);
+        logger.warn('Sync required, version:', version);
         setIsSyncing(true);
         setTimeout(() => setIsSyncing(false), 1000);
     }, []);
@@ -955,7 +956,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
         onRemoteTitleUpdate: handleRemoteTitleUpdate,
         onRoomState: handleRoomState,
         onSyncRequired: handleSyncRequired,
-        onError: (message) => console.error('Collaboration error:', message),
+        onError: (message) => logger.error('Collaboration error:', message),
     });
 
     const visibleActiveUsers = activeUsers.filter((user) => user.userId !== currentUserId);
@@ -1048,7 +1049,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
             try {
                 await handleSaveNow();
             } catch (error) {
-                console.error('Autosave failed', error);
+                logger.error('Autosave failed', error);
                 setSaveStatus('error');
             }
         }, 900);
@@ -1080,7 +1081,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
             try {
                 await handleSaveNow();
             } catch (error) {
-                console.error('Save on close failed', error);
+                logger.error('Save on close failed', error);
             }
         }
         onClose();
@@ -1341,7 +1342,7 @@ function NoteEditorModal({ projectId, editingNote, isAnimating, mentionableMembe
             }
             setCopyStatus('copied');
         } catch (error) {
-            console.error('Failed to copy note', error);
+            logger.error('Failed to copy note', error);
         }
     }, []);
 
@@ -1722,7 +1723,7 @@ export default function ProjectNotesTab() {
         try {
             await deleteNote({ projectId: projectId!, noteId: note._id }).unwrap();
         } catch (error) {
-            console.error('Failed to delete note', error);
+            logger.error('Failed to delete note', error);
         }
     };
 

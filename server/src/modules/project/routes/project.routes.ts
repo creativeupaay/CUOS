@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../../../utils/logger';
 import multer from 'multer';
 import * as projectController from '../controllers/project.controller';
 import * as taskController from '../controllers/task.controller';
@@ -41,7 +42,7 @@ const credentialPerfLog = (label: string) => (req: Request, res: Response, next:
 
     res.on('finish', () => {
         const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-        console.log(
+        logger.info(
             `[PERF][credentials] ${label} ${req.method} ${requestPath} status=${res.statusCode} durationMs=${elapsedMs.toFixed(2)}`
         );
     });

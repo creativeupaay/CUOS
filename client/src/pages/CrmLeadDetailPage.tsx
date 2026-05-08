@@ -32,6 +32,7 @@ import {
     useUploadLeadDocumentsMutation,
 } from '@/features/crm';
 import type { Lead } from '@/features/crm';
+import { logger } from '@/utils/logger';
 
 const stageColors: Record<string, { bg: string; text: string }> = {
     new: { bg: 'var(--color-info-soft)', text: 'var(--color-info)' },
@@ -134,7 +135,7 @@ export default function CrmLeadDetailPage() {
             }).unwrap();
             setActivityDesc('');
         } catch (error) {
-            console.error('Failed to add activity:', error);
+            logger.error('Failed to add activity:', error);
         }
     };
 
@@ -145,7 +146,7 @@ export default function CrmLeadDetailPage() {
             await closeDeal(id!).unwrap();
             navigate(`/crm/clients/new?fromLead=${id}`);
         } catch (error) {
-            console.error('Failed to close deal:', error);
+            logger.error('Failed to close deal:', error);
             alert('Failed to close deal. Please try again.');
         }
     };
@@ -155,7 +156,7 @@ export default function CrmLeadDetailPage() {
         try {
             await updateLead({ id: id!, data: { stage: newStage as Lead['stage'] } }).unwrap();
         } catch (error) {
-            console.error('Failed to update stage:', error);
+            logger.error('Failed to update stage:', error);
         }
     };
 
@@ -164,7 +165,7 @@ export default function CrmLeadDetailPage() {
             await deleteLead(id!).unwrap();
             navigate('/crm/leads');
         } catch (error) {
-            console.error('Failed to delete lead:', error);
+            logger.error('Failed to delete lead:', error);
         }
     };
 
@@ -175,7 +176,7 @@ export default function CrmLeadDetailPage() {
         try {
             await uploadLeadDocuments({ leadId: id, files }).unwrap();
         } catch (error) {
-            console.error('Failed to upload documents:', error);
+            logger.error('Failed to upload documents:', error);
             alert('Failed to upload documents. Please try again.');
         } finally {
             e.target.value = '';
@@ -216,7 +217,7 @@ export default function CrmLeadDetailPage() {
             await updateLead({ id, data: { documents: renamedDocuments } }).unwrap();
             handleCancelRenameDocument();
         } catch (error) {
-            console.error('Failed to rename document:', error);
+            logger.error('Failed to rename document:', error);
             alert('Failed to rename document. Please try again.');
         }
     };
@@ -246,7 +247,7 @@ export default function CrmLeadDetailPage() {
             setLinkName('');
             setLinkUrl('');
         } catch (error) {
-            console.error('Failed to add link:', error);
+            logger.error('Failed to add link:', error);
             alert('Failed to save link. Please try again.');
         }
     };
@@ -272,7 +273,7 @@ export default function CrmLeadDetailPage() {
             await updateLead({ id, data: { documents: filteredDocuments } }).unwrap();
             setConfirmingDocumentId(null);
         } catch (error) {
-            console.error('Failed to delete document:', error);
+            logger.error('Failed to delete document:', error);
             alert('Failed to delete document. Please try again.');
         }
     };
@@ -285,7 +286,7 @@ export default function CrmLeadDetailPage() {
             await updateLead({ id, data: { links: updatedLinks } }).unwrap();
             setConfirmingLinkIndex(null);
         } catch (error) {
-            console.error('Failed to delete link:', error);
+            logger.error('Failed to delete link:', error);
             alert('Failed to delete link. Please try again.');
         }
     };

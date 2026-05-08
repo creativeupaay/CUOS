@@ -34,6 +34,7 @@ import {
     useUpdateOtherBankAccountMutation,
 } from '@/features/finance/api/financeApi';
 import type {
+import { logger } from '@/utils/logger';
     BankAccountKey,
     BankAccountDetail,
     BankTransaction,
@@ -460,7 +461,7 @@ export default function FinanceCashInBankPage() {
             }
             closeModal();
         } catch (error) {
-            console.error('Failed to save bank transaction:', error);
+            logger.error('Failed to save bank transaction:', error);
         }
     };
 
@@ -472,7 +473,7 @@ export default function FinanceCashInBankPage() {
         try {
             await deleteBankTransaction(transactionId).unwrap();
         } catch (error) {
-            console.error('Failed to delete bank transaction:', error);
+            logger.error('Failed to delete bank transaction:', error);
         }
     };
 
@@ -488,7 +489,7 @@ export default function FinanceCashInBankPage() {
             }).unwrap();
             closeAccountModal();
         } catch (error) {
-            console.error('Failed to update bank account:', error);
+            logger.error('Failed to update bank account:', error);
         }
     };
 

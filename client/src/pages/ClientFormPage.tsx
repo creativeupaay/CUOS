@@ -8,6 +8,7 @@ import { useGetLeadByIdQuery } from '@/features/crm';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 export default function ClientFormPage() {
     const { id } = useParams<{ id: string }>();
@@ -230,7 +231,7 @@ export default function ClientFormPage() {
                 navigate(createTarget, { replace: true });
             }
         } catch (err: any) {
-            console.error('Failed to save client:', err);
+            logger.error('Failed to save client:', err);
             const errorMessage = err.data?.message || err.message || 'Failed to save client. Please try again.';
             setServerError(errorMessage);
         }

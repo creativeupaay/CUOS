@@ -19,6 +19,7 @@ import {
     Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2, Eye, EyeOff, Filter, FolderPlus, X, UserMinus
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { logger } from '@/utils/logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type CredentialType = 'env' | 'ssh-key' | 'test-user' | 'account' | 'other';
@@ -292,7 +293,7 @@ export default function ProjectCredentialsTab() {
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
             alert('Credentials saved successfully!');
         } catch (err: any) {
-            console.error('Failed to save credentials:', err);
+            logger.error('Failed to save credentials:', err);
             const errorMessage = err?.data?.message || err?.message || 'Unknown error';
             alert(`Failed to save: ${errorMessage}`);
         }
@@ -300,7 +301,7 @@ export default function ProjectCredentialsTab() {
 
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this credential?')) return;
-        try { await deleteCredential({ projectId: projectId!, id }).unwrap(); } catch (e) { console.error(e); }
+        try { await deleteCredential({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
 
     return (
@@ -834,7 +835,7 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
         try {
             await revokeAccess({ projectId, data: { credentialIds: [credential._id], userIds: [userId] } }).unwrap();
         } catch (e) {
-            console.error('Revoke failed:', e);
+            logger.error('Revoke failed:', e);
         }
     };
 

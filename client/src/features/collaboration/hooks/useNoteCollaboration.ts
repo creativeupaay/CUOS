@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import debounce from 'lodash.debounce';
 import { socket, connectSocket } from '../../../services/socket';
+import { logger } from '../../../utils/logger';
 import {
   setConnected,
   setCurrentNoteId,
@@ -101,7 +102,7 @@ export const useNoteCollaboration = ({
     const payload: JoinNotePayload = { noteId, projectId };
     socket.emit('note:join', payload);
 
-    console.log('[Collaboration] Joining note room:', noteId);
+    logger.debug('[Collaboration] Joining note room:', noteId);
   }, [noteId, projectId]);
 
   /**
@@ -114,7 +115,7 @@ export const useNoteCollaboration = ({
     socket.emit('note:leave', payload);
     isJoinedRef.current = false;
 
-    console.log('[Collaboration] Leaving note room:', noteId);
+    logger.debug('[Collaboration] Leaving note room:', noteId);
   }, [noteId]);
 
   /**
@@ -123,7 +124,7 @@ export const useNoteCollaboration = ({
   const broadcastChange = useCallback(
     (operation: Omit<BlockOperation, 'noteId' | 'timestamp' | 'userId' | 'version'>) => {
       if (!socket.connected || !isJoinedRef.current) {
-        console.warn('[Collaboration] Cannot broadcast - socket not connected');
+        logger.warn('[Collaboration] Cannot broadcast - socket not connected');
         return;
       }
 
@@ -142,7 +143,7 @@ export const useNoteCollaboration = ({
       versionRef.current = outgoingVersion + 1;
       dispatch(setVersion(versionRef.current));
 
-      console.log('[Collaboration] Broadcasted change:', operation.type, operation.blockId);
+      logger.debug('[Collaboration] Broadcasted change:', operation.type, operation.blockId);
     },
     [noteId, dispatch]
   );
@@ -201,7 +202,7 @@ export const useNoteCollaboration = ({
     // Connection state handlers
     const handleConnect = () => {
       dispatch(setConnected(true));
-      console.log('[Collaboration] Socket connected');
+      logger.info('[Collaboration] Socket connected');
 
       // Join note room on connect
       if (noteId && projectId) {
@@ -212,12 +213,12 @@ export const useNoteCollaboration = ({
     const handleDisconnect = () => {
       dispatch(setConnected(false));
       isJoinedRef.current = false;
-      console.log('[Collaboration] Socket disconnected');
+      logger.info('[Collaboration] Socket disconnected');
     };
 
     // Note collaboration event handlers
     const handleNoteJoined = (response: NoteJoinedResponse) => {
-      console.log('[Collaboration] Successfully joined note:', response);
+      logger.info('[Collaboration] Successfully joined note:', response);
       isJoinedRef.current = true;
       versionRef.current = response.version;
       dispatch(setVersion(response.version));
@@ -225,7 +226,7 @@ export const useNoteCollaboration = ({
     };
 
     const handleRoomState = (response: NoteRoomStateResponse) => {
-      console.log('[Collaboration] Received room state:', response);
+      logger.debug('[Collaboration] Received room state:', response);
       versionRef.current = response.version;
       dispatch(setVersion(response.version));
       dispatch(setActiveUsers(response.users));
@@ -236,7 +237,7 @@ export const useNoteCollaboration = ({
     };
 
     const handleBroadcast = (operation: NoteBroadcastResponse) => {
-      console.log('[Collaboration] Received broadcast:', operation);
+      logger.debug('[Collaboration] Received broadcast:', operation);
       versionRef.current = operation.version;
       dispatch(setVersion(operation.version));
 
@@ -252,7 +253,7 @@ export const useNoteCollaboration = ({
     };
 
     const handlePresence = (response: NotePresenceResponse) => {
-      console.log('[Collaboration] Presence update:', response.event, response.presence);
+      logger.debug('[Collaboration] Presence update:', response.event, response.presence);
 
       if (response.event === 'user-joined') {
         dispatch(addUser(response.presence));
@@ -269,7 +270,7 @@ export const useNoteCollaboration = ({
     };
 
     const handleSync = (response: NoteSyncResponse) => {
-      console.warn('[Collaboration] Sync required:', response);
+      logger.warn('[Collaboration] Sync required:', response);
       versionRef.current = response.version;
       dispatch(setVersion(response.version));
 
@@ -283,7 +284,7 @@ export const useNoteCollaboration = ({
     };
 
     const handleError = (response: NoteErrorResponse) => {
-      console.error('[Collaboration] Error:', response.message);
+      logger.error('[Collaboration] Error:', response.message);
       isJoinedRef.current = false;
 
       // Call error callback

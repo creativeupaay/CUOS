@@ -4,6 +4,7 @@ import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink } from 'lucide-react';
+import { logger } from '@/utils/logger';
 
 type MeetingType = 'internal' | 'external';
 
@@ -47,14 +48,14 @@ export default function ProjectMeetingsTab() {
             setForm({ purpose: '', members: '', datetime: '', notesLink: '', type: activeTab });
             closeForm();
         } catch (err) {
-            console.error('Failed to save meeting:', err);
+            logger.error('Failed to save meeting:', err);
             alert('Failed to save meeting. Please try again.');
         }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this meeting?')) return;
-        try { await deleteMeeting({ projectId: projectId!, id }).unwrap(); } catch (e) { console.error(e); }
+        try { await deleteMeeting({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
 
     const openForm = (type: MeetingType) => {

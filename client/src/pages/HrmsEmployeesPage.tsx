@@ -6,6 +6,7 @@ import {
     Plus, Search, Trash2, Edit, Eye, Users, Building2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { dedupeDepartments, formatDepartmentLabel, normalizeDepartmentKey, DEFAULT_DEPARTMENTS } from '@/utils/department';
+import { logger } from '@/utils/logger';
 const STATUSES = ['active', 'on-notice', 'relieved', 'terminated'];
 
 export default function HrmsEmployeesPage() {
@@ -44,7 +45,7 @@ export default function HrmsEmployeesPage() {
             try {
                 await deleteEmployee(id).unwrap();
             } catch (err) {
-                console.error('Failed to delete employee:', err);
+                logger.error('Failed to delete employee:', err);
             }
         }
     };

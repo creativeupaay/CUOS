@@ -23,6 +23,7 @@ import {
 import { useGetSalariesQuery } from '@/features/hrms/hrmsApi';
 import ModalPortal from '@/components/ui/ModalPortal';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 type ExpenseLevel = 'company' | 'project';
 type ExpenseType = 'fixed' | 'variable';
@@ -302,7 +303,7 @@ export default function FinanceExpensesPage() {
             setEditingId(null);
             setFormData(initialFormData);
         } catch (error) {
-            console.error('Failed to save expense:', error);
+            logger.error('Failed to save expense:', error);
         }
     };
 
@@ -321,7 +322,7 @@ export default function FinanceExpensesPage() {
             try {
                 await deleteExpense(id).unwrap();
             } catch (error) {
-                console.error('Failed to delete expense:', error);
+                logger.error('Failed to delete expense:', error);
             }
         }
     };
@@ -419,7 +420,7 @@ export default function FinanceExpensesPage() {
             resetFixedForm();
             setShowFixedExpenseForm(false);
         } catch (error) {
-            console.error('Failed to save fixed expense:', error);
+            logger.error('Failed to save fixed expense:', error);
         }
     };
 
@@ -432,7 +433,7 @@ export default function FinanceExpensesPage() {
             await deleteFixedExpense(id).unwrap();
             if (fixedEditingId === id) resetFixedForm();
         } catch (error) {
-            console.error('Failed to delete fixed expense:', error);
+            logger.error('Failed to delete fixed expense:', error);
         }
     };
 
@@ -443,7 +444,7 @@ export default function FinanceExpensesPage() {
                 isActive: !fixedExpense.isActive,
             }).unwrap();
         } catch (error) {
-            console.error('Failed to toggle fixed expense:', error);
+            logger.error('Failed to toggle fixed expense:', error);
         }
     };
 
@@ -480,7 +481,7 @@ export default function FinanceExpensesPage() {
                 await rejectFixedExpense(payload).unwrap();
             }
         } catch (error) {
-            console.error(`Failed to ${action} fixed expense:`, error);
+            logger.error(`Failed to ${action} fixed expense:`, error);
         }
     };
 

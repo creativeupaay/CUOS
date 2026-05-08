@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { logger } from '../utils/logger';
 
 // Determine base URL for Socket.io connection
 const getBaseURL = (): string => {
@@ -47,7 +48,7 @@ export const socket: Socket = io(BASE_URL, {
  */
 export const connectSocket = (): void => {
   if (!socket.connected) {
-    console.log('[Socket] Connecting to server...');
+    logger.info('[Socket] Connecting to server...');
     socket.connect();
   }
 };
@@ -57,7 +58,7 @@ export const connectSocket = (): void => {
  */
 export const disconnectSocket = (): void => {
   if (socket.connected) {
-    console.log('[Socket] Disconnecting from server...');
+    logger.info('[Socket] Disconnecting from server...');
     socket.disconnect();
   }
 };
@@ -71,19 +72,19 @@ export const isSocketConnected = (): boolean => {
 
 // Log connection events
 socket.on('connect', () => {
-  console.log('[Socket] Connected successfully');
+  logger.info('[Socket] Connected successfully');
 });
 
 socket.on('disconnect', (reason) => {
-  console.log('[Socket] Disconnected:', reason);
+  logger.info('[Socket] Disconnected:', reason);
 });
 
 socket.on('connect_error', (error) => {
-  console.error('[Socket] Connection error:', error.message);
+  logger.error('[Socket] Connection error:', error.message);
 });
 
 socket.on('error', (error) => {
-  console.error('[Socket] Error:', error);
+  logger.error('[Socket] Error:', error);
 });
 
 export default socket;

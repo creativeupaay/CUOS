@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { socket, connectSocket } from '@/services/socket';
 import {
@@ -30,7 +31,7 @@ export const useNotificationSocket = () => {
                 const permission = await Notification.requestPermission();
                 dispatch(setBrowserPermission(permission));
             } catch (error) {
-                console.error('[NotificationSocket] Error requesting permission:', error);
+                logger.error('[NotificationSocket] Error requesting permission:', error);
             }
         }
     }, [dispatch]);
@@ -59,7 +60,7 @@ export const useNotificationSocket = () => {
                 // Auto close after 5 seconds
                 setTimeout(() => browserNotification.close(), 5000);
             } catch (error) {
-                console.error('[NotificationSocket] Error showing browser notification:', error);
+                logger.error('[NotificationSocket] Error showing browser notification:', error);
             }
         },
         [browserPermission]

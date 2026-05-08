@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import { useGetPartnerEmployeesQuery } from '@/features/partners/partnerEmployeeApi';
 import PhasePaymentDialog from '@/components/PhasePaymentDialog';
+import { logger } from '@/utils/logger';
 
 function getAssigneeMeta(assignee: any) {
     const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
@@ -151,7 +152,7 @@ export default function ProjectOverviewTab() {
             setRoleError(false);
             setSubModules({ overview: true, tasks: false, timeLogs: false, meetings: false, credentials: false, documents: false, notes: false });
         } catch (error) {
-            console.error('Failed to add assignee:', error);
+            logger.error('Failed to add assignee:', error);
         }
     };
 
@@ -160,7 +161,7 @@ export default function ProjectOverviewTab() {
             try {
                 await removeAssignee({ projectId: project._id, memberId: employeeId }).unwrap();
             } catch (error) {
-                console.error('Failed to remove assignee:', error);
+                logger.error('Failed to remove assignee:', error);
             }
         }
     };
@@ -177,7 +178,7 @@ export default function ProjectOverviewTab() {
             // Merge: defaults first so old records without `notes` still have it, backend values win
             setEditSubModules({ ...fullDefaults, ...(res.data ?? {}) });
         } catch (error) {
-            console.error("Failed to fetch assignee permissions", error);
+            logger.error("Failed to fetch assignee permissions", error);
             setEditSubModules(fullDefaults);
         }
     };
@@ -192,7 +193,7 @@ export default function ProjectOverviewTab() {
             }).unwrap();
             setEditingUserId(null);
         } catch (error) {
-            console.error('Failed to update permissions:', error);
+            logger.error('Failed to update permissions:', error);
         }
     };
 
@@ -808,7 +809,7 @@ function ProjectProgress({ project, isSuperAdmin, canViewPaymentDetails }: { pro
             await updateProject({ id: String(project._id), data: { phases: cleaned } }).unwrap();
             setShowPhasePanel(false);
         } catch (e) {
-            console.error('Failed to save phases:', e);
+            logger.error('Failed to save phases:', e);
         }
     };
 
@@ -840,7 +841,7 @@ function ProjectProgress({ project, isSuperAdmin, canViewPaymentDetails }: { pro
             // Close the payment dialog
             setPaymentDialogPhase(null);
         } catch (error) {
-            console.error('Failed to mark payment received or complete phase:', error);
+            logger.error('Failed to mark payment received or complete phase:', error);
         }
     };
 
@@ -890,7 +891,7 @@ function ProjectProgress({ project, isSuperAdmin, canViewPaymentDetails }: { pro
 
             await updateProject({ id: String(project._id), data: { phases: cleanedPhases } }).unwrap();
         } catch (error) {
-            console.error('Failed to update phase status:', error);
+            logger.error('Failed to update phase status:', error);
         }
     };
 

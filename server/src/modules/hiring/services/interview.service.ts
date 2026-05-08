@@ -816,7 +816,7 @@ export class InterviewService {
             pickFirst(payload, ['triggerEvent', 'event', 'type', 'data.type', 'payload.type']) || ''
         ).trim();
 
-        console.info('Cal.com webhook extracted identifiers', {
+        logger.info('Cal.com webhook extracted identifiers', {
             rawEvent,
             status,
             bookingUid: ids.bookingUid,
@@ -938,7 +938,7 @@ export class InterviewService {
         }
 
         if (ids.jobId && String(application.jobId?._id || application.jobId) !== String(ids.jobId)) {
-            console.warn('Cal.com webhook job mismatch; continuing with mapped application', {
+            logger.warn('Cal.com webhook job mismatch; continuing with mapped application', {
                 applicationId,
                 jobIdFromWebhook: ids.jobId,
             });
@@ -975,7 +975,7 @@ export class InterviewService {
             const job = await Job.findById(appJobId).select('interviewScheduling.eventTypeId');
             const expectedEventTypeId = job?.interviewScheduling?.eventTypeId;
             if (expectedEventTypeId && expectedEventTypeId !== ids.eventTypeId) {
-                console.warn('Cal.com webhook event type mismatch; continuing with mapped application', {
+                logger.warn('Cal.com webhook event type mismatch; continuing with mapped application', {
                     applicationId,
                     expectedEventTypeId,
                     receivedEventTypeId: ids.eventTypeId,
@@ -1137,7 +1137,7 @@ export class InterviewService {
             { upsert: true, new: true, runValidators: true }
         );
 
-        console.info('Cal.com webhook persisted interview', {
+        logger.info('Cal.com webhook persisted interview', {
             applicationId: String(application._id),
             interviewId: String(updatedInterview?._id || ''),
             status: effectiveStatus,

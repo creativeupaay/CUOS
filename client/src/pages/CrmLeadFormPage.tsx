@@ -16,6 +16,7 @@ import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import CurrencyInput from 'react-currency-input-field';
 import SelectCurrency from '@/components/ui/CurrencySelect';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 // Schema matching the backend validator
 const leadSchema = z.object({
@@ -169,7 +170,7 @@ export default function CrmLeadFormPage() {
 
             navigate(closeTarget, { replace: true });
         } catch (error: any) {
-            console.error('Failed to save lead:', error);
+            logger.error('Failed to save lead:', error);
             setServerError(error.data?.message || 'Failed to save lead. Please try again.');
         }
     };

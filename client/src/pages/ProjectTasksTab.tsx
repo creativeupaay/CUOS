@@ -15,6 +15,7 @@ import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Loader2, ListTodo, X, ChevronDown, ChevronRight, Trash2, LayoutList, Kanban, MoreVertical, FileText, CheckCircle2, Circle, Pause, Pencil, Clock, Lock, Filter } from 'lucide-react';
+import { logger } from '@/utils/logger';
 
 const statusStyles: Record<string, { bg: string; text: string; dot: string; icon?: any }> = {
     todo: { bg: 'transparent', text: 'var(--color-text-secondary)', dot: '#9CA3AF', icon: Circle },
@@ -226,7 +227,7 @@ export default function ProjectTasksTab() {
             setShowForm(false);
             setEditingTask(null);
         } catch (error) {
-            console.error('Failed to save task:', error);
+            logger.error('Failed to save task:', error);
         }
     };
 
@@ -235,7 +236,7 @@ export default function ProjectTasksTab() {
         try {
             await deleteTask({ projectId: projectId!, taskId }).unwrap();
         } catch (error) {
-            console.error('Failed to delete task:', error);
+            logger.error('Failed to delete task:', error);
         }
     };
 
@@ -770,7 +771,7 @@ function TaskCard({
             setSubSelectedAssignees([]);
             refetchSubtasks();
         } catch (err) {
-            console.error('Failed to create subtask:', err);
+            logger.error('Failed to create subtask:', err);
         }
     };
 
@@ -794,7 +795,7 @@ function TaskCard({
             closeSubtaskEdit();
             refetchSubtasks();
         } catch (err) {
-            console.error('Failed to update subtask:', err);
+            logger.error('Failed to update subtask:', err);
         }
     };
 

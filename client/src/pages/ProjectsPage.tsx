@@ -8,6 +8,7 @@ import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import ProjectFormPage from './ProjectFormPage';
 import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import { projectApi } from '@/features/project';
+import { logger } from '@/utils/logger';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -167,7 +168,7 @@ export default function ProjectsPage() {
             await deleteProject(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
         } catch (err) {
-            console.error('Failed to delete project:', err);
+            logger.error('Failed to delete project:', err);
         }
     };
 
@@ -177,7 +178,7 @@ export default function ProjectsPage() {
             await updateProject({ id: statusModal.id, data: { status: selectedStatus as any } }).unwrap();
             setStatusModal(null);
         } catch (err) {
-            console.error('Failed to update project status:', err);
+            logger.error('Failed to update project status:', err);
         }
     };
 

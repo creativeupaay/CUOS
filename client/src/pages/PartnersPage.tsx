@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BarChart3, Handshake, Plus, Search, ExternalLink, Trash2 } from 'lucide-react';
 import {
+import { logger } from '@/utils/logger';
     useDeletePartnerMutation,
     useGetPartnersQuery,
     type Partner,
@@ -30,7 +31,7 @@ export default function PartnersPage() {
     // Log error for debugging
     useEffect(() => {
         if (error) {
-            console.error('Partners fetch error:', error);
+            logger.error('Partners fetch error:', error);
         }
     }, [error]);
 

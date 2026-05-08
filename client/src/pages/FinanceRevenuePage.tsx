@@ -12,6 +12,7 @@ import {
     useDeleteRevenueMutation,
 } from '@/features/finance/api/financeApi';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { logger } from '@/utils/logger';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type RevenueSource = 'manual' | 'invoice' | 'project';
@@ -197,7 +198,7 @@ export default function FinanceRevenuePage() {
             setEditingId(null);
             setFormData(initialFormData);
         } catch (error) {
-            console.error('Failed to save revenue:', error);
+            logger.error('Failed to save revenue:', error);
         }
     };
 
@@ -217,7 +218,7 @@ export default function FinanceRevenuePage() {
             try {
                 await deleteRevenue(id).unwrap();
             } catch (error) {
-                console.error('Failed to delete revenue:', error);
+                logger.error('Failed to delete revenue:', error);
             }
         }
     };

@@ -225,4 +225,4 @@ content = content.replace(
 );
 
 fs.writeFileSync(filepath, content);
-console.log('Refactoring complete!');
+// console.log('Refactoring complete!');

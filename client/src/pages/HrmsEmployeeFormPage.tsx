@@ -5,6 +5,7 @@ import { useGetUsersQuery } from '@/features/auth/authApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { ArrowLeft, Save, Loader2, UserPlus } from 'lucide-react';
 import { dedupeDepartments, resolveDepartmentValue, DEFAULT_DEPARTMENTS } from '@/utils/department';
+import { logger } from '@/utils/logger';
 const EMPLOYMENT_TYPES = ['full-time', 'part-time', 'contract', 'intern'];
 
 const DEFAULT_ONBOARDING_CHECKLIST = [
@@ -124,7 +125,7 @@ export default function HrmsEmployeeFormPage() {
         } catch (err: any) {
             const msg = err?.data?.message || err?.message || 'Failed to save employee. Please check the form and try again.';
             setErrorMsg(msg);
-            console.error('Failed to save employee:', err);
+            logger.error('Failed to save employee:', err);
         }
     };
 
