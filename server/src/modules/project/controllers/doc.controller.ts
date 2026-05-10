@@ -48,7 +48,10 @@ export const deleteFolder = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { folderId } = req.params;
 
-        await docService.deleteFolder(folderId);
+        await docService.deleteFolder(folderId, {
+            deletedBy: req.user?.id,
+            reason: 'Project folder delete requested',
+        });
 
         res.status(200).json({ success: true, message: 'Folder deleted successfully' });
     }
@@ -146,7 +149,10 @@ export const deleteDocItem = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { itemId } = req.params;
 
-        await docService.deleteDocItem(itemId);
+        await docService.deleteDocItem(itemId, {
+            deletedBy: req.user?.id,
+            reason: 'Project document item delete requested',
+        });
 
         res.status(200).json({ success: true, message: 'File deleted successfully' });
     }

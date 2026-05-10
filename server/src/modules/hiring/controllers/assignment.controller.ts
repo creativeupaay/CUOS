@@ -21,7 +21,7 @@ export const createAssignment = asyncHandler(async (req: Request, res: Response)
 
 export const getAssignmentsByJob = asyncHandler(async (req: Request, res: Response) => {
     // If user is a job manager (not admin/HR), filter to only assignments for their managed jobs
-    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+    const managerUserId = req.isJobManager ? req.user?.id : undefined;
 
     const assignments = await assignmentService.getAssignmentsByJob(req.params.jobId, managerUserId);
 
@@ -42,7 +42,10 @@ export const updateAssignment = asyncHandler(async (req: Request, res: Response)
 });
 
 export const deleteAssignment = asyncHandler(async (req: Request, res: Response) => {
-    await assignmentService.deleteAssignment(req.params.id);
+    await assignmentService.deleteAssignment(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'Hiring assignment delete requested',
+    });
 
     res.status(200).json({
         status: 'success',

@@ -7,6 +7,7 @@ import type {
     UpdateProposalInput,
     ListProposalsInput,
 } from '../validators/proposal.validator';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 export class ProposalService {
     /**
@@ -125,7 +126,7 @@ export class ProposalService {
     /**
      * Delete proposal
      */
-    async deleteProposal(id: string): Promise<void> {
+    async deleteProposal(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
         const proposal = await Proposal.findById(id);
 
         if (!proposal) {
@@ -136,7 +137,34 @@ export class ProposalService {
             throw new AppError('Cannot delete an accepted proposal', 400);
         }
 
-        await Proposal.findByIdAndDelete(id);
+        const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+        await DeletedRecordService.archiveDocument(proposal, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Proposal delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                proposalId: proposal._id.toString(),
+                leadId: proposal.leadId?.toString(),
+                clientId: proposal.clientId?.toString(),
+                embeddedSections: [
+                    'items',
+                    'documents',
+                    'auditLog',
+                    'overview',
+                    'businessChallenge',
+                    'scopeOfWork',
+                    'features',
+                    'timeline',
+                    'budgetV2',
+                    'terms',
+                ],
+            },
+        });
+
+        await proposal.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     /**

@@ -9,6 +9,10 @@
     "seed": "ts-node src/scripts/seedRoles.ts",
     "seed:safe": "ts-node src/scripts/seedRolesSafe.ts",
     "seed:finance": "node seed-finance.js",
+    "backfill:fx": "ts-node src/scripts/backfillRevenueExchangeRates.ts",
+    "archive:list": "ts-node src/scripts/listArchiveBatch.ts",
+    "archive:restore": "ts-node src/scripts/restoreArchivedRecord.ts",
+    "archive:recalculate-bank-balances": "ts-node src/scripts/recalculateBankBalances.ts",
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit"
   },

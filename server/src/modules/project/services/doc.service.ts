@@ -5,13 +5,13 @@ import { Project } from '../models/Project.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import {
     uploadDocument,
-    deleteDocument,
     getSignedUrl,
 } from '../../../utils/cloudinary.util';
 import AppError from '../../../utils/appError';
 import { ensureUnifiedSharedFolder } from './sharedFolder.service';
 import { notificationService } from '../../notification/services/notification.service';
 import { logger } from "../../../utils/logger";
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
 
@@ -284,34 +284,98 @@ export const renameFolder = async (
     return folder;
 };
 
+const buildDocItemArchiveMetadata = (
+    item: IDocItem,
+    extra: Record<string, unknown> = {}
+) => ({
+    ...extra,
+    projectId: item.projectId.toString(),
+    folderId: item.folderId?.toString() ?? null,
+    docItemId: item._id.toString(),
+    name: item.name,
+    cloudinaryId: item.cloudinaryId,
+    mimeType: item.mimeType,
+    size: item.size,
+    uploadedBy: item.uploadedBy.toString(),
+    viewAccess: item.viewAccess.map((id) => id.toString()),
+    externalAssetRetained: true,
+    externalAssetRetentionPolicy: 'Retain Cloudinary/local file during 30-day archive window.',
+});
+
+const buildDocFolderArchiveMetadata = (
+    folder: IDocFolder,
+    extra: Record<string, unknown> = {}
+) => ({
+    ...extra,
+    projectId: folder.projectId.toString(),
+    folderId: folder._id.toString(),
+    parentId: folder.parentId?.toString() ?? null,
+    name: folder.name,
+    createdBy: folder.createdBy.toString(),
+    viewAccess: folder.viewAccess.map((id) => id.toString()),
+    isSystem: folder.isSystem,
+    isClientShared: folder.isClientShared,
+    isPartnerShared: folder.isPartnerShared,
+});
+
 /**
  * Delete a folder and all its subfolders + files (recursive).
  */
-export const deleteFolder = async (folderId: string): Promise<void> => {
-    const folder = await DocFolder.findById(folderId).lean();
+export const deleteFolder = async (
+    folderId: string,
+    options: ArchiveDeleteOptions = {}
+): Promise<void> => {
+    const folder = await DocFolder.findById(folderId);
     if (!folder) throw new AppError('Folder not found', 404);
     if ((folder as any).isSystem) {
         throw new AppError('The \'Shared Files\' folder cannot be deleted', 403);
     }
-    await _deleteFolderRecursive(folderId);
+    const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    await _deleteFolderRecursive(folder, {
+        ...options,
+        archiveBatchId,
+    });
 };
 
-const _deleteFolderRecursive = async (folderId: string): Promise<void> => {
+const _deleteFolderRecursive = async (
+    folder: IDocFolder,
+    options: ArchiveDeleteOptions
+): Promise<void> => {
     // Delete all files in this folder
-    const files = await DocItem.find({ folderId: new Types.ObjectId(folderId) });
+    const files = await DocItem.find({ folderId: folder._id });
     for (const file of files) {
-        await deleteDocument(file.cloudinaryId).catch(() => { });
-        await file.deleteOne();
+        await DeletedRecordService.archiveDocument(file, {
+            archiveBatchId: options.archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Project folder delete requested',
+            operation: 'external_retention',
+            session: options.session,
+            metadata: buildDocItemArchiveMetadata(file, {
+                linkedFrom: 'DocFolder',
+                deletedViaFolderId: folder._id.toString(),
+            }),
+        });
+        await file.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     // Recurse into subfolders
-    const subfolders = await DocFolder.find({ parentId: new Types.ObjectId(folderId) });
+    const subfolders = await DocFolder.find({ parentId: folder._id });
     for (const sub of subfolders) {
-        await _deleteFolderRecursive(sub._id.toString());
+        await _deleteFolderRecursive(sub, options);
     }
 
     // Delete this folder itself
-    await DocFolder.findByIdAndDelete(folderId);
+    await DeletedRecordService.archiveDocument(folder, {
+        archiveBatchId: options.archiveBatchId,
+        deletedBy: options.deletedBy,
+        reason: options.reason ?? 'Project folder delete requested',
+        operation: 'delete',
+        session: options.session,
+        metadata: buildDocFolderArchiveMetadata(folder, {
+            recursiveDelete: true,
+        }),
+    });
+    await folder.deleteOne(options.session ? { session: options.session } : undefined);
 };
 
 /**
@@ -454,13 +518,23 @@ export const getDocItemUrl = async (itemId: string): Promise<string> => {
 };
 
 /**
- * Delete a file from Cloudinary and the database.
+ * Delete a file record while retaining the external asset during archive retention.
  */
-export const deleteDocItem = async (itemId: string): Promise<void> => {
+export const deleteDocItem = async (
+    itemId: string,
+    options: ArchiveDeleteOptions = {}
+): Promise<void> => {
     const item = await DocItem.findById(itemId);
     if (!item) throw new AppError('File not found', 404);
-    await deleteDocument(item.cloudinaryId).catch(() => { });
-    await item.deleteOne();
+    await DeletedRecordService.archiveDocument(item, {
+        archiveBatchId: options.archiveBatchId,
+        deletedBy: options.deletedBy,
+        reason: options.reason ?? 'Project document item delete requested',
+        operation: 'external_retention',
+        session: options.session,
+        metadata: buildDocItemArchiveMetadata(item),
+    });
+    await item.deleteOne(options.session ? { session: options.session } : undefined);
 };
 
 /**

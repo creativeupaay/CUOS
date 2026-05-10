@@ -63,7 +63,11 @@ export const getEmployeeAttendance = asyncHandler(async (req: Request, res: Resp
 // ── Admin: Bulk mark attendance ──────────────────────────────────────
 export const bulkMarkAttendance = asyncHandler(async (req: Request, res: Response) => {
     const { date, records, onlyUnmarked } = req.body;
-    const result = await AttendanceService.bulkMarkAttendance(date, records, { onlyUnmarked });
+    const result = await AttendanceService.bulkMarkAttendance(date, records, {
+        onlyUnmarked,
+        deletedBy: req.user?.id,
+        reason: 'HRMS bulk attendance clear requested',
+    });
     res.status(200).json({ status: 'success', data: result });
 });
 

@@ -1,7 +1,8 @@
 import { Types } from 'mongoose';
-import { Project } from '../models/Project.model';
+import { Project, IProject, IProjectPhase } from '../models/Project.model';
 import { Revenue } from '../../finance/models/Revenue.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
+import { ExchangeRateService } from '../../finance/services/exchangeRate.service';
 import AppError from '../../../utils/appError';
 
 interface MarkPhasePaymentReceivedData {
@@ -11,7 +12,10 @@ interface MarkPhasePaymentReceivedData {
     bankAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     receivedDate: Date;
     notes?: string;
+    manualExchangeRate?: number;
     userId: string; // User marking the payment as received
+    markAsFullyPaid?: boolean;
+    adjustPhaseValue?: boolean;
 }
 
 export class PhasePaymentService {
@@ -19,7 +23,7 @@ export class PhasePaymentService {
      * Calculate the phase payment amount based on fixed amount or percentage
      */
     static calculatePhasePaymentAmount(
-        phase: any,
+        phase: IProjectPhase,
         projectBudget?: number,
         projectCurrency?: string
     ): { amount: number; currency: string } {
@@ -44,6 +48,10 @@ export class PhasePaymentService {
         return { amount: 0, currency };
     }
 
+    private static roundMoney(value: number): number {
+        return Math.round(Number(value || 0) * 100) / 100;
+    }
+
     /**
      * Mark a phase payment as received
      * This will:
@@ -59,7 +67,7 @@ export class PhasePaymentService {
         revenue: any;
         bankTransaction: any;
     }> {
-        const { projectId, phaseId, receivedAmount, bankAccountKey, receivedDate, notes, userId } =
+        const { projectId, phaseId, receivedAmount, bankAccountKey, receivedDate, notes, manualExchangeRate, userId } =
             data;
 
         // Find the project and phase
@@ -69,7 +77,7 @@ export class PhasePaymentService {
             throw new AppError('Project not found', 404);
         }
 
-        const phase = project.phases.find((p: any) => p._id?.toString() === phaseId);
+        const phase = project.phases.find((p: IProjectPhase) => p._id?.toString() === phaseId);
 
         if (!phase) {
             throw new AppError('Phase not found', 404);
@@ -116,19 +124,114 @@ export class PhasePaymentService {
             throw new AppError('Payment for this phase has already been recorded', 400);
         }
 
-        // Calculate amounts in INR (for consistent revenue tracking)
-        const exchangeRate = currency === 'INR' ? 1 : 1; // TODO: Add exchange rate lookup
-        const amountINR = currency === 'INR' ? receivedAmount : receivedAmount * exchangeRate;
+        // Convert the contract/expected phase value into INR using the payment received date.
+        // The dialog amount is the actual INR credited to the bank.
+        const storedAmountINR = Number(phase.paymentExpectedAmountINR || 0);
+        const storedExchangeRate = Number(phase.paymentExchangeRate || 0);
+        let conversion: {
+            rate: number;
+            amountINR: number;
+            date: Date;
+            provider: string;
+            source: string;
+            requestedDate: Date;
+            fallbackUsed: boolean;
+        };
 
-        // Payment should reflect the exact amount received from user input.
+        if (storedAmountINR > 0 && storedExchangeRate > 0) {
+            conversion = {
+                rate: storedExchangeRate,
+                amountINR: storedAmountINR,
+                date: phase.paymentExchangeRateDate || phase.paymentFxRequestedDate || receivedDate,
+                provider: phase.paymentFxRateSource === 'manual' ? 'manual' : 'stored',
+                source: phase.paymentFxRateSource || 'exact-cache',
+                requestedDate: phase.paymentFxRequestedDate || receivedDate,
+                fallbackUsed: Boolean(phase.paymentFxFallbackUsed),
+            };
+        } else {
+            try {
+                conversion = await ExchangeRateService.convertToINR(expectedAmount, currency, receivedDate, {
+                    manualRate: manualExchangeRate,
+                    allowLatestFallback: true,
+                });
+            } catch (error: unknown) {
+                throw new AppError(
+                    'Manual exchange rate required before this phase payment can be marked as received',
+                    409,
+                    'FX_RATE_REQUIRED',
+                    {
+                        requirements: [{
+                            phaseId,
+                            phaseName: String(phase.name || 'Phase'),
+                            currency,
+                            date: receivedDate.toISOString().slice(0, 10),
+                            amount: this.roundMoney(expectedAmount),
+                        }],
+                    }
+                );
+            }
+        }
+        const exchangeRate = conversion.rate;
+        const amountINR = conversion.amountINR;
+        const actualReceivedINR = this.roundMoney(receivedAmount);
+
         const gstApplicable = phase.gstApplicable ?? true;
+        const isGstInclusive = phase.isGstInclusive ?? false;
         const gstRate = phase.gstRate || 18;
-        const gst = 0;
-        const tdsDeducted = 0;
-        const totalAmount = receivedAmount;
+        const tdsPercentage = phase.tdsPercentage || 0;
+
+        let baseAmountINR = amountINR;
+        let gst = 0;
+
+        if (gstApplicable) {
+            if (isGstInclusive) {
+                baseAmountINR = this.roundMoney(amountINR / (1 + gstRate / 100));
+                gst = this.roundMoney(amountINR - baseAmountINR);
+            } else {
+                gst = this.roundMoney((amountINR * gstRate) / 100);
+            }
+        }
+
+        // Calculate TDS based on base amount
+        const tdsDeducted = tdsPercentage > 0 
+            ? this.roundMoney((baseAmountINR * tdsPercentage) / 100)
+            : this.roundMoney(phase.tdsDeducted || 0);
+
+        const expectedTotalAmountINR = this.roundMoney(baseAmountINR + gst - tdsDeducted);
+
+        // Handle discrepancies
+        let fxFeesINR = 0;
+        let tipINR = 0;
+        let finalBaseINR = baseAmountINR;
+        let finalGst = gst;
+        let finalTds = tdsDeducted;
+        let finalExpectedTotal = expectedTotalAmountINR;
+        let finalAmountOriginal = expectedAmount;
+
+        const delta = this.roundMoney(actualReceivedINR - expectedTotalAmountINR);
+
+        if (delta < 0) {
+            if (data.markAsFullyPaid) {
+                fxFeesINR = Math.abs(delta);
+            }
+        } else if (delta > 0) {
+            if (data.adjustPhaseValue) {
+                // Adjust phase value so that actualReceivedINR is the new total
+                const factor = 1 + (gstApplicable ? gstRate / 100 : 0) - (tdsPercentage / 100);
+                finalBaseINR = this.roundMoney(actualReceivedINR / factor);
+                finalGst = gstApplicable ? this.roundMoney((finalBaseINR * gstRate) / 100) : 0;
+                finalTds = this.roundMoney((finalBaseINR * tdsPercentage) / 100);
+                finalExpectedTotal = actualReceivedINR;
+                
+                // Also update the original currency amount
+                finalAmountOriginal = this.roundMoney(finalBaseINR / exchangeRate);
+            } else {
+                tipINR = delta;
+            }
+        }
 
         // Get client info
-        const client: any = project.clientId;
+        const client = project.clientId as any;
         const clientName = client?.name || 'Unknown Client';
 
         // Create Revenue entry
@@ -140,19 +243,23 @@ export class PhasePaymentService {
             project: project.name,
             projectId: project._id,
             phaseId: phaseObjectId,
-            amount: receivedAmount,
+            amount: finalAmountOriginal,
             currency,
             exchangeRate,
-            amountINR,
+            exchangeRateDate: conversion.date,
+            exchangeRateProvider: conversion.provider,
+            amountINR: finalBaseINR,
             gstApplicable,
             gstRate,
-            gst,
-            tdsDeducted,
-            totalAmount,
-            receivedAmount: totalAmount,
-            pendingAmount: 0,
+            gst: finalGst,
+            tdsDeducted: finalTds,
+            totalAmount: finalExpectedTotal,
+            receivedAmount: actualReceivedINR,
+            pendingAmount: data.markAsFullyPaid ? 0 : Math.max(0, this.roundMoney(finalExpectedTotal - actualReceivedINR)),
+            fxFeesINR,
+            tipINR,
             source: 'project',
-            status: 'received',
+            status: (actualReceivedINR + fxFeesINR) >= finalExpectedTotal ? 'received' : 'partial',
             notes: notes || `Auto-generated from project phase payment: ${phase.name}`,
             createdBy: new Types.ObjectId(userId),
         });
@@ -161,31 +268,46 @@ export class PhasePaymentService {
         const bankTransaction = await BankTransactionService.create({
             accountKey: bankAccountKey,
             transactionType: 'credit',
-            amount: totalAmount,
+            amount: actualReceivedINR,
             date: receivedDate,
             description: `Payment received: ${project.name} - ${phase.name}`,
             referenceNumber: `PHASE-${phaseId.slice(-8)}`,
             notes: notes || `Auto-generated from project phase payment`,
             source: 'automatic',
+            projectId: project._id,
+            phaseId: phaseObjectId,
+            revenueId: revenue._id,
             createdBy: new Types.ObjectId(userId),
         });
 
         // Update phase with payment info
-        const updatedReceivedAmount = (phase.paymentReceivedAmount || 0) + totalAmount;
-        const newPaymentStatus =
-            updatedReceivedAmount >= expectedAmount ? 'received' : 'partial';
+        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedINR);
+        const isFullyPaid = (actualReceivedINR + fxFeesINR) >= finalExpectedTotal;
+        const newPaymentStatus = isFullyPaid ? 'received' : 'partial';
 
         await Project.updateOne(
             { _id: project._id, 'phases._id': phaseObjectId },
             {
                 $set: {
+                    'phases.$.paymentAmount': finalAmountOriginal,
                     'phases.$.paymentReceivedAmount': updatedReceivedAmount,
+                    'phases.$.paymentExpectedAmountINR': finalBaseINR,
+                    'phases.$.paymentReceivedAmountINR': updatedReceivedAmount,
+                    'phases.$.paymentExchangeRate': exchangeRate,
+                    'phases.$.paymentExchangeRateDate': conversion.date,
+                    'phases.$.paymentSettlementCurrency': 'INR',
+                    'phases.$.paymentFxRateSource': conversion.source,
+                    'phases.$.paymentFxRequestedDate': conversion.requestedDate,
+                    'phases.$.paymentFxFallbackUsed': conversion.fallbackUsed,
                     'phases.$.paymentStatus': newPaymentStatus,
                     'phases.$.paymentBankAccount': bankAccountKey,
                     'phases.$.revenueId': revenue._id,
                     'phases.$.bankTransactionId': bankTransaction._id,
-                    'phases.$.status': 'completed',
-                    'phases.$.completedAt': new Date(),
+                    'phases.$.status': isFullyPaid ? 'completed' : phase.status,
+                    'phases.$.completedAt': isFullyPaid ? new Date() : phase.completedAt,
+                    'phases.$.tdsDeducted': finalTds,
+                    'phases.$.fxFeesINR': fxFeesINR,
+                    'phases.$.adjustmentAmountINR': tipINR,
                 },
             }
         );
@@ -210,7 +332,7 @@ export class PhasePaymentService {
         receivedDate: Date,
         notes: string | undefined,
         userId: string
-    ): Promise<any> {
+    ): Promise<{ project: any; revenue: any; bankTransaction: any }> {
         // Same logic as markPhasePaymentReceived but updates status to 'partial'
         return this.markPhasePaymentReceived({
             projectId,
@@ -253,19 +375,22 @@ export class PhasePaymentService {
         let phasesWithPayment = 0;
         let phasesPaymentReceived = 0;
 
-        const phaseDetails = project.phases
-            .filter((phase: any) => phase.hasPayment)
-            .map((phase: any) => {
-                const { amount: expectedAmount } = this.calculatePhasePaymentAmount(
+        const phaseDetails = await Promise.all(project.phases
+            .filter((phase: IProjectPhase) => phase.hasPayment)
+            .map(async (phase: IProjectPhase) => {
+                const { amount: expectedAmount, currency } = this.calculatePhasePaymentAmount(
                     phase,
                     project.budget,
                     project.currency
                 );
 
-                const receivedAmount = phase.paymentReceivedAmount || 0;
-                const pendingAmount = expectedAmount - receivedAmount;
+                const conversionDate = phase.paymentDueDate || phase.endDate || new Date();
+                const conversion = await ExchangeRateService.convertToINR(expectedAmount, currency, conversionDate);
+                const expectedAmountINR = phase.paymentExpectedAmountINR ?? conversion.amountINR;
+                const receivedAmount = phase.paymentReceivedAmountINR ?? phase.paymentReceivedAmount ?? 0;
+                const pendingAmount = Math.max(0, expectedAmountINR - receivedAmount);
 
-                totalExpectedPayment += expectedAmount;
+                totalExpectedPayment += expectedAmountINR;
                 totalReceivedPayment += receivedAmount;
                 phasesWithPayment += 1;
 
@@ -276,13 +401,13 @@ export class PhasePaymentService {
                 return {
                     phaseId: phase._id?.toString() || '',
                     phaseName: phase.name,
-                    expectedAmount,
+                    expectedAmount: expectedAmountINR,
                     receivedAmount,
                     pendingAmount,
                     status: phase.paymentStatus || 'pending',
                     dueDate: phase.paymentDueDate,
                 };
-            });
+            }));
 
         return {
             totalExpectedPayment,

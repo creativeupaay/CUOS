@@ -16,6 +16,14 @@ export interface IProjectPhase {
     paymentReceivedAmount?: number; // Actual amount received
     paymentDueDate?: Date; // Expected payment date
     paymentBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash'; // Bank account for this payment
+    paymentExpectedAmountINR?: number;
+    paymentReceivedAmountINR?: number;
+    paymentExchangeRate?: number;
+    paymentExchangeRateDate?: Date;
+    paymentSettlementCurrency?: 'INR';
+    paymentFxRateSource?: 'exact-provider' | 'exact-cache' | 'manual' | 'latest-known';
+    paymentFxRequestedDate?: Date;
+    paymentFxFallbackUsed?: boolean;
 
     // Finance integration
     revenueId?: Types.ObjectId; // Link to Revenue entry
@@ -23,8 +31,14 @@ export interface IProjectPhase {
 
     // GST and TDS
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
+    tdsPercentage?: number;
     tdsDeducted?: number;
+
+    // Discrepancy tracking
+    fxFeesINR?: number;
+    adjustmentAmountINR?: number;
 
     completedAt?: Date; // When the phase was marked as completed
 }
@@ -192,6 +206,21 @@ const ProjectPhaseSchema = new Schema<IProjectPhase>(
             type: String,
             enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
         },
+        paymentExpectedAmountINR: { type: Number, min: 0 },
+        paymentReceivedAmountINR: { type: Number, min: 0 },
+        paymentExchangeRate: { type: Number, min: 0 },
+        paymentExchangeRateDate: Date,
+        paymentSettlementCurrency: {
+            type: String,
+            enum: ['INR'],
+            default: 'INR',
+        },
+        paymentFxRateSource: {
+            type: String,
+            enum: ['exact-provider', 'exact-cache', 'manual', 'latest-known'],
+        },
+        paymentFxRequestedDate: Date,
+        paymentFxFallbackUsed: { type: Boolean, default: false },
 
         // Finance integration
         revenueId: { type: Schema.Types.ObjectId, ref: 'Revenue' },
@@ -199,8 +228,14 @@ const ProjectPhaseSchema = new Schema<IProjectPhase>(
 
         // GST and TDS
         gstApplicable: { type: Boolean, default: true },
+        isGstInclusive: { type: Boolean, default: false },
         gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
+        tdsPercentage: { type: Number, default: 0 },
         tdsDeducted: { type: Number, default: 0, min: 0 },
+
+        // Discrepancy tracking
+        fxFeesINR: { type: Number, default: 0 },
+        adjustmentAmountINR: { type: Number, default: 0 },
 
         completedAt: Date,
     },

@@ -3,13 +3,14 @@ import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
 import { JobTemplate } from '../models/JobTemplate.model';
 import { CreateJobTemplateInput, UpdateJobTemplateInput } from '../validators/job.validator';
+import { DeletedRecordService } from '../../archive';
 
 export const createTemplate = asyncHandler(async (req: Request, res: Response) => {
     const input = req.body as CreateJobTemplateInput;
 
     const template = await JobTemplate.create({
         ...input,
-        createdBy: (req.user as any)?.id,
+        createdBy: req.user?.id,
     });
 
     res.status(201).json({
@@ -64,11 +65,23 @@ export const updateTemplate = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const deleteTemplate = asyncHandler(async (req: Request, res: Response) => {
-    const template = await JobTemplate.findByIdAndDelete(req.params.id);
+    const template = await JobTemplate.findById(req.params.id);
 
     if (!template) {
         throw new AppError('Template not found', 404);
     }
+
+    await DeletedRecordService.archiveDocument(template, {
+        deletedBy: req.user?.id,
+        reason: 'Hiring job template delete requested',
+        operation: 'delete',
+        metadata: {
+            jobTemplateId: template._id.toString(),
+            templateName: template.templateName,
+        },
+    });
+
+    await template.deleteOne();
 
     res.status(204).json({
         status: 'success',

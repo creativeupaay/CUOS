@@ -8,6 +8,7 @@ import {
     FixedExpenseApprovalStatus,
 } from '../models/FixedExpenseApproval.model';
 import { notificationService } from '../../notification/services/notification.service';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 interface CreateFixedExpenseData {
     title: string;
@@ -97,6 +98,10 @@ const getFirstCursor = (startDate: Date, dueDay: number, frequency: FixedExpense
 };
 
 export class FixedExpenseService {
+    private static getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     static async create(data: CreateFixedExpenseData): Promise<IFixedExpense> {
         const fixedExpense = new FixedExpense({
             ...data,
@@ -129,14 +134,53 @@ export class FixedExpenseService {
         ).lean();
     }
 
-    static async delete(id: Types.ObjectId | string): Promise<boolean> {
-        const result = await FixedExpense.findByIdAndDelete(id);
-        if (!result) return false;
+    static async delete(id: Types.ObjectId | string, options: ArchiveDeleteOptions = {}): Promise<boolean> {
+        const fixedExpense = await FixedExpense.findById(id);
+        if (!fixedExpense) return false;
 
-        await FixedExpenseApproval.deleteMany({
-            fixedExpenseId: new Types.ObjectId(result._id.toString()),
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const pendingApprovals = await FixedExpenseApproval.find({
+            fixedExpenseId: fixedExpense._id,
             status: 'pending',
         });
+
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveDocument(fixedExpense, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Fixed expense delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    fixedExpenseId: fixedExpense._id.toString(),
+                    projectId: fixedExpense.projectId?.toString(),
+                    sourceAccountKey: fixedExpense.sourceAccountKey,
+                },
+            });
+
+            await DeletedRecordService.archiveDocuments(pendingApprovals, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Fixed expense delete requested',
+                operation: 'cascade_delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    fixedExpenseId: fixedExpense._id.toString(),
+                    linkedFrom: 'FixedExpense',
+                    pendingOnly: true,
+                },
+            });
+        }
+
+        await FixedExpenseApproval.deleteMany(
+            {
+                _id: { $in: pendingApprovals.map((approval) => approval._id) },
+            },
+            options.session ? { session: options.session } : undefined
+        );
+        await fixedExpense.deleteOne(options.session ? { session: options.session } : undefined);
 
         return true;
     }

@@ -33,8 +33,8 @@ import {
     useUpdateBankTransactionMutation,
     useUpdateOtherBankAccountMutation,
 } from '@/features/finance/api/financeApi';
-import type {
 import { logger } from '@/utils/logger';
+import type {
     BankAccountKey,
     BankAccountDetail,
     BankTransaction,

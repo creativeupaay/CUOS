@@ -135,7 +135,11 @@ export class FixedExpenseController {
 
     static async delete(req: Request, res: Response): Promise<void> {
         try {
-            const deleted = await FixedExpenseService.delete(req.params.id);
+            const userId = getAuthenticatedUserId(req);
+            const deleted = await FixedExpenseService.delete(req.params.id, {
+                deletedBy: userId,
+                reason: 'Fixed expense delete requested from finance module',
+            });
 
             if (!deleted) {
                 res.status(404).json({ success: false, message: 'Fixed expense not found' });

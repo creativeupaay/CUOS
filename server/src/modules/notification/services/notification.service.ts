@@ -6,6 +6,7 @@ import { User } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 // Global socket.io reference - set from socket.config.ts
 let io: Server | null = null;
@@ -215,13 +216,34 @@ class NotificationService {
     /**
      * Delete notification(s)
      */
-    async deleteNotifications(userId: string, notificationIds?: string[]): Promise<void> {
+    async deleteNotifications(
+        userId: string,
+        notificationIds?: string[],
+        options: ArchiveDeleteOptions = {}
+    ): Promise<void> {
         const query: FilterQuery<INotification> = { userId: new Types.ObjectId(userId) };
         if (notificationIds?.length) {
             query._id = { $in: notificationIds.map((id) => new Types.ObjectId(id)) };
         }
 
-        await Notification.deleteMany(query);
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveAndDeleteMany(Notification, query, {
+                archiveBatchId: options.archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'User notification delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    userId,
+                    notificationIds,
+                    userTriggered: true,
+                    archivePolicy: 'Explicit notification deletes are archived; automatic read-notification TTL purges are not archived.',
+                    ...options.metadata,
+                },
+            });
+        } else {
+            await Notification.deleteMany(query, options.session ? { session: options.session } : undefined);
+        }
 
         // Emit updated unread count
         const unreadCount = await this.getUnreadCount(userId);

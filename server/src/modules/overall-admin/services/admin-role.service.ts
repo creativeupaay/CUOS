@@ -3,6 +3,7 @@ import { Permission } from '../../auth/models/Permission.model';
 import { User } from '../../auth/models/User.model';
 import { AuditLog } from '../models/AuditLog.model';
 import AppError from '../../../utils/appError';
+import { DeleteGraphService } from '../../archive';
 
 export interface CreateRoleData {
     name: string;
@@ -157,7 +158,17 @@ export const deleteRole = async (id: string, adminId: string) => {
         throw new AppError(`Cannot delete role — ${userCount} user(s) still assigned`, 400);
     }
 
-    await Role.findByIdAndDelete(id);
+    await DeleteGraphService.archiveGraph('Role', id, {
+        deletedBy: adminId,
+        reason: 'Admin role delete requested',
+        metadata: {
+            roleId: id,
+            roleName: role.name,
+            blockedIfUsersAssigned: true,
+        },
+    });
+
+    await role.deleteOne();
 
     await AuditLog.create({
         userId: adminId,
@@ -269,7 +280,18 @@ export const deletePermission = async (id: string, adminId: string) => {
         throw new AppError(`Cannot delete — ${roleCount} role(s) still use this permission`, 400);
     }
 
-    await Permission.findByIdAndDelete(id);
+    await DeleteGraphService.archiveGraph('Permission', id, {
+        deletedBy: adminId,
+        reason: 'Admin permission delete requested',
+        metadata: {
+            permissionId: id,
+            resource: permission.resource,
+            action: permission.action,
+            blockedIfRolesAssigned: true,
+        },
+    });
+
+    await permission.deleteOne();
 
     await AuditLog.create({
         userId: adminId,

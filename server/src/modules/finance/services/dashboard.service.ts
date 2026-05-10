@@ -47,6 +47,14 @@ export class DashboardService {
             ExpenseService.getMonthlyData(startDate, endDate),
         ]);
 
+        let receivablesTotal = revenueSummary.totalPending;
+        try {
+            const receivables = await RevenueService.getReceivables();
+            receivablesTotal = receivables.summary.totalOpen;
+        } catch {
+            receivablesTotal = revenueSummary.totalPending;
+        }
+
         // Calculate cash in bank (sum of all active bank accounts)
         const bankAccounts = await BankAccount.find({ isActive: true });
         const cashInBank = bankAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0);
@@ -134,7 +142,7 @@ export class DashboardService {
                 ebidta,
                 runwayLeft,
                 cashInBank,
-                receivables: revenueSummary.totalPending,
+                receivables: receivablesTotal,
             },
             monthlyData,
             breakdownData,
@@ -209,7 +217,7 @@ export class DashboardService {
             {
                 $group: {
                     _id: '$client',
-                    revenue: { $sum: '$amountINR' },
+                    revenue: { $sum: { $ifNull: ['$amountINR', '$amount'] } },
                 },
             },
             {

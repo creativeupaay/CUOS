@@ -3,6 +3,7 @@ import AppError from '../../../utils/appError';
 import { Project } from '../models/Project.model';
 import { DocFolder } from '../models/DocFolder.model';
 import { DocItem } from '../models/DocItem.model';
+import { DeletedRecordService } from '../../archive';
 
 /**
  * Ensures exactly one root-level system "Shared Files" folder per project.
@@ -75,6 +76,21 @@ export const ensureUnifiedSharedFolder = async (projectId: string) => {
     }
 
     if (duplicateIds.length > 0) {
+        const duplicateFolders = await DocFolder.find({ _id: { $in: duplicateIds } });
+        const archiveBatchId = DeletedRecordService.generateArchiveBatchId();
+
+        await DeletedRecordService.archiveDocuments(duplicateFolders, {
+            archiveBatchId,
+            reason: 'Shared folder duplicate merge cleanup',
+            operation: 'delete',
+            metadata: {
+                projectId,
+                primaryFolderId: primary._id.toString(),
+                duplicateFolderIds: duplicateIds.map((id) => id.toString()),
+                mergeCleanup: true,
+            },
+        });
+
         await DocItem.updateMany(
             { projectId: projectObjectId, folderId: { $in: duplicateIds } },
             { $set: { folderId: primary._id } }

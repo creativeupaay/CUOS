@@ -2,6 +2,7 @@ import { FilterQuery, Types } from 'mongoose';
 import { PartnerEmployee, IPartnerEmployee } from '../models/PartnerEmployee.model';
 import { Partner } from '../models/Partner.model';
 import AppError from '../../../utils/appError';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 export interface CreatePartnerEmployeeInput {
     name: string;
@@ -190,17 +191,37 @@ export class PartnerEmployeeService {
     /**
      * Delete employee
      */
-    async deleteEmployee(employeeId: string, userId: string): Promise<void> {
+    async deleteEmployee(
+        employeeId: string,
+        userId: string,
+        options: ArchiveDeleteOptions = {}
+    ): Promise<void> {
         const partnerId = await this.getPartnerIdFromUser(userId);
 
-        const employee = await PartnerEmployee.findOneAndDelete({
+        const employee = await PartnerEmployee.findOne({
             _id: employeeId,
             partnerId: new Types.ObjectId(partnerId),
-        });
+        }).select('+password');
 
         if (!employee) {
             throw new AppError('Employee not found', 404);
         }
+
+        await DeletedRecordService.archiveDocument(employee, {
+            archiveBatchId: options.archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Partner employee delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                partnerEmployeeId: employee._id.toString(),
+                partnerId,
+                email: employee.email,
+            },
+        });
+
+        await employee.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     /**

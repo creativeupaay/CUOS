@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, DollarSign, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { X, DollarSign, CheckCircle2, Loader2, AlertCircle, Info } from 'lucide-react';
 import type { ProjectPhase } from '@/features/project';
+import { useGetExchangeRateQuery } from '@/features/finance/api/financeApi';
 
 interface PhasePaymentDialogProps {
     phase: ProjectPhase & { _id: string };
@@ -15,6 +16,9 @@ interface PhasePaymentDialogProps {
         bankAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
         receivedDate: string;
         notes?: string;
+        manualExchangeRate?: number;
+        markAsFullyPaid?: boolean;
+        adjustPhaseValue?: boolean;
     }) => Promise<void>;
 }
 
@@ -26,12 +30,16 @@ export default function PhasePaymentDialog({
     onClose,
     onConfirm,
 }: PhasePaymentDialogProps) {
-    const [receivedAmount, setReceivedAmount] = useState<number>(0);
+    const [receivedAmount, setReceivedAmount] = useState<number | ''>('');
     const [bankAccountKey, setBankAccountKey] = useState<'hdfc_gst' | 'sbi_non_gst' | 'cash'>(
         phase.paymentBankAccount || defaultBankAccount || 'hdfc_gst'
     );
     const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
     const [notes, setNotes] = useState('');
+    const [manualExchangeRate, setManualExchangeRate] = useState<number | ''>('');
+    const [needsManualFxRate, setNeedsManualFxRate] = useState(false);
+    const [markAsFullyPaid, setMarkAsFullyPaid] = useState(false);
+    const [adjustPhaseValue, setAdjustPhaseValue] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -44,7 +52,7 @@ export default function PhasePaymentDialog({
     }, []);
 
     // Calculate expected amount
-    const calculateExpectedAmount = () => {
+    const expectedAmount = useMemo(() => {
         if (phase.paymentAmount && phase.paymentAmount > 0) {
             return phase.paymentAmount;
         }
@@ -52,16 +60,52 @@ export default function PhasePaymentDialog({
             return (projectBudget * phase.paymentPercentage) / 100;
         }
         return 0;
-    };
+    }, [phase.paymentAmount, phase.paymentPercentage, projectBudget]);
 
-    const expectedAmount = calculateExpectedAmount();
     const currency = phase.paymentCurrency || projectCurrency || 'INR';
+
+    // Fetch exchange rate if currency is not INR
+    const { data: exchangeRateData, isLoading: isFxLoading, error: fxError } = useGetExchangeRateQuery(currency, {
+        skip: currency === 'INR',
+    });
+
+    const isFxFallback = exchangeRateData?.data?.isFallback;
+    const autoFxRate = exchangeRateData?.data?.rate || 0;
+
+    // Calculate expected INR
+    const calculatedExpectedINR = useMemo(() => {
+        if (currency === 'INR') return expectedAmount;
+        if (autoFxRate > 0) return expectedAmount * autoFxRate;
+        if (manualExchangeRate) return expectedAmount * Number(manualExchangeRate);
+        return 0;
+    }, [currency, expectedAmount, autoFxRate, manualExchangeRate]);
+
+    // Automatically set the received amount once we have calculated the expected INR
+    useEffect(() => {
+        if (receivedAmount === '' && calculatedExpectedINR > 0) {
+            setReceivedAmount(Number(calculatedExpectedINR.toFixed(2)));
+        }
+    }, [calculatedExpectedINR, receivedAmount]);
+
+    // Check if there is a difference
+    const diff = Number(receivedAmount) - calculatedExpectedINR;
+    const hasDifference = Math.abs(diff) > 0.01 && calculatedExpectedINR > 0;
+    const isOverpayment = diff > 0.01;
+    const isUnderpayment = diff < -0.01;
 
     const handleSubmit = async () => {
         setError('');
 
-        if (!receivedAmount || receivedAmount <= 0) {
+        const finalReceivedAmount = Number(receivedAmount);
+        const finalManualFxRate = Number(manualExchangeRate);
+
+        if (!finalReceivedAmount || finalReceivedAmount <= 0) {
             setError('Please enter a valid received amount');
+            return;
+        }
+
+        if (needsManualFxRate && currency !== 'INR' && (!finalManualFxRate || finalManualFxRate <= 0)) {
+            setError(`Please enter the INR value for 1 ${currency}`);
             return;
         }
 
@@ -69,13 +113,22 @@ export default function PhasePaymentDialog({
             setIsSubmitting(true);
             await onConfirm({
                 phaseId: phase._id,
-                receivedAmount,
+                receivedAmount: finalReceivedAmount,
                 bankAccountKey,
                 receivedDate,
                 notes,
+                manualExchangeRate: needsManualFxRate ? finalManualFxRate : undefined,
+                markAsFullyPaid: isUnderpayment ? markAsFullyPaid : undefined,
+                adjustPhaseValue: isOverpayment ? adjustPhaseValue : undefined,
             });
             onClose();
         } catch (err: any) {
+            if (err?.data?.error?.code === 'FX_RATE_REQUIRED') {
+                setNeedsManualFxRate(true);
+                setError(`Automatic FX lookup is unavailable. Enter the INR value for 1 ${currency} to continue.`);
+                setIsSubmitting(false);
+                return;
+            }
             setError(err?.data?.message || 'Failed to mark payment as received');
             setIsSubmitting(false);
         }
@@ -128,8 +181,24 @@ export default function PhasePaymentDialog({
                             {phase.name}
                         </p>
                         <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                            Expected: {currency} {expectedAmount.toLocaleString()}
+                            Expected contract value: {currency} {expectedAmount.toLocaleString()}
                         </p>
+                        {currency !== 'INR' && calculatedExpectedINR > 0 && (
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                Expected INR value: {calculatedExpectedINR.toFixed(2)} INR
+                                {isFxFallback && ' (using fallback rate)'}
+                            </p>
+                        )}
+                        {isFxLoading && (
+                            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+                                <Loader2 size={10} className="animate-spin" /> Fetching exchange rate...
+                            </p>
+                        )}
+                        {fxError && !needsManualFxRate && (
+                            <p className="text-xs mt-0.5 text-red-500">
+                                Failed to fetch exchange rate.
+                            </p>
+                        )}
                     </div>
 
                     {/* Error */}
@@ -143,13 +212,16 @@ export default function PhasePaymentDialog({
                     {/* Received Amount */}
                     <div>
                         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>
-                            Amount Received *
+                            Actual INR Received *
                         </label>
                         <input
                             type="number"
-                            value={receivedAmount || ''}
-                            onChange={(e) => setReceivedAmount(parseFloat(e.target.value) || 0)}
-                            placeholder={`0.00 ${currency}`}
+                            value={receivedAmount}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setReceivedAmount(val === '' ? '' : parseFloat(val));
+                            }}
+                            placeholder="0.00 INR"
                             className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
                             style={{
                                 borderColor: 'var(--color-border-default)',
@@ -159,6 +231,94 @@ export default function PhasePaymentDialog({
                             autoFocus
                         />
                     </div>
+
+                    {/* Difference Indicator & Options */}
+                    {hasDifference && (
+                        <div className="p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                            <div className="flex items-start gap-2">
+                                <Info size={16} className="shrink-0 mt-0.5" style={{ color: 'var(--color-primary)' }} />
+                                <div className="text-sm">
+                                    <p style={{ color: 'var(--color-text-primary)' }} className="font-medium mb-1">
+                                        Amount Difference Detected
+                                    </p>
+                                    <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                                        Expected: {calculatedExpectedINR.toFixed(2)} INR
+                                        <br />
+                                        Received: {Number(receivedAmount).toFixed(2)} INR
+                                        <br />
+                                        Difference: {Math.abs(diff).toFixed(2)} INR {isOverpayment ? '(Overpayment)' : '(Underpayment)'}
+                                    </p>
+
+                                    {isUnderpayment && (
+                                        <label className="flex items-start gap-2 cursor-pointer mt-2 group">
+                                            <div className="relative flex items-center justify-center mt-0.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={markAsFullyPaid}
+                                                    onChange={(e) => setMarkAsFullyPaid(e.target.checked)}
+                                                    className="w-4 h-4 border-2 rounded appearance-none cursor-pointer peer"
+                                                    style={{ borderColor: 'var(--color-border-default)' }}
+                                                />
+                                                <CheckCircle2 size={12} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
+                                                <div className="absolute inset-0 rounded bg-[var(--color-primary)] opacity-0 peer-checked:opacity-100 pointer-events-none -z-10" />
+                                            </div>
+                                            <span className="text-xs leading-tight select-none pt-0.5" style={{ color: 'var(--color-text-primary)' }}>
+                                                Mark phase as fully paid? 
+                                                <span className="block text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                                    Difference will be recorded as FX Fees / Bank Charges.
+                                                </span>
+                                            </span>
+                                        </label>
+                                    )}
+
+                                    {isOverpayment && (
+                                        <label className="flex items-start gap-2 cursor-pointer mt-2 group">
+                                            <div className="relative flex items-center justify-center mt-0.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={adjustPhaseValue}
+                                                    onChange={(e) => setAdjustPhaseValue(e.target.checked)}
+                                                    className="w-4 h-4 border-2 rounded appearance-none cursor-pointer peer"
+                                                    style={{ borderColor: 'var(--color-border-default)' }}
+                                                />
+                                                <CheckCircle2 size={12} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
+                                                <div className="absolute inset-0 rounded bg-[var(--color-primary)] opacity-0 peer-checked:opacity-100 pointer-events-none -z-10" />
+                                            </div>
+                                            <span className="text-xs leading-tight select-none pt-0.5" style={{ color: 'var(--color-text-primary)' }}>
+                                                Adjust phase value to match received amount?
+                                                <span className="block text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                                    If unchecked, the extra amount will be recorded as FX difference/Tip.
+                                                </span>
+                                            </span>
+                                        </label>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {needsManualFxRate && currency !== 'INR' && (
+                        <div>
+                            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                1 {currency} = INR *
+                            </label>
+                            <input
+                                type="number"
+                                value={manualExchangeRate}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setManualExchangeRate(val === '' ? '' : parseFloat(val));
+                                }}
+                                placeholder="Enter current INR rate"
+                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    backgroundColor: 'var(--color-bg-surface)',
+                                    color: 'var(--color-text-primary)',
+                                }}
+                            />
+                        </div>
+                    )}
 
                     {/* Bank Account */}
                     <div>

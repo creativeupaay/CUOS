@@ -35,6 +35,10 @@ export const updatePayrollSchema = z.object({
     params: z.object({ id: z.string() }),
 });
 
+export const deletePayrollSchema = z.object({
+    params: z.object({ id: z.string() }),
+});
+
 export type GeneratePayrollInput = z.infer<typeof generatePayrollSchema>['body'];
 export type GenerateBulkPayrollInput = z.infer<typeof generateBulkPayrollSchema>['body'];
 export type UpdatePayrollStatusInput = z.infer<typeof updatePayrollStatusSchema>['body'];

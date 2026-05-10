@@ -4,7 +4,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 
 // ── Create Leave Request ────────────────────────────────────────────
 export const createLeave = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const leave = await leaveService.createLeave(req.body, userId);
 
     res.status(201).json({
@@ -32,7 +32,7 @@ export const getLeaves = asyncHandler(async (req: Request, res: Response) => {
 
 // ── Get My Leaves ───────────────────────────────────────────────────
 export const getMyLeaves = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const { status, page, limit } = req.query;
     const result = await leaveService.getMyLeaves(userId, {
         status: status as string,
@@ -58,7 +58,7 @@ export const getLeaveById = asyncHandler(async (req: Request, res: Response) => 
 
 // ── Update Leave Status ─────────────────────────────────────────────
 export const updateLeaveStatus = asyncHandler(async (req: Request, res: Response) => {
-    const approvedBy = (req.user as any).id;
+    const approvedBy = req.user!.id;
     const leave = await leaveService.updateLeaveStatus(req.params.id, req.body, approvedBy);
 
     res.json({
@@ -68,7 +68,10 @@ export const updateLeaveStatus = asyncHandler(async (req: Request, res: Response
 });
 
 export const deleteLeave = asyncHandler(async (req: Request, res: Response) => {
-    await leaveService.deleteLeave(req.params.id);
+    await leaveService.deleteLeave(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS leave delete requested',
+    });
 
     res.json({
         status: 'success',
@@ -78,7 +81,7 @@ export const deleteLeave = asyncHandler(async (req: Request, res: Response) => {
 
 // ── Get Leave Balance ───────────────────────────────────────────────
 export const getLeaveBalance = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
     const result = await leaveService.getLeaveBalance(userId, year);
 

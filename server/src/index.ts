@@ -38,19 +38,13 @@ app.use(
   })
 );
 
-const parseOrigins = (raw?: string): string[] =>
-  (raw || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
 // CORS configuration
-const allowedOrigins: string[] = [
+const allowedOrigins: string[] = Array.from(new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  ...parseOrigins(process.env.FRONTEND_URL),
-  ...parseOrigins(process.env.FRONTEND_URLS),
-];
+  env.FRONTEND_URL,
+  ...env.FRONTEND_URLS,
+]));
 
 const isAllowedOrigin = (origin?: string): boolean => {
   if (!origin) return true;

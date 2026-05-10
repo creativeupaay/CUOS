@@ -9,8 +9,7 @@ import {
 } from 'recharts';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery, useGetRevenuesQuery } from '@/features/finance/api/financeApi';
-import { useGetProjectsQuery } from '@/features/project/projectApi';
+import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery, useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -74,14 +73,6 @@ const diffDays = (from: Date, to: Date) => Math.max(0, Math.floor((to.getTime() 
 const formatDateLong = (date: Date | null) => {
     if (!date) return 'N/A';
     return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
-};
-
-const getPhaseExpectedAmount = (phase: any, project: any) => {
-    if (Number(phase?.paymentAmount || 0) > 0) return Number(phase.paymentAmount || 0);
-    if (Number(phase?.paymentPercentage || 0) > 0 && Number(project?.budget || 0) > 0) {
-        return (Number(project.budget || 0) * Number(phase.paymentPercentage || 0)) / 100;
-    }
-    return 0;
 };
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────
@@ -234,8 +225,7 @@ export default function FinanceDashboardPage() {
         isLoading: isCashSummaryLoading,
     } = useGetBankTransactionsQuery({ page: 1, limit: 1 }, { refetchOnMountOrArgChange: true });
 
-    const { data: revenuesData } = useGetRevenuesQuery({ page: 1, limit: 500 });
-    const { data: projectsData } = useGetProjectsQuery({});
+    const { data: receivablesData } = useGetFinanceReceivablesQuery();
 
     // Use currentData directly — undefined until a fresh response for the current filter set arrives.
     const visibleDashboardData = currentDashboardData;
@@ -255,39 +245,25 @@ export default function FinanceDashboardPage() {
     const monthlyData = visibleDashboardData?.data?.monthlyData || [];
     const breakdownData = visibleDashboardData?.data?.breakdownData || [];
 
-    const projectPhaseReceivables = useMemo(() => {
-        const projects = projectsData?.data || [];
+    const receivableItems = useMemo(() => (receivablesData?.data?.items || []).map((item: any) => ({
+        id: String(item.id || ''),
+        client: String(item.party || 'Unknown'),
+        description: String(item.title || 'Receivable'),
+        outstanding: Number(item.outstanding || 0),
+        dueDate: item.dueDate ? getStartOfDay(new Date(item.dueDate)) : null,
+        source: item.source as 'finance-revenue' | 'phase-payment',
+        sourceLabel: String(item.sourceLabel || ''),
+        party: String(item.party || ''),
+        title: String(item.title || ''),
+        status: String(item.status || 'pending'),
+        expected: Number(item.expected || 0),
+        received: Number(item.received || 0),
+    })), [receivablesData]);
 
-        const items = projects.flatMap((project: any) => {
-            const phases = project?.phases || [];
-            return phases
-                .filter((phase: any) => phase?.hasPayment)
-                .map((phase: any, index: number) => {
-                    const expectedAmount = getPhaseExpectedAmount(phase, project);
-                    const receivedAmount = Number(phase?.paymentReceivedAmount || 0);
-                    const outstanding = Math.max(0, expectedAmount - receivedAmount);
-                    const status = String(phase?.paymentStatus || 'pending').toLowerCase();
-                    const dueDateRaw = phase?.paymentDueDate || phase?.endDate || null;
-                    const dueDate = dueDateRaw ? getStartOfDay(new Date(dueDateRaw)) : null;
-
-                    return {
-                        id: `${String(project?._id || 'project')}-${String(phase?._id || index)}`,
-                        client: String(project?.name || 'Project'),
-                        description: `Phase Payment: ${String(phase?.name || 'Unnamed phase')}`,
-                        outstanding,
-                        dueDate,
-                        source: 'phase-payment' as const,
-                        status,
-                    };
-                })
-                .filter((item: any) => item.outstanding > 0 && ['pending', 'partial'].includes(item.status));
-        });
-
-        const total = items.reduce((acc: number, item: any) => acc + Number(item.outstanding || 0), 0);
-        return { items, total };
-    }, [projectsData]);
-
-    const combinedReceivablesValue = Math.max(0, Number(metrics.receivables || 0)) + projectPhaseReceivables.total;
+    const receivablesSummary = receivablesData?.data?.summary;
+    const fxWarnings = receivablesData?.data?.warnings || [];
+    const skippedReceivablesCount = receivablesData?.data?.skippedCount || fxWarnings.length;
+    const combinedReceivablesValue = Math.max(0, Number(receivablesSummary?.totalOpen ?? metrics.receivables ?? 0));
 
     const runwayInsights = useMemo(() => {
         const today = getStartOfDay(new Date());
@@ -305,25 +281,7 @@ export default function FinanceDashboardPage() {
         const burnRateMonthly = averageNetBurn > 0 ? averageNetBurn : averageMonthlyExpense;
         const burnBasisLabel = averageNetBurn > 0 ? 'Net burn (Expense - Revenue)' : 'Gross expense burn';
 
-        const openRevenues = (revenuesData?.data?.revenues || []).filter((item: any) =>
-            ['pending', 'partial', 'overdue'].includes(String(item.status || '').toLowerCase())
-        );
-
-        const financeReceivables = openRevenues
-            .map((item: any) => {
-                const outstanding = Math.max(0, Number(item.totalAmount || item.amountINR || item.amount || 0) - Number(item.receivedAmount || 0));
-                const dueDate = item.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
-                return {
-                    id: String(item._id || ''),
-                    client: String(item.client || 'Unknown client'),
-                    description: String(item.description || item.invoiceNumber || 'Receivable'),
-                    outstanding,
-                    dueDate,
-                    source: 'finance-revenue' as const,
-                };
-            });
-
-        const mergedReceivables = [...financeReceivables, ...projectPhaseReceivables.items];
+        const mergedReceivables = receivableItems;
 
         const receivablesWithDueDate = mergedReceivables
             .filter((item: any) => item.outstanding > 0 && item.dueDate)
@@ -342,9 +300,9 @@ export default function FinanceDashboardPage() {
                 extensionMonths: null,
                 extensionDays: null,
                 totalOpenReceivables,
-                phaseOpenReceivables: projectPhaseReceivables.total,
+                phaseOpenReceivables: receivablesSummary?.phaseAmount || 0,
                 receivablesAppliedAmount: 0,
-                financeOpenReceivables: Math.max(0, totalOpenReceivables - projectPhaseReceivables.total),
+                financeOpenReceivables: receivablesSummary?.financeAmount || Math.max(0, totalOpenReceivables - (receivablesSummary?.phaseAmount || 0)),
                 appliedReceivables: [] as Array<{ id: string; client: string; description: string; outstanding: number; dueDate: Date | null; source: 'finance-revenue' | 'phase-payment' }>,
             };
         }
@@ -394,66 +352,38 @@ export default function FinanceDashboardPage() {
             extensionMonths,
             extensionDays,
             totalOpenReceivables,
-            phaseOpenReceivables: projectPhaseReceivables.total,
+            phaseOpenReceivables: receivablesSummary?.phaseAmount || 0,
             receivablesAppliedAmount,
-            financeOpenReceivables: Math.max(0, totalOpenReceivables - projectPhaseReceivables.total),
+            financeOpenReceivables: receivablesSummary?.financeAmount || Math.max(0, totalOpenReceivables - (receivablesSummary?.phaseAmount || 0)),
             appliedReceivables,
         };
-    }, [cashInBank, monthlyData, revenuesData, projectPhaseReceivables]);
+    }, [cashInBank, monthlyData, receivableItems, receivablesSummary]);
 
     const receivablesAuditItems = useMemo(() => {
         const today = getStartOfDay(new Date());
 
-        const financeItems = (revenuesData?.data?.revenues || [])
-            .filter((item: any) => ['pending', 'partial', 'overdue'].includes(String(item?.status || '').toLowerCase()))
-            .map((item: any) => {
-                const expected = Number(item?.totalAmount || item?.amountINR || item?.amount || 0);
-                const received = Number(item?.receivedAmount || 0);
-                const outstanding = Math.max(0, expected - received);
-                const dueDate = item?.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
-                const status = dueDate && dueDate < today
-                    ? 'overdue'
-                    : (String(item?.status || 'pending').toLowerCase() === 'partial' ? 'partial' : 'pending');
-
-                return {
-                    id: `finance-${String(item?._id || '')}`,
-                    source: 'finance-revenue',
-                    sourceLabel: 'Finance Revenue',
-                    party: String(item?.client || 'Unknown client'),
-                    title: String(item?.description || item?.invoiceNumber || 'Receivable'),
-                    dueDate,
-                    status,
-                    expected,
-                    received,
-                    outstanding,
-                };
-            })
-            .filter((item: any) => item.outstanding > 0);
-
-        const phaseItems = projectPhaseReceivables.items.map((item: any) => {
-            const dueDate = item?.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
+        return receivableItems.map((item: any) => {
+            const dueDate = item.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
             const status = dueDate && dueDate < today ? 'overdue' : 'pending';
             return {
-                id: `phase-${item.id}`,
-                source: 'phase-payment',
-                sourceLabel: 'Project Phase',
-                party: item.client,
-                title: item.description,
+                id: `${item.source}-${item.id}`,
+                source: item.source,
+                sourceLabel: item.sourceLabel,
+                party: item.party,
+                title: item.title,
                 dueDate,
-                status,
-                expected: Number(item.outstanding || 0),
-                received: 0,
+                status: item.status === 'partial' ? 'partial' : status,
+                expected: Number(item.expected || 0),
+                received: Number(item.received || 0),
                 outstanding: Number(item.outstanding || 0),
             };
-        });
-
-        return [...financeItems, ...phaseItems].sort((a: any, b: any) => {
+        }).sort((a: any, b: any) => {
             if (!a.dueDate && !b.dueDate) return 0;
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
             return a.dueDate.getTime() - b.dueDate.getTime();
         });
-    }, [projectPhaseReceivables.items, revenuesData]);
+    }, [receivableItems]);
 
     const ebidtaInsights = useMemo(() => {
         const rows = breakdownData || [];
@@ -773,6 +703,23 @@ export default function FinanceDashboardPage() {
                         </div>
                     </div>
                 </div>
+
+                {fxWarnings.length > 0 && (
+                    <div
+                        className="flex items-start gap-3 rounded-lg border px-4 py-3"
+                        style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}
+                    >
+                        <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-sm font-semibold">Some receivables need FX review.</p>
+                            <p className="text-xs mt-1">
+                                {skippedReceivablesCount > 0
+                                    ? `${skippedReceivablesCount} receivable${skippedReceivablesCount === 1 ? '' : 's'} need a manual INR rate before they can be counted.`
+                                    : 'Latest known FX rates were used for one or more receivables.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Metric Cards ────────────────────────────────────────────── */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

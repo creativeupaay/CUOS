@@ -9,6 +9,31 @@ import { sendClientOnboardingEmail } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
 import { notificationService } from '../../notification/services/notification.service';
 import { logger } from "../../../utils/logger";
+import {
+    ArchiveDeleteOptions,
+    DeletedRecordService,
+    DeleteGraphResult,
+    DeleteGraphService,
+} from '../../archive';
+
+const getGraphNodeIds = (
+    graph: DeleteGraphResult,
+    sourceModel: string,
+    relationship?: string
+): Types.ObjectId[] => {
+    const ids = new Map<string, Types.ObjectId>();
+
+    for (const node of graph.nodes) {
+        if (node.sourceModel !== sourceModel) continue;
+        if (relationship && node.relationship !== relationship) continue;
+
+        for (const sourceId of node.sourceIds) {
+            ids.set(sourceId.toString(), sourceId);
+        }
+    }
+
+    return Array.from(ids.values());
+};
 
 export class ClientService {
     private isAdminRole(role?: string): boolean {
@@ -298,12 +323,53 @@ export class ClientService {
     /**
      * Delete client — permanently removes from database
      */
-    async deleteClient(id: string): Promise<void> {
-        const client = await Client.findByIdAndDelete(id);
+    async deleteClient(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const client = await Client.findById(id);
 
         if (!client) {
             throw new AppError('Client not found', 404);
         }
+
+        const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+        const graph = await DeleteGraphService.archiveGraph('Client', client._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Client delete requested',
+            metadata: {
+                ...options.metadata,
+                clientId: client._id.toString(),
+                leadId: client.leadId?.toString(),
+                proposalIds: client.proposalIds?.map((proposalId) => proposalId.toString()) ?? [],
+                partnerId: client.partnerId?.toString(),
+            },
+        });
+
+        const projectIds = getGraphNodeIds(graph, 'Project', 'client_projects');
+        const { deleteProject } = await import('../../project/services/project.service');
+        for (const projectId of projectIds) {
+            await deleteProject(projectId.toString(), {
+                archiveBatchId,
+                deletedBy: options.deletedBy?.toString(),
+                reason: options.reason ?? 'Client delete requested',
+            });
+        }
+
+        const revenueIds = getGraphNodeIds(graph, 'Revenue', 'client_revenue');
+        const { RevenueService } = await import('../../finance/services/revenue.service');
+        for (const revenueId of revenueIds) {
+            await RevenueService.delete(revenueId, {
+                ...options,
+                archiveBatchId,
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    clientId: client._id.toString(),
+                    linkedFrom: 'Client',
+                },
+            });
+        }
+
+        await client.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     /**

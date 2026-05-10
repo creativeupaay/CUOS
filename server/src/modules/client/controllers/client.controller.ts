@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { Types } from 'mongoose';
 import { ClientService } from '../services/client.service';
 import { Client } from '../models/Client.model';
 import asyncHandler from '../../../utils/asyncHandler';
@@ -14,7 +15,7 @@ const clientService = new ClientService();
  */
 export const createClient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const data: CreateClientInput & { partnerId?: string } = req.body;
-    const createdBy = (req.user as any).id;
+    const createdBy = new Types.ObjectId(req.user!.id);
 
     const client = await clientService.createClient(
         {
@@ -110,7 +111,7 @@ export const uploadClientDocuments = asyncHandler(async (req: Request, res: Resp
             mimetype: file.mimetype,
             size: file.size,
         })),
-        (req.user as any).id,
+        new Types.ObjectId(req.user!.id),
         {
             requesterRole: req.user?.role,
             requesterPartnerId: req.partnerId,
@@ -129,7 +130,10 @@ export const uploadClientDocuments = asyncHandler(async (req: Request, res: Resp
 export const deleteClient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
-    await clientService.deleteClient(id);
+    await clientService.deleteClient(id, {
+        deletedBy: req.user?.id,
+        reason: 'Client delete requested from client module',
+    });
 
     res.status(204).json({
         status: 'success',
@@ -160,7 +164,7 @@ export const getClientProjects = asyncHandler(async (req: Request, res: Response
 export const addActivity = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
     const data: AddClientActivityInput = req.body;
-    const createdBy = (req.user as any).id;
+    const createdBy = new Types.ObjectId(req.user!.id);
 
     const client = await clientService.addActivity(id, data, createdBy, {
         requesterRole: req.user?.role,

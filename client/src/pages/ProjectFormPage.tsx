@@ -6,7 +6,7 @@ import {
 } from '@/features/project';
 import { useCreateClientMutation, useGetClientsQuery } from '@/features/client/clientApi';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, DollarSign, Loader2, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Copy, DollarSign, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ProjectPhase } from '@/features/project/types/types';
 import { createPortal } from 'react-dom';
@@ -15,6 +15,7 @@ import SelectCurrency from '@/components/ui/CurrencySelect';
 import { useAppSelector } from '@/app/hooks';
 import ModalPortal from '@/components/ui/ModalPortal';
 import { useCreatePartnerMutation, useGetPartnersQuery } from '@/features/partners/partnersApi';
+import ManualFxRateModal, { type ManualFxRateRequirement } from '@/components/ManualFxRateModal';
 
 type ProjectFormPageProps = {
     modeOverride?: 'details' | 'phases';
@@ -310,10 +311,11 @@ export default function ProjectFormPage({
         billingType: 'fixed' as string,
         hourlyRate: '',
         defaultBankAccount: '',
-        phases: [] as Omit<ProjectPhase, '_id'>[],
+        phases: [] as ProjectPhase[],
     });
 
     const [error, setError] = useState('');
+    const [manualFxRequirements, setManualFxRequirements] = useState<ManualFxRateRequirement[]>([]);
     const phaseRowRefs = useRef<Array<HTMLDivElement | null>>([]);
     const newlyAddedPhaseIndexRef = useRef<number | null>(null);
     const [expandedPaymentSections, setExpandedPaymentSections] = useState<Record<number, boolean>>({});
@@ -335,6 +337,7 @@ export default function ProjectFormPage({
                 hourlyRate: project.hourlyRate?.toString() || '',
                 defaultBankAccount: project.defaultBankAccount || '',
                 phases: project.phases ? project.phases.map((p: any) => ({
+                    _id: p._id,
                     name: p.name,
                     status: p.status,
                     startDate: p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : undefined,
@@ -343,11 +346,24 @@ export default function ProjectFormPage({
                     paymentAmount: Number(p.paymentAmount || 0),
                     paymentPercentage: Number(p.paymentPercentage || 0),
                     paymentCurrency: toPaymentCurrency(p.paymentCurrency || project.currency),
+                    paymentStatus: p.paymentStatus,
+                    paymentReceivedAmount: p.paymentReceivedAmount,
                     paymentDueDate: p.paymentDueDate ? new Date(p.paymentDueDate).toISOString().split('T')[0] : undefined,
                     paymentBankAccount: p.paymentBankAccount,
+                    revenueId: p.revenueId,
+                    bankTransactionId: p.bankTransactionId,
+                    paymentExpectedAmountINR: p.paymentExpectedAmountINR,
+                    paymentReceivedAmountINR: p.paymentReceivedAmountINR,
+                    paymentExchangeRate: p.paymentExchangeRate,
+                    paymentExchangeRateDate: p.paymentExchangeRateDate ? new Date(p.paymentExchangeRateDate).toISOString().split('T')[0] : undefined,
+                    paymentSettlementCurrency: p.paymentSettlementCurrency,
+                    paymentFxRateSource: p.paymentFxRateSource,
+                    paymentFxRequestedDate: p.paymentFxRequestedDate ? new Date(p.paymentFxRequestedDate).toISOString().split('T')[0] : undefined,
+                    paymentFxFallbackUsed: p.paymentFxFallbackUsed,
                     gstApplicable: p.gstApplicable !== false,
                     gstRate: Number(p.gstRate || 18),
                     tdsDeducted: Number(p.tdsDeducted || 0),
+                    completedAt: p.completedAt,
                 })) : [],
             });
             const existingPartnerId =
@@ -433,8 +449,66 @@ export default function ProjectFormPage({
     const handlePhaseChange = (index: number, field: keyof ProjectPhase, value: any) => {
         setForm((prev) => {
             const updatedPhases = [...prev.phases];
-            updatedPhases[index] = { ...updatedPhases[index], [field]: value } as any;
+            const currentPhase = updatedPhases[index];
+            const nextPhase = { ...currentPhase, [field]: value } as ProjectPhase;
+
+            if (['paymentCurrency', 'paymentDueDate', 'endDate'].includes(String(field))) {
+                delete nextPhase.paymentExchangeRate;
+                delete nextPhase.paymentExchangeRateDate;
+                delete nextPhase.paymentExpectedAmountINR;
+                delete nextPhase.paymentFxRateSource;
+                delete nextPhase.paymentFxRequestedDate;
+                delete nextPhase.paymentFxFallbackUsed;
+            }
+
+            if (field === 'hasPayment' && value && !currentPhase.paymentDueDate && currentPhase.endDate) {
+                nextPhase.paymentDueDate = currentPhase.endDate;
+            }
+
+            if (field === 'endDate' && currentPhase.hasPayment && (!currentPhase.paymentDueDate || currentPhase.paymentDueDate === currentPhase.endDate)) {
+                nextPhase.paymentDueDate = value || undefined;
+            }
+
+            updatedPhases[index] = nextPhase;
             return { ...prev, phases: updatedPhases };
+        });
+    };
+
+    const createDuplicatePhase = (phase: ProjectPhase): ProjectPhase => ({
+        name: `${phase.name || 'Phase'} Copy`,
+        status: 'pending',
+        startDate: phase.startDate,
+        endDate: phase.endDate,
+        hasPayment: phase.hasPayment || false,
+        paymentAmount: phase.paymentAmount,
+        paymentPercentage: phase.paymentPercentage,
+        paymentCurrency: phase.paymentCurrency || toPaymentCurrency(form.currency),
+        paymentDueDate: phase.paymentDueDate || phase.endDate,
+        paymentBankAccount: phase.paymentBankAccount,
+        gstApplicable: phase.gstApplicable !== false,
+        gstRate: phase.gstRate || 18,
+        tdsDeducted: phase.tdsDeducted || 0,
+    });
+
+    const handleDuplicatePhase = (index: number) => {
+        setForm((prev) => {
+            const sourcePhase = prev.phases[index];
+            if (!sourcePhase) return prev;
+            const insertIndex = index + 1;
+            newlyAddedPhaseIndexRef.current = insertIndex;
+            const updatedPhases = [...prev.phases];
+            updatedPhases.splice(insertIndex, 0, createDuplicatePhase(sourcePhase));
+            return { ...prev, phases: updatedPhases };
+        });
+        setExpandedPaymentSections((prev) => {
+            const next: Record<number, boolean> = {};
+            Object.entries(prev).forEach(([k, v]) => {
+                const key = Number(k);
+                if (Number.isNaN(key) || !v) return;
+                next[key >= index + 1 ? key + 1 : key] = true;
+            });
+            if (form.phases[index]?.hasPayment) next[index + 1] = true;
+            return next;
         });
     };
 
@@ -455,7 +529,7 @@ export default function ProjectFormPage({
         return Math.max(0, 100 - otherAllocated);
     };
 
-    const cleanPhasesForSave = () => form.phases
+    const cleanPhasesForSave = (phaseList = form.phases) => phaseList
         .filter((p) => p.name.trim())
         .map((p) => {
             const phase: any = { ...p };
@@ -470,6 +544,12 @@ export default function ProjectFormPage({
                 delete phase.paymentCurrency;
                 delete phase.paymentDueDate;
                 delete phase.paymentBankAccount;
+                delete phase.paymentExpectedAmountINR;
+                delete phase.paymentExchangeRate;
+                delete phase.paymentExchangeRateDate;
+                delete phase.paymentFxRateSource;
+                delete phase.paymentFxRequestedDate;
+                delete phase.paymentFxFallbackUsed;
                 delete phase.gstApplicable;
                 delete phase.gstRate;
                 delete phase.tdsDeducted;
@@ -518,8 +598,86 @@ export default function ProjectFormPage({
 
         const cleanedPhases = cleanPhasesForSave();
 
-        let payload: any = {};
+        const buildPayload = (phasesForPayload: any[]) => {
+            let nextPayload: any = {};
 
+            if (mode === 'details' || !isEditing) {
+                nextPayload = {
+                    ...nextPayload,
+                    name: form.name.trim(),
+                    description: form.description.trim() || undefined,
+                    status: form.status,
+                    priority: form.priority,
+                    clientId: form.clientId,
+                    partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
+                    startDate: form.startDate,
+                    endDate: form.endDate || undefined,
+                    deadline: form.deadline || undefined,
+                    budget: form.budget ? Number(form.budget) : undefined,
+                    currency: form.currency,
+                    billingType: form.billingType,
+                    hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
+                    defaultBankAccount: form.defaultBankAccount || undefined,
+                };
+            }
+
+            if (mode === 'phases' || !isEditing) {
+                nextPayload = {
+                    ...nextPayload,
+                    phases: phasesForPayload.length > 0 ? phasesForPayload : undefined,
+                };
+            }
+
+            return nextPayload;
+        };
+
+        try {
+            const payload = buildPayload(cleanedPhases);
+            if (isEditing && id) {
+                await updateProject({ id, data: payload }).unwrap();
+                if (onSaved) {
+                    onSaved();
+                } else {
+                    navigate(`/projects/${id}`);
+                }
+            } else {
+                const result = await createProject(payload).unwrap();
+                navigate(`/projects/${result.data?._id || ''}`);
+            }
+        } catch (err: any) {
+            const code = err?.data?.error?.code;
+            const requirements = err?.data?.error?.details?.requirements;
+            if (code === 'FX_RATE_REQUIRED' && Array.isArray(requirements)) {
+                setManualFxRequirements(requirements);
+                setError('');
+                return;
+            }
+            setError(err?.data?.message || 'Failed to save project');
+        }
+    };
+
+    const handleManualFxSubmit = async (rates: Record<number, number>) => {
+        const requirementsByIndex = new Map(manualFxRequirements.map((item) => [item.phaseIndex, item]));
+        const phasesWithManualRates = form.phases.map((phase, index) => {
+            const rate = rates[index];
+            const requirement = requirementsByIndex.get(index);
+            if (!rate || !requirement) return phase;
+            return {
+                ...phase,
+                paymentExchangeRate: rate,
+                paymentExchangeRateDate: requirement.date,
+                paymentFxRequestedDate: requirement.date,
+                paymentFxRateSource: 'manual' as const,
+                paymentFxFallbackUsed: false,
+                paymentExpectedAmountINR: undefined,
+            };
+        });
+
+        setForm((prev) => ({ ...prev, phases: phasesWithManualRates }));
+        setManualFxRequirements([]);
+
+        const cleanedPhases = cleanPhasesForSave(phasesWithManualRates);
+        let payload: any = {};
         if (mode === 'details' || !isEditing) {
             payload = {
                 ...payload,
@@ -539,27 +697,26 @@ export default function ProjectFormPage({
                 defaultBankAccount: form.defaultBankAccount || undefined,
             };
         }
-
         if (mode === 'phases' || !isEditing) {
-            payload = {
-                ...payload,
-                phases: cleanedPhases.length > 0 ? cleanedPhases : undefined,
-            };
+            payload = { ...payload, phases: cleanedPhases.length > 0 ? cleanedPhases : undefined };
         }
 
         try {
             if (isEditing && id) {
                 await updateProject({ id, data: payload }).unwrap();
-                if (onSaved) {
-                    onSaved();
-                } else {
-                    navigate(`/projects/${id}`);
-                }
+                if (onSaved) onSaved();
+                else navigate(`/projects/${id}`);
             } else {
                 const result = await createProject(payload).unwrap();
                 navigate(`/projects/${result.data?._id || ''}`);
             }
         } catch (err: any) {
+            const code = err?.data?.error?.code;
+            const requirements = err?.data?.error?.details?.requirements;
+            if (code === 'FX_RATE_REQUIRED' && Array.isArray(requirements)) {
+                setManualFxRequirements(requirements);
+                return;
+            }
             setError(err?.data?.message || 'Failed to save project');
         }
     };
@@ -990,7 +1147,16 @@ export default function ProjectFormPage({
                                             borderColor: 'var(--color-border-default)'
                                         }}
                                     >
-                                        <div className="absolute top-3 right-3">
+                                        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDuplicatePhase(index)}
+                                                className="p-1.5 hover:text-blue-700 bg-white hover:bg-blue-50 rounded-full border shadow-sm transition-colors cursor-pointer"
+                                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-primary)' }}
+                                                title="Duplicate Phase"
+                                            >
+                                                <Copy size={13} />
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleRemovePhase(index)}
@@ -1041,13 +1207,22 @@ export default function ProjectFormPage({
                                         </div>
 
                                         <div className="pt-2 border-t mt-3" style={{ borderColor: 'var(--color-border-default)' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setExpandedPaymentSections((prev) => ({ ...prev, [index]: !prev[index] }))}
+                                            <div
                                                 className="flex items-center justify-between w-full text-xs font-medium py-2"
                                                 style={{ color: 'var(--color-text-secondary)' }}
                                             >
-                                                <div className="flex items-center gap-2">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={phase.hasPayment || false}
+                                                        onChange={(e) => {
+                                                            handlePhaseChange(index, 'hasPayment', e.target.checked);
+                                                            if (e.target.checked) {
+                                                                setExpandedPaymentSections((prev) => ({ ...prev, [index]: true }));
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 rounded border-gray-300"
+                                                    />
                                                     <DollarSign size={14} />
                                                     <span>Payment Tracking</span>
                                                     {phase.hasPayment && (
@@ -1055,24 +1230,20 @@ export default function ProjectFormPage({
                                                             Enabled
                                                         </span>
                                                     )}
-                                                </div>
-                                                {expandedPaymentSections[index] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                            </button>
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedPaymentSections((prev) => ({ ...prev, [index]: !prev[index] }))}
+                                                    className="p-1 rounded transition-colors hover:bg-black/5"
+                                                    style={{ color: 'var(--color-text-secondary)' }}
+                                                    title={expandedPaymentSections[index] ? 'Hide payment details' : 'Show payment details'}
+                                                >
+                                                    {expandedPaymentSections[index] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                </button>
+                                            </div>
 
                                             {expandedPaymentSections[index] && (
                                                 <div className="space-y-3 mt-2 pt-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={phase.hasPayment || false}
-                                                            onChange={(e) => handlePhaseChange(index, 'hasPayment', e.target.checked)}
-                                                            className="w-4 h-4 rounded border-gray-300"
-                                                        />
-                                                        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                                            This phase has a payment
-                                                        </span>
-                                                    </label>
-
                                                     {phase.hasPayment && (
                                                         <>
                                                             <div className="grid grid-cols-2 gap-3">
@@ -1298,6 +1469,14 @@ export default function ProjectFormPage({
                     lockPartner={Boolean(isPartnerUser || selectedPartnerId)}
                     onClose={() => setShowClientModal(false)}
                     onCreated={handleClientCreated}
+                />
+            )}
+            {manualFxRequirements.length > 0 && (
+                <ManualFxRateModal
+                    requirements={manualFxRequirements}
+                    isSaving={isSaving}
+                    onClose={() => setManualFxRequirements([])}
+                    onSubmit={handleManualFxSubmit}
                 />
             )}
         </div>

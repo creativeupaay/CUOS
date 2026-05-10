@@ -5,6 +5,17 @@ import { logger } from "../utils/logger";
 
 dotenv.config();
 
+const parseOriginList = (value: unknown): string[] | undefined => {
+  if (typeof value !== "string") return value as string[] | undefined;
+
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins;
+};
+
 /**
  * Zod schema for environment variables validation
  * All required environment variables must be defined here
@@ -31,6 +42,10 @@ const envSchema = z.object({
     .string()
     .url("FRONTEND_URL must be a valid URL")
     .default("http://localhost:5173"),
+  FRONTEND_URLS: z.preprocess(
+    parseOriginList,
+    z.array(z.string().url("FRONTEND_URLS must contain valid URLs")).default([])
+  ),
 
   // Resend email service — used for client onboarding forms & admin notifications
   RESEND_API_KEY: z.string().optional(),

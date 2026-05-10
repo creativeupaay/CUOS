@@ -69,7 +69,10 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
     const userId = requireUserId(req);
     const { id } = req.params;
 
-    await notificationService.deleteNotifications(userId, [id]);
+    await notificationService.deleteNotifications(userId, [id], {
+        deletedBy: userId,
+        reason: 'Notification delete requested',
+    });
 
     res.json({
         success: true,
@@ -81,7 +84,13 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
 export const clearAllNotifications = asyncHandler(async (req: Request, res: Response) => {
     const userId = requireUserId(req);
 
-    await notificationService.deleteNotifications(userId);
+    await notificationService.deleteNotifications(userId, undefined, {
+        deletedBy: userId,
+        reason: 'Notification clear-all requested',
+        metadata: {
+            clearAll: true,
+        },
+    });
 
     res.json({
         success: true,

@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BarChart3, Handshake, Plus, Search, ExternalLink, Trash2 } from 'lucide-react';
-import {
 import { logger } from '@/utils/logger';
+import {
     useDeletePartnerMutation,
     useGetPartnersQuery,
     type Partner,

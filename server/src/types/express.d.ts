@@ -21,6 +21,7 @@ export interface ApiResponse<T = unknown> {
 // Canonical shape of req.user set by authenticate middleware
 export interface AuthenticatedUser {
   id: string;
+  _id?: string;
   email: string;
   role: string;
   isPartnerEmployee?: boolean;
@@ -54,6 +55,8 @@ declare global {
     interface Request {
       user?: AuthenticatedUser;
       partner?: PartnerContext;
+      isJobManager?: boolean;
+      isHiringAdmin?: boolean;
     }
   }
 }

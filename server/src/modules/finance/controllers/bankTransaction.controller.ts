@@ -170,7 +170,11 @@ export class BankTransactionController {
 
     static async deleteOtherAccount(req: Request, res: Response): Promise<void> {
         try {
-            const deleted = await BankTransactionService.deleteOtherAccount(req.params.id);
+            const userId = getAuthenticatedUserId(req);
+            const deleted = await BankTransactionService.deleteOtherAccount(req.params.id, {
+                deletedBy: userId,
+                reason: 'Other bank account delete requested from finance module',
+            });
             if (!deleted) {
                 res.status(404).json({ success: false, message: 'Bank account not found' });
                 return;
@@ -182,7 +186,7 @@ export class BankTransactionController {
             });
         } catch (error: any) {
             logger.error({ context: error }, 'Error deleting other bank account:');
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 message: 'Failed to delete other bank account',
                 error: error.message,
@@ -315,7 +319,11 @@ export class BankTransactionController {
 
     static async delete(req: Request, res: Response): Promise<void> {
         try {
-            const deleted = await BankTransactionService.delete(req.params.id);
+            const userId = getAuthenticatedUserId(req);
+            const deleted = await BankTransactionService.delete(req.params.id, {
+                deletedBy: userId,
+                reason: 'Bank transaction delete requested from finance module',
+            });
             if (!deleted) {
                 res.status(404).json({ success: false, message: 'Bank transaction not found' });
                 return;

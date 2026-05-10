@@ -8,6 +8,16 @@ import AppError from '../../../utils/appError';
 import { env } from '../../../config/env.config';
 import { sendEmployeeOnboardingEmail } from '../../../services/email.service';
 import { notificationService } from '../../notification/services/notification.service';
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
+import { Attendance } from '../models/Attendance.model';
+import { BankTransactionService } from '../../finance/services/bankTransaction.service';
+import { EmployeeDocument } from '../models/EmployeeDocument.model';
+import { ExpenseService } from '../../finance/services/expense.service';
+import { Incentive } from '../models/Incentive.model';
+import { Leave } from '../models/Leave.model';
+import { LeaveBalance } from '../models/LeaveBalance.model';
+import { Payroll } from '../models/Payroll.model';
+import { SalaryStructure } from '../models/SalaryStructure.model';
 import {
     buildDepartmentFilter,
     getDepartmentCatalog,
@@ -16,7 +26,15 @@ import {
 import { generateNextEmployeeId } from '../utils/employeeId.util';
 import { logger } from "../../../utils/logger";
 
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
+
 class EmployeeService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     async createEmployee(data: CreateEmployeeInput, createdBy: string): Promise<IEmployee> {
         // Check if user already has an employee record
         const existing = await Employee.findOne({ userId: data.userId });
@@ -239,11 +257,69 @@ class EmployeeService {
         }
     }
 
-    async deleteEmployee(id: string): Promise<void> {
-        const employee = await Employee.findByIdAndDelete(id);
+    async deleteEmployee(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const employee = await Employee.findById(id);
         if (!employee) {
             throw new AppError('Employee not found', 404);
         }
+
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Employee', employee._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Employee delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                employeeId: employee._id.toString(),
+                employeeCode: employee.employeeId,
+                userId: employee.userId?.toString(),
+                linkedUserRetained: true,
+            },
+        });
+
+        const expenseIds = getGraphNodeIds(graph, 'employee_expenses');
+        for (const expenseId of expenseIds) {
+            await ExpenseService.delete(expenseId, {
+                ...options,
+                archiveBatchId,
+                reason: options.reason ?? 'Employee delete requested',
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    employeeId: employee._id.toString(),
+                    linkedFrom: 'Employee',
+                },
+            });
+        }
+
+        const bankTransactionIds = getGraphNodeIds(graph, 'payroll_bank_transactions');
+        for (const bankTransactionId of bankTransactionIds) {
+            await BankTransactionService.delete(bankTransactionId, {
+                ...options,
+                archiveBatchId,
+                reason: options.reason ?? 'Employee delete requested',
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    employeeId: employee._id.toString(),
+                    linkedFrom: 'Employee',
+                },
+            });
+        }
+
+        const deleteOptions = options.session ? { session: options.session } : undefined;
+        await Promise.all([
+            Attendance.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_attendance') } }, deleteOptions),
+            Leave.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_leaves') } }, deleteOptions),
+            LeaveBalance.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_leave_balances') } }, deleteOptions),
+            Payroll.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_payrolls') } }, deleteOptions),
+            SalaryStructure.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_salary_structure') } }, deleteOptions),
+            EmployeeDocument.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_documents') } }, deleteOptions),
+            Incentive.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'employee_incentives') } }, deleteOptions),
+        ]);
+
+        await employee.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     async getTeamMembers(managerId: string) {

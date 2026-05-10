@@ -36,7 +36,7 @@ export const checkLeadAccess = async (
         const userId = req.user.id;
 
         if (role === 'partner') {
-            const requesterPartnerId = (req.user as any).partnerId ? String((req.user as any).partnerId) : '';
+            const requesterPartnerId = req.user.partnerId ? String(req.user.partnerId) : '';
             const leadPartnerId = lead.partnerId ? String(lead.partnerId) : '';
 
             if (!requesterPartnerId || !leadPartnerId || requesterPartnerId !== leadPartnerId) {

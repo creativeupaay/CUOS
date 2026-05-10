@@ -73,7 +73,7 @@ export const getProjectById = asyncHandler(
 
 export const updateProject = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const project = await projectService.updateProject(req.params.id, req.body);
+        const project = await projectService.updateProject(req.params.id, req.body, req.user?.id);
 
         if (!project) {
             return next(new AppError('Project not found', 404));
@@ -89,7 +89,10 @@ export const updateProject = asyncHandler(
 
 export const deleteProject = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const project = await projectService.deleteProject(req.params.id);
+        const project = await projectService.deleteProject(req.params.id, {
+            deletedBy: req.user?.id,
+            reason: 'Project delete requested from project management',
+        });
 
         if (!project) {
             return next(new AppError('Project not found', 404));
@@ -97,7 +100,7 @@ export const deleteProject = asyncHandler(
 
         res.status(200).json({
             success: true,
-            message: 'Project archived successfully',
+            message: 'Project archived successfully and linked financial records removed',
             data: project,
         });
     }
@@ -223,7 +226,11 @@ export const deleteDocument = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const project = await projectService.deleteProjectDocument(
             req.params.id,
-            req.params.docId
+            req.params.docId,
+            {
+                deletedBy: req.user?.id,
+                reason: 'Project embedded document delete requested',
+            }
         );
 
         res.status(200).json({

@@ -124,7 +124,10 @@ export const deleteEmployee = asyncHandler(
             });
         }
 
-        await partnerEmployeeService.deleteEmployee(id, userId);
+        await partnerEmployeeService.deleteEmployee(id, userId, {
+            deletedBy: userId,
+            reason: 'Partner employee delete requested',
+        });
 
         res.status(200).json({
             success: true,

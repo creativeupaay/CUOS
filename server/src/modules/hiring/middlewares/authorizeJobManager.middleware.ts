@@ -26,15 +26,15 @@ export const authorizeHiringView = async (
     const userRole = req.user.role;
 
     if (hasModuleViewAccess(req.user, 'hiring')) {
-        (req as any).isJobManager = false;
-        (req as any).isHiringAdmin = hasModuleAdminAccess(req.user, 'hiring');
+        req.isJobManager = false;
+        req.isHiringAdmin = hasModuleAdminAccess(req.user, 'hiring');
         return next();
     }
 
     // Admin/HR roles always have access
     if (!usesVersionedModulePermissions(req.user) && VIEW_ROLES.includes(userRole)) {
-        (req as any).isJobManager = false;
-        (req as any).isHiringAdmin = true;
+        req.isJobManager = false;
+        req.isHiringAdmin = true;
         return next();
     }
 
@@ -42,8 +42,8 @@ export const authorizeHiringView = async (
     try {
         const isManager = await jobService.isUserJobManager(req.user.id);
         if (isManager) {
-            (req as any).isJobManager = true;
-            (req as any).isHiringAdmin = false;
+            req.isJobManager = true;
+            req.isHiringAdmin = false;
             return next();
         }
     } catch {
@@ -68,15 +68,15 @@ export const authorizeHiringManage = async (
     const userRole = req.user.role;
 
     if (hasModuleAdminAccess(req.user, 'hiring')) {
-        (req as any).isJobManager = false;
-        (req as any).isHiringAdmin = true;
+        req.isJobManager = false;
+        req.isHiringAdmin = true;
         return next();
     }
 
     // Admin/HR roles always have manage access
     if (!usesVersionedModulePermissions(req.user) && MANAGE_ROLES.includes(userRole)) {
-        (req as any).isJobManager = false;
-        (req as any).isHiringAdmin = true;
+        req.isJobManager = false;
+        req.isHiringAdmin = true;
         return next();
     }
 
@@ -84,8 +84,8 @@ export const authorizeHiringManage = async (
     try {
         const isManager = await jobService.isUserJobManager(req.user.id);
         if (isManager && !usesVersionedModulePermissions(req.user)) {
-            (req as any).isJobManager = true;
-            (req as any).isHiringAdmin = false;
+            req.isJobManager = true;
+            req.isHiringAdmin = false;
             return next();
         }
     } catch {
@@ -105,7 +105,7 @@ export const authorizeJobAccess = async (
     next: NextFunction
 ) => {
     // If user is a hiring admin (role-based), allow access to all jobs
-    if ((req as any).isHiringAdmin) {
+    if (req.isHiringAdmin) {
         return next();
     }
 

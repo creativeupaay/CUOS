@@ -205,7 +205,11 @@ export class ExpenseController {
      */
     static async delete(req: Request, res: Response): Promise<void> {
         try {
-            const deleted = await ExpenseService.delete(req.params.id);
+            const userId = getAuthenticatedUserId(req);
+            const deleted = await ExpenseService.delete(req.params.id, {
+                deletedBy: userId,
+                reason: 'Expense delete requested from finance module',
+            });
 
             if (!deleted) {
                 res.status(404).json({

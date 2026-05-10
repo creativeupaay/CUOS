@@ -6,23 +6,18 @@ import { setupNotificationHandlers } from '../modules/notification/handlers/noti
 import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
 import { logger } from "../utils/logger";
+import { env } from './env.config';
 
 /**
  * Initialize Socket.io server
  */
 export const initializeSocket = (httpServer: HTTPServer): Server => {
-  const parseOrigins = (raw?: string): string[] =>
-    (raw || '')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean);
-
-  const allowedOrigins: string[] = [
+  const allowedOrigins: string[] = Array.from(new Set([
     'http://localhost:5173',
     'http://localhost:3000',
-    ...parseOrigins(process.env.FRONTEND_URL),
-    ...parseOrigins(process.env.FRONTEND_URLS),
-  ];
+    env.FRONTEND_URL,
+    ...env.FRONTEND_URLS,
+  ]));
 
   const isAllowedOrigin = (origin?: string): boolean => {
     if (!origin) return true;

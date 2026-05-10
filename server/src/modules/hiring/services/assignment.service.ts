@@ -1,4 +1,5 @@
 import AppError from '../../../utils/appError';
+import { Types } from 'mongoose';
 import { uploadDocument } from '../../../utils/cloudinary.util';
 import { Application } from '../models/Application.model';
 import { Assignment, IAssignment } from '../models/Assignment.model';
@@ -9,12 +10,17 @@ import {
     IAssignmentSubmission,
 } from '../models/AssignmentSubmission.model';
 import { Job } from '../models/Job.model';
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
 import {
     CreateAssignmentInput,
     SubmitAssignmentInput,
     UpdateAssignmentInput,
 } from '../validators/assignment.validator';
 import { logApplicationActivity } from './activity.service';
+
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
 
 function normalizeOptionalUrl(value?: string) {
     const trimmedValue = String(value || '').trim();
@@ -40,6 +46,10 @@ function hasAtLeastOneConfiguredSubmissionField(fields: any): boolean {
 }
 
 export class AssignmentService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     async createAssignment(data: CreateAssignmentInput): Promise<IAssignment> {
         const job = await Job.findById(data.jobId).select('_id');
         if (!job) {
@@ -122,13 +132,31 @@ export class AssignmentService {
         return assignment;
     }
 
-    async deleteAssignment(id: string): Promise<void> {
-        const assignment = await Assignment.findByIdAndDelete(id);
+    async deleteAssignment(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const assignment = await Assignment.findById(id);
         if (!assignment) {
             throw new AppError('Assignment not found', 404);
         }
 
-        await AssignmentSubmission.deleteMany({ assignmentId: assignment._id });
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Assignment', assignment._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Hiring assignment delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                assignmentId: assignment._id.toString(),
+                jobId: assignment.jobId.toString(),
+            },
+        });
+
+        const deleteOptions = options.session ? { session: options.session } : undefined;
+        await AssignmentSubmission.deleteMany(
+            { _id: { $in: getGraphNodeIds(graph, 'assignment_submissions') } },
+            deleteOptions
+        );
+        await assignment.deleteOne(deleteOptions);
     }
 
     async getAssignmentForApplication(applicationId: string): Promise<{

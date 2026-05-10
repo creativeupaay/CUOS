@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import { ProposalService } from '../services/proposal.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import type {
@@ -16,7 +17,7 @@ const proposalService = new ProposalService();
 export const createProposal = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const data: CreateProposalInput = req.body;
-        const createdBy = (req.user as any).id;
+        const createdBy = new Types.ObjectId(req.user!.id);
 
         const proposal = await proposalService.createProposal(data, createdBy);
 
@@ -83,7 +84,10 @@ export const deleteProposal = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
 
-        await proposalService.deleteProposal(id);
+        await proposalService.deleteProposal(id, {
+            deletedBy: req.user?.id,
+            reason: 'Proposal delete requested from CRM module',
+        });
 
         res.status(204).json({
             status: 'success',

@@ -1,11 +1,17 @@
 import { Partner, IPartner } from '../models/Partner.model';
 import { User } from '../../auth/models/User.model';
 import { Client } from '../../client/models/Client.model';
+import { Lead } from '../../crm/models/Lead.model';
+import { Proposal } from '../../crm/models/Proposal.model';
 import { Project } from '../../project/models/Project.model';
+import { PartnerEmployee } from '../models/PartnerEmployee.model';
 import AppError from '../../../utils/appError';
 import { FilterQuery, Types } from 'mongoose';
 import crypto from 'crypto';
 import { logger } from "../../../utils/logger";
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
+import { RevenueService } from '../../finance/services/revenue.service';
+import { deleteProject } from '../../project/services/project.service';
 
 // Minimal input for initial partner creation (just name and email)
 export interface CreatePartnerInput {
@@ -59,7 +65,15 @@ export interface ListPartnersFilters {
     limit?: number;
 }
 
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
+
 export class PartnerService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     /**
      * Ensure partner role exists so partner onboarding does not hard-depend on seed script execution.
      */
@@ -534,33 +548,61 @@ export class PartnerService {
     }
 
     /**
-     * Delete partner (hard delete)
+     * Delete partner and linked partner-owned records after archiving the full partner graph.
      */
-    async deletePartner(id: string): Promise<void> {
+    async deletePartner(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
         const partner = await Partner.findById(id);
 
         if (!partner) {
             throw new AppError('Partner not found', 404);
         }
 
-        // Check if partner has any clients or projects
-        const [clientsCount, projectsCount] = await Promise.all([
-            Client.countDocuments({ partnerId: partner._id }),
-            Project.countDocuments({ partnerId: partner._id }),
-        ]);
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Partner', partner._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Partner delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                partnerId: partner._id.toString(),
+                userId: partner.userId?.toString(),
+                companyName: partner.companyName,
+                email: partner.email,
+            },
+        });
 
-        if (clientsCount > 0 || projectsCount > 0) {
-            throw new AppError(
-                'Cannot delete partner with existing clients or projects. Please reassign them first.',
-                400
-            );
+        for (const projectId of getGraphNodeIds(graph, 'partner_projects')) {
+            await deleteProject(projectId.toString(), {
+                archiveBatchId,
+                deletedBy: options.deletedBy?.toString(),
+                reason: options.reason ?? 'Partner delete requested',
+            });
         }
 
-        // Delete both partner and associated user
+        for (const revenueId of getGraphNodeIds(graph, 'partner_revenue')) {
+            await RevenueService.delete(revenueId, {
+                ...options,
+                archiveBatchId,
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    partnerId: partner._id.toString(),
+                    linkedFrom: 'Partner',
+                },
+            });
+        }
+
+        const deleteOptions = options.session ? { session: options.session } : undefined;
         await Promise.all([
-            Partner.findByIdAndDelete(id),
-            ...(partner.userId ? [User.findByIdAndDelete(partner.userId)] : []),
+            Proposal.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'partner_proposals') } }, deleteOptions),
+            Lead.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'partner_leads') } }, deleteOptions),
+            Client.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'partner_clients') } }, deleteOptions),
+            PartnerEmployee.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'partner_employees') } }, deleteOptions),
+            ...(partner.userId ? [User.deleteOne({ _id: partner.userId }, deleteOptions)] : []),
         ]);
+
+        await partner.deleteOne(deleteOptions);
     }
 
     /**
