@@ -4,6 +4,11 @@ import { Holiday } from '../models/Holiday.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
+
+interface BulkMarkAttendanceOptions extends ArchiveDeleteOptions {
+    onlyUnmarked?: boolean;
+}
 
 export class AttendanceService {
     static async checkIn(userId: string, data: any) {
@@ -105,7 +110,7 @@ export class AttendanceService {
     static async bulkMarkAttendance(
         date: string,
         records: Array<{ employeeId: string; status: string; notes?: string }>,
-        options: { onlyUnmarked?: boolean } = {}
+        options: BulkMarkAttendanceOptions = {}
     ) {
         // Always use Date.UTC so the date is stored as UTC midnight,
         // regardless of the server's local timezone (e.g. IST = UTC+5:30)
@@ -165,10 +170,31 @@ export class AttendanceService {
 
         let deleted = 0;
         if (clearIds.length > 0) {
-            const res = await Attendance.deleteMany({
+            const clearFilter = {
                 employeeId: { $in: clearIds },
                 date: dateObj,
-            });
+            };
+            const recordsToClear = await Attendance.find(clearFilter);
+
+            if (!options.skipArchive) {
+                await DeletedRecordService.archiveDocuments(recordsToClear, {
+                    archiveBatchId: options.archiveBatchId,
+                    deletedBy: options.deletedBy,
+                    reason: options.reason ?? 'Bulk attendance clear requested',
+                    operation: 'delete',
+                    session: options.session,
+                    metadata: {
+                        ...options.metadata,
+                        date,
+                        employeeIds: clearIds.map((employeeId) => employeeId.toString()),
+                    },
+                });
+            }
+
+            const res = await Attendance.deleteMany(
+                { _id: { $in: recordsToClear.map((record) => record._id) } },
+                options.session ? { session: options.session } : undefined
+            );
             deleted = res.deletedCount;
         }
 

@@ -38,7 +38,7 @@ export const createPublicApplication = asyncHandler(async (req: Request, res: Re
 });
 
 export const getApplications = asyncHandler(async (req: Request, res: Response) => {
-    const filters: ListApplicationsInput = { ...req.query } as any;
+    const filters = { ...req.query } as unknown as ListApplicationsInput;
 
     // The frontend sends `minExperience` as a string, make sure to convert it
     if (filters.minExperience && typeof filters.minExperience === 'string') {
@@ -46,7 +46,7 @@ export const getApplications = asyncHandler(async (req: Request, res: Response) 
     }
 
     // If user is a job manager (not admin/HR), filter to only applications for their managed jobs
-    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+    const managerUserId = req.isJobManager ? req.user?.id : undefined;
 
     const result = await applicationService.getApplications(filters, managerUserId);
 
@@ -74,6 +74,18 @@ export const getApplicationTimeline = asyncHandler(async (req: Request, res: Res
     });
 });
 
+export const deleteApplication = asyncHandler(async (req: Request, res: Response) => {
+    await applicationService.deleteApplication(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'Hiring application delete requested',
+    });
+
+    res.status(204).json({
+        status: 'success',
+        data: null,
+    });
+});
+
 export const updateApplication = asyncHandler(async (req: Request, res: Response) => {
     const data: UpdateApplicationInput = req.body;
     const application = await applicationService.updateApplication(req.params.id, data);
@@ -86,7 +98,7 @@ export const updateApplication = asyncHandler(async (req: Request, res: Response
 
 export const updateApplicationStatus = asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body as UpdateStatusInput;
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const application = await applicationService.updateStatus(req.params.id, status, actorId);
 
     res.status(200).json({
@@ -97,7 +109,7 @@ export const updateApplicationStatus = asyncHandler(async (req: Request, res: Re
 
 export const addApplicationTag = asyncHandler(async (req: Request, res: Response) => {
     const { tag } = req.body as TagInput;
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const application = await applicationService.addTag(req.params.id, tag, actorId);
 
     res.status(200).json({
@@ -108,7 +120,7 @@ export const addApplicationTag = asyncHandler(async (req: Request, res: Response
 
 export const removeApplicationTag = asyncHandler(async (req: Request, res: Response) => {
     const { tag } = req.body as TagInput;
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const application = await applicationService.removeTag(req.params.id, tag, actorId);
 
     res.status(200).json({
@@ -120,7 +132,7 @@ export const removeApplicationTag = asyncHandler(async (req: Request, res: Respo
 export const applyFinalDecision = asyncHandler(async (req: Request, res: Response) => {
     const data: ApplicationDecisionInput = req.body;
     const offerLetter = req.file;
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
 
     const result = await applicationService.makeFinalDecision(req.params.id, data, offerLetter, actorId);
 

@@ -5,6 +5,7 @@ import { getRoom, getRoomName, saveTimers } from '../utils/roomManager';
 import { IContentBlock } from '../../project/models/Note.model';
 import { ROOM_CONFIG } from '../types/types';
 import noteService from '../../project/services/note.service';
+import { logger } from "../../../utils/logger";
 
 /**
  * Apply block operation to room state
@@ -77,7 +78,7 @@ const applyInsert = (
   blocks.splice(position, 0, newBlock);
   room.version++;
 
-  console.log(`[OT] Inserted block ${blockId}, version: ${room.version}`);
+  logger.info(`[OT] Inserted block ${blockId}, version: ${room.version}`);
 
   return { success: true, newVersion: room.version };
 };
@@ -123,7 +124,7 @@ const applyUpdate = (
 
   room.version++;
 
-  console.log(`[OT] Updated block ${blockId}, version: ${room.version}`);
+  logger.info(`[OT] Updated block ${blockId}, version: ${room.version}`);
 
   return { success: true, newVersion: room.version };
 };
@@ -147,7 +148,7 @@ const applyDelete = (
   blocks.splice(blockIndex, 1);
   room.version++;
 
-  console.log(`[OT] Deleted block ${blockId}, version: ${room.version}`);
+  logger.info(`[OT] Deleted block ${blockId}, version: ${room.version}`);
 
   return { success: true, newVersion: room.version };
 };
@@ -179,7 +180,7 @@ const applyMove = (
   blocks.splice(data.newPosition, 0, block);
   room.version++;
 
-  console.log(`[OT] Moved block ${blockId} to position ${data.newPosition}, version: ${room.version}`);
+  logger.info(`[OT] Moved block ${blockId} to position ${data.newPosition}, version: ${room.version}`);
 
   return { success: true, newVersion: room.version };
 };
@@ -201,7 +202,7 @@ export const broadcastOperation = (
     version: newVersion,
   });
 
-  console.log(`[OT] Broadcasted operation to room ${roomName}`);
+  logger.info(`[OT] Broadcasted operation to room ${roomName}`);
 };
 
 /**
@@ -215,7 +216,7 @@ export const scheduleNoteSave = async (
   const room = getRoom(noteId);
 
   if (!room) {
-    console.error(`[OT] Cannot save - room not found for note ${noteId}`);
+    logger.error(`[OT] Cannot save - room not found for note ${noteId}`);
     return;
   }
 
@@ -231,7 +232,7 @@ export const scheduleNoteSave = async (
   // Schedule save after debounce delay
   const timer = setTimeout(async () => {
     try {
-      console.log(`[OT] Saving note ${noteId} to database...`);
+      logger.info(`[OT] Saving note ${noteId} to database...`);
 
       await noteService.updateNote(noteId, userId, userRole, {
         blocks: room.blocks,
@@ -241,9 +242,9 @@ export const scheduleNoteSave = async (
       room.saveScheduled = false;
       saveTimers.delete(noteId);
 
-      console.log(`[OT] Successfully saved note ${noteId}`);
+      logger.info(`[OT] Successfully saved note ${noteId}`);
     } catch (error: any) {
-      console.error(`[OT] Failed to save note ${noteId}:`, error.message);
+      logger.error({ context: error.message }, `[OT] Failed to save note ${noteId}:`);
       room.saveScheduled = false;
       saveTimers.delete(noteId);
 
@@ -264,7 +265,7 @@ export const saveAllNotes = async (): Promise<void> => {
   const { getAllRooms } = require('../utils/roomManager');
   const rooms = getAllRooms();
 
-  console.log(`[OT] Saving ${rooms.size} notes before shutdown...`);
+  logger.info(`[OT] Saving ${rooms.size} notes before shutdown...`);
 
   const savePromises: Promise<void>[] = [];
 
@@ -279,10 +280,10 @@ export const saveAllNotes = async (): Promise<void> => {
             blocks: room.blocks,
           })
           .then(() => {
-            console.log(`[OT] Saved note ${noteId} on shutdown`);
+            logger.info(`[OT] Saved note ${noteId} on shutdown`);
           })
           .catch((error: any) => {
-            console.error(`[OT] Failed to save note ${noteId} on shutdown:`, error.message);
+            logger.error({ context: error.message }, `[OT] Failed to save note ${noteId} on shutdown:`);
           });
 
         savePromises.push(savePromise);
@@ -291,7 +292,7 @@ export const saveAllNotes = async (): Promise<void> => {
   }
 
   await Promise.all(savePromises);
-  console.log(`[OT] Completed saving all notes`);
+  logger.info(`[OT] Completed saving all notes`);
 };
 
 /**
@@ -308,7 +309,7 @@ export const sendSyncEvent = (
     message: 'Your version is out of sync, please refresh',
   });
 
-  console.log(`[OT] Sent sync event to socket ${socket.id} for note ${noteId}`);
+  logger.info(`[OT] Sent sync event to socket ${socket.id} for note ${noteId}`);
 };
 
 export default {

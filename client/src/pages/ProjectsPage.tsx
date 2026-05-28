@@ -7,6 +7,8 @@ import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import ProjectFormPage from './ProjectFormPage';
 import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
+import { projectApi } from '@/features/project';
+import { logger } from '@/utils/logger';
 
 /* ── Status map ──────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -44,6 +46,7 @@ export default function ProjectsPage() {
     const [priorityFilter, setPriorityFilter] = useState('');
     const [partnerFilter, setPartnerFilter] = useState(partnerParam);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+    const [deleteVerificationText, setDeleteVerificationText] = useState('');
     const [statusModal, setStatusModal] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
     const [selectedStatus, setSelectedStatus] = useState('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export default function ProjectsPage() {
         priority: priorityFilter,
         partnerId: scopeParam === 'internal' ? undefined : partnerFilter || undefined,
     });
+    const prefetchProjectById = projectApi.usePrefetch('getProjectById');
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const allLoadedProjects = data?.data || [];
@@ -133,6 +137,10 @@ export default function ProjectsPage() {
         setPartnerFilter(scopeParam === 'internal' ? '' : partnerParam);
     }, [partnerParam, scopeParam]);
 
+    useEffect(() => {
+        if (!deleteConfirm) setDeleteVerificationText('');
+    }, [deleteConfirm]);
+
     const getProjectPartnerId = (project: any) => typeof project.partnerId === 'object' ? project.partnerId?._id : project.partnerId;
     const getProjectPartnerName = (project: any) => {
         const partner = typeof project.partnerId === 'object' ? project.partnerId : undefined;
@@ -161,11 +169,12 @@ export default function ProjectsPage() {
 
     const handleDeleteProject = async () => {
         if (!deleteConfirm) return;
+        if (deleteVerificationText.trim() !== deleteConfirm.name) return;
         try {
             await deleteProject(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
         } catch (err) {
-            console.error('Failed to delete project:', err);
+            logger.error('Failed to delete project:', err);
         }
     };
 
@@ -175,8 +184,12 @@ export default function ProjectsPage() {
             await updateProject({ id: statusModal.id, data: { status: selectedStatus as any } }).unwrap();
             setStatusModal(null);
         } catch (err) {
-            console.error('Failed to update project status:', err);
+            logger.error('Failed to update project status:', err);
         }
+    };
+
+    const warmProjectDetail = (projectId: string) => {
+        prefetchProjectById(projectId, { ifOlderThan: 30 });
     };
 
     if (!canViewProjects && !isLoading) return <Navigate to="/dashboard" replace />;
@@ -288,11 +301,14 @@ export default function ProjectsPage() {
                                         flexDirection: 'column',
                                     }}
                                     onMouseEnter={(e) => {
+                                        warmProjectDetail(project._id);
                                         e.currentTarget.style.transform = 'translateY(-2px)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-md)';
                                         e.currentTarget.style.borderColor = borderAccent + '60';
                                         e.currentTarget.style.borderLeftColor = borderAccent;
                                     }}
+                                    onFocus={() => warmProjectDetail(project._id)}
+                                    onMouseDown={() => warmProjectDetail(project._id)}
                                     onMouseLeave={(e) => {
                                         e.currentTarget.style.transform = 'translateY(0)';
                                         e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
@@ -505,9 +521,22 @@ export default function ProjectsPage() {
                         Delete Project
                     </h3>
                     <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
-                        Are you sure you want to permanently delete <strong>{deleteConfirm.name}</strong>?
-                        This will remove all associated tasks, time logs, and documents. This action cannot be undone.
+                        Type <strong>{deleteConfirm.name}</strong> to confirm deletion. This will archive the project and remove linked revenue entries and Cash in Bank transactions. This action cannot be undone.
                     </p>
+                    <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                        Project name
+                    </label>
+                    <input
+                        value={deleteVerificationText}
+                        onChange={(event) => setDeleteVerificationText(event.target.value)}
+                        className="w-full rounded-lg border px-3 py-2 text-sm mb-5"
+                        style={{
+                            borderColor: 'var(--color-border-default)',
+                            color: 'var(--color-text-primary)',
+                        }}
+                        placeholder={deleteConfirm.name}
+                        autoFocus
+                    />
                     <div className="flex gap-3 justify-end">
                         <button
                             onClick={() => setDeleteConfirm(null)}
@@ -518,7 +547,7 @@ export default function ProjectsPage() {
                         </button>
                         <button
                             onClick={handleDeleteProject}
-                            disabled={isDeletingProject}
+                            disabled={isDeletingProject || deleteVerificationText.trim() !== deleteConfirm.name}
                             className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             {isDeletingProject ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}

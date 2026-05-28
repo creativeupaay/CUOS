@@ -3,6 +3,7 @@ import { Attendance } from '../../hrms/models/Attendance.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Holiday } from '../../hrms/models/Holiday.model';
 import { notificationService } from '../services/notification.service';
+import { logger } from "../../../utils/logger";
 
 /**
  * Get today's date range in UTC
@@ -40,7 +41,7 @@ export const initAttendanceReminderJob = () => {
     cron.schedule(
         '0 30 10 * * *',
         async () => {
-            console.log('[CRON] Running attendance reminder check...');
+            logger.info('[CRON] Running attendance reminder check...');
 
             try {
                 const today = new Date();
@@ -48,14 +49,14 @@ export const initAttendanceReminderJob = () => {
 
                 // Skip weekends (Saturday = 6, Sunday = 0)
                 if (dayOfWeek === 0 || dayOfWeek === 6) {
-                    console.log('[CRON] Weekend - skipping attendance reminder');
+                    logger.info('[CRON] Weekend - skipping attendance reminder');
                     return;
                 }
 
                 // Skip if today is a declared holiday
                 const isHoliday = await isTodayHoliday();
                 if (isHoliday) {
-                    console.log('[CRON] Holiday - skipping attendance reminder');
+                    logger.info('[CRON] Holiday - skipping attendance reminder');
                     return;
                 }
 
@@ -86,12 +87,12 @@ export const initAttendanceReminderJob = () => {
                         },
                     });
 
-                    console.log(`[CRON] Sent attendance reminder: ${missing} employees missing`);
+                    logger.info(`[CRON] Sent attendance reminder: ${missing} employees missing`);
                 } else {
-                    console.log('[CRON] All employees have attendance marked');
+                    logger.info('[CRON] All employees have attendance marked');
                 }
             } catch (error) {
-                console.error('[CRON] Error in attendance reminder job:', error);
+                logger.error({ context: error }, '[CRON] Error in attendance reminder job:');
             }
         },
         {
@@ -99,5 +100,5 @@ export const initAttendanceReminderJob = () => {
         }
     );
 
-    console.log('[CRON] Attendance reminder job scheduled for 4:00 PM IST daily');
+    logger.info('[CRON] Attendance reminder job scheduled for 4:00 PM IST daily');
 };

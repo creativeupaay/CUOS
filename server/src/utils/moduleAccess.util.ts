@@ -1,6 +1,19 @@
 type ModuleKey = 'projectManagement' | 'finance' | 'crm' | 'hrms' | 'overallAdmin' | 'partners' | 'hiring';
 
-export function usesVersionedModulePermissions(user: any): boolean {
+export interface ModuleAccessUser {
+    role?: unknown;
+    isPartnerEmployee?: unknown;
+    modulePermissions?: {
+        accessControlVersion?: number | string;
+    } & Partial<Record<ModuleKey, {
+        adminAccess?: boolean;
+        enabled?: boolean;
+        subModules?: Record<string, boolean>;
+    }>>;
+    [key: string]: unknown;
+}
+
+export function usesVersionedModulePermissions(user: ModuleAccessUser | null | undefined): boolean {
     return Number(user?.modulePermissions?.accessControlVersion || 0) >= 2;
 }
 
@@ -20,7 +33,7 @@ function hasLegacyModuleRole(roleName: string, moduleKey: ModuleKey) {
     return false;
 }
 
-export function hasModuleAdminAccess(user: any, moduleKey: ModuleKey): boolean {
+export function hasModuleAdminAccess(user: ModuleAccessUser | null | undefined, moduleKey: ModuleKey): boolean {
     const roleName = String(user?.role || '').toLowerCase();
     if (['super-admin', 'super_admin'].includes(roleName)) return true;
 
@@ -38,7 +51,7 @@ export function hasModuleAdminAccess(user: any, moduleKey: ModuleKey): boolean {
     return moduleAccess?.adminAccess === true;
 }
 
-export function hasModuleViewAccess(user: any, moduleKey: ModuleKey): boolean {
+export function hasModuleViewAccess(user: ModuleAccessUser | null | undefined, moduleKey: ModuleKey): boolean {
     if (hasModuleAdminAccess(user, moduleKey)) return true;
 
     const roleName = String(user?.role || '').toLowerCase();
@@ -62,7 +75,7 @@ export function hasModuleViewAccess(user: any, moduleKey: ModuleKey): boolean {
 
 export type HrmsSelfSubmodule = 'attendance' | 'leaves' | 'holidays' | 'payroll' | 'announcements';
 
-export function hasHrmsSelfSubmoduleAccess(user: any, submodule: HrmsSelfSubmodule): boolean {
+export function hasHrmsSelfSubmoduleAccess(user: ModuleAccessUser | null | undefined, submodule: HrmsSelfSubmodule): boolean {
     if (hasModuleAdminAccess(user, 'hrms')) return true;
     if (!hasModuleViewAccess(user, 'hrms')) return false;
 

@@ -14,8 +14,8 @@ export const markPhasePaymentReceived = async (
 ) => {
     try {
         const { id: projectId, phaseId } = req.params;
-        const { receivedAmount, bankAccountKey, receivedDate, notes } = req.body;
-        const userId = (req.user as any)?.id?.toString() || (req.user as any)?._id?.toString();
+        const { receivedAmount, bankAccountKey, receivedDate, notes, manualExchangeRate } = req.body;
+        const userId = req.user?.id?.toString() || req.user?._id?.toString();
 
         if (!userId) {
             return next(new AppError('Not authenticated', 401));
@@ -42,6 +42,7 @@ export const markPhasePaymentReceived = async (
             bankAccountKey,
             receivedDate: receivedDate ? new Date(receivedDate) : new Date(),
             notes,
+            manualExchangeRate: manualExchangeRate ? Number(manualExchangeRate) : undefined,
             userId,
         });
 

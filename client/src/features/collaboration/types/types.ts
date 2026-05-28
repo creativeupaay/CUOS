@@ -56,7 +56,7 @@ export interface LeaveNotePayload {
   noteId: string;
 }
 
-export interface UpdateNotePayload extends BlockOperation {}
+export interface UpdateNotePayload extends BlockOperation { }
 
 export interface UpdatePresencePayload {
   noteId: string;

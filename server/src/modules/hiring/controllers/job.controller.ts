@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import { JobService } from '../services/job.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import type {
@@ -15,7 +16,7 @@ const jobService = new JobService();
 export const createJob = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
         const data: CreateJobInput = req.body;
-        const createdBy = (req.user as any).id;
+        const createdBy = new Types.ObjectId(req.user!.id);
 
         const job = await jobService.createJob(data, createdBy);
 
@@ -31,10 +32,10 @@ export const createJob = asyncHandler(
  */
 export const getJobs = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const filters: ListJobsInput = req.query as any;
+        const filters = req.query as unknown as ListJobsInput;
 
         // If user is a job manager (not admin/HR), filter to only their managed jobs
-        const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+        const managerUserId = req.isJobManager ? req.user?.id : undefined;
 
         const result = await jobService.getJobs(filters, managerUserId);
 
@@ -101,7 +102,10 @@ export const deleteJob = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
         const { id } = req.params;
 
-        await jobService.deleteJob(id);
+        await jobService.deleteJob(id, {
+            deletedBy: req.user?.id,
+            reason: 'Hiring job delete requested',
+        });
 
         res.status(204).json({
             status: 'success',
@@ -176,7 +180,7 @@ export const getEmployeesList = asyncHandler(
  */
 export const checkJobManagerStatus = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const userId = (req.user as any).id;
+        const userId = req.user!.id;
         const isJobManager = await jobService.isUserJobManager(userId);
 
         res.status(200).json({

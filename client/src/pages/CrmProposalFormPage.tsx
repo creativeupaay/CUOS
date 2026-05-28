@@ -31,6 +31,7 @@ import ScopeTab from '../features/crm/components/Proposal/ScopeTab';
 import TechTab from '../features/crm/components/Proposal/TechTab';
 import ExecutionTab from '../features/crm/components/Proposal/ExecutionTab';
 import BudgetTab from '../features/crm/components/Proposal/BudgetTab';
+import { logger } from '@/utils/logger';
 
 const ProposalPdfDownloadButton = lazy(() => import('../features/crm/components/Proposal/ProposalPdfDownloadButton'));
 
@@ -159,7 +160,7 @@ export default function CrmProposalFormPage() {
             }
             navigate('/crm/proposals');
         } catch (error: any) {
-            console.error('Failed to save:', error);
+            logger.error('Failed to save:', error);
             setServerError(error.data?.message || 'Failed to save proposal.');
         }
     };

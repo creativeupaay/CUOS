@@ -74,6 +74,14 @@ export interface PortalComment {
     createdAt: string;
 }
 
+export interface PortalClientInfo {
+    clientId: string;
+    email: string;
+    name: string;
+    companyName?: string;
+}
+
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const clientPortalApi = createApi({
@@ -90,7 +98,7 @@ export const clientPortalApi = createApi({
     endpoints: (builder) => ({
         // Auth
         exchangePortalToken: builder.mutation<
-            { status: string; data: { client: { clientId: string; name: string; email: string; companyName?: string } } },
+            { status: string; data: { client: PortalClientInfo } },
             { clientId: string; token: string }
         >({
             query: (body) => ({ url: '/client-portal/auth/exchange', method: 'POST', body }),
@@ -99,8 +107,8 @@ export const clientPortalApi = createApi({
         logoutPortal: builder.mutation<{ status: string; message: string }, void>({
             query: () => ({ url: '/client-portal/auth/logout', method: 'POST' }),
         }),
+        getPortalMe: builder.query<{ status: string; data: { client: PortalClientInfo } }, void>({
 
-        getPortalMe: builder.query<{ status: string; data: { client: any } }, void>({
             query: () => '/client-portal/me',
         }),
 
@@ -109,6 +117,7 @@ export const clientPortalApi = createApi({
             query: () => '/client-portal/projects',
             providesTags: ['PortalProjects'],
         }),
+
 
         getPortalProject: builder.query<{ status: string; data: { project: PortalProject } }, string>({
             query: (projectId) => `/client-portal/projects/${projectId}`,
@@ -147,12 +156,13 @@ export const clientPortalApi = createApi({
 
         // Documents
         getPortalDocuments: builder.query<
-            { status: string; data: { folder: any; items: PortalDocItem[] } },
+            { status: string; data: { folder: Record<string, unknown>; items: PortalDocItem[] } },
             string
         >({
             query: (projectId) => `/client-portal/projects/${projectId}/documents`,
             providesTags: (_r, _e, id) => [{ type: 'PortalDocuments', id }],
         }),
+
 
         getPortalDocumentUrl: builder.query<
             { status: string; data: { url: string } },
@@ -213,3 +223,4 @@ export const {
     useGetPortalCommentsQuery,
     useAddPortalCommentMutation,
 } = clientPortalApi;
+

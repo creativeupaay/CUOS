@@ -1,8 +1,20 @@
 import dotenv from "dotenv";
 import { z } from "zod";
-import path from "path";
+
+import { logger } from "../utils/logger";
 
 dotenv.config();
+
+const parseOriginList = (value: unknown): string[] | undefined => {
+  if (typeof value !== "string") return value as string[] | undefined;
+
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins;
+};
 
 /**
  * Zod schema for environment variables validation
@@ -30,6 +42,10 @@ const envSchema = z.object({
     .string()
     .url("FRONTEND_URL must be a valid URL")
     .default("http://localhost:5173"),
+  FRONTEND_URLS: z.preprocess(
+    parseOriginList,
+    z.array(z.string().url("FRONTEND_URLS must contain valid URLs")).default([])
+  ),
 
   // Resend email service — used for client onboarding forms & admin notifications
   RESEND_API_KEY: z.string().optional(),
@@ -80,12 +96,12 @@ function validateEnv() {
     const parsed = envSchema.safeParse(process.env);
 
     if (!parsed.success) {
-      console.error("Invalid or missing environment variables:\n");
+      logger.error("Invalid or missing environment variables:\n");
       parsed.error.issues.forEach((issue) => {
-        console.error(`  ❌ ${issue.path.join(".")}: ${issue.message}`);
+        logger.error(`  ❌ ${issue.path.join(".")}: ${issue.message}`);
       });
 
-      console.error(
+      logger.error(
         "\n⚠️  Please check your .env file and ensure all required variables are set correctly.\n"
       );
       process.exit(1);
@@ -93,8 +109,8 @@ function validateEnv() {
 
     return parsed.data;
   } catch (error) {
-    console.error("\n❌ ENVIRONMENT CONFIGURATION ERROR\n");
-    console.error(error);
+    logger.error("\n❌ ENVIRONMENT CONFIGURATION ERROR\n");
+    logger.error(error);
     process.exit(1);
   }
 }
@@ -112,5 +128,5 @@ export type Env = z.infer<typeof envSchema>;
 
 // Log successful validation in development
 if (env.NODE_ENV === "development") {
-  console.log("✓ Environment variables validated successfully");
+  logger.info("✓ Environment variables validated successfully");
 }

@@ -58,6 +58,14 @@ export const createProjectSchema = z.object({
             paymentReceivedAmount: z.number().min(0).optional(),
             paymentDueDate: z.string().or(z.date()).optional(),
             paymentBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
+            paymentExpectedAmountINR: z.number().min(0).optional(),
+            paymentReceivedAmountINR: z.number().min(0).optional(),
+            paymentExchangeRate: z.number().min(0).optional(),
+            paymentExchangeRateDate: z.string().or(z.date()).optional(),
+            paymentSettlementCurrency: z.literal('INR').optional(),
+            paymentFxRateSource: z.enum(['exact-provider', 'exact-cache', 'manual', 'latest-known']).optional(),
+            paymentFxRequestedDate: z.string().or(z.date()).optional(),
+            paymentFxFallbackUsed: z.boolean().optional(),
 
             // GST and TDS
             gstApplicable: z.boolean().optional(),
@@ -111,6 +119,14 @@ export const updateProjectSchema = z.object({
             paymentReceivedAmount: z.number().min(0).optional(),
             paymentDueDate: z.string().or(z.date()).optional(),
             paymentBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
+            paymentExpectedAmountINR: z.number().min(0).optional(),
+            paymentReceivedAmountINR: z.number().min(0).optional(),
+            paymentExchangeRate: z.number().min(0).optional(),
+            paymentExchangeRateDate: z.string().or(z.date()).optional(),
+            paymentSettlementCurrency: z.literal('INR').optional(),
+            paymentFxRateSource: z.enum(['exact-provider', 'exact-cache', 'manual', 'latest-known']).optional(),
+            paymentFxRequestedDate: z.string().or(z.date()).optional(),
+            paymentFxFallbackUsed: z.boolean().optional(),
 
             // GST and TDS
             gstApplicable: z.boolean().optional(),

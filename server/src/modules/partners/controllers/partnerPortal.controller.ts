@@ -7,18 +7,25 @@ import {
     getPartnerPortalProject,
 } from '../services/partnerPortal.service';
 import asyncHandler from '../../../utils/asyncHandler';
+import AppError from '../../../utils/appError';
+
+function requirePartnerContext(req: Request) {
+    if (!req.partner) throw new AppError('Partner context not found', 403);
+    return req.partner;
+}
 
 /**
  * Get all projects for the partner
  */
 export const getProjects = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const partnerId = (req as any).partner.partnerId; // From partner auth middleware
+        const { partnerId } = requirePartnerContext(req);
 
         const projects = await getPartnerPortalProjects(partnerId);
 
         res.status(200).json({
-            status: 'success',
+            success: true,
+            message: 'Projects retrieved',
             data: { projects },
         });
     }
@@ -29,13 +36,14 @@ export const getProjects = asyncHandler(
  */
 export const getProject = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const partnerId = (req as any).partner.partnerId;
+        const { partnerId } = requirePartnerContext(req);
         const { projectId } = req.params;
 
         const project = await getPartnerPortalProject(partnerId, projectId);
 
         res.status(200).json({
-            status: 'success',
+            success: true,
+            message: 'Project retrieved',
             data: { project },
         });
     }
@@ -46,13 +54,14 @@ export const getProject = asyncHandler(
  */
 export const getDocuments = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const partnerId = (req as any).partner.partnerId;
+        const { partnerId } = requirePartnerContext(req);
         const { projectId } = req.params;
 
         const result = await getPartnerPortalDocuments(partnerId, projectId);
 
         res.status(200).json({
-            status: 'success',
+            success: true,
+            message: 'Documents retrieved',
             data: result,
         });
     }
@@ -63,13 +72,12 @@ export const getDocuments = asyncHandler(
  */
 export const uploadDocument = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const partnerId = (req as any).partner.partnerId;
-        const userId = (req as any).partner.userId; // Partner user ID or employee ID
+        const { partnerId, userId } = requirePartnerContext(req);
         const { projectId } = req.params;
 
         if (!req.file) {
             return res.status(400).json({
-                status: 'error',
+                success: false,
                 message: 'No file uploaded',
             });
         }
@@ -85,7 +93,8 @@ export const uploadDocument = asyncHandler(
         );
 
         res.status(201).json({
-            status: 'success',
+            success: true,
+            message: 'Document uploaded',
             data: { document: item },
         });
     }
@@ -96,13 +105,14 @@ export const uploadDocument = asyncHandler(
  */
 export const getDocumentUrl = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction) => {
-        const partnerId = (req as any).partner.partnerId;
+        const { partnerId } = requirePartnerContext(req);
         const { projectId, itemId } = req.params;
 
         const url = await getPartnerPortalDocumentUrl(partnerId, projectId, itemId);
 
         res.status(200).json({
-            status: 'success',
+            success: true,
+            message: 'Document URL retrieved',
             data: { url },
         });
     }

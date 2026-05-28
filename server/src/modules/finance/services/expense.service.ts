@@ -6,6 +6,8 @@ import { Employee } from '../../hrms/models/Employee.model';
 import { TimeLog } from '../../project/models/TimeLog.model';
 import { Project } from '../../project/models/Project.model';
 import { Types, FilterQuery } from 'mongoose';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
+import { BankTransaction } from '../models/BankTransaction.model';
 
 interface CreateExpenseData {
     date: Date;
@@ -46,6 +48,10 @@ interface UpdateExpenseData extends Partial<CreateExpenseData> {
 }
 
 export class ExpenseService {
+    private static getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     static async upsertPayrollSalaryExpense(params: {
         payrollId: Types.ObjectId;
         employeeId: Types.ObjectId;
@@ -241,7 +247,13 @@ export class ExpenseService {
                 await existing.save();
             }
         } else if (previousTransactionId) {
-            await BankTransactionService.delete(previousTransactionId);
+            await BankTransactionService.delete(previousTransactionId, {
+                deletedBy: data.updatedBy,
+                reason: 'Expense update removed source account',
+                metadata: {
+                    expenseId: existing._id.toString(),
+                },
+            });
             existing.bankTransactionId = undefined;
             await existing.save();
         }
@@ -252,15 +264,58 @@ export class ExpenseService {
     /**
      * Delete expense
      */
-    static async delete(id: Types.ObjectId | string): Promise<boolean> {
-        const result = await Expense.findById(id);
-        if (!result) return false;
+    static async delete(id: Types.ObjectId | string, options: ArchiveDeleteOptions = {}): Promise<boolean> {
+        const expense = await Expense.findById(id);
+        if (!expense) return false;
 
-        if (result.bankTransactionId) {
-            await BankTransactionService.delete(result.bankTransactionId);
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const linkedTransactions = await BankTransaction.find({
+            $or: [
+                { expenseId: expense._id },
+                ...(expense.bankTransactionId ? [{ _id: expense.bankTransactionId }] : []),
+            ],
+        });
+
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveDocument(expense, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Expense delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    expenseId: expense._id.toString(),
+                    bankTransactionId: expense.bankTransactionId?.toString(),
+                    payrollId: expense.payrollId?.toString(),
+                    projectId: expense.projectId?.toString(),
+                    employeeId: expense.employeeId?.toString(),
+                },
+            });
+
+            await DeletedRecordService.archiveDocuments(linkedTransactions, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Expense delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    expenseId: expense._id.toString(),
+                    linkedFrom: 'Expense',
+                },
+            });
         }
 
-        await result.deleteOne();
+        for (const transaction of linkedTransactions) {
+            await BankTransactionService.delete(transaction._id, {
+                ...options,
+                archiveBatchId,
+                skipArchive: true,
+            });
+        }
+
+        await expense.deleteOne(options.session ? { session: options.session } : undefined);
         return true;
     }
 

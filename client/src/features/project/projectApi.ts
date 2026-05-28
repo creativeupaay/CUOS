@@ -65,7 +65,13 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { id }) => [{ type: 'Projects', id }, 'Projects'],
+            invalidatesTags: (_result, _error, { id }) => [
+                { type: 'Projects', id },
+                'Projects',
+                'Revenues',
+                'BankTransactions',
+                'FinanceDashboard',
+            ],
         }),
 
         deleteProject: builder.mutation<ApiResponse<Project>, string>({
@@ -92,7 +98,7 @@ export const projectApi = api.injectEndpoints({
                     patchResult.undo();
                 }
             },
-            invalidatesTags: ['Projects'],
+            invalidatesTags: ['Projects', 'Revenues', 'BankTransactions', 'FinanceDashboard'],
         }),
 
         addAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; data: AddAssigneeRequest }>({
@@ -373,6 +379,28 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/credentials/${id}`,
                 method: 'DELETE',
             }),
+            async onQueryStarted({ projectId, id }, { dispatch, queryFulfilled }) {
+                const credentialTypes: Array<string | undefined> = [undefined, 'env', 'ssh-key', 'test-user', 'account', 'other', '2fa'];
+                const patches = credentialTypes.map((type) =>
+                    dispatch(
+                        api.util.updateQueryData(
+                            'getCredentials' as never,
+                            ({ projectId, ...(type ? { type } : {}) } as never),
+                            (draft: any) => {
+                                if (draft?.data) {
+                                    draft.data = draft.data.filter((cred: any) => cred._id !== id);
+                                }
+                            }
+                        )
+                    )
+                );
+
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((patch) => patch.undo());
+                }
+            },
             invalidatesTags: ['Credentials'],
         }),
 
@@ -612,6 +640,9 @@ export const projectApi = api.injectEndpoints({
             bankAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
             receivedDate?: string;
             notes?: string;
+            manualExchangeRate?: number;
+            markAsFullyPaid?: boolean;
+            adjustPhaseValue?: boolean;
         }>({
             query: ({ projectId, phaseId, ...data }) => ({
                 url: `/projects/${projectId}/phases/${phaseId}/mark-payment-received`,
@@ -623,6 +654,7 @@ export const projectApi = api.injectEndpoints({
                 'Projects',
                 'Revenues',
                 'BankTransactions',
+                'FinanceDashboard',
             ],
         }),
     }),
@@ -674,6 +706,7 @@ export const {
     useCreateCredentialMutation,
     useGetCredentialsQuery,
     useGetCredentialByIdQuery,
+    useLazyGetCredentialByIdQuery,
     useUpdateCredentialMutation,
     useDeleteCredentialMutation,
     useShareCredentialsMutation,

@@ -8,6 +8,7 @@ import { Meeting } from '../models/Meeting.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
+import { logger } from "../../../utils/logger";
 
 const normalizeRole = (role: any): string => {
     if (typeof role === 'string') return role.toLowerCase();
@@ -399,13 +400,13 @@ export const checkDocAdmin = async (
         );
 
         // Debug logging for admin check
-        console.log('[checkDocAdmin] Debug Info:', {
-            projectId,
-            userId,
-            userRole: req.user?.role,
-            docAdmins: project.docAdmins.map(id => id.toString()),
-            isDocAdmin,
-        });
+        logger.info({ context: {
+                        projectId,
+                        userId,
+                        userRole: req.user?.role,
+                        docAdmins: project.docAdmins.map(id => id.toString()),
+                        isDocAdmin,
+                    } }, '[checkDocAdmin] Debug Info:');
 
         if (!isDocAdmin) {
             return next(

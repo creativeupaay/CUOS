@@ -1,6 +1,7 @@
 import { SalaryStructure, ISalaryStructure } from '../models/SalaryStructure.model';
 import { CreateSalaryInput, UpdateSalaryInput } from '../validators/salary.validator';
 import AppError from '../../../utils/appError';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 class SalaryService {
     async createSalaryStructure(data: CreateSalaryInput, createdBy: string): Promise<ISalaryStructure> {
@@ -98,11 +99,26 @@ class SalaryService {
         return salary;
     }
 
-    async deleteSalaryStructure(id: string): Promise<void> {
-        const salary = await SalaryStructure.findByIdAndDelete(id);
+    async deleteSalaryStructure(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const salary = await SalaryStructure.findById(id);
         if (!salary) {
             throw new AppError('Salary structure not found', 404);
         }
+
+        await DeletedRecordService.archiveDocument(salary, {
+            archiveBatchId: options.archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Salary structure delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                salaryStructureId: salary._id.toString(),
+                employeeId: salary.employeeId.toString(),
+            },
+        });
+
+        await salary.deleteOne(options.session ? { session: options.session } : undefined);
     }
 }
 

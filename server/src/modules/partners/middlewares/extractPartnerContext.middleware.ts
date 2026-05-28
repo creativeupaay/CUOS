@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Partner } from '../models/Partner.model';
 import { PartnerEmployee } from '../models/PartnerEmployee.model';
 import AppError from '../../../utils/appError';
+import type { PartnerContext } from '../../../types/express.d';
 
 /**
  * Middleware to extract partner context from authenticated user
@@ -22,23 +23,23 @@ export const extractPartnerContext = async (
         // First check if it's a partner (main account)
         const partner = await Partner.findOne({ userId }).lean();
         if (partner) {
-            (req as any).partner = {
+            req.partner = {
                 partnerId: partner._id.toString(),
-                userId: userId,
+                userId,
                 type: 'partner',
-            };
+            } satisfies PartnerContext;
             return next();
         }
 
         // Check if it's a partner employee
         const partnerEmployee = await PartnerEmployee.findById(userId).lean();
         if (partnerEmployee) {
-            (req as any).partner = {
+            req.partner = {
                 partnerId: partnerEmployee.partnerId.toString(),
-                userId: userId,
+                userId,
                 type: 'employee',
                 modulePermissions: partnerEmployee.modulePermissions,
-            };
+            } satisfies PartnerContext;
             return next();
         }
 

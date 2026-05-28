@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { AuthenticatedSocket } from '../../collaboration/types/types';
 import { notificationService } from '../services/notification.service';
+import { logger } from "../../../utils/logger";
 
 /**
  * Setup notification-related socket event handlers
@@ -14,7 +15,7 @@ export const setupNotificationHandlers = (socket: AuthenticatedSocket, io: Serve
             const unreadCount = await notificationService.getUnreadCount(userId);
             socket.emit('notification:unreadCount', { unreadCount });
         } catch (error) {
-            console.error('[NotificationHandler] Error getting unread count:', error);
+            logger.error({ context: error }, '[NotificationHandler] Error getting unread count:');
         }
     });
 
@@ -23,7 +24,7 @@ export const setupNotificationHandlers = (socket: AuthenticatedSocket, io: Serve
         try {
             await notificationService.markAsRead(userId, [payload.notificationId]);
         } catch (error) {
-            console.error('[NotificationHandler] Error marking read:', error);
+            logger.error({ context: error }, '[NotificationHandler] Error marking read:');
         }
     });
 
@@ -32,7 +33,7 @@ export const setupNotificationHandlers = (socket: AuthenticatedSocket, io: Serve
         try {
             await notificationService.markAsRead(userId);
         } catch (error) {
-            console.error('[NotificationHandler] Error marking all read:', error);
+            logger.error({ context: error }, '[NotificationHandler] Error marking all read:');
         }
     });
 };

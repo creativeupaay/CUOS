@@ -3,6 +3,7 @@ import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import { notificationService } from '../../notification/services/notification.service';
+import { logger } from "../../../utils/logger";
 
 export interface PartnerOnboardingInput {
     name: string;
@@ -53,8 +54,8 @@ export class PartnerAuthService {
             });
 
             return partnerRole;
-        } catch (error: any) {
-            if (error?.code === 11000) {
+        } catch (error: unknown) {
+            if ((error as { code?: number })?.code === 11000) {
                 const existing = await Role.findOne({ name: /^partner$/i });
                 if (existing) {
                     return existing;
@@ -206,8 +207,8 @@ export class PartnerAuthService {
                 password: plainPassword,
                 loginUrl,
             });
-        } catch (emailError: any) {
-            console.error('Failed to send partner credentials email:', emailError.message);
+        } catch (emailError: unknown) {
+            logger.error({ context: (emailError as Error).message }, 'Failed to send partner credentials email:');
             // Don't fail onboarding if email fails
         }
 

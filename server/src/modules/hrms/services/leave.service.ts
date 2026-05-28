@@ -7,6 +7,8 @@ import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
+import { createArchiveSnapshot } from '../../archive/utils/archiveSnapshot.util';
 
 class LeaveService {
     private shouldConsumePaidLeave(leave: ILeave): boolean {
@@ -204,7 +206,16 @@ class LeaveService {
             if (previousConsumesPaidBalance) {
                 await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
             }
-            await this.rollbackApprovedLeaveAttendance(leave);
+            await this.rollbackApprovedLeaveAttendance(leave, {
+                deletedBy: approvedBy,
+                reason: 'Leave status update removed approved leave attendance',
+                metadata: {
+                    leaveId: leave._id.toString(),
+                    employeeId: leave.employeeId.toString(),
+                    previousStatus,
+                    nextStatus,
+                },
+            });
         }
 
         leave.status = nextStatus;
@@ -264,21 +275,68 @@ class LeaveService {
         return leave;
     }
 
-    async deleteLeave(id: string): Promise<void> {
+    async deleteLeave(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
         const leave = await Leave.findById(id);
         if (!leave) {
             throw new AppError('Leave not found', 404);
         }
 
+        const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+        const year = leave.startDate.getUTCFullYear();
+        const balanceBefore = await LeaveBalance.findOne({ employeeId: leave.employeeId, year });
+        const leaveAttendance = await this.getApprovedLeaveAttendance(leave);
+
+        const archivedLeave = await DeletedRecordService.archiveDocument(leave, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Leave delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                leaveId: leave._id.toString(),
+                employeeId: leave.employeeId.toString(),
+                status: leave.status,
+                year,
+                leaveBalanceBefore: balanceBefore ? createArchiveSnapshot(balanceBefore) : null,
+                attendanceIds: leaveAttendance.map((attendance) => attendance._id.toString()),
+            },
+        });
+
+        await DeletedRecordService.archiveDocuments(leaveAttendance, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Leave delete requested',
+            operation: 'cascade_delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                leaveId: leave._id.toString(),
+                employeeId: leave.employeeId.toString(),
+                linkedFrom: 'Leave',
+            },
+        });
+
         if (leave.status === 'approved') {
-            const year = leave.startDate.getUTCFullYear();
             if (this.shouldConsumePaidLeave(leave)) {
                 await this.restorePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
             }
-            await this.rollbackApprovedLeaveAttendance(leave);
+            await this.rollbackApprovedLeaveAttendance(leave, {
+                ...options,
+                archiveBatchId,
+                skipArchive: true,
+            });
         }
 
-        await leave.deleteOne();
+        const balanceAfter = await LeaveBalance.findOne({ employeeId: leave.employeeId, year });
+        archivedLeave.metadata = {
+            ...(archivedLeave.metadata ?? {}),
+            leaveBalanceAfter: balanceAfter ? createArchiveSnapshot(balanceAfter) : null,
+        };
+        archivedLeave.markModified('metadata');
+        await archivedLeave.save({ session: options.session });
+
+        await leave.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     private async consumePaidLeaveBalance(employeeId: string, year: number, leaveDays: number) {
@@ -358,7 +416,7 @@ class LeaveService {
         await Attendance.bulkWrite(operations);
     }
 
-    private async rollbackApprovedLeaveAttendance(leave: ILeave) {
+    private async getApprovedLeaveAttendance(leave: ILeave) {
         const leaveDates: Date[] = [];
         const cursor = new Date(leave.startDate);
         cursor.setUTCHours(0, 0, 0, 0);
@@ -372,15 +430,44 @@ class LeaveService {
         }
 
         if (leaveDates.length === 0) {
-            return;
+            return [];
         }
 
-        await Attendance.deleteMany({
+        return Attendance.find({
             employeeId: leave.employeeId,
             date: { $in: leaveDates },
             status: 'on-leave',
             notes: 'Auto-marked on leave due to approved leave',
         });
+    }
+
+    private async rollbackApprovedLeaveAttendance(leave: ILeave, options: ArchiveDeleteOptions = {}) {
+        const attendanceRecords = await this.getApprovedLeaveAttendance(leave);
+
+        if (attendanceRecords.length === 0) {
+            return;
+        }
+
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveDocuments(attendanceRecords, {
+                archiveBatchId: options.archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Approved leave attendance rollback',
+                operation: 'cascade_delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    leaveId: leave._id.toString(),
+                    employeeId: leave.employeeId.toString(),
+                    linkedFrom: 'Leave',
+                },
+            });
+        }
+
+        await Attendance.deleteMany(
+            { _id: { $in: attendanceRecords.map((attendance) => attendance._id) } },
+            options.session ? { session: options.session } : undefined
+        );
     }
 
     private async ensureLeaveBalance(employeeId: string, year: number) {

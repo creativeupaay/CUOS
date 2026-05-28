@@ -4,7 +4,7 @@ import { holidayService } from '../services/holiday.service';
 
 // ── Create Holiday ─────────────────────────────────────────────────────
 export const createHoliday = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id || (req.user as any)._id;
+    const userId = req.user!.id;
     const holiday = await holidayService.createHoliday(req.body, userId.toString());
     res.status(201).json({ status: 'success', data: { holiday } });
 });
@@ -29,6 +29,9 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
 
 // ── Delete Holiday ─────────────────────────────────────────────────────
 export const deleteHoliday = asyncHandler(async (req: Request, res: Response) => {
-    await holidayService.deleteHoliday(req.params.id);
+    await holidayService.deleteHoliday(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS holiday delete requested',
+    });
     res.json({ status: 'success', message: 'Holiday deleted successfully' });
 });

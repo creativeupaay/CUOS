@@ -27,6 +27,7 @@ import {
 } from '@dnd-kit/core';
 import { useGetLeadsQuery, useUpdateLeadMutation } from '@/features/crm';
 import type { Lead } from '@/features/crm';
+import { logger } from '@/utils/logger';
 
 const stages = [
     { id: 'new', label: 'New', color: 'var(--color-info)' },
@@ -288,7 +289,7 @@ export default function CrmPipelinePage() {
                 data: { stage: newStage as Lead['stage'] },
             }).unwrap();
         } catch (err) {
-            console.error('Failed to update lead stage:', err);
+            logger.error('Failed to update lead stage:', err);
         }
     };
 

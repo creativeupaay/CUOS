@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import { LeadService } from '../services/lead.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
@@ -15,7 +16,8 @@ import type {
 const leadService = new LeadService();
 
 const resolveRequesterPartnerId = async (req: Request): Promise<string | undefined> => {
-    const user = (req.user as any) || {};
+    const user = req.user;
+    if (!user) return undefined;
     if (user.role !== 'partner') return undefined;
 
     if (user.partnerId) {
@@ -43,7 +45,7 @@ const resolveRequesterPartnerId = async (req: Request): Promise<string | undefin
 export const createLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const data: CreateLeadInput & { partnerId?: string } = req.body;
-        const createdBy = (req.user as any).id;
+        const createdBy = new Types.ObjectId(req.user!.id);
         const requesterPartnerId = await resolveRequesterPartnerId(req);
 
         if (requesterPartnerId) {
@@ -125,7 +127,10 @@ export const deleteLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
 
-        await leadService.deleteLead(id);
+        await leadService.deleteLead(id, {
+            deletedBy: req.user?.id,
+            reason: 'Lead delete requested from CRM module',
+        });
 
         res.status(204).json({
             status: 'success',
@@ -141,7 +146,7 @@ export const addActivity = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
         const data: AddActivityInput = req.body;
-        const createdBy = (req.user as any).id;
+        const createdBy = new Types.ObjectId(req.user!.id);
 
         const lead = await leadService.addActivity(id, data, createdBy);
 
@@ -159,7 +164,7 @@ export const addMeeting = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
         const data: AddMeetingInput = req.body;
-        const createdBy = (req.user as any).id;
+        const createdBy = new Types.ObjectId(req.user!.id);
 
         const lead = await leadService.addMeeting(id, data, createdBy);
 
@@ -193,7 +198,7 @@ export const uploadLeadDocument = asyncHandler(
                 normalizedFiles[0].originalname,
                 normalizedFiles[0].mimetype,
                 normalizedFiles[0].size,
-                (req.user as any).id
+                new Types.ObjectId(req.user!.id)
             )
             : await leadService.uploadLeadDocuments(
                 id,
@@ -203,7 +208,7 @@ export const uploadLeadDocument = asyncHandler(
                     mimetype: file.mimetype,
                     size: file.size,
                 })),
-                (req.user as any).id
+                new Types.ObjectId(req.user!.id)
             );
 
         res.status(201).json({
@@ -219,7 +224,7 @@ export const uploadLeadDocument = asyncHandler(
 export const closeLead = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const { id } = req.params;
-        const userId = (req.user as any).id;
+        const userId = new Types.ObjectId(req.user!.id);
 
         const result = await leadService.closeLead(id, userId);
 

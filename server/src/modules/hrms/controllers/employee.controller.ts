@@ -4,7 +4,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 
 // ── Create Employee ─────────────────────────────────────────────────
 export const createEmployee = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const createdBy = (req.user as any).id;
+    const createdBy = req.user!.id;
     const employee = await employeeService.createEmployee(req.body, createdBy);
 
     res.status(201).json({
@@ -42,7 +42,7 @@ export const getEmployee = asyncHandler(async (req: Request, res: Response) => {
 
 // ── Get My Employee Profile ─────────────────────────────────────────
 export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const employee = await employeeService.getEmployeeByUserId(userId);
 
     res.json({
@@ -53,7 +53,7 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
 
 // ── Update My Profile (employee self-service) ───────────────────────
 export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const employee = await employeeService.updateMyProfile(userId, req.body);
 
     res.json({
@@ -64,7 +64,7 @@ export const updateMyProfile = asyncHandler(async (req: Request, res: Response) 
 
 // ── Update My Profile Photo (employee self-service) ───────────────
 export const updateMyProfilePhoto = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const file = req.file as Express.Multer.File | undefined;
 
     if (!file) {
@@ -113,7 +113,10 @@ export const updateEmployeeProfilePhoto = asyncHandler(async (req: Request, res:
 
 // ── Delete Employee ─────────────────────────────────────────────────
 export const deleteEmployee = asyncHandler(async (req: Request, res: Response) => {
-    await employeeService.deleteEmployee(req.params.id);
+    await employeeService.deleteEmployee(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS employee delete requested',
+    });
 
     res.json({
         status: 'success',

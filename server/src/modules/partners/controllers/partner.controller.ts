@@ -126,7 +126,10 @@ export const activatePartner = asyncHandler(async (req: Request, res: Response) 
  * Delete partner (Admin only)
  */
 export const deletePartner = asyncHandler(async (req: Request, res: Response) => {
-    await partnerService.deletePartner(req.params.id);
+    await partnerService.deletePartner(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'Partner delete requested',
+    });
 
     res.json({
         success: true,

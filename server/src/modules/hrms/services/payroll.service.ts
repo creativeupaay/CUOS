@@ -8,8 +8,17 @@ import { BankTransaction } from '../../finance/models/BankTransaction.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
 import { ExpenseService } from '../../finance/services/expense.service';
 import AppError from '../../../utils/appError';
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
+
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
 
 class PayrollService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     private calculateNetSalary(payroll: IPayroll): number {
         const totalDeductions = (payroll.deductions.pf || 0)
             + (payroll.deductions.esi || 0)
@@ -349,6 +358,59 @@ class PayrollService {
 
         if (!payroll) throw new AppError('Payroll not found', 404);
         return payroll;
+    }
+
+    async deletePayroll(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const payroll = await Payroll.findById(id);
+        if (!payroll) throw new AppError('Payroll not found', 404);
+
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Payroll', payroll._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Payroll delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                payrollId: payroll._id.toString(),
+                employeeId: payroll.employeeId.toString(),
+                month: payroll.month,
+                year: payroll.year,
+                status: payroll.status,
+            },
+        });
+
+        const expenseIds = getGraphNodeIds(graph, 'payroll_expenses');
+        for (const expenseId of expenseIds) {
+            await ExpenseService.delete(expenseId, {
+                ...options,
+                archiveBatchId,
+                reason: options.reason ?? 'Payroll delete requested',
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    payrollId: payroll._id.toString(),
+                    linkedFrom: 'Payroll',
+                },
+            });
+        }
+
+        const bankTransactionIds = getGraphNodeIds(graph, 'payroll_bank_transactions');
+        for (const bankTransactionId of bankTransactionIds) {
+            await BankTransactionService.delete(bankTransactionId, {
+                ...options,
+                archiveBatchId,
+                reason: options.reason ?? 'Payroll delete requested',
+                skipArchive: true,
+                metadata: {
+                    ...options.metadata,
+                    payrollId: payroll._id.toString(),
+                    linkedFrom: 'Payroll',
+                },
+            });
+        }
+
+        await payroll.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     async updatePayrollStatus(

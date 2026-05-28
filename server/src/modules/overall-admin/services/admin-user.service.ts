@@ -1,11 +1,14 @@
 import { User, IUser } from '../../auth/models/User.model';
 import { Role } from '../../auth/models/Role.model';
+import { Types } from 'mongoose';
 import AppError from '../../../utils/appError';
 import { AuditLog } from '../models/AuditLog.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Job } from '../../hiring/models/Job.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerService } from '../../partners/services/partner.service';
+import { Notification } from '../../notification/models/Notification.model';
+import { DeleteGraphResult, DeleteGraphService } from '../../archive';
 import {
     buildDepartmentFilter,
     getDepartmentCatalog,
@@ -37,6 +40,10 @@ export interface UpdateUserData {
     isActive?: boolean;
     modulePermissions?: Record<string, any>;
 }
+
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
 
 const createDefaultModulePermissions = () => ({
     accessControlVersion: 2,
@@ -404,7 +411,7 @@ export const resetPassword = async (id: string, newPassword: string, adminId: st
 };
 
 /**
- * Delete user (hard delete)
+ * Delete user after archiving the user graph. Historical createdBy/updatedBy references are preserved.
  */
 export const deleteUser = async (id: string, adminId: string) => {
     const user = await User.findById(id);
@@ -416,7 +423,19 @@ export const deleteUser = async (id: string, adminId: string) => {
         throw new AppError('Cannot delete your own account', 400);
     }
 
-    await User.findByIdAndDelete(id);
+    const graph = await DeleteGraphService.archiveGraph('User', id, {
+        deletedBy: adminId,
+        reason: 'Admin user delete requested',
+        metadata: {
+            userId: id,
+            email: user.email,
+            name: user.name,
+            preservesHistoricalReferences: true,
+        },
+    });
+
+    await Notification.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'user_notifications') } });
+    await user.deleteOne();
 
     // Cascade: Deactivate associated employee if it exists
     await Employee.findOneAndUpdate(

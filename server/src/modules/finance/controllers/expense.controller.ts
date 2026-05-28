@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ExpenseService } from '../services/expense.service';
 import { Types } from 'mongoose';
+import { logger } from "../../../utils/logger";
 
 const getAuthenticatedUserId = (req: Request) => (req as any).user?.id ?? (req as any).user?._id;
 
@@ -52,7 +53,7 @@ export class ExpenseController {
                 data: expense,
             });
         } catch (error: any) {
-            console.error('Error creating expense:', error);
+            logger.error({ context: error }, 'Error creating expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to create expense entry',
@@ -89,7 +90,7 @@ export class ExpenseController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Error fetching expenses:', error);
+            logger.error({ context: error }, 'Error fetching expenses:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch expenses',
@@ -118,7 +119,7 @@ export class ExpenseController {
                 data: expense,
             });
         } catch (error: any) {
-            console.error('Error fetching expense:', error);
+            logger.error({ context: error }, 'Error fetching expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch expense',
@@ -190,7 +191,7 @@ export class ExpenseController {
                 data: expense,
             });
         } catch (error: any) {
-            console.error('Error updating expense:', error);
+            logger.error({ context: error }, 'Error updating expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to update expense',
@@ -204,7 +205,11 @@ export class ExpenseController {
      */
     static async delete(req: Request, res: Response): Promise<void> {
         try {
-            const deleted = await ExpenseService.delete(req.params.id);
+            const userId = getAuthenticatedUserId(req);
+            const deleted = await ExpenseService.delete(req.params.id, {
+                deletedBy: userId,
+                reason: 'Expense delete requested from finance module',
+            });
 
             if (!deleted) {
                 res.status(404).json({
@@ -219,7 +224,7 @@ export class ExpenseController {
                 message: 'Expense entry deleted successfully',
             });
         } catch (error: any) {
-            console.error('Error deleting expense:', error);
+            logger.error({ context: error }, 'Error deleting expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to delete expense',
@@ -260,7 +265,7 @@ export class ExpenseController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Error syncing salaries:', error);
+            logger.error({ context: error }, 'Error syncing salaries:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to sync salary expenses',
@@ -288,7 +293,7 @@ export class ExpenseController {
                 data: summary,
             });
         } catch (error: any) {
-            console.error('Error fetching project expense summary:', error);
+            logger.error({ context: error }, 'Error fetching project expense summary:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to fetch project expense summary',

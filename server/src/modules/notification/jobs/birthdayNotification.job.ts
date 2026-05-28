@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Notification } from '../models/Notification.model';
 import { notificationService } from '../services/notification.service';
+import { logger } from "../../../utils/logger";
 
 const getMonthAndDateKey = (value: Date): string => {
     const month = String(value.getUTCMonth() + 1).padStart(2, '0');
@@ -13,7 +14,7 @@ export const initBirthdayNotificationJob = () => {
     cron.schedule(
         '0 0 9 * * *',
         async () => {
-            console.log('[CRON] Running birthday notification job...');
+            logger.info('[CRON] Running birthday notification job...');
 
             try {
                 const today = new Date();
@@ -65,9 +66,9 @@ export const initBirthdayNotificationJob = () => {
                     });
                 }
 
-                console.log('[CRON] Birthday notification job completed');
+                logger.info('[CRON] Birthday notification job completed');
             } catch (error) {
-                console.error('[CRON] Error in birthday notification job:', error);
+                logger.error({ context: error }, '[CRON] Error in birthday notification job:');
             }
         },
         {
@@ -75,5 +76,5 @@ export const initBirthdayNotificationJob = () => {
         }
     );
 
-    console.log('[CRON] Birthday notification job scheduled for 9:00 AM IST daily');
+    logger.info('[CRON] Birthday notification job scheduled for 9:00 AM IST daily');
 };

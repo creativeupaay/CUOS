@@ -5,7 +5,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 
 // ── Generate Payroll ────────────────────────────────────────────────
 export const generatePayroll = asyncHandler(async (req: Request, res: Response) => {
-    const generatedBy = (req.user as any).id;
+    const generatedBy = req.user!.id;
     const { employeeId, month, year, payDate } = req.body;
     const payroll = await payrollService.generatePayroll(employeeId, month, year, generatedBy, payDate);
 
@@ -17,7 +17,7 @@ export const generatePayroll = asyncHandler(async (req: Request, res: Response) 
 
 // ── Bulk Generate Payroll ────────────────────────────────────────────
 export const generateBulkPayroll = asyncHandler(async (req: Request, res: Response) => {
-    const generatedBy = (req.user as any).id;
+    const generatedBy = req.user!.id;
     const { month, year, payDate } = req.body;
     const result = await payrollService.generateBulkPayroll(month, year, generatedBy, payDate);
 
@@ -54,9 +54,21 @@ export const getPayrollById = asyncHandler(async (req: Request, res: Response) =
     });
 });
 
+export const deletePayroll = asyncHandler(async (req: Request, res: Response) => {
+    await payrollService.deletePayroll(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS payroll delete requested',
+    });
+
+    res.json({
+        status: 'success',
+        message: 'Payroll deleted successfully',
+    });
+});
+
 // ── Update Payroll Status ───────────────────────────────────────────
 export const updatePayrollStatus = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const payroll = await payrollService.updatePayrollStatus(req.params.id, req.body.status, userId);
 
     res.json({
@@ -66,7 +78,7 @@ export const updatePayrollStatus = asyncHandler(async (req: Request, res: Respon
 });
 
 export const updatePayroll = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const payroll = await payrollService.updatePayroll(req.params.id, req.body, userId);
 
     res.json({
@@ -97,7 +109,7 @@ export const getUpcomingEvents = asyncHandler(async (req: Request, res: Response
 
 // ── Working Hours Analytics ─────────────────────────────────────────
 export const getWorkingHoursAnalytics = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.query.userId as string || (req.user as any).id;
+    const userId = req.query.userId as string || req.user!.id;
     const startDate = new Date(req.query.startDate as string);
     const endDate = new Date(req.query.endDate as string);
 
@@ -139,7 +151,7 @@ export const getIncentiveSummary = asyncHandler(async (req: Request, res: Respon
 
 // ── Employee: My Payslips ────────────────────────────────────────────
 export const getMyPayrolls = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const payrolls = await payrollService.getMyPayrolls(userId);
 
     res.json({

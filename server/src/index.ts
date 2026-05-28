@@ -5,12 +5,13 @@ import compression from "compression";
 
 
 
-import morgan from "morgan";
+import pinoHttp from "pino-http";
 import helmet from "helmet";
 import cors, { CorsOptions } from "cors";
 import path from "path";
 import { env } from "./config/env.config";
 import connectDB from "./config/db.config";
+import { logger } from "./utils/logger";
 import v1Routes from "./routes/v1/index";
 import errorHandlerMiddleware from "./middlewares/errorHandler";
 import notFoundMiddleware from "./middlewares/notFound";
@@ -28,9 +29,7 @@ connectDB();
 
 const app = express();
 
-if (env.NODE_ENV === "development") {
-  app.use(morgan("dev"));
-}
+app.use(pinoHttp({ logger }));
 
 // Configure helmet with exceptions for webhook
 app.use(
@@ -39,19 +38,13 @@ app.use(
   })
 );
 
-const parseOrigins = (raw?: string): string[] =>
-  (raw || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
 // CORS configuration
-const allowedOrigins: string[] = [
+const allowedOrigins: string[] = Array.from(new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  ...parseOrigins(process.env.FRONTEND_URL),
-  ...parseOrigins(process.env.FRONTEND_URLS),
-];
+  env.FRONTEND_URL,
+  ...env.FRONTEND_URLS,
+]));
 
 const isAllowedOrigin = (origin?: string): boolean => {
   if (!origin) return true;
@@ -146,24 +139,24 @@ initBirthdayNotificationJob();
 
 // Start server
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Socket.io ready for real-time collaboration`);
+  logger.info(`Server running on port ${PORT}`);
+  logger.info(`Socket.io ready for real-time collaboration`);
 });
 
 // Graceful shutdown - close ports early, save files safely, then exit
 const gracefulShutdown = async (signal: string) => {
-  console.log(`\n${signal} received, tearing down server connections...`);
+  logger.info(`\n${signal} received, tearing down server connections...`);
   
   // Release the port listener immediately so rapid nodemon restarts do not crash with EADDRINUSE
   httpServer.close();
   if (io) io.close();
 
   try {
-    console.log('Saving all pending OT blocks to database...');
+    logger.info('Saving all pending OT blocks to database...');
     await otService.saveAllNotes();
-    console.log('Shutdown saving complete.');
+    logger.info('Shutdown saving complete.');
   } catch (err) {
-    console.error('Error during shutdown note saving:', err);
+    logger.error({ err }, 'Error during shutdown note saving');
   } finally {
     process.exit(0);
   }
@@ -173,3 +166,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.once('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // Nodemon explicit handling
 
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught Exception');
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.fatal({ reason, promise }, 'Unhandled Rejection');
+  gracefulShutdown('unhandledRejection');
+});

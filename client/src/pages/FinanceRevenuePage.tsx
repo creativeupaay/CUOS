@@ -12,6 +12,7 @@ import {
     useDeleteRevenueMutation,
 } from '@/features/finance/api/financeApi';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { logger } from '@/utils/logger';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type RevenueSource = 'manual' | 'invoice' | 'project';
@@ -26,6 +27,8 @@ interface RevenueFormData {
     amount: number;
     currency: Currency;
     exchangeRate: number;
+    exchangeRateDate?: string;
+    exchangeRateProvider?: string;
     amountINR: number;
     gstApplicable: boolean;
     gstRate: number;
@@ -188,16 +191,34 @@ export default function FinanceRevenuePage() {
 
     const handleSubmit = async () => {
         try {
+            const payload = {
+                date: formData.date,
+                description: formData.description,
+                client: formData.client,
+                project: formData.project || undefined,
+                amount: formData.amount,
+                currency: formData.currency,
+                gstApplicable: formData.gstApplicable,
+                gstRate: formData.gstRate,
+                tdsDeducted: formData.tdsDeducted,
+                receivedAmount: formData.receivedAmount,
+                source: formData.source,
+                status: formData.status,
+                invoiceNumber: formData.invoiceNumber || undefined,
+                dueDate: formData.dueDate || undefined,
+                notes: formData.notes || undefined,
+            };
+
             if (editingId) {
-                await updateRevenue({ id: editingId, ...formData }).unwrap();
+                await updateRevenue({ id: editingId, ...payload }).unwrap();
             } else {
-                await createRevenue(formData).unwrap();
+                await createRevenue(payload).unwrap();
             }
             setShowAddModal(false);
             setEditingId(null);
             setFormData(initialFormData);
         } catch (error) {
-            console.error('Failed to save revenue:', error);
+            logger.error('Failed to save revenue:', error);
         }
     };
 
@@ -217,7 +238,7 @@ export default function FinanceRevenuePage() {
             try {
                 await deleteRevenue(id).unwrap();
             } catch (error) {
-                console.error('Failed to delete revenue:', error);
+                logger.error('Failed to delete revenue:', error);
             }
         }
     };
@@ -340,6 +361,8 @@ export default function FinanceRevenuePage() {
                                                     <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#6366F1' }}>
                                                         <Globe size={10} />
                                                         {formatCurrency(entry.amount, entry.currency)} @ {entry.exchangeRate}
+                                                        {entry.exchangeRateDate ? ` on ${new Date(entry.exchangeRateDate).toLocaleDateString('en-IN')}` : ''}
+                                                        {entry.exchangeRateProvider ? ` via ${entry.exchangeRateProvider}` : ''}
                                                     </p>
                                                 )}
                                             </div>
@@ -518,7 +541,7 @@ export default function FinanceRevenuePage() {
                                 </div>
                                 {formData.currency !== 'INR' && (
                                     <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
-                                        Amount in INR: {formatCurrency(formData.amountINR)}
+                                        Preview only. The server will save INR using the rate for the revenue date.
                                     </p>
                                 )}
                             </div>

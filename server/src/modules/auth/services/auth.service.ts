@@ -1,5 +1,5 @@
 import { User, IUser } from '../models/User.model';
-import { Role } from '../models/Role.model';
+import { Role, IRole } from '../models/Role.model';
 import AppError from '../../../utils/appError';
 import {
     generateAccessToken,
@@ -8,6 +8,15 @@ import {
     TokenPayload,
 } from '../utils/jwt.util';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
+import { logger } from "../../../utils/logger";
+import { Document, Types } from 'mongoose';
+
+/** Safely extract role name from a populated or unpopulated role field */
+function getRoleName(role: IUser['role']): string {
+    if (!role) return '';
+    if (role instanceof Types.ObjectId) return '';
+    return (role as IRole).name?.toLowerCase() || '';
+}
 
 export interface RegisterData {
     name?: string;
@@ -35,6 +44,9 @@ type UserListRequester = {
     isPartnerEmployee?: boolean;
 };
 
+// Minimal type for empty subModules placeholder in partner employee permissions
+type IModuleSubset = Record<string, never>;
+
 const buildPartnerEmployeeModulePermissions = (modulePermissions?: {
     projectManagement?: boolean;
     crm?: boolean;
@@ -58,15 +70,15 @@ const buildPartnerEmployeeModulePermissions = (modulePermissions?: {
     },
     finance: {
         enabled: false,
-        subModules: {} as any,
+        subModules: {} as IModuleSubset,
     },
     hrms: {
         enabled: false,
-        subModules: {} as any,
+        subModules: {} as IModuleSubset,
     },
     overallAdmin: {
         enabled: false,
-        subModules: {} as any,
+        subModules: {} as IModuleSubset,
     },
 });
 
@@ -130,7 +142,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
     // Find user with password field
     const user = await User.findOne({ email: data.email })
         .select('+password')
-        .populate('role');
+        .populate<{ role: IRole }>('role');
 
     if (!user) {
         throw new AppError('Invalid email or password', 401);
@@ -148,11 +160,10 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
     }
 
     // Get role name
-    const role = user.role as any;
-    if (!role) {
+    if (!user.role) {
         throw new AppError('User role not found. Please contact an administrator.', 500);
     }
-    const roleName = role.name?.toLowerCase() || 'employee';
+    const roleName = getRoleName(user.role) || 'employee';
 
     // BLOCK PARTNERS from using regular login
     if (roleName === 'partner') {
@@ -165,7 +176,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
 
     // Generate tokens
     const tokenPayload: TokenPayload = {
-        userId: (user._id as any).toString(),
+        userId: (user._id as unknown as { toString(): string }).toString(),
         email: user.email,
         role: roleName,
     };
@@ -174,11 +185,11 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
     const refreshToken = generateRefreshToken(tokenPayload);
 
     // Remove password from response
-    const userObj = user.toObject();
-    delete (userObj as any).password;
+    const userObj = user.toObject() as unknown as Record<string, unknown>;
+    delete userObj.password;
 
     return {
-        user: userObj as IUser,
+        user: userObj as unknown as IUser,
         accessToken,
         refreshToken,
     };
@@ -203,9 +214,9 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     }
 
     // First, try to find as a regular partner user
-    let user = await User.findOne({ email: data.email })
+    let user: IUser | null = (await User.findOne({ email: data.email })
         .select('+password')
-        .populate('role');
+        .populate<{ role: IRole }>('role')) as unknown as IUser | null;
 
     let isPartnerEmployee = false;
     let partnerIdForEmployee: string | null = null;
@@ -216,13 +227,16 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
     } | undefined;
     let belongsToThisPortal = false;
 
-    const normalizeEntityId = (value: any): string | null => {
+    const normalizeEntityId = (value: unknown): string | null => {
         if (!value) return null;
         if (typeof value === 'string') return value;
-        if (typeof value === 'object' && '_id' in value && value._id) {
-            return (value._id as any).toString();
+        if (typeof value === 'object' && '_id' in value && (value as { _id: unknown })._id) {
+            return String((value as { _id: { toString(): string } })._id.toString());
         }
-        return value.toString?.() || null;
+        if (typeof (value as { toString?: () => string }).toString === 'function') {
+            return (value as { toString(): string }).toString();
+        }
+        return null;
     };
 
     if (user) {
@@ -238,11 +252,10 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
         }
 
         // Get role name
-        const role = user.role as any;
-        if (!role) {
+        if (!user.role) {
             throw new AppError('User role not found. Please contact an administrator.', 500);
         }
-        const roleName = role.name?.toLowerCase() || 'employee';
+        const roleName = getRoleName(user.role) || 'employee';
 
         // ONLY ALLOW PARTNERS to use partner login
         if (roleName !== 'partner') {
@@ -250,13 +263,8 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
         }
 
         // Validate this user belongs to the partner portal they're trying to access
-        const portalUserId = partnerPortal.userId
-            ? typeof partnerPortal.userId === 'object' && '_id' in partnerPortal.userId
-                ? (partnerPortal.userId as any)._id.toString()
-                : (partnerPortal.userId as any).toString()
-            : null;
-
-        belongsToThisPortal = portalUserId === (user._id as any).toString();
+        const portalUserId = normalizeEntityId(partnerPortal.userId);
+        belongsToThisPortal = portalUserId === (user._id as unknown as { toString(): string }).toString();
     } else {
         // If not found as User, check if it's a PartnerEmployee
         const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');
@@ -280,12 +288,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
         }
 
         // Validate this employee belongs to the partner portal they're trying to access
-        const employeePartnerId = partnerEmployee.partnerId
-            ? typeof partnerEmployee.partnerId === 'object' && '_id' in partnerEmployee.partnerId
-                ? (partnerEmployee.partnerId as any)._id.toString()
-                : (partnerEmployee.partnerId as any).toString()
-            : null;
-
+        const employeePartnerId = normalizeEntityId(partnerEmployee.partnerId);
         belongsToThisPortal = employeePartnerId === partnerPortal._id.toString();
 
         // Mark as partner employee and store parent partnerId
@@ -298,12 +301,12 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
             _id: partnerEmployee._id,
             email: partnerEmployee.email,
             name: partnerEmployee.name,
-            role: 'partner' as any, // Treat partner employees as partners for access control
+            role: 'partner' as unknown as IUser['role'], // Treat partner employees as partners for access control
             isActive: partnerEmployee.isActive,
             partnerId: normalizeEntityId(partnerEmployee.partnerId),
             isPartnerEmployee: true,
-            save: async function() { return this; },
-            toObject: function() {
+            save: async function(this: { _id: unknown; email: string; name: string; isActive: boolean; partnerId: unknown }) { return this; },
+            toObject: function(this: { _id: unknown; email: string; name: string; isActive: boolean; partnerId: unknown }) {
                 return {
                     _id: this._id,
                     email: this.email,
@@ -315,7 +318,7 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
                     modulePermissions: buildPartnerEmployeeModulePermissions(partnerEmployee.modulePermissions),
                 };
             },
-        } as any;
+        } as unknown as IUser;
     }
 
     // Check if user belongs to this partner portal
@@ -325,44 +328,46 @@ export const partnerLogin = async (data: LoginData, slug: string): Promise<AuthR
 
     // Update last login (only for regular partner users, not employees)
     if (!isPartnerEmployee && user?.save) {
-        (user as any).lastLogin = new Date();
+        (user as IUser).lastLogin = new Date();
         await user.save();
     }
 
     // Generate tokens
     const tokenPayload: TokenPayload = {
-        userId: user ? (user._id as any).toString() : '',
+        userId: user ? (user._id as unknown as { toString(): string }).toString() : '',
         email: user?.email || '',
         role: 'partner', // Always 'partner' for access control
     };
 
-    // Add partnerId for partner employees
+    // Add partnerId for partner employees (extend payload with a non-standard claim)
     if (isPartnerEmployee && partnerIdForEmployee) {
-        (tokenPayload as any).partnerIdOverride = partnerIdForEmployee;
+        (tokenPayload as TokenPayload & { partnerIdOverride: string }).partnerIdOverride = partnerIdForEmployee;
     }
 
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
     // Remove password from response
-    const userObj = user?.toObject ? user.toObject() : (user || {});
-    delete (userObj as any).password;
+    const userObj = user?.toObject
+        ? (user.toObject() as unknown as Record<string, unknown>)
+        : ({ ...(user || {}) } as Record<string, unknown>);
+    delete userObj.password;
 
     // Add partner info to response
-    (userObj as any).partnerId = partnerPortal._id;
-    (userObj as any).partnerSlug = partnerPortal.slug;
-    (userObj as any).companyName = partnerPortal.companyName;
-    (userObj as any).companyLogo = partnerPortal.companyLogo;
+    userObj.partnerId = partnerPortal._id;
+    userObj.partnerSlug = partnerPortal.slug;
+    userObj.companyName = partnerPortal.companyName;
+    userObj.companyLogo = partnerPortal.companyLogo;
 
     // Add partnerId to response for partner employees
     if (isPartnerEmployee) {
-        (userObj as any).partnerId = partnerIdForEmployee;
-        (userObj as any).isPartnerEmployee = true;
-        (userObj as any).modulePermissions = buildPartnerEmployeeModulePermissions(partnerEmployeeModulePermissions);
+        userObj.partnerId = partnerIdForEmployee;
+        userObj.isPartnerEmployee = true;
+        userObj.modulePermissions = buildPartnerEmployeeModulePermissions(partnerEmployeeModulePermissions);
     }
 
     return {
-        user: userObj as IUser,
+        user: userObj as unknown as IUser,
         accessToken,
         refreshToken,
     };
@@ -383,7 +388,7 @@ export const refreshAccessToken = async (
 
         return { accessToken };
     } catch (error) {
-        console.log('Error refreshing access token:', error);
+        logger.info({ context: error }, 'Error refreshing access token:');
         throw new AppError('Invalid or expired refresh token', 401);
     }
 };
@@ -400,7 +405,9 @@ export const getUserById = async (userId: string): Promise<IUser | null> => {
  * Get current user
  */
 export const getCurrentUser = async (userId: string): Promise<IUser> => {
-    const user = await User.findById(userId).populate({
+    const user = await User.findById(userId).populate<{
+        role: IRole;
+    }>({
         path: 'role',
         populate: {
             path: 'permissions',
@@ -425,20 +432,20 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
             _id: partnerEmployee._id,
             name: partnerEmployee.name,
             email: partnerEmployee.email,
-            role: 'partner' as any,
+            role: 'partner' as unknown as IUser['role'],
             isActive: partnerEmployee.isActive,
             createdAt: partnerEmployee.createdAt,
             updatedAt: partnerEmployee.updatedAt,
-            partnerId: partnerEmployee.partnerId as any,
+            partnerId: partnerEmployee.partnerId as unknown as Types.ObjectId,
             partnerSlug: partnerPortal?.slug,
             companyName: partnerPortal?.companyName,
             companyLogo: partnerPortal?.companyLogo,
             isPartnerEmployee: true,
             modulePermissions: buildPartnerEmployeeModulePermissions(partnerEmployee.modulePermissions),
-        } as any;
+        } as unknown as IUser;
     }
 
-    const roleName = ((user.role as any)?.name || '').toLowerCase();
+    const roleName = getRoleName(user.role).toLowerCase();
 
     if (roleName === 'partner') {
         const { Partner } = await import('../../partners/models/Partner.model');
@@ -447,29 +454,29 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
             .lean();
 
         if (partnerPortal) {
-            const userObj = user.toObject() as IUser & {
-                partnerId?: any;
+            const userObj = user.toObject() as unknown as IUser & {
+                partnerId?: Types.ObjectId;
                 partnerSlug?: string;
                 companyName?: string;
                 companyLogo?: string;
             };
 
-            userObj.partnerId = partnerPortal._id as any;
+            userObj.partnerId = partnerPortal._id as unknown as Types.ObjectId;
             userObj.partnerSlug = partnerPortal.slug;
             userObj.companyName = partnerPortal.companyName;
             userObj.companyLogo = partnerPortal.companyLogo;
 
-            return userObj as IUser;
+            return userObj;
         }
     }
 
-    return user;
+    return user as unknown as IUser;
 };
 
 /**
  * Get all users
  */
-export const getAllUsers = async (requester?: UserListRequester): Promise<any[]> => {
+export const getAllUsers = async (requester?: UserListRequester): Promise<IUser[]> => {
     const requesterRole = String(requester?.role || '').toLowerCase();
 
     if (requesterRole !== 'partner') {
@@ -503,8 +510,11 @@ export const getAllUsers = async (requester?: UserListRequester): Promise<any[]>
         .populate('role', 'name')
         .lean();
 
-    const partnerMainUser: any[] = [];
-    const partnerTeamMembers: any[] = [];
+    type PartialUserView = Pick<IUser, '_id' | 'name' | 'email' | 'isActive' | 'department'> & {
+        role?: { name: string } | unknown;
+    };
+    const partnerMainUser: PartialUserView[] = [];
+    const partnerTeamMembers: PartialUserView[] = [];
 
     if (partnerId) {
         const partner = await Partner.findById(partnerId)
@@ -516,7 +526,8 @@ export const getAllUsers = async (requester?: UserListRequester): Promise<any[]>
             .select('userId')
             .lean();
 
-        const partnerUser = (partner as any)?.userId;
+        const partnerWithUser = partner as typeof partner & { userId?: PartialUserView };
+        const partnerUser = partnerWithUser?.userId;
         if (partnerUser?._id) {
             partnerMainUser.push(partnerUser);
         }
@@ -543,7 +554,7 @@ export const getAllUsers = async (requester?: UserListRequester): Promise<any[]>
     const merged = [...superAdmins, ...partnerMainUser, ...partnerTeamMembers];
     const seen = new Set<string>();
 
-    return merged.filter((user: any) => {
+    return (merged as IUser[]).filter((user) => {
         const id = user?._id?.toString?.() || String(user?._id || '');
         if (!id || seen.has(id)) return false;
         seen.add(id);
@@ -559,7 +570,8 @@ export const changePassword = async (
     oldPassword: string,
     newPassword: string
 ): Promise<void> => {
-    let user: any = await User.findById(userId).select('+password');
+    type UserWithPassword = { comparePassword(p: string): Promise<boolean>; password: string; save(): Promise<unknown> };
+    let user: UserWithPassword | null = await User.findById(userId).select('+password') as UserWithPassword | null;
 
     if (!user) {
         const { PartnerEmployee } = await import('../../partners/models/PartnerEmployee.model');

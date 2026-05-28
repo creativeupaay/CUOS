@@ -6,6 +6,8 @@ import {
     BankTransactionType,
     IBankTransaction,
 } from '../models/BankTransaction.model';
+import AppError from '../../../utils/appError';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 interface CreateBankTransactionData {
     accountKey: BankAccountKey;
@@ -18,6 +20,9 @@ interface CreateBankTransactionData {
     source?: 'manual' | 'automatic';
     expenseId?: Types.ObjectId;
     payrollId?: Types.ObjectId;
+    projectId?: Types.ObjectId;
+    phaseId?: Types.ObjectId;
+    revenueId?: Types.ObjectId;
     createdBy: Types.ObjectId;
 }
 
@@ -74,6 +79,10 @@ const sanitizeAccountPayload = (data: Partial<Pick<IBankAccount, 'accountName' |
 });
 
 export class BankTransactionService {
+    private static getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     static async ensureManagedAccounts(createdBy: Types.ObjectId): Promise<Record<BankAccountKey, IBankAccount>> {
         const accounts = {} as Record<BankAccountKey, IBankAccount>;
 
@@ -230,8 +239,36 @@ export class BankTransactionService {
         return account;
     }
 
-    static async deleteOtherAccount(id: string): Promise<boolean> {
-        const deleted = await BankAccount.deleteOne({ _id: id, $or: [{ accountKey: { $exists: false } }, { accountKey: null }] });
+    static async deleteOtherAccount(id: string, options: ArchiveDeleteOptions = {}): Promise<boolean> {
+        const account = await BankAccount.findById(id);
+
+        if (!account) return false;
+
+        if (account.accountKey) {
+            throw new AppError('Managed bank accounts cannot be deleted.', 400, 'MANAGED_BANK_ACCOUNT_DELETE_BLOCKED');
+        }
+
+        const archiveBatchId = this.getArchiveBatchId(options);
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveDocument(account, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Other bank account delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    bankAccountId: account._id.toString(),
+                    accountKey: account.accountKey ?? null,
+                    managedAccount: false,
+                },
+            });
+        }
+
+        const deleted = await BankAccount.deleteOne(
+            { _id: account._id, $or: [{ accountKey: { $exists: false } }, { accountKey: null }] },
+            options.session ? { session: options.session } : undefined
+        );
         return deleted.deletedCount > 0;
     }
 
@@ -252,6 +289,9 @@ export class BankTransactionService {
             source: data.source || 'manual',
             expenseId: data.expenseId,
             payrollId: data.payrollId,
+            projectId: data.projectId,
+            phaseId: data.phaseId,
+            revenueId: data.revenueId,
             createdBy: data.createdBy,
         });
 
@@ -392,23 +432,50 @@ export class BankTransactionService {
         existing.referenceNumber = data.referenceNumber === '' ? undefined : (data.referenceNumber ?? existing.referenceNumber);
         existing.notes = data.notes === '' ? undefined : (data.notes ?? existing.notes);
         existing.source = data.source || existing.source;
+        existing.projectId = data.projectId ?? existing.projectId;
+        existing.phaseId = data.phaseId ?? existing.phaseId;
+        existing.revenueId = data.revenueId ?? existing.revenueId;
         existing.updatedBy = data.updatedBy;
 
         await existing.save();
         return existing.toObject() as IBankTransaction;
     }
 
-    static async delete(id: Types.ObjectId | string): Promise<boolean> {
+    static async delete(id: Types.ObjectId | string, options: ArchiveDeleteOptions = {}): Promise<boolean> {
         const existing = await BankTransaction.findById(id);
         if (!existing) return false;
+
+        const archiveBatchId = this.getArchiveBatchId(options);
+        if (!options.skipArchive) {
+            await DeletedRecordService.archiveDocument(existing, {
+                archiveBatchId,
+                deletedBy: options.deletedBy,
+                reason: options.reason ?? 'Bank transaction delete requested',
+                operation: 'delete',
+                session: options.session,
+                metadata: {
+                    ...options.metadata,
+                    bankTransactionId: existing._id.toString(),
+                    bankAccountId: existing.bankAccountId?.toString(),
+                    accountKey: existing.accountKey,
+                    transactionType: existing.transactionType,
+                    amount: existing.amount,
+                    expenseId: existing.expenseId?.toString(),
+                    payrollId: existing.payrollId?.toString(),
+                    projectId: existing.projectId?.toString(),
+                    phaseId: existing.phaseId?.toString(),
+                    revenueId: existing.revenueId?.toString(),
+                },
+            });
+        }
 
         const account = await BankAccount.findById(existing.bankAccountId);
         if (account) {
             account.currentBalance -= getSignedAmount(existing.transactionType, existing.amount);
-            await account.save();
+            await account.save({ session: options.session });
         }
 
-        await existing.deleteOne();
+        await existing.deleteOne(options.session ? { session: options.session } : undefined);
         return true;
     }
 }

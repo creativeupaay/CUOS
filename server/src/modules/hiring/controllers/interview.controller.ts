@@ -3,6 +3,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 import { env } from '../../../config/env.config';
 import AppError from '../../../utils/appError';
 import { InterviewService } from '../services/interview.service';
+import { InterviewWebhookService } from '../services/interview-webhook.service';
 import type {
     ListInterviewsInput,
     RequestInterviewRescheduleInput,
@@ -13,9 +14,10 @@ import type {
 } from '../validators/interview.validator';
 
 const interviewService = new InterviewService();
+const interviewWebhookService = new InterviewWebhookService();
 
 export const sendInterviewInvite = asyncHandler(async (req: Request, res: Response) => {
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const bookingUrl = await interviewService.sendInterviewInvite(req.params.applicationId, actorId);
 
     res.status(200).json({
@@ -26,7 +28,7 @@ export const sendInterviewInvite = asyncHandler(async (req: Request, res: Respon
 });
 
 export const handleCalcomWebhook = asyncHandler(async (req: Request, res: Response) => {
-    await interviewService.handleCalcomWebhook(req.body, req.headers);
+    await interviewWebhookService.handleCalcomWebhook(req.body, req.headers);
 
     res.status(200).json({
         status: 'success',
@@ -35,10 +37,10 @@ export const handleCalcomWebhook = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getInterviews = asyncHandler(async (req: Request, res: Response) => {
-    const filters: ListInterviewsInput = req.query as any;
+    const filters = req.query as unknown as ListInterviewsInput;
 
     // If user is a job manager (not admin/HR), filter to only interviews for their managed jobs
-    const managerUserId = (req as any).isJobManager ? (req.user as any).id : undefined;
+    const managerUserId = req.isJobManager ? req.user?.id : undefined;
 
     const result = await interviewService.listInterviews(filters, managerUserId);
 
@@ -50,7 +52,7 @@ export const getInterviews = asyncHandler(async (req: Request, res: Response) =>
 
 export const updateInterviewStatus = asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body as UpdateInterviewStatusInput;
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const interview = await interviewService.updateInterviewStatus(req.params.id, status, actorId);
 
     res.status(200).json({
@@ -60,7 +62,7 @@ export const updateInterviewStatus = asyncHandler(async (req: Request, res: Resp
 });
 
 export const requestInterviewReschedule = asyncHandler(async (req: Request, res: Response) => {
-    const actorId = (req.user as any)?.id;
+    const actorId = req.user?.id;
     const data = req.body as RequestInterviewRescheduleInput;
     const result = await interviewService.requestInterviewReschedule(req.params.id, data, actorId);
 
@@ -82,7 +84,7 @@ export const getInterviewDetails = asyncHandler(async (req: Request, res: Respon
 
 export const saveInterviewNote = asyncHandler(async (req: Request, res: Response) => {
     const data: SaveInterviewNoteInput = req.body;
-    const createdBy = (req.user as any)?.id;
+    const createdBy = req.user!.id;
     const note = await interviewService.saveInterviewNote(req.params.id, data, createdBy);
 
     res.status(201).json({

@@ -8,6 +8,7 @@ import {
 } from '@/features/project';
 import type { Project, Credential } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CredentialShareModalProps {
@@ -192,7 +193,7 @@ function EditAccessTab({ project, projectId }: { project: Project; projectId: st
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (e) {
-            console.error(e);
+            logger.error(e);
         }
     };
 
@@ -283,7 +284,7 @@ function ViewAccessTab({ project, projectId }: { project: Project; projectId: st
             setStep(1);
             setTimeout(() => setSharedSuccessfully(false), 3000);
         } catch (e) {
-            console.error(e);
+            logger.error(e);
         }
     };
 

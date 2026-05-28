@@ -11,10 +11,16 @@ import {
 } from '../../../services/email.service';
 import { env } from '../../../config/env.config';
 import { Application, IApplication } from '../models/Application.model';
+import { ApplicationActivity } from '../models/ApplicationActivity.model';
 import { Offer, IOffer } from '../models/Offer.model';
 import type { ApplicationStatus } from '../models/Application.model';
 import { Job } from '../models/Job.model';
 import { Assignment } from '../models/Assignment.model';
+import { AssignmentSubmission } from '../models/AssignmentSubmission.model';
+import { Interview } from '../models/Interview.model';
+import { InterviewNote } from '../models/InterviewNote.model';
+import { InterviewNotification } from '../models/InterviewNotification.model';
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
 import type {
     ApplicationDecisionInput,
     CreatePublicApplicationInput,
@@ -27,16 +33,21 @@ import {
 } from './activity.service';
 import { InterviewService } from './interview.service';
 import type { IJobApplicationCustomField, JobApplicationFieldType } from '../models/Job.model';
+import { logger } from "../../../utils/logger";
 
 async function runEmailSafely(label: string, fn: () => Promise<void>) {
     try {
         await fn();
     } catch (error) {
-        console.error(`[Hiring Email] ${label} failed:`, error);
+        logger.error({ context: error }, `[Hiring Email] ${label} failed:`);
     }
 }
 
 const interviewService = new InterviewService();
+
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
 
 function normalizeOptionalUrl(value?: string) {
     const trimmedValue = String(value || '').trim();
@@ -100,6 +111,10 @@ const RESUME_ALLOWED_TYPES = new Set([
 ]);
 
 export class ApplicationService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     async createPublicApplication(
         jobId: string,
         data: CreatePublicApplicationInput,
@@ -392,6 +407,40 @@ export class ApplicationService {
 
         const activities = await getApplicationActivityTimeline(id);
         return { activities };
+    }
+
+    async deleteApplication(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const application = await Application.findById(id);
+        if (!application) {
+            throw new AppError('Application not found', 404);
+        }
+
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Application', application._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Hiring application delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                applicationId: application._id.toString(),
+                jobId: application.jobId.toString(),
+                candidateEmail: application.email,
+                candidateName: application.name,
+            },
+        });
+
+        const deleteOptions = options.session ? { session: options.session } : undefined;
+        await Promise.all([
+            InterviewNotification.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_interview_notifications') } }, deleteOptions),
+            InterviewNote.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_interview_notes') } }, deleteOptions),
+            Offer.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_offers') } }, deleteOptions),
+            AssignmentSubmission.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_assignment_submissions') } }, deleteOptions),
+            ApplicationActivity.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_activities') } }, deleteOptions),
+            Interview.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'application_interviews') } }, deleteOptions),
+        ]);
+
+        await application.deleteOne(deleteOptions);
     }
 
     async updateApplication(id: string, data: UpdateApplicationInput): Promise<IApplication> {

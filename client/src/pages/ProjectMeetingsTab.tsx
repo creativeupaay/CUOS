@@ -1,31 +1,33 @@
 import { useParams } from 'react-router-dom';
-import { useGetMeetingsQuery, useCreateMeetingMutation, useDeleteMeetingMutation } from '@/features/project';
+import { useGetMeetingsQuery, useCreateMeetingMutation, useDeleteMeetingMutation, type Meeting } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink } from 'lucide-react';
+import { logger } from '@/utils/logger';
+import { ProjectTabHeader } from '@/components/organisms/ProjectTabHeader';
 
-type MeetingType = 'internal' | 'external';
+
 
 export default function ProjectMeetingsTab() {
     const { id: projectId } = useParams<{ id: string }>();
     const [showForm, setShowForm] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
-    const [activeTab, setActiveTab] = useState<MeetingType>('internal');
+    const [activeTab, setActiveTab] = useState<Meeting['type']>('internal');
 
     useBodyScrollLock(showForm);
 
     const { data, isLoading } = useGetMeetingsQuery({ projectId: projectId! });
     const meetings = data?.data || [];
 
-    const internalCount = meetings.filter((m: any) => m.type === 'internal').length;
-    const externalCount = meetings.filter((m: any) => m.type === 'external').length;
-    const filteredMeetings = meetings.filter((m: any) => m.type === activeTab);
+    const internalCount = meetings.filter((m: Meeting) => m.type === 'internal').length;
+    const externalCount = meetings.filter((m: Meeting) => m.type === 'external').length;
+    const filteredMeetings = meetings.filter((m: Meeting) => m.type === activeTab);
 
     const [createMeeting, { isLoading: isCreating }] = useCreateMeetingMutation();
     const [deleteMeeting] = useDeleteMeetingMutation();
 
-    const [form, setForm] = useState({ purpose: '', members: '', datetime: '', notesLink: '', type: 'internal' as MeetingType });
+    const [form, setForm] = useState({ purpose: '', members: '', datetime: '', notesLink: '', type: 'internal' as Meeting['type'] });
     const setField = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -47,17 +49,17 @@ export default function ProjectMeetingsTab() {
             setForm({ purpose: '', members: '', datetime: '', notesLink: '', type: activeTab });
             closeForm();
         } catch (err) {
-            console.error('Failed to save meeting:', err);
+            logger.error('Failed to save meeting:', err);
             alert('Failed to save meeting. Please try again.');
         }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this meeting?')) return;
-        try { await deleteMeeting({ projectId: projectId!, id }).unwrap(); } catch (e) { console.error(e); }
+        try { await deleteMeeting({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
 
-    const openForm = (type: MeetingType) => {
+    const openForm = (type: Meeting['type']) => {
         setForm({ purpose: '', members: '', datetime: '', notesLink: '', type });
         setShowForm(true);
         setTimeout(() => setIsAnimating(true), 10);
@@ -90,23 +92,24 @@ export default function ProjectMeetingsTab() {
         <div className="space-y-5">
 
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Meetings
-                </h2>
-                {!showForm && (
-                    <button
-                        onClick={() => openForm(activeTab)}
-                        className="flex items-center gap-1.5 px-4 text-sm font-medium text-white rounded-lg transition-colors"
-                        style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}>
-                        <Plus size={15} /> Add Meeting
-                    </button>
-                )}
-            </div>
+            <ProjectTabHeader
+                title="Meetings"
+                icon={Video}
+                rightElement={
+                    !showForm ? (
+                        <button
+                            onClick={() => openForm(activeTab)}
+                            className="flex items-center gap-1.5 px-4 text-sm font-medium text-white rounded-lg transition-colors"
+                            style={{ height: '36px', backgroundColor: 'var(--color-primary)' }}>
+                            <Plus size={15} /> Add Meeting
+                        </button>
+                    ) : undefined
+                }
+            />
 
             {/* Sub-tabs: Internal / External */}
             <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                {(['internal', 'external'] as MeetingType[]).map(tab => {
+                {(['internal', 'external'] as Meeting['type'][]).map(tab => {
                     const count = tab === 'internal' ? internalCount : externalCount;
                     const isActive = activeTab === tab;
                     return (
@@ -173,7 +176,7 @@ export default function ProjectMeetingsTab() {
                                 <div>
                                     <label className={labelCls} style={labelSty}>Meeting Type *</label>
                                     <div className="flex gap-2">
-                                        {(['internal', 'external'] as MeetingType[]).map(t => (
+                                        {(['internal', 'external'] as Meeting['type'][]).map(t => (
                                             <button
                                                 key={t}
                                                 type="button"
@@ -277,7 +280,7 @@ export default function ProjectMeetingsTab() {
                 </div>
             ) : (
                 <div className="space-y-2">
-                    {filteredMeetings.map((meeting: any) => {
+                    {filteredMeetings.map((meeting: Meeting) => {
                         const hasLink = !!meeting.notes;
                         const isExternal = meeting.type === 'external';
                         return (

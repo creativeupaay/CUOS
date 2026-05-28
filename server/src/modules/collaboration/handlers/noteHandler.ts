@@ -33,6 +33,7 @@ import { Employee } from '../../hrms/models/Employee.model';
 import { Note } from '../../project/models/Note.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
+import { logger } from "../../../utils/logger";
 
 /**
  * Check if user has access to a project
@@ -98,7 +99,7 @@ const checkProjectAccess = async (
 
     return isAssigned;
   } catch (error) {
-    console.error('[NoteHandler] Error checking project access:', error);
+    logger.error({ context: error }, '[NoteHandler] Error checking project access:');
     return false;
   }
 };
@@ -114,7 +115,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
     try {
       const { noteId, projectId } = payload;
 
-      console.log(`[NoteHandler] User ${socket.data.userId} joining note ${noteId}`);
+      logger.info(`[NoteHandler] User ${socket.data.userId} joining note ${noteId}`);
 
       // Verify project access
       const hasAccess = await checkProjectAccess(
@@ -155,7 +156,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
       // Initialize blocks if empty (first join)
       if (noteRoom.blocks.length === 0 && note.blocks) {
         noteRoom.blocks = JSON.parse(JSON.stringify(note.blocks));
-        console.log(`[NoteHandler] Initialized room with ${noteRoom.blocks.length} blocks`);
+        logger.info(`[NoteHandler] Initialized room with ${noteRoom.blocks.length} blocks`);
       }
 
       // Create user presence
@@ -181,9 +182,9 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
         message: 'Successfully joined note',
       });
 
-      console.log(`[NoteHandler] User ${presence.userName} joined note ${noteId}`);
+      logger.info(`[NoteHandler] User ${presence.userName} joined note ${noteId}`);
     } catch (error: any) {
-      console.error('[NoteHandler] Error joining note:', error);
+      logger.error({ context: error }, '[NoteHandler] Error joining note:');
       socket.emit('note:error', {
         message: 'Failed to join note',
       });
@@ -197,7 +198,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
     try {
       const { noteId } = payload;
 
-      console.log(`[NoteHandler] User ${socket.data.userId} leaving note ${noteId}`);
+      logger.info(`[NoteHandler] User ${socket.data.userId} leaving note ${noteId}`);
 
       // Remove user from room
       const presence = removeUserFromRoom(noteId, socket.id);
@@ -212,10 +213,10 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
         // Cleanup room if empty
         cleanupRoomIfEmpty(noteId);
 
-        console.log(`[NoteHandler] User ${presence.userName} left note ${noteId}`);
+        logger.info(`[NoteHandler] User ${presence.userName} left note ${noteId}`);
       }
     } catch (error: any) {
-      console.error('[NoteHandler] Error leaving note:', error);
+      logger.error({ context: error }, '[NoteHandler] Error leaving note:');
     }
   });
 
@@ -226,7 +227,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
     try {
       const { noteId } = operation;
 
-      console.log(
+      logger.info(
         `[NoteHandler] Received update for note ${noteId}, block ${operation.blockId}, type: ${operation.type}`
       );
 
@@ -245,7 +246,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
       const result = otService.applyOperation(noteId, operation);
 
       if (!result.success) {
-        console.error(`[NoteHandler] Operation failed: ${result.error}`);
+        logger.error(`[NoteHandler] Operation failed: ${result.error}`);
 
         // Send sync event if version mismatch
         if (result.error?.includes('Version mismatch')) {
@@ -274,11 +275,11 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
       // Schedule database save (debounced)
       await otService.scheduleNoteSave(noteId, socket.data.userId, socket.data.role);
 
-      console.log(
+      logger.info(
         `[NoteHandler] Applied operation for note ${noteId}, new version: ${result.newVersion}`
       );
     } catch (error: any) {
-      console.error('[NoteHandler] Error updating note:', error);
+      logger.error({ context: error }, '[NoteHandler] Error updating note:');
       socket.emit('note:error', {
         message: 'Failed to update note',
       });
@@ -312,7 +313,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
         }
       }
     } catch (error: any) {
-      console.error('[NoteHandler] Error updating presence:', error);
+      logger.error({ context: error }, '[NoteHandler] Error updating presence:');
     }
   });
 
@@ -333,7 +334,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
         title,
       });
     } catch (error: any) {
-      console.error('[NoteHandler] Error broadcasting title:', error);
+      logger.error({ context: error }, '[NoteHandler] Error broadcasting title:');
     }
   });
 
@@ -341,7 +342,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
    * Handle disconnect
    */
   socket.on('disconnect', () => {
-    console.log(`[NoteHandler] User ${socket.data.userId} disconnected`);
+    logger.info(`[NoteHandler] User ${socket.data.userId} disconnected`);
 
     // Schedule delayed cleanup (grace period for reconnection)
     const timer = setTimeout(() => {
@@ -354,7 +355,7 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
       // Clear disconnect timer
       disconnectTimers.delete(socket.id);
 
-      console.log(`[NoteHandler] Cleaned up user ${socket.data.userId} from ${noteIds.length} rooms`);
+      logger.info(`[NoteHandler] Cleaned up user ${socket.data.userId} from ${noteIds.length} rooms`);
     }, ROOM_CONFIG.DISCONNECT_GRACE_PERIOD);
 
     disconnectTimers.set(socket.id, timer);
@@ -366,6 +367,6 @@ export const setupNoteHandlers = (socket: AuthenticatedSocket, io: Server) => {
   socket.on('connect', () => {
     // Clear disconnect timer if user reconnects
     clearDisconnectTimer(socket.id);
-    console.log(`[NoteHandler] User ${socket.data.userId} reconnected`);
+    logger.info(`[NoteHandler] User ${socket.data.userId} reconnected`);
   });
 };

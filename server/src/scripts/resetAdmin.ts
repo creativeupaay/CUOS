@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { User } from '../modules/auth/models/User.model';
+import { logger } from "../utils/logger";
 
 dotenv.config();
 
@@ -10,9 +11,9 @@ async function reset() {
     if (user) {
         user.password = 'Admin@123';
         await user.save();
-        console.log('Password reset successfully to Admin@123');
+        logger.info('Password reset successfully to Admin@123');
     } else {
-        console.log('Admin user not found');
+        logger.info('Admin user not found');
     }
     process.exit(0);
 }

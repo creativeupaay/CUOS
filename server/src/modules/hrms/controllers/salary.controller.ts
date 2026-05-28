@@ -4,7 +4,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 
 // ── Create Salary Structure ─────────────────────────────────────────
 export const createSalary = asyncHandler(async (req: Request, res: Response) => {
-    const createdBy = (req.user as any).id;
+    const createdBy = req.user!.id;
     const salary = await salaryService.createSalaryStructure(req.body, createdBy);
 
     res.status(201).json({
@@ -49,7 +49,7 @@ export const getSalaryById = asyncHandler(async (req: Request, res: Response) =>
 
 // ── Update Salary Structure ─────────────────────────────────────────
 export const updateSalary = asyncHandler(async (req: Request, res: Response) => {
-    const revisedBy = (req.user as any).id;
+    const revisedBy = req.user!.id;
     const salary = await salaryService.updateSalaryStructure(req.params.id, req.body, revisedBy);
 
     res.json({
@@ -60,7 +60,10 @@ export const updateSalary = asyncHandler(async (req: Request, res: Response) => 
 
 // ── Delete Salary Structure ─────────────────────────────────────────
 export const deleteSalary = asyncHandler(async (req: Request, res: Response) => {
-    await salaryService.deleteSalaryStructure(req.params.id);
+    await salaryService.deleteSalaryStructure(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS salary structure delete requested',
+    });
 
     res.json({
         status: 'success',

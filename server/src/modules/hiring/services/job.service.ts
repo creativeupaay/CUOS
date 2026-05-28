@@ -4,9 +4,16 @@ import { Types } from 'mongoose';
 import { env } from '../../../config/env.config';
 import { calcomService } from './calcom.service';
 import { Application } from '../models/Application.model';
+import { ApplicationActivity } from '../models/ApplicationActivity.model';
 import { Assignment } from '../models/Assignment.model';
+import { AssignmentSubmission } from '../models/AssignmentSubmission.model';
 import { Employee } from '../../hrms/models/Employee.model';
+import { Interview } from '../models/Interview.model';
+import { InterviewNote } from '../models/InterviewNote.model';
+import { InterviewNotification } from '../models/InterviewNotification.model';
+import { Offer } from '../models/Offer.model';
 import { OrgSettings } from '../../overall-admin/models/OrgSettings.model';
+import { ArchiveDeleteOptions, DeletedRecordService, DeleteGraphResult, DeleteGraphService } from '../../archive';
 import { buildInterviewSchedulingSyncHash } from './scheduling-hash.util';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 import type {
@@ -217,6 +224,10 @@ const DEFAULT_STANDARD_FIELD_SETTINGS: Record<
 const DEFAULT_ABOUT_COMPANY_TEXT =
     'Creative Upaay is a tech and design partner that works closely with Startups and Enterprises to build AI based digital products and systems. Our work goes beyond just design or development, we focus on creating practical, scalable solutions that teams actually use. We work across 10+ Industries, for their Custom web solution development, automation workflows, and AI based tools. A lot of our projects involve understanding messy real-world processes and turning them into structured digital experiences.\n\nSo far, we have worked with 85+ brands globally and delivered 350+ projects.\n\nWe look for people who take ownership, think in systems, and care about solving real problems, not just completing tasks. Our Team culture is simple: low ego, high responsibility, honest communication, and a strong focus on doing quality work that actually makes an impact.';
 
+const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
+    graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
+);
+
 function normalizeApplicationForm(input?: JobApplicationFormInput) {
     const selectedStandardFields = Array.isArray(input?.selectedStandardFields)
         ? Array.from(
@@ -351,6 +362,10 @@ function mergeSchedulingUpdate(existing: any, updates: InterviewSchedulingUpdate
 }
 
 export class JobService {
+    private getArchiveBatchId(options: ArchiveDeleteOptions = {}): string {
+        return options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    }
+
     /**
      * Create a new job posting
      */
@@ -582,25 +597,39 @@ export class JobService {
     /**
      * Delete a job posting
      */
-    async deleteJob(id: string): Promise<void> {
-        const job = await Job.findById(id).select('_id title');
+    async deleteJob(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const job = await Job.findById(id).select('_id title department');
         if (!job) {
             throw new AppError('Job not found', 404);
         }
 
-        const [applicationCount, assignmentCount] = await Promise.all([
-            Application.countDocuments({ jobId: job._id }),
-            Assignment.countDocuments({ jobId: job._id }),
+        const archiveBatchId = this.getArchiveBatchId(options);
+        const graph = await DeleteGraphService.archiveGraph('Job', job._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Hiring job delete requested',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                jobId: job._id.toString(),
+                jobTitle: job.title,
+                department: job.department,
+            },
+        });
+
+        const deleteOptions = options.session ? { session: options.session } : undefined;
+        await Promise.all([
+            InterviewNotification.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_interview_notifications') } }, deleteOptions),
+            InterviewNote.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_interview_notes') } }, deleteOptions),
+            Offer.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_offers') } }, deleteOptions),
+            AssignmentSubmission.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_assignment_submissions') } }, deleteOptions),
+            ApplicationActivity.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_application_activities') } }, deleteOptions),
+            Interview.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_interviews') } }, deleteOptions),
+            Application.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_applications') } }, deleteOptions),
+            Assignment.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'job_assignments') } }, deleteOptions),
         ]);
 
-        if (applicationCount > 0 || assignmentCount > 0) {
-            throw new AppError(
-                'This job already has hiring data linked to it. Close the job instead of deleting it.',
-                400
-            );
-        }
-
-        await Job.findByIdAndDelete(id);
+        await job.deleteOne(deleteOptions);
     }
 
     /**

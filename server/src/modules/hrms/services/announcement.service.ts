@@ -1,6 +1,7 @@
 import { Announcement, IAnnouncement } from '../models/Announcement.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 class AnnouncementService {
     async createAnnouncement(
@@ -39,11 +40,25 @@ class AnnouncementService {
             .sort({ createdAt: -1 });
     }
 
-    async deleteAnnouncement(id: string): Promise<void> {
-        const announcement = await Announcement.findByIdAndDelete(id);
+    async deleteAnnouncement(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
+        const announcement = await Announcement.findById(id);
         if (!announcement) {
             throw new AppError('Announcement not found', 404);
         }
+
+        await DeletedRecordService.archiveDocument(announcement, {
+            archiveBatchId: options.archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Announcement delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                announcementId: announcement._id.toString(),
+            },
+        });
+
+        await announcement.deleteOne(options.session ? { session: options.session } : undefined);
     }
 }
 

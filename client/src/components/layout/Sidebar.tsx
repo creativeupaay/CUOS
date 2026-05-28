@@ -615,62 +615,62 @@ const ProjectFoldersNav = ({
                                         className="ml-8 mt-1 space-y-0.5 border-l pl-3"
                                         style={{ borderColor: isFolderActive ? 'rgba(5, 150, 105, 0.22)' : 'var(--color-border-default)' }}
                                     >
-                                    {group.projects.length === 0 ? (
-                                        <div className="px-3 py-2 text-xs rounded-lg" style={{ color: 'var(--color-text-muted)' }}>
-                                            No projects
-                                        </div>
-                                    ) : (
-                                        group.projects.map((project) => {
-                                            const isProjectActive = currentProjectId === project._id;
-                                            return (
-                                                <NavLink
-                                                    key={project._id}
-                                                    to={`/projects/${project._id}`}
-                                                    onClick={() => onNavigate?.()}
-                                                    className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
-                                                    style={
-                                                        isProjectActive
-                                                            ? {
-                                                                color: 'var(--color-primary-dark)',
-                                                                fontWeight: 600,
-                                                                backgroundColor: 'var(--color-primary-soft)',
-                                                                transform: 'translateX(2px)',
+                                        {group.projects.length === 0 ? (
+                                            <div className="px-3 py-2 text-xs rounded-lg" style={{ color: 'var(--color-text-muted)' }}>
+                                                No projects
+                                            </div>
+                                        ) : (
+                                            group.projects.map((project) => {
+                                                const isProjectActive = currentProjectId === project._id;
+                                                return (
+                                                    <NavLink
+                                                        key={project._id}
+                                                        to={`/projects/${project._id}`}
+                                                        onClick={() => onNavigate?.()}
+                                                        className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
+                                                        style={
+                                                            isProjectActive
+                                                                ? {
+                                                                    color: 'var(--color-primary-dark)',
+                                                                    fontWeight: 600,
+                                                                    backgroundColor: 'var(--color-primary-soft)',
+                                                                    transform: 'translateX(2px)',
+                                                                }
+                                                                : { color: 'var(--color-text-secondary)', fontWeight: 500 }
+                                                        }
+                                                        onMouseEnter={(e) => {
+                                                            if (!isProjectActive) {
+                                                                e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                                                e.currentTarget.style.color = 'var(--color-text-primary)';
                                                             }
-                                                            : { color: 'var(--color-text-secondary)', fontWeight: 500 }
-                                                    }
-                                                    onMouseEnter={(e) => {
-                                                        if (!isProjectActive) {
-                                                            e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
-                                                            e.currentTarget.style.color = 'var(--color-text-primary)';
-                                                        }
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        if (!isProjectActive) {
-                                                            e.currentTarget.style.backgroundColor = 'transparent';
-                                                            e.currentTarget.style.color = 'var(--color-text-secondary)';
-                                                        }
-                                                    }}
-                                                >
-                                                    <div
-                                                        className="absolute top-1/2 h-px w-3"
-                                                        style={{
-                                                            left: '-13px',
-                                                            backgroundColor: isProjectActive ? 'rgba(5, 150, 105, 0.45)' : 'var(--color-border-default)',
                                                         }}
-                                                    />
-                                                    <div
-                                                        className="w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-200"
-                                                        style={{
-                                                            backgroundColor: isProjectActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                                            opacity: isProjectActive ? 1 : 0.45,
-                                                            transform: isProjectActive ? 'scale(1.25)' : 'scale(1)',
+                                                        onMouseLeave={(e) => {
+                                                            if (!isProjectActive) {
+                                                                e.currentTarget.style.backgroundColor = 'transparent';
+                                                                e.currentTarget.style.color = 'var(--color-text-secondary)';
+                                                            }
                                                         }}
-                                                    />
-                                                    <span className="truncate">{project.name}</span>
-                                                </NavLink>
-                                            );
-                                        })
-                                    )}
+                                                    >
+                                                        <div
+                                                            className="absolute top-1/2 h-px w-3"
+                                                            style={{
+                                                                left: '-13px',
+                                                                backgroundColor: isProjectActive ? 'rgba(5, 150, 105, 0.45)' : 'var(--color-border-default)',
+                                                            }}
+                                                        />
+                                                        <div
+                                                            className="w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-200"
+                                                            style={{
+                                                                backgroundColor: isProjectActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                                                opacity: isProjectActive ? 1 : 0.45,
+                                                                transform: isProjectActive ? 'scale(1.25)' : 'scale(1)',
+                                                            }}
+                                                        />
+                                                        <span className="truncate">{project.name}</span>
+                                                    </NavLink>
+                                                );
+                                            })
+                                        )}
                                     </div>
                                 </div>
                             </div>

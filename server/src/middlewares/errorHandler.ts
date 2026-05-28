@@ -3,15 +3,41 @@ import { Request, Response, NextFunction } from 'express';
 import AppError from '../utils/appError';
 import { env } from '../config/env.config';
 import { ApiResponse } from '../types/express.d';
+import { logger } from "../utils/logger";
+
+// Mongoose-specific error shapes (not exported by mongoose, so we define minimal interfaces)
+interface MongooseValidationError extends Error {
+    name: 'ValidationError';
+    errors: Record<string, { message: string }>;
+}
+
+interface MongoDuplicateKeyError extends Error {
+    code: 11000;
+    keyValue: Record<string, unknown>;
+}
+
+interface MongooseCastError extends Error {
+    name: 'CastError';
+    path: string;
+    value: unknown;
+}
+
+type KnownError =
+    | Error
+    | MongooseValidationError
+    | MongoDuplicateKeyError
+    | MongooseCastError
+    | AppError;
 
 const errorHandlerMiddleware = (
-    err: any,
-    req: any,
-    res: any,
-    next: () => void
+    err: KnownError,
+    req: Request,
+    res: Response,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _next: NextFunction
 ) => {
-    console.log("---errorHandlerMiddleware---");
-    console.log(err);
+    logger.info("---errorHandlerMiddleware---");
+    logger.info(err);
     let error: AppError;
 
     // Guard against null/non-object errors
@@ -27,36 +53,39 @@ const errorHandlerMiddleware = (
     } else {
         error = new AppError(
             err.message || 'Something went wrong, try again later',
-            err.statusCode || StatusCodes.INTERNAL_SERVER_ERROR
+            (err as AppError).statusCode || StatusCodes.INTERNAL_SERVER_ERROR
         );
     }
 
     // Handle Mongoose validation errors
     if (err.name === 'ValidationError') {
-        const message = Object.values(err.errors)
-            .map((item: any) => item.message)
+        const validationErr = err as MongooseValidationError;
+        const message = Object.values(validationErr.errors)
+            .map((item) => item.message)
             .join(', ');
-        error = new AppError(message, StatusCodes.BAD_REQUEST, 'VALIDATION_ERROR', err.errors);
+        error = new AppError(message, StatusCodes.BAD_REQUEST, 'VALIDATION_ERROR', validationErr.errors);
     }
 
     // Handle Mongoose duplicate key errors
-    if (err.code && err.code === 11000) {
-        const field = Object.keys(err.keyValue)[0];
+    if ((err as MongoDuplicateKeyError).code === 11000) {
+        const dupeErr = err as MongoDuplicateKeyError;
+        const field = Object.keys(dupeErr.keyValue)[0];
         error = new AppError(
             `${field} already exists`,
             StatusCodes.BAD_REQUEST,
             'DUPLICATE_KEY',
-            { field, value: err.keyValue[field] }
+            { field, value: dupeErr.keyValue[field] }
         );
     }
 
     // Handle Mongoose CastError
     if (err.name === 'CastError') {
+        const castErr = err as MongooseCastError;
         error = new AppError(
-            `Invalid ${err.path}: ${err.value}`,
+            `Invalid ${castErr.path}: ${castErr.value}`,
             StatusCodes.BAD_REQUEST,
             'CAST_ERROR',
-            { path: err.path, value: err.value }
+            { path: castErr.path, value: castErr.value }
         );
     }
 
@@ -76,7 +105,7 @@ const errorHandlerMiddleware = (
     };
 
     // Add error details if available
-    const errorDetails: any = {};
+    const errorDetails: ApiResponse['error'] = {};
 
     if (error.code) {
         errorDetails.code = error.code;
@@ -87,7 +116,7 @@ const errorHandlerMiddleware = (
     }
 
     // Include stack trace in development mode
-    if (process.env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'development') {
         errorDetails.stack = error.stack;
     }
 
@@ -99,4 +128,3 @@ const errorHandlerMiddleware = (
 };
 
 export default errorHandlerMiddleware;
-

@@ -13,7 +13,7 @@ interface KanbanColumn {
     allowedSourceStatuses?: ApplicationStatus[];
 }
 
-export const KANBAN_COLUMNS: KanbanColumn[] = [
+const KANBAN_COLUMNS: KanbanColumn[] = [
     { status: 'new', label: 'New', color: '#1D4ED8', bg: '#DBEAFE', headerBg: '#EFF6FF' },
     { status: 'screening', label: 'Screening', color: '#92400E', bg: '#FEF3C7', headerBg: '#FFFBEB' },
     { status: 'shortlisted', label: 'Shortlisted', color: '#166534', bg: '#DCFCE7', headerBg: '#F0FDF4' },

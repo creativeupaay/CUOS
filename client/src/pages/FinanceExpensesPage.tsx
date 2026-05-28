@@ -23,6 +23,7 @@ import {
 import { useGetSalariesQuery } from '@/features/hrms/hrmsApi';
 import ModalPortal from '@/components/ui/ModalPortal';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 type ExpenseLevel = 'company' | 'project';
 type ExpenseType = 'fixed' | 'variable';
@@ -302,7 +303,7 @@ export default function FinanceExpensesPage() {
             setEditingId(null);
             setFormData(initialFormData);
         } catch (error) {
-            console.error('Failed to save expense:', error);
+            logger.error('Failed to save expense:', error);
         }
     };
 
@@ -321,7 +322,7 @@ export default function FinanceExpensesPage() {
             try {
                 await deleteExpense(id).unwrap();
             } catch (error) {
-                console.error('Failed to delete expense:', error);
+                logger.error('Failed to delete expense:', error);
             }
         }
     };
@@ -419,7 +420,7 @@ export default function FinanceExpensesPage() {
             resetFixedForm();
             setShowFixedExpenseForm(false);
         } catch (error) {
-            console.error('Failed to save fixed expense:', error);
+            logger.error('Failed to save fixed expense:', error);
         }
     };
 
@@ -432,7 +433,7 @@ export default function FinanceExpensesPage() {
             await deleteFixedExpense(id).unwrap();
             if (fixedEditingId === id) resetFixedForm();
         } catch (error) {
-            console.error('Failed to delete fixed expense:', error);
+            logger.error('Failed to delete fixed expense:', error);
         }
     };
 
@@ -443,7 +444,7 @@ export default function FinanceExpensesPage() {
                 isActive: !fixedExpense.isActive,
             }).unwrap();
         } catch (error) {
-            console.error('Failed to toggle fixed expense:', error);
+            logger.error('Failed to toggle fixed expense:', error);
         }
     };
 
@@ -480,7 +481,7 @@ export default function FinanceExpensesPage() {
                 await rejectFixedExpense(payload).unwrap();
             }
         } catch (error) {
-            console.error(`Failed to ${action} fixed expense:`, error);
+            logger.error(`Failed to ${action} fixed expense:`, error);
         }
     };
 
@@ -902,100 +903,100 @@ export default function FinanceExpensesPage() {
                         className={`fixed top-0 right-0 h-full z-[61] w-full max-w-[720px] border-l shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${isFixedDrawerVisible ? 'translate-x-0' : 'translate-x-full'}`}
                         style={{ backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }}
                     >
-                            <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
-                                <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: '#6366F1' }}>Fixed Expenses</p>
-                                        <h2 className="text-lg font-semibold mt-1" style={{ color: '#111827' }}>Manage recurring expenses and approvals</h2>
-                                    </div>
-                                    <button onClick={closeFixedDrawer} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: '#6B7280' }}>
-                                        <X size={18} />
-                                    </button>
+                        <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: '#6366F1' }}>Fixed Expenses</p>
+                                    <h2 className="text-lg font-semibold mt-1" style={{ color: '#111827' }}>Manage recurring expenses and approvals</h2>
                                 </div>
-
-                                <div className="mt-4 flex items-center gap-2 rounded-xl p-1" style={{ backgroundColor: '#F3F4F6', width: 'fit-content' }}>
-                                    {([
-                                        { key: 'manage', label: 'Manage', count: fixedExpenses.length },
-                                        { key: 'transactions', label: 'Transactions', count: fixedTransactions.length },
-                                        { key: 'approval', label: 'Approval', count: pendingApprovalCount },
-                                    ] as const).map((tab) => (
-                                        <button
-                                            key={tab.key}
-                                            onClick={() => setFixedDrawerTab(tab.key)}
-                                            className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-                                            style={{
-                                                backgroundColor: fixedDrawerTab === tab.key ? 'white' : 'transparent',
-                                                color: fixedDrawerTab === tab.key ? '#111827' : '#6B7280',
-                                                boxShadow: fixedDrawerTab === tab.key ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                                            }}
-                                        >
-                                            {tab.label}
-                                            <span
-                                                className="inline-flex items-center justify-center min-w-5 h-5 rounded-full px-1.5 text-[11px] font-semibold"
-                                                style={{
-                                                    backgroundColor: tab.key === 'approval' && tab.count > 0 ? '#FEF3C7' : '#E5E7EB',
-                                                    color: tab.key === 'approval' && tab.count > 0 ? '#92400E' : '#4B5563',
-                                                }}
-                                            >
-                                                {tab.count}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
+                                <button onClick={closeFixedDrawer} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: '#6B7280' }}>
+                                    <X size={18} />
+                                </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                                {fixedDrawerTab === 'manage' ? (
-                                    <>
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Existing fixed expenses</h3>
-                                                    <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-                                                        These schedules create approval requests on their due date.
-                                                    </p>
-                                                </div>
-                                            </div>
+                            <div className="mt-4 flex items-center gap-2 rounded-xl p-1" style={{ backgroundColor: '#F3F4F6', width: 'fit-content' }}>
+                                {([
+                                    { key: 'manage', label: 'Manage', count: fixedExpenses.length },
+                                    { key: 'transactions', label: 'Transactions', count: fixedTransactions.length },
+                                    { key: 'approval', label: 'Approval', count: pendingApprovalCount },
+                                ] as const).map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setFixedDrawerTab(tab.key)}
+                                        className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                                        style={{
+                                            backgroundColor: fixedDrawerTab === tab.key ? 'white' : 'transparent',
+                                            color: fixedDrawerTab === tab.key ? '#111827' : '#6B7280',
+                                            boxShadow: fixedDrawerTab === tab.key ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                                        }}
+                                    >
+                                        {tab.label}
+                                        <span
+                                            className="inline-flex items-center justify-center min-w-5 h-5 rounded-full px-1.5 text-[11px] font-semibold"
+                                            style={{
+                                                backgroundColor: tab.key === 'approval' && tab.count > 0 ? '#FEF3C7' : '#E5E7EB',
+                                                color: tab.key === 'approval' && tab.count > 0 ? '#92400E' : '#4B5563',
+                                            }}
+                                        >
+                                            {tab.count}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
-                                            {isLoadingFixedExpenses ? (
-                                                <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
-                                                    <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    {/* Salaries Virtual Row */}
-                                                    <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
-                                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 flex-wrap">
-                                                                    <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>Salaries</h4>
-                                                                    <span
-                                                                        className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold"
-                                                                        style={{
-                                                                            backgroundColor: '#DCFCE7',
-                                                                            color: '#166534',
-                                                                        }}
-                                                                    >
-                                                                        Active
-                                                                    </span>
-                                                                    <LevelBadge level="company" />
-                                                                </div>
-                                                                <p className="text-sm mt-1" style={{ color: '#4B5563' }}>Aggregated total gross salaries of all employees</p>
-                                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
-                                                                    <span>{formatCurrency(totalSalaries)}</span>
-                                                                    <span>Monthly recurring</span>
-                                                                    <span>Salaries</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="px-3 py-2 text-sm font-medium italic text-gray-500 rounded-lg bg-gray-50">
-                                                                    Managed in Salaries page
+                        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                            {fixedDrawerTab === 'manage' ? (
+                                <>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Existing fixed expenses</h3>
+                                                <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                                                    These schedules create approval requests on their due date.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {isLoadingFixedExpenses ? (
+                                            <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
+                                                <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Salaries Virtual Row */}
+                                                <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
+                                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>Salaries</h4>
+                                                                <span
+                                                                    className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold"
+                                                                    style={{
+                                                                        backgroundColor: '#DCFCE7',
+                                                                        color: '#166534',
+                                                                    }}
+                                                                >
+                                                                    Active
                                                                 </span>
+                                                                <LevelBadge level="company" />
+                                                            </div>
+                                                            <p className="text-sm mt-1" style={{ color: '#4B5563' }}>Aggregated total gross salaries of all employees</p>
+                                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
+                                                                <span>{formatCurrency(totalSalaries)}</span>
+                                                                <span>Monthly recurring</span>
+                                                                <span>Salaries</span>
                                                             </div>
                                                         </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="px-3 py-2 text-sm font-medium italic text-gray-500 rounded-lg bg-gray-50">
+                                                                Managed in Salaries page
+                                                            </span>
+                                                        </div>
                                                     </div>
+                                                </div>
 
-                                                    {fixedExpenses.map((fixedExpense: any) => (
+                                                {fixedExpenses.map((fixedExpense: any) => (
                                                     <div key={fixedExpense._id} className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
                                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                                             <div>
@@ -1052,486 +1053,486 @@ export default function FinanceExpensesPage() {
                                                         </div>
                                                     </div>
                                                 ))}
-                                                </>
-                                            )}
-                                        </div>
+                                            </>
+                                        )}
+                                    </div>
 
-                                        {showFixedExpenseForm && (
-                                            <div
-                                                ref={fixedExpenseFormRef}
-                                                className="rounded-2xl border p-5"
-                                                style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)' }}
-                                            >
-                                                <div className="flex items-center justify-between gap-3 mb-4">
-                                                    <div>
-                                                        <h3 className="text-base font-semibold" style={{ color: '#111827' }}>
-                                                            {fixedEditingId ? 'Edit fixed expense' : 'Add fixed expense'}
-                                                        </h3>
-                                                        <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-                                                            Set the recurring schedule once. On each due date, the payment moves to approval instead of auto-recording.
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {fixedEditingId && (
-                                                            <button
-                                                                onClick={resetFixedForm}
-                                                                className="px-3 py-2 rounded-lg text-sm font-medium"
-                                                                style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
-                                                            >
-                                                                Reset form
-                                                            </button>
-                                                        )}
+                                    {showFixedExpenseForm && (
+                                        <div
+                                            ref={fixedExpenseFormRef}
+                                            className="rounded-2xl border p-5"
+                                            style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)' }}
+                                        >
+                                            <div className="flex items-center justify-between gap-3 mb-4">
+                                                <div>
+                                                    <h3 className="text-base font-semibold" style={{ color: '#111827' }}>
+                                                        {fixedEditingId ? 'Edit fixed expense' : 'Add fixed expense'}
+                                                    </h3>
+                                                    <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                                                        Set the recurring schedule once. On each due date, the payment moves to approval instead of auto-recording.
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {fixedEditingId && (
                                                         <button
-                                                            onClick={() => setShowFixedExpenseForm(false)}
+                                                            onClick={resetFixedForm}
                                                             className="px-3 py-2 rounded-lg text-sm font-medium"
-                                                            style={{ border: '1px solid #E5E7EB', color: '#6B7280' }}
+                                                            style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
                                                         >
-                                                            Close
+                                                            Reset form
                                                         </button>
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Title *</label>
-                                                        <input
-                                                            type="text"
-                                                            value={fixedFormData.title}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, title: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                            placeholder="e.g. Office Rent"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Amount (INR) *</label>
-                                                        <input
-                                                            type="number"
-                                                            value={fixedFormData.amount || ''}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, amount: parseFloat(e.target.value) || 0 })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        />
-                                                    </div>
-                                                    <div className="md:col-span-2">
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Description *</label>
-                                                        <input
-                                                            type="text"
-                                                            value={fixedFormData.description}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, description: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                            placeholder="What should be recorded when this gets approved?"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Category *</label>
-                                                        <select
-                                                            value={fixedFormData.category}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, category: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        >
-                                                            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Level *</label>
-                                                        <select
-                                                            value={fixedFormData.level}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, level: e.target.value as ExpenseLevel })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        >
-                                                            <option value="company">Company Level</option>
-                                                            <option value="project">Project Level</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Frequency *</label>
-                                                        <select
-                                                            value={fixedFormData.frequency}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, frequency: e.target.value as FixedExpenseFrequency })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        >
-                                                            <option value="monthly">Monthly</option>
-                                                            <option value="quarterly">Quarterly</option>
-                                                            <option value="yearly">Yearly</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="md:col-span-2">
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Date of Expense *</label>
-                                                        <input
-                                                            type="date"
-                                                            value={fixedFormData.expenseDate}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, expenseDate: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        />
-                                                        <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-                                                            On this date the expense becomes due, an approval request is created, and superadmins can see the pending notification. For recurring entries, the same date pattern repeats based on frequency.
-                                                        </p>
-                                                    </div>
-                                                    {fixedFormData.level === 'project' && (
-                                                        <div className="md:col-span-2">
-                                                            <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Project Name</label>
-                                                            <input
-                                                                type="text"
-                                                                value={fixedFormData.projectName}
-                                                                onChange={(e) => setFixedFormData({ ...fixedFormData, projectName: e.target.value })}
-                                                                className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                                style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                            />
-                                                        </div>
                                                     )}
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Vendor</label>
-                                                        <input
-                                                            type="text"
-                                                            value={fixedFormData.vendor}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, vendor: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid By</label>
-                                                        <input
-                                                            type="text"
-                                                            value={fixedFormData.paidBy}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, paidBy: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Source of Expense</label>
-                                                        <select
-                                                            value={fixedFormData.sourceAccountKey}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, sourceAccountKey: e.target.value as ExpenseSourceAccount | '' })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        >
-                                                            <option value="">Select source</option>
-                                                            {EXPENSE_SOURCE_OPTIONS.map((option) => (
-                                                                <option key={option.value} value={option.value}>{option.label}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div className="md:col-span-2">
-                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Notes</label>
-                                                        <textarea
-                                                            rows={3}
-                                                            value={fixedFormData.notes}
-                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, notes: e.target.value })}
-                                                            className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
-                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                                                        />
-                                                    </div>
-                                                    <div className="md:col-span-2">
-                                                        <label className="flex items-center gap-2 text-sm font-medium" style={{ color: '#374151' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={fixedFormData.isActive}
-                                                                onChange={(e) => setFixedFormData({ ...fixedFormData, isActive: e.target.checked })}
-                                                                className="rounded"
-                                                            />
-                                                            Keep this fixed expense active
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex flex-wrap items-center justify-end gap-3 mt-5">
                                                     <button
-                                                        onClick={resetFixedForm}
-                                                        className="px-4 py-2 rounded-lg text-sm font-medium"
+                                                        onClick={() => setShowFixedExpenseForm(false)}
+                                                        className="px-3 py-2 rounded-lg text-sm font-medium"
                                                         style={{ border: '1px solid #E5E7EB', color: '#6B7280' }}
                                                     >
-                                                        Reset
-                                                    </button>
-                                                    <button
-                                                        onClick={handleSaveFixedExpense}
-                                                        disabled={isCreatingFixedExpense || isUpdatingFixedExpense || !fixedFormData.title || !fixedFormData.description || !fixedFormData.amount}
-                                                        className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2"
-                                                        style={{ background: '#4F46E5' }}
-                                                    >
-                                                        {(isCreatingFixedExpense || isUpdatingFixedExpense) && <Loader2 size={16} className="animate-spin" />}
-                                                        {fixedEditingId ? 'Update fixed expense' : 'Save fixed expense'}
+                                                        Close
                                                     </button>
                                                 </div>
                                             </div>
-                                        )}
-                                    </>
-                                ) : fixedDrawerTab === 'transactions' ? (
-                                    <div className="space-y-4">
-                                        <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%)' }}>
-                                            <div className="flex items-center gap-2">
-                                                <ArrowRightLeft size={18} style={{ color: '#4338CA' }} />
-                                                <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Fixed expense transactions</h3>
-                                            </div>
-                                            <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
-                                                This shows only recorded transactions created from approved fixed expenses.
-                                            </p>
-                                        </div>
 
-                                        {isLoadingFixedTransactions ? (
-                                            <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
-                                                <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Title *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fixedFormData.title}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, title: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                        placeholder="e.g. Office Rent"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Amount (INR) *</label>
+                                                    <input
+                                                        type="number"
+                                                        value={fixedFormData.amount || ''}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, amount: parseFloat(e.target.value) || 0 })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    />
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Description *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fixedFormData.description}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, description: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                        placeholder="What should be recorded when this gets approved?"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Category *</label>
+                                                    <select
+                                                        value={fixedFormData.category}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, category: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    >
+                                                        {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Level *</label>
+                                                    <select
+                                                        value={fixedFormData.level}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, level: e.target.value as ExpenseLevel })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    >
+                                                        <option value="company">Company Level</option>
+                                                        <option value="project">Project Level</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Frequency *</label>
+                                                    <select
+                                                        value={fixedFormData.frequency}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, frequency: e.target.value as FixedExpenseFrequency })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    >
+                                                        <option value="monthly">Monthly</option>
+                                                        <option value="quarterly">Quarterly</option>
+                                                        <option value="yearly">Yearly</option>
+                                                    </select>
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Date of Expense *</label>
+                                                    <input
+                                                        type="date"
+                                                        value={fixedFormData.expenseDate}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, expenseDate: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    />
+                                                    <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                                                        On this date the expense becomes due, an approval request is created, and superadmins can see the pending notification. For recurring entries, the same date pattern repeats based on frequency.
+                                                    </p>
+                                                </div>
+                                                {fixedFormData.level === 'project' && (
+                                                    <div className="md:col-span-2">
+                                                        <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Project Name</label>
+                                                        <input
+                                                            type="text"
+                                                            value={fixedFormData.projectName}
+                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, projectName: e.target.value })}
+                                                            className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                            style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                        />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Vendor</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fixedFormData.vendor}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, vendor: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid By</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fixedFormData.paidBy}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, paidBy: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Source of Expense</label>
+                                                    <select
+                                                        value={fixedFormData.sourceAccountKey}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, sourceAccountKey: e.target.value as ExpenseSourceAccount | '' })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    >
+                                                        <option value="">Select source</option>
+                                                        {EXPENSE_SOURCE_OPTIONS.map((option) => (
+                                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Notes</label>
+                                                    <textarea
+                                                        rows={3}
+                                                        value={fixedFormData.notes}
+                                                        onChange={(e) => setFixedFormData({ ...fixedFormData, notes: e.target.value })}
+                                                        className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
+                                                        style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
+                                                    />
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="flex items-center gap-2 text-sm font-medium" style={{ color: '#374151' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={fixedFormData.isActive}
+                                                            onChange={(e) => setFixedFormData({ ...fixedFormData, isActive: e.target.checked })}
+                                                            className="rounded"
+                                                        />
+                                                        Keep this fixed expense active
+                                                    </label>
+                                                </div>
                                             </div>
-                                        ) : fixedTransactions.length === 0 ? (
-                                            <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
-                                                <ArrowRightLeft size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
-                                                <p className="text-sm font-medium" style={{ color: '#374151' }}>No fixed expense transactions yet</p>
-                                                <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Approved fixed expenses will appear here automatically.</p>
+
+                                            <div className="flex flex-wrap items-center justify-end gap-3 mt-5">
+                                                <button
+                                                    onClick={resetFixedForm}
+                                                    className="px-4 py-2 rounded-lg text-sm font-medium"
+                                                    style={{ border: '1px solid #E5E7EB', color: '#6B7280' }}
+                                                >
+                                                    Reset
+                                                </button>
+                                                <button
+                                                    onClick={handleSaveFixedExpense}
+                                                    disabled={isCreatingFixedExpense || isUpdatingFixedExpense || !fixedFormData.title || !fixedFormData.description || !fixedFormData.amount}
+                                                    className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2"
+                                                    style={{ background: '#4F46E5' }}
+                                                >
+                                                    {(isCreatingFixedExpense || isUpdatingFixedExpense) && <Loader2 size={16} className="animate-spin" />}
+                                                    {fixedEditingId ? 'Update fixed expense' : 'Save fixed expense'}
+                                                </button>
                                             </div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                {fixedTransactions.map((transaction: any) => (
-                                                    <div key={transaction._id} className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
-                                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 flex-wrap">
-                                                                    <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>{transaction.description}</h4>
-                                                                    <LevelBadge level={transaction.level} />
-                                                                    <TypeBadge type={transaction.type} />
-                                                                </div>
-                                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
-                                                                    <span>{new Date(transaction.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                                                    <span>{transaction.category}</span>
-                                                                    {transaction.sourceAccountKey && (
-                                                                        <span>
-                                                                            {EXPENSE_SOURCE_OPTIONS.find((option) => option.value === transaction.sourceAccountKey)?.label || transaction.sourceAccountKey}
-                                                                        </span>
-                                                                    )}
-                                                                    {transaction.vendor && <span>Vendor: {transaction.vendor}</span>}
-                                                                </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : fixedDrawerTab === 'transactions' ? (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%)' }}>
+                                        <div className="flex items-center gap-2">
+                                            <ArrowRightLeft size={18} style={{ color: '#4338CA' }} />
+                                            <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Fixed expense transactions</h3>
+                                        </div>
+                                        <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
+                                            This shows only recorded transactions created from approved fixed expenses.
+                                        </p>
+                                    </div>
+
+                                    {isLoadingFixedTransactions ? (
+                                        <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
+                                            <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
+                                        </div>
+                                    ) : fixedTransactions.length === 0 ? (
+                                        <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
+                                            <ArrowRightLeft size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
+                                            <p className="text-sm font-medium" style={{ color: '#374151' }}>No fixed expense transactions yet</p>
+                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Approved fixed expenses will appear here automatically.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {fixedTransactions.map((transaction: any) => (
+                                                <div key={transaction._id} className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
+                                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>{transaction.description}</h4>
+                                                                <LevelBadge level={transaction.level} />
+                                                                <TypeBadge type={transaction.type} />
                                                             </div>
-                                                            <div className="text-right">
-                                                                <div className="text-sm font-semibold" style={{ color: '#111827' }}>{formatCurrency(transaction.amount)}</div>
-                                                                <div className="text-xs mt-1" style={{ color: '#6B7280' }}>
-                                                                    Synced to Cash in Bank
-                                                                </div>
+                                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
+                                                                <span>{new Date(transaction.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                <span>{transaction.category}</span>
+                                                                {transaction.sourceAccountKey && (
+                                                                    <span>
+                                                                        {EXPENSE_SOURCE_OPTIONS.find((option) => option.value === transaction.sourceAccountKey)?.label || transaction.sourceAccountKey}
+                                                                    </span>
+                                                                )}
+                                                                {transaction.vendor && <span>Vendor: {transaction.vendor}</span>}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-sm font-semibold" style={{ color: '#111827' }}>{formatCurrency(transaction.amount)}</div>
+                                                            <div className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                                                                Synced to Cash in Bank
                                                             </div>
                                                         </div>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 100%)' }}>
-                                            <div className="flex items-center gap-2">
-                                                <ShieldCheck size={18} style={{ color: '#B45309' }} />
-                                                <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Approval queue</h3>
-                                            </div>
-                                            <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
-                                                Due fixed expenses appear here on their scheduled date. Approving creates the expense entry, and rejecting keeps a clear decision trail.
-                                            </p>
+                                                </div>
+                                            ))}
                                         </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 100%)' }}>
+                                        <div className="flex items-center gap-2">
+                                            <ShieldCheck size={18} style={{ color: '#B45309' }} />
+                                            <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Approval queue</h3>
+                                        </div>
+                                        <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
+                                            Due fixed expenses appear here on their scheduled date. Approving creates the expense entry, and rejecting keeps a clear decision trail.
+                                        </p>
+                                    </div>
 
-                                        {isLoadingApprovals ? (
-                                            <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
-                                                <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
-                                            </div>
-                                        ) : approvalItems.length === 0 ? (
-                                            <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
-                                                <ShieldCheck size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
-                                                <p className="text-sm font-medium" style={{ color: '#374151' }}>No approval requests yet</p>
-                                                <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Once a fixed expense reaches its due date, the request will show up here.</p>
-                                            </div>
-                                        ) : (
-                                            approvalItems.map((approval: any) => {
-                                                const draft = approvalDrafts[approval._id];
-                                                const isExpanded = expandedApprovalId === approval._id;
-                                                const statusConfig = approval.status === 'approved'
-                                                    ? { icon: CheckCircle2, bg: '#DCFCE7', color: '#166534', label: 'Approved' }
-                                                    : approval.status === 'rejected'
-                                                        ? { icon: CircleX, bg: '#FEE2E2', color: '#991B1B', label: 'Rejected' }
-                                                        : { icon: Clock3, bg: '#FEF3C7', color: '#92400E', label: 'Pending Approval' };
-                                                const StatusIcon = statusConfig.icon;
+                                    {isLoadingApprovals ? (
+                                        <div className="rounded-2xl border p-8 flex items-center justify-center" style={{ borderColor: '#E5E7EB' }}>
+                                            <Loader2 size={20} className="animate-spin" style={{ color: '#4F46E5' }} />
+                                        </div>
+                                    ) : approvalItems.length === 0 ? (
+                                        <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
+                                            <ShieldCheck size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
+                                            <p className="text-sm font-medium" style={{ color: '#374151' }}>No approval requests yet</p>
+                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Once a fixed expense reaches its due date, the request will show up here.</p>
+                                        </div>
+                                    ) : (
+                                        approvalItems.map((approval: any) => {
+                                            const draft = approvalDrafts[approval._id];
+                                            const isExpanded = expandedApprovalId === approval._id;
+                                            const statusConfig = approval.status === 'approved'
+                                                ? { icon: CheckCircle2, bg: '#DCFCE7', color: '#166534', label: 'Approved' }
+                                                : approval.status === 'rejected'
+                                                    ? { icon: CircleX, bg: '#FEE2E2', color: '#991B1B', label: 'Rejected' }
+                                                    : { icon: Clock3, bg: '#FEF3C7', color: '#92400E', label: 'Pending Approval' };
+                                            const StatusIcon = statusConfig.icon;
 
-                                                return (
-                                                    <div key={approval._id} className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
-                                                        <div className="flex flex-wrap items-center justify-between gap-3">
-                                                            <div className="min-w-0">
-                                                                <div className="flex items-center gap-2 flex-wrap">
-                                                                    <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>{approval.title}</h4>
-                                                                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold" style={{ backgroundColor: statusConfig.bg, color: statusConfig.color }}>
-                                                                        <StatusIcon size={12} />
-                                                                        {statusConfig.label}
-                                                                    </span>
-                                                                    <LevelBadge level={approval.level} />
-                                                                </div>
-                                                                <p className="text-sm mt-1" style={{ color: '#4B5563' }}>{approval.description}</p>
-                                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
-                                                                    <span>Due: {new Date(approval.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                                                    <span>{approval.category}</span>
-                                                                    <span>{approval.frequency}</span>
-                                                                    <span>{formatCurrency(approval.amount)}</span>
-                                                                </div>
+                                            return (
+                                                <div key={approval._id} className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }}>
+                                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <h4 className="text-sm font-semibold" style={{ color: '#111827' }}>{approval.title}</h4>
+                                                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold" style={{ backgroundColor: statusConfig.bg, color: statusConfig.color }}>
+                                                                    <StatusIcon size={12} />
+                                                                    {statusConfig.label}
+                                                                </span>
+                                                                <LevelBadge level={approval.level} />
                                                             </div>
+                                                            <p className="text-sm mt-1" style={{ color: '#4B5563' }}>{approval.description}</p>
+                                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-2" style={{ color: '#6B7280' }}>
+                                                                <span>Due: {new Date(approval.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                <span>{approval.category}</span>
+                                                                <span>{approval.frequency}</span>
+                                                                <span>{formatCurrency(approval.amount)}</span>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setExpandedApprovalId((current) => current === approval._id ? null : approval._id)}
+                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+                                                            style={{ backgroundColor: '#F8FAFC', color: '#374151' }}
+                                                        >
+                                                            {approval.status === 'pending' ? 'Review' : 'View'}
+                                                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                        </button>
+                                                    </div>
+
+                                                    {isExpanded && draft && (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t" style={{ borderColor: '#E5E7EB' }}>
+                                                            <div>
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid Date</label>
+                                                                <input
+                                                                    type="date"
+                                                                    value={draft.paidDate}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { paidDate: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Amount</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={draft.amount || ''}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { amount: parseFloat(e.target.value) || 0 })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div className="md:col-span-2">
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Description</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={draft.description}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { description: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Vendor</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={draft.vendor}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { vendor: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid By</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={draft.paidBy}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { paidBy: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Source</label>
+                                                                <select
+                                                                    value={draft.sourceAccountKey}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { sourceAccountKey: e.target.value as ExpenseSourceAccount | '' })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                >
+                                                                    <option value="">Select source</option>
+                                                                    {EXPENSE_SOURCE_OPTIONS.map((option) => (
+                                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <div className="md:col-span-2">
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Expense Notes</label>
+                                                                <textarea
+                                                                    rows={2}
+                                                                    value={draft.notes}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { notes: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                            <div className="md:col-span-2">
+                                                                <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>
+                                                                    {approval.status === 'pending' ? 'Approval / Rejection Notes' : 'Decision Notes'}
+                                                                </label>
+                                                                <textarea
+                                                                    rows={2}
+                                                                    value={draft.responseNotes}
+                                                                    onChange={(e) => updateApprovalDraft(approval._id, { responseNotes: e.target.value })}
+                                                                    disabled={approval.status !== 'pending'}
+                                                                    className="w-full px-3 py-2 rounded-lg border text-sm resize-none disabled:bg-gray-50"
+                                                                    style={{ borderColor: '#E5E7EB', color: '#374151' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {isExpanded && approval.status !== 'pending' ? (
+                                                        <div className="mt-4 text-xs" style={{ color: '#6B7280' }}>
+                                                            {approval.actedAt
+                                                                ? `Decision recorded on ${new Date(approval.actedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`
+                                                                : 'Decision recorded.'}
+                                                        </div>
+                                                    ) : isExpanded ? (
+                                                        <div className="flex flex-wrap items-center justify-end gap-3 mt-4">
                                                             <button
-                                                                onClick={() => setExpandedApprovalId((current) => current === approval._id ? null : approval._id)}
-                                                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-                                                                style={{ backgroundColor: '#F8FAFC', color: '#374151' }}
+                                                                onClick={() => handleApprovalAction(approval._id, 'reject')}
+                                                                disabled={isRejectingFixedExpense || isApprovingFixedExpense}
+                                                                className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                                                style={{ backgroundColor: '#FEF2F2', color: '#B91C1C' }}
                                                             >
-                                                                {approval.status === 'pending' ? 'Review' : 'View'}
-                                                                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                                Reject
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleApprovalAction(approval._id, 'approve')}
+                                                                disabled={isApprovingFixedExpense || isRejectingFixedExpense}
+                                                                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                                                                style={{ backgroundColor: '#16A34A' }}
+                                                            >
+                                                                Approve and record expense
                                                             </button>
                                                         </div>
-
-                                                        {isExpanded && draft && (
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t" style={{ borderColor: '#E5E7EB' }}>
-                                                                <div>
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid Date</label>
-                                                                    <input
-                                                                        type="date"
-                                                                        value={draft.paidDate}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { paidDate: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Amount</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={draft.amount || ''}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { amount: parseFloat(e.target.value) || 0 })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div className="md:col-span-2">
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Description</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={draft.description}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { description: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Vendor</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={draft.vendor}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { vendor: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Paid By</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={draft.paidBy}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { paidBy: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Source</label>
-                                                                    <select
-                                                                        value={draft.sourceAccountKey}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { sourceAccountKey: e.target.value as ExpenseSourceAccount | '' })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    >
-                                                                        <option value="">Select source</option>
-                                                                        {EXPENSE_SOURCE_OPTIONS.map((option) => (
-                                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                                        ))}
-                                                                    </select>
-                                                                </div>
-                                                                <div className="md:col-span-2">
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>Expense Notes</label>
-                                                                    <textarea
-                                                                        rows={2}
-                                                                        value={draft.notes}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { notes: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm resize-none disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                                <div className="md:col-span-2">
-                                                                    <label className="text-sm font-medium mb-1.5 block" style={{ color: '#374151' }}>
-                                                                        {approval.status === 'pending' ? 'Approval / Rejection Notes' : 'Decision Notes'}
-                                                                    </label>
-                                                                    <textarea
-                                                                        rows={2}
-                                                                        value={draft.responseNotes}
-                                                                        onChange={(e) => updateApprovalDraft(approval._id, { responseNotes: e.target.value })}
-                                                                        disabled={approval.status !== 'pending'}
-                                                                        className="w-full px-3 py-2 rounded-lg border text-sm resize-none disabled:bg-gray-50"
-                                                                        style={{ borderColor: '#E5E7EB', color: '#374151' }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {isExpanded && approval.status !== 'pending' ? (
-                                                            <div className="mt-4 text-xs" style={{ color: '#6B7280' }}>
-                                                                {approval.actedAt
-                                                                    ? `Decision recorded on ${new Date(approval.actedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`
-                                                                    : 'Decision recorded.'}
-                                                            </div>
-                                                        ) : isExpanded ? (
-                                                            <div className="flex flex-wrap items-center justify-end gap-3 mt-4">
-                                                                <button
-                                                                    onClick={() => handleApprovalAction(approval._id, 'reject')}
-                                                                    disabled={isRejectingFixedExpense || isApprovingFixedExpense}
-                                                                    className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                                                                    style={{ backgroundColor: '#FEF2F2', color: '#B91C1C' }}
-                                                                >
-                                                                    Reject
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleApprovalAction(approval._id, 'approve')}
-                                                                    disabled={isApprovingFixedExpense || isRejectingFixedExpense}
-                                                                    className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                                                                    style={{ backgroundColor: '#16A34A' }}
-                                                                >
-                                                                    Approve and record expense
-                                                                </button>
-                                                            </div>
-                                                        ) : approval.status === 'pending' ? (
-                                                            <div className="mt-3 text-xs" style={{ color: '#6B7280' }}>
-                                                                Paid date can be edited when you expand this request.
-                                                            </div>
-                                                        ) : null}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                            {fixedDrawerTab === 'manage' && (
-                                <div className="px-5 py-4 border-t" style={{ borderColor: '#E5E7EB', backgroundColor: 'white' }}>
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => openFixedExpenseForm('new')}
-                                            className="inline-flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium shadow-lg"
-                                            style={{ backgroundColor: '#4F46E5', color: '#FFFFFF' }}
-                                        >
-                                            <Plus size={16} />
-                                            Add fixed expense
-                                        </button>
-                                    </div>
+                                                    ) : approval.status === 'pending' ? (
+                                                        <div className="mt-3 text-xs" style={{ color: '#6B7280' }}>
+                                                            Paid date can be edited when you expand this request.
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             )}
+                        </div>
+                        {fixedDrawerTab === 'manage' && (
+                            <div className="px-5 py-4 border-t" style={{ borderColor: '#E5E7EB', backgroundColor: 'white' }}>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => openFixedExpenseForm('new')}
+                                        className="inline-flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium shadow-lg"
+                                        style={{ backgroundColor: '#4F46E5', color: '#FFFFFF' }}
+                                    >
+                                        <Plus size={16} />
+                                        Add fixed expense
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </>,
                 document.body

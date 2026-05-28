@@ -333,21 +333,21 @@ export default function PublicAssignmentSubmissionPage() {
 
     const statusPillStyle: CSSProperties = hasSubmitted
         ? {
-              backgroundColor: '#DCFCE7',
-              color: '#166534',
-              border: '1px solid #BBF7D0',
-          }
+            backgroundColor: '#DCFCE7',
+            color: '#166534',
+            border: '1px solid #BBF7D0',
+        }
         : isTimeExpired
-        ? {
-              backgroundColor: '#FEF2F2',
-              color: '#B91C1C',
-              border: '1px solid #FECACA',
-          }
-        : {
-              backgroundColor: '#ECFDF5',
-              color: '#065F46',
-              border: '1px solid #A7F3D0',
-          };
+            ? {
+                backgroundColor: '#FEF2F2',
+                color: '#B91C1C',
+                border: '1px solid #FECACA',
+            }
+            : {
+                backgroundColor: '#ECFDF5',
+                color: '#065F46',
+                border: '1px solid #A7F3D0',
+            };
 
     return (
         <div
@@ -553,8 +553,8 @@ export default function PublicAssignmentSubmissionPage() {
                                             {hasSubmitted
                                                 ? 'Submitted'
                                                 : isTimeExpired
-                                                ? 'Late window'
-                                                : 'Open'}
+                                                    ? 'Late window'
+                                                    : 'Open'}
                                         </span>
                                     </div>
 
@@ -790,10 +790,10 @@ export default function PublicAssignmentSubmissionPage() {
                                                     field.type === 'url'
                                                         ? 'url'
                                                         : field.type === 'number'
-                                                        ? 'number'
-                                                        : field.type === 'date'
-                                                        ? 'date'
-                                                        : 'text';
+                                                            ? 'number'
+                                                            : field.type === 'date'
+                                                                ? 'date'
+                                                                : 'text';
 
                                                 return (
                                                     <div key={field.key}>

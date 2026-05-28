@@ -1,5 +1,6 @@
-import mongoose, { Document, Schema, Types } from 'mongoose';
+import mongoose, { Document, Schema, Types, PopulatedDoc } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import type { IRole } from './Role.model';
 
 export interface IProjectPermission {
     projectId: string;
@@ -63,7 +64,7 @@ export interface IUser extends Document {
     name: string;
     email: string;
     password: string;
-    role: Types.ObjectId;
+    role: PopulatedDoc<IRole & Document, Types.ObjectId>;
     department?: string;
     isActive: boolean;
     lastLogin?: Date;
@@ -201,8 +202,8 @@ UserSchema.pre('save', async function (next) {
         const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
         next();
-    } catch (error: any) {
-        next(error);
+    } catch (error: unknown) {
+        next(error instanceof Error ? error : new Error(String(error)));
     }
 });
 

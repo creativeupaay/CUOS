@@ -18,6 +18,9 @@ export interface IBankTransaction extends Document {
     source: BankTransactionSource;
     expenseId?: Types.ObjectId;
     payrollId?: Types.ObjectId;
+    projectId?: Types.ObjectId;
+    phaseId?: Types.ObjectId;
+    revenueId?: Types.ObjectId;
     createdBy: Types.ObjectId;
     updatedBy?: Types.ObjectId;
     createdAt: Date;
@@ -52,6 +55,9 @@ const BankTransactionSchema = new Schema<IBankTransaction>(
         },
         expenseId: { type: Schema.Types.ObjectId, ref: 'Expense', index: true },
         payrollId: { type: Schema.Types.ObjectId, ref: 'Payroll', index: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
+        phaseId: { type: Schema.Types.ObjectId, index: true },
+        revenueId: { type: Schema.Types.ObjectId, ref: 'Revenue', index: true },
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },
@@ -61,5 +67,6 @@ const BankTransactionSchema = new Schema<IBankTransaction>(
 );
 
 BankTransactionSchema.index({ accountKey: 1, date: -1, createdAt: -1 });
+BankTransactionSchema.index({ projectId: 1, phaseId: 1 });
 
 export const BankTransaction = mongoose.model<IBankTransaction>('BankTransaction', BankTransactionSchema);

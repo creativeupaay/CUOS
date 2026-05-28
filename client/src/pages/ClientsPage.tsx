@@ -5,6 +5,7 @@ import { useGetClientsQuery, useDeleteClientMutation, useUpdateClientMutation } 
 import { Plus, Search, Building2, Mail, Phone, Trash2, Edit, Eye, Loader2, ChevronDown, Users, Sparkles } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import { logger } from '@/utils/logger';
 
 export default function ClientsPage() {
     const location = useLocation();
@@ -45,7 +46,7 @@ export default function ClientsPage() {
             await deleteClient(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
         } catch (err) {
-            console.error('Failed to delete client:', err);
+            logger.error('Failed to delete client:', err);
         }
     };
 
@@ -53,7 +54,7 @@ export default function ClientsPage() {
         try {
             await updateClient({ id, data: { status: status as any } }).unwrap();
         } catch (err) {
-            console.error('Failed to update client status:', err);
+            logger.error('Failed to update client status:', err);
         }
     };
 

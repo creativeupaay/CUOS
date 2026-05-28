@@ -4,6 +4,7 @@ import { Attendance } from '../models/Attendance.model';
 import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 class HolidayService {
     /**
@@ -182,17 +183,51 @@ class HolidayService {
         return holiday;
     }
 
-    async deleteHoliday(id: string): Promise<void> {
+    async deleteHoliday(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
         const holiday = await Holiday.findById(id);
         if (!holiday) throw new AppError('Holiday not found', 404);
 
-        // Remove the auto-applied attendance records for this holiday
-        await Attendance.deleteMany({
+        const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+        const attendanceFilter = {
             date: holiday.date,
             notes: `Office Holiday: ${holiday.name}`
+        };
+        const attendanceRecords = await Attendance.find(attendanceFilter);
+
+        await DeletedRecordService.archiveDocument(holiday, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Holiday delete requested',
+            operation: 'delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                holidayId: holiday._id.toString(),
+                holidayDate: holiday.date.toISOString(),
+                attendanceIds: attendanceRecords.map((attendance) => attendance._id.toString()),
+            },
         });
 
-        await holiday.deleteOne();
+        await DeletedRecordService.archiveDocuments(attendanceRecords, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Holiday delete requested',
+            operation: 'cascade_delete',
+            session: options.session,
+            metadata: {
+                ...options.metadata,
+                holidayId: holiday._id.toString(),
+                linkedFrom: 'Holiday',
+            },
+        });
+
+        // Remove the auto-applied attendance records for this holiday
+        await Attendance.deleteMany(
+            attendanceFilter,
+            options.session ? { session: options.session } : undefined
+        );
+
+        await holiday.deleteOne(options.session ? { session: options.session } : undefined);
     }
 }
 

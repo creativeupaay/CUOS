@@ -365,6 +365,13 @@ router.patch(
     applicationController.updateApplication
 );
 
+router.delete(
+    '/applications/:id',
+    authorizeHiringManage,
+    validateRequest(getApplicationSchema),
+    applicationController.deleteApplication
+);
+
 router.post(
     '/assignments',
     authorizeHiringManage,

@@ -5,6 +5,7 @@ import {
     useGetCredentialsQuery,
     useCreateCredentialMutation,
     useGetCredentialByIdQuery,
+    useLazyGetCredentialByIdQuery,
     useDeleteCredentialMutation,
     useGetCredentialAdminsQuery,
     useRevokeCredentialAccessMutation,
@@ -18,6 +19,7 @@ import {
     Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2, Eye, EyeOff, Filter, FolderPlus, X, UserMinus
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { logger } from '@/utils/logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type CredentialType = 'env' | 'ssh-key' | 'test-user' | 'account' | 'other';
@@ -291,7 +293,7 @@ export default function ProjectCredentialsTab() {
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
             alert('Credentials saved successfully!');
         } catch (err: any) {
-            console.error('Failed to save credentials:', err);
+            logger.error('Failed to save credentials:', err);
             const errorMessage = err?.data?.message || err?.message || 'Unknown error';
             alert(`Failed to save: ${errorMessage}`);
         }
@@ -299,7 +301,7 @@ export default function ProjectCredentialsTab() {
 
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this credential?')) return;
-        try { await deleteCredential({ projectId: projectId!, id }).unwrap(); } catch (e) { console.error(e); }
+        try { await deleteCredential({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
 
     return (
@@ -813,10 +815,13 @@ export default function ProjectCredentialsTab() {
 
 // ─── Credential List Item (type-aware) ───────────────────────────────────────
 function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { credential: any; onDelete: () => void; projectId: string; isCredAdmin?: boolean }) {
-    const { data, isLoading } = useGetCredentialByIdQuery({ projectId, id: credential._id });
+    const [expanded, setExpanded] = useState(false);
+    const { data, isLoading } = useGetCredentialByIdQuery(
+        { projectId, id: credential._id },
+        { skip: !expanded }
+    );
     const full = data?.data;
     const creds = full?.credentials ?? {};
-    const [expanded, setExpanded] = useState(true);
     const [viewersOpen, setViewersOpen] = useState(false);
     const [revokeAccess, { isLoading: isRevoking }] = useRevokeCredentialAccessMutation();
     const { copied, copy } = useCopy();
@@ -830,7 +835,7 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
         try {
             await revokeAccess({ projectId, data: { credentialIds: [credential._id], userIds: [userId] } }).unwrap();
         } catch (e) {
-            console.error('Revoke failed:', e);
+            logger.error('Revoke failed:', e);
         }
     };
 
@@ -1112,47 +1117,43 @@ function FieldChip({ icon, label, value, mono, copyId, copied, onCopy, isUrl }: 
     );
 }
 
-// ─── Copy All Env ─────────────────────────────────────────────────────────────
-function EnvValueFetcher({ credential, projectId, onLoaded }: {
-    credential: any; projectId: string; onLoaded: (key: string, value: string) => void
-}) {
-    const { data } = useGetCredentialByIdQuery({ projectId, id: credential._id });
-    const envValue = data?.data?.credentials?.envValue;
-    if (envValue) onLoaded(credential.name, envValue);
-    return null;
-}
-
 function CopyAllEnvButton({ credentials, projectId }: { credentials: any[]; projectId: string }) {
     const [copied, setCopied] = useState(false);
-    const valuesRef = useRef<Record<string, string>>({});
+    const [isFetching, setIsFetching] = useState(false);
+    const [fetchCredentialById] = useLazyGetCredentialByIdQuery();
 
-    const handleCopyAll = () => {
-        const lines = credentials
-            .map(c => { const v = valuesRef.current[c._id]; return v ? `${c.name}="${v}"` : `${c.name}=`; })
-            .join('\n');
-        navigator.clipboard.writeText(lines);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const handleCopyAll = async () => {
+        if (isFetching) return;
+        setIsFetching(true);
+        try {
+            const results = await Promise.all(
+                credentials.map(async (c) => {
+                    const detail = await fetchCredentialById({ projectId, id: c._id }, true).unwrap();
+                    const envValue = detail?.data?.credentials?.envValue ?? '';
+                    return `${c.name}="${envValue}"`;
+                })
+            );
+            navigator.clipboard.writeText(results.join('\n'));
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } finally {
+            setIsFetching(false);
+        }
     };
 
     if (!credentials.length) return null;
     return (
-        <>
-            {credentials.map(c => (
-                <EnvValueFetcher key={c._id} credential={c} projectId={projectId}
-                    onLoaded={(_k, v) => { valuesRef.current[c._id] = v; }} />
-            ))}
-            <button onClick={handleCopyAll}
-                title="Copy all env variables as KEY=VALUE block"
-                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded border transition-colors"
-                style={{
-                    color: copied ? 'var(--color-success)' : 'var(--color-text-secondary)',
-                    borderColor: copied ? 'var(--color-success)' : 'var(--color-border-default)',
-                    backgroundColor: 'transparent'
-                }}>
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-                {copied ? 'Copied!' : 'Copy All'}
-            </button>
-        </>
+        <button onClick={handleCopyAll}
+            disabled={isFetching}
+            title="Copy all env variables as KEY=VALUE block"
+            className="flex items-center gap-2 text-xs px-3 py-1.5 rounded border transition-colors disabled:opacity-60"
+            style={{
+                color: copied ? 'var(--color-success)' : 'var(--color-text-secondary)',
+                borderColor: copied ? 'var(--color-success)' : 'var(--color-border-default)',
+                backgroundColor: 'transparent'
+            }}>
+            {isFetching ? <Loader2 size={13} className="animate-spin" /> : copied ? <Check size={13} /> : <Copy size={13} />}
+            {isFetching ? 'Preparing...' : copied ? 'Copied!' : 'Copy All'}
+        </button>
     );
 }

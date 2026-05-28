@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useGetLeadsQuery, useGetPipelineSummaryQuery, useDeleteLeadMutation } from '@/features/crm';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { logger } from '@/utils/logger';
 
 const stageColors: Record<string, { bg: string; text: string }> = {
     new: { bg: 'var(--color-info-soft)', text: 'var(--color-info)' },
@@ -90,7 +91,7 @@ export default function CrmLeadsPage() {
             await deleteLead(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
         } catch (error) {
-            console.error('Failed to delete lead:', error);
+            logger.error('Failed to delete lead:', error);
         }
     };
 

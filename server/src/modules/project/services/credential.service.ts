@@ -4,6 +4,7 @@ import { Project } from '../models/Project.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
+import { logger } from "../../../utils/logger";
 
 export interface CreateCredentialData {
     name: string;
@@ -43,13 +44,13 @@ export const isCredentialAdmin = async (
     const isAdmin = credentialAdmins.some((id) => id.toString().trim() === normalizedUserId);
 
     // Debug logging (remove in production if needed)
-    console.log('[isCredentialAdmin] Debug Info:', {
-        projectId,
-        userId: normalizedUserId,
-        userRole,
-        credentialAdmins: credentialAdmins.map(id => id.toString()),
-        isAdmin,
-    });
+    logger.info({ context: {
+                projectId,
+                userId: normalizedUserId,
+                userRole,
+                credentialAdmins: credentialAdmins.map(id => id.toString()),
+                isAdmin,
+            } }, '[isCredentialAdmin] Debug Info:');
 
     return isAdmin;
 };
@@ -289,7 +290,7 @@ export const updateCredentialAdmins = async (
 const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
     if (userIds.length === 0) return [];
 
-    console.log('[credential convertToEmployeeData] Input User IDs:', userIds.map(id => id.toString()));
+    logger.info({ context: userIds.map(id => id.toString()) }, '[credential convertToEmployeeData] Input User IDs:');
 
     // Find employees whose userId matches the stored User IDs
     const employees = await Employee.find({
@@ -299,12 +300,12 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
     .select('_id userId')
     .lean();
 
-    console.log('[credential convertToEmployeeData] Found employees:', employees.length);
-    console.log('[credential convertToEmployeeData] Employee details:', employees.map(e => ({
-        employeeId: e._id.toString(),
-        userId: e.userId.toString(),
-        userDetails: (e.userId as any)
-    })));
+    logger.info({ context: employees.length }, '[credential convertToEmployeeData] Found employees:');
+    logger.info({ context: employees.map(e => ({
+                employeeId: e._id.toString(),
+                userId: e.userId.toString(),
+                userDetails: (e.userId as any)
+            })) }, '[credential convertToEmployeeData] Employee details:');
 
     // Return employee data with Employee ID and user details
     const result = employees.map(employee => ({
@@ -313,7 +314,7 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
         email: (employee.userId as any)?.email,
     }));
 
-    console.log('[credential convertToEmployeeData] Final result:', result);
+    logger.info({ context: result }, '[credential convertToEmployeeData] Final result:');
     return result;
 };
 

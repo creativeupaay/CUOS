@@ -14,6 +14,8 @@ export interface IRevenue extends Document {
     amount: number;
     currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
     exchangeRate: number;
+    exchangeRateDate?: Date;
+    exchangeRateProvider?: string;
     amountINR: number; // Converted amount in INR
 
     // Tax details
@@ -22,6 +24,8 @@ export interface IRevenue extends Document {
     gst: number;
     tdsDeducted: number;
     totalAmount: number; // amountINR + gst - tdsDeducted
+    fxFeesINR?: number;
+    tipINR?: number;
 
     // Payment tracking
     receivedAmount: number;
@@ -64,6 +68,8 @@ const RevenueSchema = new Schema<IRevenue>(
             default: 'INR',
         },
         exchangeRate: { type: Number, default: 1, min: 0 },
+        exchangeRateDate: Date,
+        exchangeRateProvider: { type: String, trim: true },
         amountINR: { type: Number, required: true, min: 0 },
 
         // Tax details
@@ -72,6 +78,8 @@ const RevenueSchema = new Schema<IRevenue>(
         gst: { type: Number, default: 0, min: 0 },
         tdsDeducted: { type: Number, default: 0, min: 0 },
         totalAmount: { type: Number, required: true, min: 0 },
+        fxFeesINR: { type: Number, default: 0 },
+        tipINR: { type: Number, default: 0 },
 
         // Payment tracking
         receivedAmount: { type: Number, default: 0, min: 0 },
@@ -110,7 +118,8 @@ RevenueSchema.pre('save', function (next) {
     this.pendingAmount = this.totalAmount - this.receivedAmount;
 
     // Auto-update status based on received amount
-    if (this.receivedAmount >= this.totalAmount) {
+    const effectiveReceived = this.receivedAmount + (this.fxFeesINR || 0);
+    if (effectiveReceived >= this.totalAmount) {
         this.status = 'received';
     } else if (this.receivedAmount > 0) {
         this.status = 'partial';

@@ -11,6 +11,8 @@ export interface Revenue {
     amount: number;
     currency: 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
     exchangeRate: number;
+    exchangeRateDate?: string;
+    exchangeRateProvider?: string;
     amountINR: number;
     gstApplicable: boolean;
     gstRate: number;
@@ -25,6 +27,46 @@ export interface Revenue {
     notes?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface FinanceReceivableItem {
+    id: string;
+    source: 'finance-revenue' | 'phase-payment';
+    sourceLabel: string;
+    party: string;
+    title: string;
+    status: 'pending' | 'partial' | 'overdue';
+    dueDate: string | null;
+    outstanding: number;
+    expected: number;
+    received: number;
+    currency: 'INR';
+    originalCurrency?: string;
+    originalExpected?: number;
+    exchangeRate?: number;
+    exchangeRateDate?: string;
+    exchangeRateProvider?: string;
+}
+
+export interface FinanceReceivablesResponse {
+    items: FinanceReceivableItem[];
+    summary: {
+        totalOpen: number;
+        overdueAmount: number;
+        dueSoonAmount: number;
+        phaseAmount: number;
+        financeAmount: number;
+    };
+    warnings: Array<{
+        code: 'FX_LOOKUP_FAILED';
+        message: string;
+        source: 'finance-revenue' | 'phase-payment';
+        projectId?: string;
+        phaseId?: string;
+        currency?: string;
+        date?: string;
+    }>;
+    skippedCount: number;
 }
 
 export interface Expense {
@@ -221,6 +263,11 @@ export const financeApi = api.injectEndpoints({
         getRevenueById: builder.query<{ data: Revenue }, string>({
             query: (id) => `/finance/revenues/${id}`,
             providesTags: (_result, _error, id) => [{ type: 'Revenues', id }],
+        }),
+
+        getFinanceReceivables: builder.query<{ data: FinanceReceivablesResponse }, void>({
+            query: () => '/finance/receivables',
+            providesTags: ['Revenues', 'Projects'],
         }),
 
         createRevenue: builder.mutation<{ data: Revenue }, Partial<Revenue>>({
@@ -561,12 +608,16 @@ export const financeApi = api.injectEndpoints({
             },
             invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
         }),
+        getExchangeRate: builder.query<{ data: { currency: string; rate: number; provider: string; date: string; isFallback: boolean } }, string>({
+            query: (currency) => `/finance/exchange-rate?currency=${currency}`,
+        }),
     }),
 });
 
 export const {
     useGetFinanceDashboardQuery,
     useGetRevenuesQuery,
+    useGetFinanceReceivablesQuery,
     useGetRevenueByIdQuery,
     useCreateRevenueMutation,
     useUpdateRevenueMutation,
@@ -596,4 +647,5 @@ export const {
     useUpdateBankTransactionMutation,
     useUpdateBankAccountMutation,
     useDeleteBankTransactionMutation,
+    useGetExchangeRateQuery,
 } = financeApi;

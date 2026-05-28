@@ -10,6 +10,31 @@ import type {
     AddActivityInput,
     AddMeetingInput,
 } from '../validators/lead.validator';
+import {
+    ArchiveDeleteOptions,
+    DeletedRecordService,
+    DeleteGraphResult,
+    DeleteGraphService,
+} from '../../archive';
+
+const getGraphNodeIds = (
+    graph: DeleteGraphResult,
+    sourceModel: string,
+    relationship?: string
+): Types.ObjectId[] => {
+    const ids = new Map<string, Types.ObjectId>();
+
+    for (const node of graph.nodes) {
+        if (node.sourceModel !== sourceModel) continue;
+        if (relationship && node.relationship !== relationship) continue;
+
+        for (const sourceId of node.sourceIds) {
+            ids.set(sourceId.toString(), sourceId);
+        }
+    }
+
+    return Array.from(ids.values());
+};
 
 export class LeadService {
     /**
@@ -127,7 +152,7 @@ export class LeadService {
     /**
      * Delete lead
      */
-    async deleteLead(id: string): Promise<void> {
+    async deleteLead(id: string, options: ArchiveDeleteOptions = {}): Promise<void> {
         const lead = await Lead.findById(id);
 
         if (!lead) {
@@ -138,7 +163,33 @@ export class LeadService {
             throw new AppError('Cannot delete a closed or converted lead', 400);
         }
 
-        await Lead.findByIdAndDelete(id);
+        const linkedProposals = await Proposal.find({ leadId: lead._id });
+        if (linkedProposals.some((proposal) => proposal.status === 'accepted')) {
+            throw new AppError('Cannot delete a lead with an accepted proposal', 400);
+        }
+
+        const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+        const graph = await DeleteGraphService.archiveGraph('Lead', lead._id, {
+            archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Lead delete requested',
+            metadata: {
+                ...options.metadata,
+                leadId: lead._id.toString(),
+                partnerId: lead.partnerId?.toString(),
+                linkedProposalIds: linkedProposals.map((proposal) => proposal._id.toString()),
+            },
+        });
+
+        const proposalIds = getGraphNodeIds(graph, 'Proposal', 'lead_proposals');
+        if (proposalIds.length > 0) {
+            await Proposal.deleteMany(
+                { _id: { $in: proposalIds } },
+                options.session ? { session: options.session } : undefined
+            );
+        }
+
+        await lead.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     /**

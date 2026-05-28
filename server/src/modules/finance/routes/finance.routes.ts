@@ -32,9 +32,11 @@ router.get('/expense-breakdown', DashboardController.getExpenseByCategory);
 // ── Revenue Routes ────────────────────────────────────────────────────────
 router.post('/revenues', financeAdminOnly, RevenueController.create);
 router.get('/revenues', RevenueController.getAll);
+router.get('/receivables', RevenueController.getReceivables);
 router.get('/revenues/:id', RevenueController.getById);
 router.put('/revenues/:id', financeAdminOnly, RevenueController.update);
 router.delete('/revenues/:id', financeAdminOnly, RevenueController.delete);
+router.get('/exchange-rate', RevenueController.getExchangeRate);
 
 // ── Expense Routes ────────────────────────────────────────────────────────
 router.post('/expenses', financeAdminOnly, ExpenseController.create);

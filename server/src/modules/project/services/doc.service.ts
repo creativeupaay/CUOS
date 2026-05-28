@@ -5,12 +5,13 @@ import { Project } from '../models/Project.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import {
     uploadDocument,
-    deleteDocument,
     getSignedUrl,
 } from '../../../utils/cloudinary.util';
 import AppError from '../../../utils/appError';
 import { ensureUnifiedSharedFolder } from './sharedFolder.service';
 import { notificationService } from '../../notification/services/notification.service';
+import { logger } from "../../../utils/logger";
+import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 
 // ─── Access Helpers ──────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ const convertToUserIds = async (ids: string[]): Promise<string[]> => {
 const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> => {
     if (userIds.length === 0) return [];
 
-    console.log('[convertToEmployeeData] Input User IDs:', userIds.map(id => id.toString()));
+    logger.info({ context: userIds.map(id => id.toString()) }, '[convertToEmployeeData] Input User IDs:');
 
     // Find employees whose userId matches the stored User IDs
     const employees = await Employee.find({
@@ -53,12 +54,12 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
     .select('_id userId')
     .lean();
 
-    console.log('[convertToEmployeeData] Found employees:', employees.length);
-    console.log('[convertToEmployeeData] Employee details:', employees.map(e => ({
-        employeeId: e._id.toString(),
-        userId: e.userId.toString(),
-        userDetails: (e.userId as any)
-    })));
+    logger.info({ context: employees.length }, '[convertToEmployeeData] Found employees:');
+    logger.info({ context: employees.map(e => ({
+                employeeId: e._id.toString(),
+                userId: e.userId.toString(),
+                userDetails: (e.userId as any)
+            })) }, '[convertToEmployeeData] Employee details:');
 
     // Return employee data with Employee ID and user details
     const result = employees.map(employee => ({
@@ -67,7 +68,7 @@ const convertToEmployeeData = async (userIds: Types.ObjectId[]): Promise<any[]> 
         email: (employee.userId as any)?.email,
     }));
 
-    console.log('[convertToEmployeeData] Final result:', result);
+    logger.info({ context: result }, '[convertToEmployeeData] Final result:');
     return result;
 };
 
@@ -93,13 +94,13 @@ export const isDocAdmin = async (
     const isAdmin = docAdmins.some((id) => id.toString().trim() === normalizedUserId);
 
     // Debug logging (remove in production if needed)
-    console.log('[isDocAdmin] Debug Info:', {
-        projectId,
-        userId: normalizedUserId,
-        userRole,
-        docAdmins: docAdmins.map(id => id.toString()),
-        isAdmin,
-    });
+    logger.info({ context: {
+                projectId,
+                userId: normalizedUserId,
+                userRole,
+                docAdmins: docAdmins.map(id => id.toString()),
+                isAdmin,
+            } }, '[isDocAdmin] Debug Info:');
 
     return isAdmin;
 };
@@ -130,12 +131,12 @@ export const getFolders = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocFolder[]> => {
-    console.log('[getFolders] Starting with params:', { projectId, parentId, userId, userRole, isPartnerRequest });
+    logger.info({ context: { projectId, parentId, userId, userRole, isPartnerRequest } }, '[getFolders] Starting with params:');
 
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
 
-    console.log('[getFolders] Admin check result:', admin);
+    logger.info({ context: admin }, '[getFolders] Admin check result:');
 
     // Normalize legacy data so only one shared folder exists across CUOS/partner/client.
     if (!parentId) {
@@ -147,7 +148,7 @@ export const getFolders = async (
         parentId: parentId ? new Types.ObjectId(parentId) : null,
     };
 
-    console.log('[getFolders] Base query:', query);
+    logger.info({ context: query }, '[getFolders] Base query:');
 
     if (!admin) {
         if (isPartnerRequest && !parentId) {
@@ -163,9 +164,9 @@ export const getFolders = async (
                 { createdBy: userObjectId },
             ];
         }
-        console.log('[getFolders] Non-admin query with filters:', query);
+        logger.info({ context: query }, '[getFolders] Non-admin query with filters:');
     } else {
-        console.log('[getFolders] Admin query - NO FILTERS (should see all)');
+        logger.info('[getFolders] Admin query - NO FILTERS (should see all)');
     }
 
     let results = await DocFolder.find(query)
@@ -215,8 +216,8 @@ export const getFolders = async (
         }
     }
 
-    console.log('[getFolders] Final results count:', results.length);
-    console.log('[getFolders] Folder names:', results.map(f => f.name));
+    logger.info({ context: results.length }, '[getFolders] Final results count:');
+    logger.info({ context: results.map(f => f.name) }, '[getFolders] Folder names:');
 
     // Add access count to each folder
     const resultsWithCount = await Promise.all(
@@ -283,34 +284,98 @@ export const renameFolder = async (
     return folder;
 };
 
+const buildDocItemArchiveMetadata = (
+    item: IDocItem,
+    extra: Record<string, unknown> = {}
+) => ({
+    ...extra,
+    projectId: item.projectId.toString(),
+    folderId: item.folderId?.toString() ?? null,
+    docItemId: item._id.toString(),
+    name: item.name,
+    cloudinaryId: item.cloudinaryId,
+    mimeType: item.mimeType,
+    size: item.size,
+    uploadedBy: item.uploadedBy.toString(),
+    viewAccess: item.viewAccess.map((id) => id.toString()),
+    externalAssetRetained: true,
+    externalAssetRetentionPolicy: 'Retain Cloudinary/local file during 30-day archive window.',
+});
+
+const buildDocFolderArchiveMetadata = (
+    folder: IDocFolder,
+    extra: Record<string, unknown> = {}
+) => ({
+    ...extra,
+    projectId: folder.projectId.toString(),
+    folderId: folder._id.toString(),
+    parentId: folder.parentId?.toString() ?? null,
+    name: folder.name,
+    createdBy: folder.createdBy.toString(),
+    viewAccess: folder.viewAccess.map((id) => id.toString()),
+    isSystem: folder.isSystem,
+    isClientShared: folder.isClientShared,
+    isPartnerShared: folder.isPartnerShared,
+});
+
 /**
  * Delete a folder and all its subfolders + files (recursive).
  */
-export const deleteFolder = async (folderId: string): Promise<void> => {
-    const folder = await DocFolder.findById(folderId).lean();
+export const deleteFolder = async (
+    folderId: string,
+    options: ArchiveDeleteOptions = {}
+): Promise<void> => {
+    const folder = await DocFolder.findById(folderId);
     if (!folder) throw new AppError('Folder not found', 404);
     if ((folder as any).isSystem) {
         throw new AppError('The \'Shared Files\' folder cannot be deleted', 403);
     }
-    await _deleteFolderRecursive(folderId);
+    const archiveBatchId = options.archiveBatchId ?? DeletedRecordService.generateArchiveBatchId();
+    await _deleteFolderRecursive(folder, {
+        ...options,
+        archiveBatchId,
+    });
 };
 
-const _deleteFolderRecursive = async (folderId: string): Promise<void> => {
+const _deleteFolderRecursive = async (
+    folder: IDocFolder,
+    options: ArchiveDeleteOptions
+): Promise<void> => {
     // Delete all files in this folder
-    const files = await DocItem.find({ folderId: new Types.ObjectId(folderId) });
+    const files = await DocItem.find({ folderId: folder._id });
     for (const file of files) {
-        await deleteDocument(file.cloudinaryId).catch(() => { });
-        await file.deleteOne();
+        await DeletedRecordService.archiveDocument(file, {
+            archiveBatchId: options.archiveBatchId,
+            deletedBy: options.deletedBy,
+            reason: options.reason ?? 'Project folder delete requested',
+            operation: 'external_retention',
+            session: options.session,
+            metadata: buildDocItemArchiveMetadata(file, {
+                linkedFrom: 'DocFolder',
+                deletedViaFolderId: folder._id.toString(),
+            }),
+        });
+        await file.deleteOne(options.session ? { session: options.session } : undefined);
     }
 
     // Recurse into subfolders
-    const subfolders = await DocFolder.find({ parentId: new Types.ObjectId(folderId) });
+    const subfolders = await DocFolder.find({ parentId: folder._id });
     for (const sub of subfolders) {
-        await _deleteFolderRecursive(sub._id.toString());
+        await _deleteFolderRecursive(sub, options);
     }
 
     // Delete this folder itself
-    await DocFolder.findByIdAndDelete(folderId);
+    await DeletedRecordService.archiveDocument(folder, {
+        archiveBatchId: options.archiveBatchId,
+        deletedBy: options.deletedBy,
+        reason: options.reason ?? 'Project folder delete requested',
+        operation: 'delete',
+        session: options.session,
+        metadata: buildDocFolderArchiveMetadata(folder, {
+            recursiveDelete: true,
+        }),
+    });
+    await folder.deleteOne(options.session ? { session: options.session } : undefined);
 };
 
 /**
@@ -350,19 +415,19 @@ export const getDocItems = async (
     userRole?: string,
     isPartnerRequest: boolean = false
 ): Promise<IDocItem[]> => {
-    console.log('[getDocItems] Starting with params:', { projectId, folderId, userId, userRole, isPartnerRequest });
+    logger.info({ context: { projectId, folderId, userId, userRole, isPartnerRequest } }, '[getDocItems] Starting with params:');
 
     const admin = await isDocAdmin(projectId, userId, userRole);
     const userObjectId = new Types.ObjectId(userId);
 
-    console.log('[getDocItems] Admin check result:', admin);
+    logger.info({ context: admin }, '[getDocItems] Admin check result:');
 
     const query: Record<string, unknown> = {
         projectId: new Types.ObjectId(projectId),
         folderId: folderId ? new Types.ObjectId(folderId) : null,
     };
 
-    console.log('[getDocItems] Base query:', query);
+    logger.info({ context: query }, '[getDocItems] Base query:');
 
     if (!admin) {
         // Check if user has folder-level access
@@ -387,9 +452,9 @@ export const getDocItems = async (
                 { uploadedBy: userObjectId },      // Files they uploaded
             ];
         }
-        console.log('[getDocItems] Non-admin query with filters:', { hasFolderAccess, query });
+        logger.info({ context: { hasFolderAccess, query } }, '[getDocItems] Non-admin query with filters:');
     } else {
-        console.log('[getDocItems] Admin query - NO FILTERS (should see all)');
+        logger.info('[getDocItems] Admin query - NO FILTERS (should see all)');
     }
 
     const results = await DocItem.find(query)
@@ -398,8 +463,8 @@ export const getDocItems = async (
         .sort({ name: 1 })
         .lean();
 
-    console.log('[getDocItems] Final results count:', results.length);
-    console.log('[getDocItems] File names:', results.map(f => f.name));
+    logger.info({ context: results.length }, '[getDocItems] Final results count:');
+    logger.info({ context: results.map(f => f.name) }, '[getDocItems] File names:');
 
     return results;
 };
@@ -453,13 +518,23 @@ export const getDocItemUrl = async (itemId: string): Promise<string> => {
 };
 
 /**
- * Delete a file from Cloudinary and the database.
+ * Delete a file record while retaining the external asset during archive retention.
  */
-export const deleteDocItem = async (itemId: string): Promise<void> => {
+export const deleteDocItem = async (
+    itemId: string,
+    options: ArchiveDeleteOptions = {}
+): Promise<void> => {
     const item = await DocItem.findById(itemId);
     if (!item) throw new AppError('File not found', 404);
-    await deleteDocument(item.cloudinaryId).catch(() => { });
-    await item.deleteOne();
+    await DeletedRecordService.archiveDocument(item, {
+        archiveBatchId: options.archiveBatchId,
+        deletedBy: options.deletedBy,
+        reason: options.reason ?? 'Project document item delete requested',
+        operation: 'external_retention',
+        session: options.session,
+        metadata: buildDocItemArchiveMetadata(item),
+    });
+    await item.deleteOne(options.session ? { session: options.session } : undefined);
 };
 
 /**
@@ -561,12 +636,12 @@ export const updateDocAdmins = async (
     projectId: string,
     userIds: string[]
 ): Promise<void> => {
-    console.log('[updateDocAdmins] Input:', { projectId, userIds });
+    logger.info({ context: { projectId, userIds } }, '[updateDocAdmins] Input:');
 
     // Convert Employee IDs to User IDs if needed
     const actualUserIds = await convertToUserIds(userIds);
 
-    console.log('[updateDocAdmins] Converted User IDs:', actualUserIds);
+    logger.info({ context: actualUserIds }, '[updateDocAdmins] Converted User IDs:');
 
     const project = await Project.findById(projectId)
         .select('name docAdmins')
@@ -603,5 +678,5 @@ export const updateDocAdmins = async (
         );
     }
 
-    console.log('[updateDocAdmins] Successfully updated doc admins for project:', projectId);
+    logger.info({ context: projectId }, '[updateDocAdmins] Successfully updated doc admins for project:');
 };

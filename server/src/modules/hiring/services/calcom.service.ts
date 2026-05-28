@@ -2,6 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { env } from '../../../config/env.config';
 import AppError from '../../../utils/appError';
 import type { IInterviewSchedulingConfig } from '../models/Job.model';
+import { logger } from "../../../utils/logger";
 
 interface SyncJobEventInput {
     jobId: string;
@@ -255,7 +256,7 @@ export class CalcomService {
                     throw error;
                 }
                 // Fall through to create a new event type
-                console.log(`[Cal.com] Event type ${existingEventTypeId} not found (404), creating new one`);
+                logger.info(`[Cal.com] Event type ${existingEventTypeId} not found (404), creating new one`);
             }
         }
 

@@ -15,6 +15,14 @@ export interface ProjectPhase {
     paymentReceivedAmount?: number;
     paymentDueDate?: string;
     paymentBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    paymentExpectedAmountINR?: number;
+    paymentReceivedAmountINR?: number;
+    paymentExchangeRate?: number;
+    paymentExchangeRateDate?: string;
+    paymentSettlementCurrency?: 'INR';
+    paymentFxRateSource?: 'exact-provider' | 'exact-cache' | 'manual' | 'latest-known';
+    paymentFxRequestedDate?: string;
+    paymentFxFallbackUsed?: boolean;
 
     // Finance links
     revenueId?: string;
@@ -22,8 +30,14 @@ export interface ProjectPhase {
 
     // GST and TDS
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
+    tdsPercentage?: number;
     tdsDeducted?: number;
+
+    // Discrepancy tracking
+    fxFeesINR?: number;
+    adjustmentAmountINR?: number;
 
     completedAt?: string;
 }

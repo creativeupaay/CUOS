@@ -63,7 +63,7 @@ export interface CreateJobTemplateRequest {
     applicationForm?: JobApplicationFormConfig;
 }
 
-export interface UpdateJobTemplateRequest extends Partial<CreateJobTemplateRequest> {}
+export type UpdateJobTemplateRequest = Partial<CreateJobTemplateRequest>;
 
 // ============================================
 // CREATE / UPDATE
@@ -245,7 +245,7 @@ export interface RequestInterviewRescheduleRequest {
     preferredTime: string;
 }
 
-export interface InterviewDetailsResponse extends InterviewDetails {}
+export type InterviewDetailsResponse = InterviewDetails;
 
 export interface SaveInterviewNoteResponse {
     note: InterviewNote;
@@ -267,4 +267,4 @@ export interface ApplicationTimelineResponse {
     activities: ApplicationActivity[];
 }
 
-export interface HiringReportSummaryResponse extends HiringReportSummary {}
+export type HiringReportSummaryResponse = HiringReportSummary;

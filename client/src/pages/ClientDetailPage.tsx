@@ -33,6 +33,7 @@ import type { Project } from '@/features/project/types/types';
 import type { ClientLink } from '@/features/client/types/types';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
+import { logger } from '@/utils/logger';
 
 type Tab = 'info' | 'projects' | 'activity' | 'documents' | 'links';
 
@@ -131,7 +132,7 @@ export default function ClientDetailPage() {
             }).unwrap();
             setActivityDesc('');
         } catch (error) {
-            console.error('Failed to add activity:', error);
+            logger.error('Failed to add activity:', error);
         }
     };
 
@@ -163,7 +164,7 @@ export default function ClientDetailPage() {
         try {
             await uploadClientDocuments({ clientId: id, files }).unwrap();
         } catch (error) {
-            console.error('Failed to upload documents:', error);
+            logger.error('Failed to upload documents:', error);
             alert('Failed to upload documents. Please try again.');
         } finally {
             e.target.value = '';
@@ -212,7 +213,7 @@ export default function ClientDetailPage() {
             await updateClient({ id, data: { documents: renamedDocuments } }).unwrap();
             handleCancelRenameDocument();
         } catch (error) {
-            console.error('Failed to rename document:', error);
+            logger.error('Failed to rename document:', error);
             alert('Failed to rename document. Please try again.');
         }
     };
@@ -239,7 +240,7 @@ export default function ClientDetailPage() {
                 handleCancelRenameDocument();
             }
         } catch (error) {
-            console.error('Failed to delete document:', error);
+            logger.error('Failed to delete document:', error);
             alert('Failed to delete document. Please try again.');
         }
     };
@@ -277,7 +278,7 @@ export default function ClientDetailPage() {
             setLinkUrl('');
             setEditingLinkIndex(null);
         } catch (error) {
-            console.error('Failed to save link:', error);
+            logger.error('Failed to save link:', error);
         }
     };
 
@@ -306,7 +307,7 @@ export default function ClientDetailPage() {
                 setEditingLinkIndex(null);
             }
         } catch (error) {
-            console.error('Failed to delete link:', error);
+            logger.error('Failed to delete link:', error);
         }
     };
 
@@ -668,13 +669,11 @@ export default function ClientDetailPage() {
                                         try { await togglePortal({ clientId: id, enabled: !client.portalEnabled }).unwrap(); } catch { }
                                     }}
                                     disabled={isTogglingPortal}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                                        client.portalEnabled ? 'bg-primary' : 'bg-neutral-300'
-                                    } ${isTogglingPortal ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${client.portalEnabled ? 'bg-primary' : 'bg-neutral-300'
+                                        } ${isTogglingPortal ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                        client.portalEnabled ? 'translate-x-6' : 'translate-x-1'
-                                    }`} />
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${client.portalEnabled ? 'translate-x-6' : 'translate-x-1'
+                                        }`} />
                                 </button>
                             </div>
 

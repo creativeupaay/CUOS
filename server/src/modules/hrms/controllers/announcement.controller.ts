@@ -3,7 +3,7 @@ import asyncHandler from '../../../utils/asyncHandler';
 import { announcementService } from '../services/announcement.service';
 
 export const createAnnouncement = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.user as any).id;
+    const userId = req.user!.id;
     const announcement = await announcementService.createAnnouncement(req.body, userId);
 
     res.status(201).json({
@@ -22,7 +22,10 @@ export const getAnnouncements = asyncHandler(async (_req: Request, res: Response
 });
 
 export const deleteAnnouncement = asyncHandler(async (req: Request, res: Response) => {
-    await announcementService.deleteAnnouncement(req.params.id);
+    await announcementService.deleteAnnouncement(req.params.id, {
+        deletedBy: req.user?.id,
+        reason: 'HRMS announcement delete requested',
+    });
 
     res.json({
         status: 'success',
