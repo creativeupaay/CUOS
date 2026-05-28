@@ -14,7 +14,7 @@ export const markPhasePaymentReceived = async (
 ) => {
     try {
         const { id: projectId, phaseId } = req.params;
-        const { receivedAmount, bankAccountKey, receivedDate, notes, manualExchangeRate } = req.body;
+        const { receivedAmount, bankAccountKey, receivedDate, notes, manualExchangeRate, markAsFullyPaid, adjustPhaseValue } = req.body;
         const userId = req.user?.id?.toString() || req.user?._id?.toString();
 
         if (!userId) {
@@ -43,6 +43,8 @@ export const markPhasePaymentReceived = async (
             receivedDate: receivedDate ? new Date(receivedDate) : new Date(),
             notes,
             manualExchangeRate: manualExchangeRate ? Number(manualExchangeRate) : undefined,
+            markAsFullyPaid: markAsFullyPaid === true,
+            adjustPhaseValue: adjustPhaseValue === true,
             userId,
         });
 

@@ -89,9 +89,9 @@ export const crmApi = api.injectEndpoints({
                     error: 'Failed to delete lead',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getLeads' as never, undefined as never, (draft: any) => {
+                    crmApi.util.updateQueryData('getLeads', {}, (draft) => {
                        if (draft?.data?.leads) {
-                           draft.data.leads = draft.data.leads.filter((l: any) => l._id !== id);
+                           draft.data.leads = draft.data.leads.filter((l: Lead) => l._id !== id);
                        }
                     })
                 );
@@ -255,9 +255,9 @@ export const crmApi = api.injectEndpoints({
                     error: 'Failed to delete proposal',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getProposals' as never, undefined as never, (draft: any) => {
+                    crmApi.util.updateQueryData('getProposals', {}, (draft) => {
                        if (draft?.data?.proposals) {
-                           draft.data.proposals = draft.data.proposals.filter((p: any) => p._id !== id);
+                           draft.data.proposals = draft.data.proposals.filter((p: Proposal) => p._id !== id);
                        }
                     })
                 );

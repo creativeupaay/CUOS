@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery, useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type FilterType = 'fiscal-year' | 'quarter' | 'month' | 'custom';
@@ -117,6 +118,7 @@ export default function FinanceDashboardPage() {
     const [activeDrawer, setActiveDrawer] = useState<FinanceDrawerType>(null);
     const [renderDrawer, setRenderDrawer] = useState(false);
     const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+    const [showResolveFxModal, setShowResolveFxModal] = useState(false);
 
     useBodyScrollLock(Boolean(activeDrawer));
 
@@ -261,9 +263,20 @@ export default function FinanceDashboardPage() {
     })), [receivablesData]);
 
     const receivablesSummary = receivablesData?.data?.summary;
-    const fxWarnings = receivablesData?.data?.warnings || [];
-    const skippedReceivablesCount = receivablesData?.data?.skippedCount || fxWarnings.length;
+    const fxRateRequiredWarnings = useMemo<FxRateRequiredWarning[]>(
+        () =>
+            (receivablesData?.data?.warnings ?? []).filter(
+                (w): w is FxRateRequiredWarning =>
+                    w.code === 'FX_RATE_REQUIRED' &&
+                    Boolean(w.projectId) &&
+                    Boolean(w.phaseId) &&
+                    Boolean(w.currency) &&
+                    Boolean(w.date)
+            ),
+        [receivablesData]
+    );
     const combinedReceivablesValue = Math.max(0, Number(receivablesSummary?.totalOpen ?? metrics.receivables ?? 0));
+
 
     const runwayInsights = useMemo(() => {
         const today = getStartOfDay(new Date());
@@ -704,20 +717,29 @@ export default function FinanceDashboardPage() {
                     </div>
                 </div>
 
-                {fxWarnings.length > 0 && (
+                {fxRateRequiredWarnings.length > 0 && (
                     <div
-                        className="flex items-start gap-3 rounded-lg border px-4 py-3"
+                        className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
                         style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}
                     >
-                        <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-                        <div>
-                            <p className="text-sm font-semibold">Some receivables need FX review.</p>
-                            <p className="text-xs mt-1">
-                                {skippedReceivablesCount > 0
-                                    ? `${skippedReceivablesCount} receivable${skippedReceivablesCount === 1 ? '' : 's'} need a manual INR rate before they can be counted.`
-                                    : 'Latest known FX rates were used for one or more receivables.'}
-                            </p>
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-sm font-semibold">Some receivables need FX review.</p>
+                                <p className="text-xs mt-1">
+                                    {fxRateRequiredWarnings.length} receivable{fxRateRequiredWarnings.length === 1 ? '' : 's'} need a manual INR rate before they can be counted.
+                                </p>
+                            </div>
                         </div>
+                        <button
+                            type="button"
+                            id="resolve-fx-rates-btn"
+                            onClick={() => setShowResolveFxModal(true)}
+                            className="shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-yellow-100"
+                            style={{ borderColor: '#F59E0B', color: '#92400E', whiteSpace: 'nowrap' }}
+                        >
+                            Fix now
+                        </button>
                     </div>
                 )}
 
@@ -1239,9 +1261,17 @@ export default function FinanceDashboardPage() {
                                 </div>
                             </div>
                         )}
-                    </aside>
+                        </aside>
                 </>,
                 document.body,
+            )}
+
+            {showResolveFxModal && fxRateRequiredWarnings.length > 0 && (
+                <ResolveFxRatesModal
+                    warnings={fxRateRequiredWarnings}
+                    onClose={() => setShowResolveFxModal(false)}
+                    onResolved={() => setShowResolveFxModal(false)}
+                />
             )}
         </>
     );

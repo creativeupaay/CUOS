@@ -12,6 +12,7 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
+import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
 
 type ReceivableSource = 'finance-revenue' | 'phase-payment';
 type ReceivableStatus = 'pending' | 'partial' | 'overdue';
@@ -59,9 +60,21 @@ export default function FinanceReceivablesPage() {
     const [sourceFilter, setSourceFilter] = useState<'all' | ReceivableSource>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'overdue'>('all');
 
+    const [showResolveFxModal, setShowResolveFxModal] = useState(false);
+
     const { data: receivablesData, isLoading } = useGetFinanceReceivablesQuery();
-    const fxWarnings = receivablesData?.data?.warnings || [];
-    const skippedCount = receivablesData?.data?.skippedCount || fxWarnings.length;
+    const fxRateRequiredWarnings = useMemo<FxRateRequiredWarning[]>(
+        () =>
+            (receivablesData?.data?.warnings ?? []).filter(
+                (w): w is FxRateRequiredWarning =>
+                    w.code === 'FX_RATE_REQUIRED' &&
+                    Boolean(w.projectId) &&
+                    Boolean(w.phaseId) &&
+                    Boolean(w.currency) &&
+                    Boolean(w.date)
+            ),
+        [receivablesData]
+    );
 
     const receivables = useMemo(() => {
         return (receivablesData?.data?.items || []).map((item: any): ReceivableItem => ({
@@ -122,22 +135,32 @@ export default function FinanceReceivablesPage() {
                 </p>
             </div>
 
-            {fxWarnings.length > 0 && (
+            {fxRateRequiredWarnings.length > 0 && (
                 <div
-                    className="flex items-start gap-3 rounded-lg border px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
                     style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}
                 >
-                    <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-                    <div>
-                        <p className="text-sm font-semibold">Some receivables need FX review.</p>
-                        <p className="text-xs mt-1">
-                            {skippedCount > 0
-                                ? `${skippedCount} receivable${skippedCount === 1 ? '' : 's'} need a manual INR rate before they can be counted.`
-                                : 'Latest known FX rates were used for one or more receivables.'}
-                        </p>
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-sm font-semibold">Some receivables need FX review.</p>
+                            <p className="text-xs mt-1">
+                                {fxRateRequiredWarnings.length} receivable{fxRateRequiredWarnings.length === 1 ? '' : 's'} need a manual INR rate before they can be counted.
+                            </p>
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        id="resolve-fx-rates-receivables-btn"
+                        onClick={() => setShowResolveFxModal(true)}
+                        className="shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-yellow-100"
+                        style={{ borderColor: '#F59E0B', color: '#92400E', whiteSpace: 'nowrap' }}
+                    >
+                        Fix now
+                    </button>
                 </div>
             )}
+
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {[
@@ -277,6 +300,14 @@ export default function FinanceReceivablesPage() {
                     </div>
                 )}
             </div>
+
+            {showResolveFxModal && fxRateRequiredWarnings.length > 0 && (
+                <ResolveFxRatesModal
+                    warnings={fxRateRequiredWarnings}
+                    onClose={() => setShowResolveFxModal(false)}
+                    onResolved={() => setShowResolveFxModal(false)}
+                />
+            )}
         </div>
     );
 }

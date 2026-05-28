@@ -2,9 +2,6 @@ import express from "express";
 import http from "http";
 import dotenv from "dotenv";
 import compression from "compression";
-
-
-
 import pinoHttp from "pino-http";
 import helmet from "helmet";
 import cors, { CorsOptions } from "cors";

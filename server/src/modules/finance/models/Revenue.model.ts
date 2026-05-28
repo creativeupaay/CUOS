@@ -23,7 +23,7 @@ export interface IRevenue extends Document {
     gstRate: number; // 5, 12, 18, or 28
     gst: number;
     tdsDeducted: number;
-    totalAmount: number; // amountINR + gst - tdsDeducted
+    totalAmount: number; // Gross amount received (inclusive of GST) = amountINR + gst
     fxFeesINR?: number;
     tipINR?: number;
 

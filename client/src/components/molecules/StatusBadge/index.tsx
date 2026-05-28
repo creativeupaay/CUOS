@@ -8,7 +8,8 @@ type StatusKey =
     | 'active' | 'inactive' | 'pending' | 'approved' | 'rejected' | 'cancelled'
     | 'completed' | 'in_progress' | 'on_hold' | 'open' | 'closed' | 'draft'
     | 'scheduled' | 'confirmed' | 'no_show' | 'rescheduled' | 'shortlisted'
-    | 'hired' | 'applied' | 'withdrawn' | 'paid' | 'unpaid' | 'overdue';
+    | 'hired' | 'applied' | 'withdrawn' | 'paid' | 'unpaid' | 'overdue'
+    | 'received' | 'partial';
 
 const statusConfig: Record<StatusKey, { label: string; variant: BadgeVariant }> = {
     active: { label: 'Active', variant: 'success' },
@@ -34,6 +35,8 @@ const statusConfig: Record<StatusKey, { label: string; variant: BadgeVariant }> 
     paid: { label: 'Paid', variant: 'success' },
     unpaid: { label: 'Unpaid', variant: 'warning' },
     overdue: { label: 'Overdue', variant: 'danger' },
+    received: { label: 'Received', variant: 'success' },
+    partial: { label: 'Partial', variant: 'purple' },
 };
 
 export interface StatusBadgeProps {
