@@ -14,6 +14,13 @@ import {
     getDepartmentCatalog,
     resolveDepartmentValue,
 } from '../../../utils/department.util';
+import { Project } from '../../project/models/Project.model';
+import { Task } from '../../project/models/Task.model';
+import { Meeting } from '../../project/models/Meeting.model';
+import { Lead } from '../../crm/models/Lead.model';
+import { InterviewNotification } from '../../hiring/models/InterviewNotification.model';
+import { Leave } from '../../hrms/models/Leave.model';
+import { Payroll } from '../../hrms/models/Payroll.model';
 
 export interface UserFilters {
     search?: string;
@@ -44,6 +51,107 @@ export interface UpdateUserData {
 const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
     graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
 );
+
+/**
+ * Removes a user's presence from all modules where they are an optional member,
+ * participant, or assignee — without deleting any shared business data.
+ *
+ * @param userId   The ObjectId of the user being deleted.
+ * @param employeeId  The ObjectId of the associated Employee record, if any.
+ */
+export const cleanupUserMemberships = async (
+    userId: string,
+    employeeId?: string | null,
+): Promise<void> => {
+    const userOid = new Types.ObjectId(userId);
+
+    await Promise.all([
+        // ── Project Module ───────────────────────────────────────────────
+        // Remove user from project assignee list
+        Project.updateMany(
+            { 'assignees.userId': userOid },
+            { $pull: { assignees: { userId: userOid } } }
+        ),
+        // Remove user from credential admins
+        Project.updateMany(
+            { credentialAdmins: userOid },
+            { $pull: { credentialAdmins: userOid } }
+        ),
+        // Remove user from document admins
+        Project.updateMany(
+            { docAdmins: userOid },
+            { $pull: { docAdmins: userOid } }
+        ),
+
+        // ── Task Module ──────────────────────────────────────────────────
+        // Remove user from task assignees
+        Task.updateMany(
+            { assignees: userOid },
+            { $pull: { assignees: userOid } }
+        ),
+        // Remove user's active timers from tasks
+        Task.updateMany(
+            { 'activeTimers.userId': userOid },
+            { $pull: { activeTimers: { userId: userOid } } }
+        ),
+        // Remove user's accumulated seconds entries from tasks
+        Task.updateMany(
+            { 'accumulatedSeconds.userId': userOid },
+            { $pull: { accumulatedSeconds: { userId: userOid } } }
+        ),
+
+        // ── Meeting Module ───────────────────────────────────────────────
+        // Remove user from meeting participants
+        Meeting.updateMany(
+            { 'participants.userId': userOid },
+            { $pull: { participants: { userId: userOid } } }
+        ),
+        // Remove user from custom access list
+        Meeting.updateMany(
+            { customAccessUsers: userOid },
+            { $pull: { customAccessUsers: userOid } }
+        ),
+        // Unset action item assignments belonging to this user
+        Meeting.updateMany(
+            { 'actionItems.assignedTo': userOid },
+            { $unset: { 'actionItems.$[elem].assignedTo': '' } },
+            { arrayFilters: [{ 'elem.assignedTo': userOid }] }
+        ),
+
+        // ── CRM Module ───────────────────────────────────────────────────
+        // Unset lead assignee
+        Lead.updateMany(
+            { assignedTo: userOid },
+            { $unset: { assignedTo: '' } }
+        ),
+
+        // ── Hiring Module ────────────────────────────────────────────────
+        // Delete interview notifications sent to this user
+        InterviewNotification.deleteMany({ userId: userOid }),
+
+        // ── HRMS Module ──────────────────────────────────────────────────
+        // Unset leave approver
+        Leave.updateMany(
+            { approvedBy: userOid },
+            { $unset: { approvedBy: '' } }
+        ),
+        // Unset payroll approver
+        Payroll.updateMany(
+            { approvedBy: userOid },
+            { $unset: { approvedBy: '' } }
+        ),
+    ]);
+
+    // ── Hiring: remove employee from job managers ─────────────────────
+    // Job.managers stores Employee ObjectIds, not User ObjectIds directly.
+    if (employeeId) {
+        const employeeOid = new Types.ObjectId(employeeId);
+        await Job.updateMany(
+            { managers: employeeOid },
+            { $pull: { managers: employeeOid } }
+        );
+    }
+};
 
 const createDefaultModulePermissions = () => ({
     accessControlVersion: 2,
@@ -423,6 +531,15 @@ export const deleteUser = async (id: string, adminId: string) => {
         throw new AppError('Cannot delete your own account', 400);
     }
 
+    // Resolve the employee record (if any) before deletion so we have the ID
+    // for removing the employee from job managers in Hiring module.
+    const employee = await Employee.findOne({ userId: id }).select('_id').lean();
+
+    // Step 1: Remove user's presence from all modules (assignees, participants,
+    // approvers, etc.) without touching shared business data.
+    await cleanupUserMemberships(id, employee?._id?.toString());
+
+    // Step 2: Archive and delete the user record and its owned graph
     const graph = await DeleteGraphService.archiveGraph('User', id, {
         deletedBy: adminId,
         reason: 'Admin user delete requested',
@@ -437,11 +554,10 @@ export const deleteUser = async (id: string, adminId: string) => {
     await Notification.deleteMany({ _id: { $in: getGraphNodeIds(graph, 'user_notifications') } });
     await user.deleteOne();
 
-    // Cascade: Deactivate associated employee if it exists
-    await Employee.findOneAndUpdate(
-        { userId: id },
-        { status: 'terminated' }
-    );
+    // Step 3: Mark associated employee as terminated (record kept for payroll history)
+    if (employee) {
+        await Employee.findByIdAndUpdate(employee._id, { status: 'terminated' });
+    }
 
     await AuditLog.create({
         userId: adminId,

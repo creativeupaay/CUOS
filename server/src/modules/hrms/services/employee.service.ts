@@ -25,6 +25,7 @@ import {
 } from '../../../utils/department.util';
 import { generateNextEmployeeId } from '../utils/employeeId.util';
 import { logger } from "../../../utils/logger";
+import { cleanupUserMemberships } from '../../overall-admin/services/admin-user.service';
 
 const getGraphNodeIds = (graph: DeleteGraphResult, relationship: string): Types.ObjectId[] => (
     graph.nodes.find((node) => node.relationship === relationship)?.sourceIds ?? []
@@ -263,6 +264,17 @@ class EmployeeService {
             throw new AppError('Employee not found', 404);
         }
 
+        // Step 1: Remove the employee's user presence from all modules
+        // (project assignees, task assignees, meeting participants, CRM leads,
+        // job managers, etc.) before archiving the record.
+        if (employee.userId) {
+            await cleanupUserMemberships(
+                employee.userId.toString(),
+                employee._id.toString(),
+            );
+        }
+
+        // Step 2: Archive and cascade-delete owned HRMS records
         const archiveBatchId = this.getArchiveBatchId(options);
         const graph = await DeleteGraphService.archiveGraph('Employee', employee._id, {
             archiveBatchId,
