@@ -9,6 +9,7 @@ import type {
     DocFolder,
     DocItem,
     DocAdminUser,
+    ProjectAssignee,
     Note,
 } from './types/types';
 import type {
@@ -86,9 +87,9 @@ export const projectApi = api.injectEndpoints({
                     error: 'Failed to delete project',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getProjects' as never, undefined as never, (draft: any) => {
+                    projectApi.util.updateQueryData('getProjects', {}, (draft) => {
                        if (draft?.data) {
-                           draft.data = draft.data.filter((p: any) => p._id !== id);
+                           draft.data = draft.data.filter((p: Project) => p._id !== id);
                        }
                     })
                 );
@@ -127,7 +128,7 @@ export const projectApi = api.injectEndpoints({
             invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
         }),
 
-        getAssigneePermissions: builder.query<ApiResponse<any>, { projectId: string; memberId: string }>({
+        getAssigneePermissions: builder.query<ApiResponse<ProjectAssignee['subModules']>, { projectId: string; memberId: string }>({
             query: ({ projectId, memberId }) => `/projects/${projectId}/assignees/${memberId}/permissions`,
             providesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
@@ -211,9 +212,9 @@ export const projectApi = api.injectEndpoints({
                     error: 'Failed to delete task',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getTasks' as never, { projectId } as never, (draft: any) => {
+                    projectApi.util.updateQueryData('getTasks', { projectId }, (draft) => {
                        if (draft?.data) {
-                           draft.data = draft.data.filter((t: any) => t._id !== taskId);
+                           draft.data = draft.data.filter((t: Task) => t._id !== taskId);
                        }
                     })
                 );
@@ -383,12 +384,12 @@ export const projectApi = api.injectEndpoints({
                 const credentialTypes: Array<string | undefined> = [undefined, 'env', 'ssh-key', 'test-user', 'account', 'other', '2fa'];
                 const patches = credentialTypes.map((type) =>
                     dispatch(
-                        api.util.updateQueryData(
-                            'getCredentials' as never,
-                            ({ projectId, ...(type ? { type } : {}) } as never),
-                            (draft: any) => {
+                        projectApi.util.updateQueryData(
+                            'getCredentials',
+                            { projectId, ...(type ? { type } : {}) },
+                            (draft) => {
                                 if (draft?.data) {
-                                    draft.data = draft.data.filter((cred: any) => cred._id !== id);
+                                    draft.data = draft.data.filter((cred: Credential) => cred._id !== id);
                                 }
                             }
                         )

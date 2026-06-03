@@ -1,8 +1,10 @@
 import { Types } from 'mongoose';
 import { Project, IProject, IProjectPhase } from '../models/Project.model';
-import { Revenue } from '../../finance/models/Revenue.model';
+import { Revenue, IRevenue } from '../../finance/models/Revenue.model';
+import { IBankTransaction } from '../../finance/models/BankTransaction.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
 import { ExchangeRateService } from '../../finance/services/exchangeRate.service';
+import { IClient } from '../../client/models/Client.model';
 import AppError from '../../../utils/appError';
 
 interface MarkPhasePaymentReceivedData {
@@ -63,9 +65,9 @@ export class PhasePaymentService {
     static async markPhasePaymentReceived(
         data: MarkPhasePaymentReceivedData
     ): Promise<{
-        project: any;
-        revenue: any;
-        bankTransaction: any;
+        project: IProject;
+        revenue: IRevenue;
+        bankTransaction: IBankTransaction;
     }> {
         const { projectId, phaseId, receivedAmount, bankAccountKey, receivedDate, notes, manualExchangeRate, userId } =
             data;
@@ -172,67 +174,73 @@ export class PhasePaymentService {
             }
         }
         const exchangeRate = conversion.rate;
-        const amountINR = conversion.amountINR;
         const actualReceivedINR = this.roundMoney(receivedAmount);
 
         const gstApplicable = phase.gstApplicable ?? true;
-        const isGstInclusive = phase.isGstInclusive ?? false;
         const gstRate = phase.gstRate || 18;
         const tdsPercentage = phase.tdsPercentage || 0;
 
-        let baseAmountINR = amountINR;
-        let gst = 0;
+        /**
+         * GST Calculation — GST-inclusive model:
+         * The amount received from the client (actualReceivedINR) is the GROSS total.
+         * It already includes GST. We reverse-calculate to split it.
+         *
+         * totalAmount  = actualReceivedINR  (what was credited to bank)
+         * baseAmountINR = totalAmount / (1 + gstRate/100)  [revenue without GST]
+         * gst           = totalAmount - baseAmountINR
+         *
+         * Example: ₹12,840 received, 18% GST
+         *   base = 12840 / 1.18 = ₹10,881
+         *   gst  = 12840 - 10881 = ₹1,959
+         */
+        let baseAmountINR: number;
+        let gst: number;
 
         if (gstApplicable) {
-            if (isGstInclusive) {
-                baseAmountINR = this.roundMoney(amountINR / (1 + gstRate / 100));
-                gst = this.roundMoney(amountINR - baseAmountINR);
-            } else {
-                gst = this.roundMoney((amountINR * gstRate) / 100);
-            }
+            baseAmountINR = this.roundMoney(actualReceivedINR / (1 + gstRate / 100));
+            gst = this.roundMoney(actualReceivedINR - baseAmountINR);
+        } else {
+            baseAmountINR = actualReceivedINR;
+            gst = 0;
         }
 
-        // Calculate TDS based on base amount
-        const tdsDeducted = tdsPercentage > 0 
+        // TDS is deducted from base amount before payment; if TDS was already factored in
+        // the received amount, we derive it from the base. Otherwise use phase setting.
+        const tdsDeducted = tdsPercentage > 0
             ? this.roundMoney((baseAmountINR * tdsPercentage) / 100)
             : this.roundMoney(phase.tdsDeducted || 0);
 
-        const expectedTotalAmountINR = this.roundMoney(baseAmountINR + gst - tdsDeducted);
+        // The total amount for this revenue entry IS what was received.
+        // When markAsFullyPaid / adjustPhaseValue is set, we honour the actual received amount.
+        const finalTotalAmountINR = actualReceivedINR;
+        const finalBaseINR = baseAmountINR;
+        const finalGst = gst;
+        const finalTds = tdsDeducted;
 
-        // Handle discrepancies
-        let fxFeesINR = 0;
-        let tipINR = 0;
-        let finalBaseINR = baseAmountINR;
-        let finalGst = gst;
-        let finalTds = tdsDeducted;
-        let finalExpectedTotal = expectedTotalAmountINR;
-        let finalAmountOriginal = expectedAmount;
+        // Original currency amount, back-calculated from base INR
+        const finalAmountOriginal = exchangeRate > 0
+            ? this.roundMoney(finalBaseINR / exchangeRate)
+            : finalBaseINR;
 
-        const delta = this.roundMoney(actualReceivedINR - expectedTotalAmountINR);
-
-        if (delta < 0) {
-            if (data.markAsFullyPaid) {
-                fxFeesINR = Math.abs(delta);
-            }
-        } else if (delta > 0) {
-            if (data.adjustPhaseValue) {
-                // Adjust phase value so that actualReceivedINR is the new total
-                const factor = 1 + (gstApplicable ? gstRate / 100 : 0) - (tdsPercentage / 100);
-                finalBaseINR = this.roundMoney(actualReceivedINR / factor);
-                finalGst = gstApplicable ? this.roundMoney((finalBaseINR * gstRate) / 100) : 0;
-                finalTds = this.roundMoney((finalBaseINR * tdsPercentage) / 100);
-                finalExpectedTotal = actualReceivedINR;
-                
-                // Also update the original currency amount
-                finalAmountOriginal = this.roundMoney(finalBaseINR / exchangeRate);
-            } else {
-                tipINR = delta;
-            }
-        }
+        // fxFees / tip tracking (delta between contracted value and actual receipt)
+        const amountINR = conversion.amountINR; // contracted conversion value
+        const contractedBase = gstApplicable
+            ? this.roundMoney(amountINR / (1 + gstRate / 100))
+            : amountINR;
+        const contractedTotal = contractedBase + (gstApplicable ? this.roundMoney(amountINR - contractedBase) : 0);
+        const delta = this.roundMoney(actualReceivedINR - contractedTotal);
+        const fxFeesINR = delta < 0 && data.markAsFullyPaid ? Math.abs(delta) : 0;
+        const tipINR = delta > 0 && !data.adjustPhaseValue ? delta : 0;
 
         // Get client info
-        const client = project.clientId as any;
+        const client = project.clientId as unknown as IClient;
         const clientName = client?.name || 'Unknown Client';
+
+        // Revenue status: fully paid when received == total (which it always is here),
+        // or when the override flags are set.
+        const isFullyPaid = data.markAsFullyPaid || data.adjustPhaseValue ||
+            this.roundMoney(actualReceivedINR + fxFeesINR) >= finalTotalAmountINR;
+        const revenueStatus: 'received' | 'partial' = isFullyPaid ? 'received' : 'partial';
 
         // Create Revenue entry
         const revenue = await Revenue.create({
@@ -248,21 +256,22 @@ export class PhasePaymentService {
             exchangeRate,
             exchangeRateDate: conversion.date,
             exchangeRateProvider: conversion.provider,
-            amountINR: finalBaseINR,
+            amountINR: finalBaseINR,          // base amount (without GST)
             gstApplicable,
             gstRate,
-            gst: finalGst,
+            gst: finalGst,                    // GST component extracted from received amount
             tdsDeducted: finalTds,
-            totalAmount: finalExpectedTotal,
+            totalAmount: finalTotalAmountINR, // = actualReceivedINR (gross inclusive of GST)
             receivedAmount: actualReceivedINR,
-            pendingAmount: data.markAsFullyPaid ? 0 : Math.max(0, this.roundMoney(finalExpectedTotal - actualReceivedINR)),
+            pendingAmount: 0,                 // always 0 — we record what was actually received
             fxFeesINR,
             tipINR,
             source: 'project',
-            status: (actualReceivedINR + fxFeesINR) >= finalExpectedTotal ? 'received' : 'partial',
+            status: revenueStatus,
             notes: notes || `Auto-generated from project phase payment: ${phase.name}`,
             createdBy: new Types.ObjectId(userId),
         });
+
 
         // Create BankTransaction via service so managed account balances stay in sync.
         const bankTransaction = await BankTransactionService.create({
@@ -282,7 +291,6 @@ export class PhasePaymentService {
 
         // Update phase with payment info
         const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedINR);
-        const isFullyPaid = (actualReceivedINR + fxFeesINR) >= finalExpectedTotal;
         const newPaymentStatus = isFullyPaid ? 'received' : 'partial';
 
         await Project.updateOne(
@@ -291,7 +299,7 @@ export class PhasePaymentService {
                 $set: {
                     'phases.$.paymentAmount': finalAmountOriginal,
                     'phases.$.paymentReceivedAmount': updatedReceivedAmount,
-                    'phases.$.paymentExpectedAmountINR': finalBaseINR,
+                    'phases.$.paymentExpectedAmountINR': finalTotalAmountINR,
                     'phases.$.paymentReceivedAmountINR': updatedReceivedAmount,
                     'phases.$.paymentExchangeRate': exchangeRate,
                     'phases.$.paymentExchangeRateDate': conversion.date,
@@ -312,12 +320,12 @@ export class PhasePaymentService {
             }
         );
 
-        const updatedProject = await Project.findById(project._id).lean();
+        const updatedProject = (await Project.findById(project._id).lean()) as unknown as IProject;
 
         return {
             project: updatedProject,
-            revenue: revenue.toObject(),
-            bankTransaction: bankTransaction.toObject(),
+            revenue: revenue as unknown as IRevenue,
+            bankTransaction: bankTransaction as unknown as IBankTransaction,
         };
     }
 
@@ -332,7 +340,7 @@ export class PhasePaymentService {
         receivedDate: Date,
         notes: string | undefined,
         userId: string
-    ): Promise<{ project: any; revenue: any; bankTransaction: any }> {
+    ): Promise<{ project: IProject; revenue: IRevenue; bankTransaction: IBankTransaction }> {
         // Same logic as markPhasePaymentReceived but updates status to 'partial'
         return this.markPhasePaymentReceived({
             projectId,

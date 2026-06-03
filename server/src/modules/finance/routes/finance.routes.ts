@@ -33,6 +33,7 @@ router.get('/expense-breakdown', DashboardController.getExpenseByCategory);
 router.post('/revenues', financeAdminOnly, RevenueController.create);
 router.get('/revenues', RevenueController.getAll);
 router.get('/receivables', RevenueController.getReceivables);
+router.post('/receivables/resolve-fx', financeAdminOnly, RevenueController.resolveReceivableFxRates);
 router.get('/revenues/:id', RevenueController.getById);
 router.put('/revenues/:id', financeAdminOnly, RevenueController.update);
 router.delete('/revenues/:id', financeAdminOnly, RevenueController.delete);

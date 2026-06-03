@@ -12,11 +12,11 @@ import { createArchiveSnapshot } from '../../archive/utils/archiveSnapshot.util'
 
 class LeaveService {
     private shouldConsumePaidLeave(leave: ILeave): boolean {
-        return leave.type !== 'unpaid' && leave.isPaid;
+        return leave.type !== 'unpaid' && leave.type !== 'wfh' && leave.isPaid;
     }
 
     private shouldConsumePaidLeaveByValues(type: ILeave['type'], isPaid: boolean): boolean {
-        return type !== 'unpaid' && isPaid;
+        return type !== 'unpaid' && type !== 'wfh' && isPaid;
     }
 
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
@@ -51,7 +51,7 @@ class LeaveService {
             throw new AppError('Leave dates overlap with an existing leave request', 400);
         }
 
-        const normalizedIsPaid = data.type === 'unpaid' ? false : data.isPaid;
+        const normalizedIsPaid = (data.type === 'unpaid' || data.type === 'wfh') ? false : data.isPaid;
 
         const leave = await Leave.create({
             ...data,
@@ -171,7 +171,7 @@ class LeaveService {
 
         const nextType = data.type ?? previousType;
         const requestedIsPaid = data.isPaid ?? previousIsPaid;
-        const nextIsPaid = nextType === 'unpaid' ? false : requestedIsPaid;
+        const nextIsPaid = (nextType === 'unpaid' || nextType === 'wfh') ? false : requestedIsPaid;
 
         const previousConsumesPaidBalance = this.shouldConsumePaidLeaveByValues(previousType, previousIsPaid);
         const nextConsumesPaidBalance = this.shouldConsumePaidLeaveByValues(nextType, nextIsPaid);
@@ -483,6 +483,9 @@ class LeaveService {
                 { type: 'unpaid', quota: 365, used: 0, pending: 365 },
                 { type: 'maternity', quota: 180, used: 0, pending: 180 },
                 { type: 'paternity', quota: 15, used: 0, pending: 15 },
+                { type: 'sabbatical', quota: 0, used: 0, pending: 0 },
+                { type: 'menstrual', quota: 12, used: 0, pending: 12 },
+                { type: 'wfh', quota: 0, used: 0, pending: 0 },
             ];
             balance = await LeaveBalance.create({
                 employeeId,
@@ -503,7 +506,7 @@ class LeaveService {
                     employeeId,
                     status: 'approved',
                     startDate: { $gte: startOfYear, $lte: endOfYear },
-                    type: { $ne: 'unpaid' },
+                    type: { $nin: ['unpaid', 'wfh'] },
                     $or: [{ isPaid: true }, { isPaid: { $exists: false } }, { isPaid: null }],
                 },
             },
@@ -522,7 +525,7 @@ class LeaveService {
         const startOfYear = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
         const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-        const rows = await Leave.aggregate<{ _id: 'paid' | 'unpaid'; requests: number; days: number }>([
+        const rows = await Leave.aggregate<{ _id: 'paid' | 'unpaid' | 'wfh'; requests: number; days: number }>([
             {
                 $match: {
                     employeeId,
@@ -535,12 +538,18 @@ class LeaveService {
                     days: '$days',
                     bucket: {
                         $cond: [
+                            { $eq: ['$type', 'wfh'] },
+                            'wfh',
                             {
-                                $or: [{ $eq: ['$type', 'unpaid'] }, { $eq: ['$isPaid', false] }],
-                            },
-                            'unpaid',
-                            'paid',
-                        ],
+                                $cond: [
+                                    {
+                                        $or: [{ $eq: ['$type', 'unpaid'] }, { $eq: ['$isPaid', false] }],
+                                    },
+                                    'unpaid',
+                                    'paid',
+                                ],
+                            }
+                        ]
                     },
                 },
             },
@@ -555,6 +564,7 @@ class LeaveService {
 
         const paid = rows.find((r) => r._id === 'paid');
         const unpaid = rows.find((r) => r._id === 'unpaid');
+        const wfh = rows.find((r) => r._id === 'wfh');
 
         return {
             paid: {
@@ -565,13 +575,20 @@ class LeaveService {
                 requests: unpaid?.requests ?? 0,
                 days: unpaid?.days ?? 0,
             },
+            wfh: {
+                requests: wfh?.requests ?? 0,
+                days: wfh?.days ?? 0,
+            },
             totalApprovedRequests: (paid?.requests ?? 0) + (unpaid?.requests ?? 0),
             totalApprovedDays: (paid?.days ?? 0) + (unpaid?.days ?? 0),
         };
     }
 
-    async getLeaveBalance(userId: string, year: number) {
-        const employee = await Employee.findOne({ userId });
+    async getLeaveBalance(userId: string, year: number, employeeId?: string) {
+        // Allow admin to query by employeeId directly
+        const employee = employeeId
+            ? await Employee.findById(employeeId)
+            : await Employee.findOne({ userId });
         if (!employee) {
             throw new AppError('Employee record not found', 404);
         }

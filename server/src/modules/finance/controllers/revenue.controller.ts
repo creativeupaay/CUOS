@@ -3,6 +3,9 @@ import { RevenueService } from '../services/revenue.service';
 import { Types } from 'mongoose';
 import { logger } from "../../../utils/logger";
 import { ExchangeRateService } from '../services/exchangeRate.service';
+import { Project } from '../../project/models/Project.model';
+
+const roundMoney = (value: number) => Math.round(Number(value || 0) * 100) / 100;
 
 const getAuthenticatedUserId = (req: Request) => (req as any).user?.id ?? (req as any).user?._id;
 
@@ -284,6 +287,128 @@ export class RevenueController {
             res.status(error.statusCode || 500).json({
                 success: false,
                 message: 'Failed to fetch exchange rate',
+                error: error.message,
+            });
+        }
+    }
+
+    /**
+     * Resolve FX rates for phase-payment receivables that have FX_RATE_REQUIRED warnings.
+     * POST /finance/receivables/resolve-fx
+     * Body: { resolutions: [{ projectId, phaseId, rate }] }
+     */
+    static async resolveReceivableFxRates(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = getAuthenticatedUserId(req);
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Not authenticated' });
+                return;
+            }
+
+            const { resolutions } = req.body as {
+                resolutions: Array<{ projectId: string; phaseId: string; rate: number }>;
+            };
+
+            if (!Array.isArray(resolutions) || resolutions.length === 0) {
+                res.status(400).json({ success: false, message: 'resolutions array is required and must not be empty' });
+                return;
+            }
+
+            const results: Array<{ projectId: string; phaseId: string; success: boolean; error?: string }> = [];
+
+            for (const item of resolutions) {
+                const { projectId, phaseId, rate } = item;
+
+                if (!Types.ObjectId.isValid(projectId) || !Types.ObjectId.isValid(phaseId)) {
+                    results.push({ projectId, phaseId, success: false, error: 'Invalid projectId or phaseId' });
+                    continue;
+                }
+
+                const numericRate = Number(rate);
+                if (!Number.isFinite(numericRate) || numericRate <= 0) {
+                    results.push({ projectId, phaseId, success: false, error: 'Rate must be a positive number' });
+                    continue;
+                }
+
+                try {
+                    // Load project and find the phase
+                    const project = await Project.findOne({
+                        _id: new Types.ObjectId(projectId),
+                        isArchived: false,
+                        'phases._id': new Types.ObjectId(phaseId),
+                    }).lean();
+
+                    if (!project) {
+                        results.push({ projectId, phaseId, success: false, error: 'Project or phase not found' });
+                        continue;
+                    }
+
+                    const phase = (project.phases as any[]).find(
+                        (p: any) => String(p._id) === phaseId
+                    );
+
+                    if (!phase) {
+                        results.push({ projectId, phaseId, success: false, error: 'Phase not found' });
+                        continue;
+                    }
+
+                    // Determine the original amount and currency
+                    const currency = phase.paymentCurrency || (project as any).currency || 'INR';
+                    const originalAmount = Number(
+                        phase.paymentAmount
+                        || (phase.paymentPercentage > 0 ? ((project as any).budget || 0) * phase.paymentPercentage / 100 : 0)
+                        || 0
+                    );
+
+                    if (originalAmount <= 0) {
+                        results.push({ projectId, phaseId, success: false, error: 'Phase has no payment amount configured' });
+                        continue;
+                    }
+
+                    const expectedINR = roundMoney(originalAmount * numericRate);
+                    const today = new Date().toISOString().slice(0, 10);
+
+                    await Project.updateOne(
+                        {
+                            _id: new Types.ObjectId(projectId),
+                            'phases._id': new Types.ObjectId(phaseId),
+                        },
+                        {
+                            $set: {
+                                'phases.$.paymentExchangeRate': numericRate,
+                                'phases.$.paymentExchangeRateDate': today,
+                                'phases.$.paymentFxRateSource': 'manual',
+                                'phases.$.paymentFxFallbackUsed': false,
+                                'phases.$.paymentExpectedAmountINR': expectedINR,
+                                'phases.$.paymentSettlementCurrency': 'INR',
+                                'phases.$.updatedAt': new Date(),
+                            },
+                        }
+                    );
+
+                    results.push({ projectId, phaseId, success: true });
+                } catch (innerError: any) {
+                    logger.error({ context: innerError }, `Error resolving FX for phase ${phaseId}:`);
+                    results.push({ projectId, phaseId, success: false, error: innerError.message });
+                }
+            }
+
+            const failed = results.filter((r) => !r.success);
+            if (failed.length === resolutions.length) {
+                res.status(400).json({ success: false, message: 'All resolutions failed', data: results });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: failed.length > 0 ? 'Some resolutions failed' : 'FX rates resolved successfully',
+                data: results,
+            });
+        } catch (error: any) {
+            logger.error({ context: error }, 'Error resolving receivable FX rates:');
+            res.status(500).json({
+                success: false,
+                message: 'Failed to resolve FX rates',
                 error: error.message,
             });
         }

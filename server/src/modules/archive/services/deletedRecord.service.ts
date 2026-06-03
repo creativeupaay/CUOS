@@ -193,7 +193,9 @@ export class DeletedRecordService {
                     {
                         upsert: true,
                         new: true,
-                        setDefaultsOnInsert: true,
+                        // All fields including purgeAt are explicitly provided in archivePayload,
+                        // so setDefaultsOnInsert is not needed and would call default functions
+                        // with a null `this` context when no insert occurs.
                     },
                     options.session
                 )

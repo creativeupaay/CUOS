@@ -145,6 +145,8 @@ router.post(
 );
 router.get('/leaves/me', hrmsSelfSubmoduleOnly('leaves'), leaveController.getMyLeaves);
 router.get('/leaves/balance', hrmsSelfSubmoduleOnly('leaves'), leaveController.getLeaveBalance);
+// Admin route: get leave balance for a specific employee
+router.get('/leaves/balance/employee/:employeeId', hrAdminOnly, leaveController.getLeaveBalance);
 router.get('/leaves', hrAdminOnly, leaveController.getLeaves);
 router.get('/leaves/:id', leaveController.getLeaveById);
 router.patch(

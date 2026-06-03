@@ -58,7 +58,7 @@ export interface FinanceReceivablesResponse {
         financeAmount: number;
     };
     warnings: Array<{
-        code: 'FX_LOOKUP_FAILED';
+        code: 'FX_LOOKUP_FAILED' | 'FX_RATE_REQUIRED' | 'FX_FALLBACK_USED';
         message: string;
         source: 'finance-revenue' | 'phase-payment';
         projectId?: string;
@@ -301,10 +301,10 @@ export const financeApi = api.injectEndpoints({
                 });
                 
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getRevenues' as never, undefined as never, (draft: any) => {
+                    financeApi.util.updateQueryData('getRevenues', {}, (draft) => {
                        // We do our best to optimistically remove if possible
                        if (draft?.data?.revenues) {
-                           draft.data.revenues = draft.data.revenues.filter((r: any) => r._id !== id);
+                           draft.data.revenues = draft.data.revenues.filter((r) => r._id !== id);
                        }
                     })
                 );
@@ -372,9 +372,9 @@ export const financeApi = api.injectEndpoints({
                 });
                 
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getExpenses' as never, undefined as never, (draft: any) => {
+                    financeApi.util.updateQueryData('getExpenses', {}, (draft) => {
                        if (draft?.data?.expenses) {
-                           draft.data.expenses = draft.data.expenses.filter((e: any) => e._id !== id);
+                           draft.data.expenses = draft.data.expenses.filter((e) => e._id !== id);
                        }
                     })
                 );
@@ -594,9 +594,9 @@ export const financeApi = api.injectEndpoints({
                     error: 'Failed to delete transaction',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getBankTransactions' as never, undefined as never, (draft: any) => {
+                    financeApi.util.updateQueryData('getBankTransactions', {}, (draft) => {
                        if (draft?.data?.transactions) {
-                           draft.data.transactions = draft.data.transactions.filter((t: any) => t._id !== id);
+                           draft.data.transactions = draft.data.transactions.filter((t) => t._id !== id);
                        }
                     })
                 );
@@ -610,6 +610,18 @@ export const financeApi = api.injectEndpoints({
         }),
         getExchangeRate: builder.query<{ data: { currency: string; rate: number; provider: string; date: string; isFallback: boolean } }, string>({
             query: (currency) => `/finance/exchange-rate?currency=${currency}`,
+        }),
+
+        resolveReceivableFxRates: builder.mutation<
+            { success: boolean; message: string; data: Array<{ projectId: string; phaseId: string; success: boolean; error?: string }> },
+            { resolutions: Array<{ projectId: string; phaseId: string; rate: number }> }
+        >({
+            query: (body) => ({
+                url: '/finance/receivables/resolve-fx',
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: ['Revenues', 'Projects'],
         }),
     }),
 });
@@ -648,4 +660,5 @@ export const {
     useUpdateBankAccountMutation,
     useDeleteBankTransactionMutation,
     useGetExchangeRateQuery,
+    useResolveReceivableFxRatesMutation,
 } = financeApi;

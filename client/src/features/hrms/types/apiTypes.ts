@@ -61,20 +61,34 @@ export interface ListEmployeesParams {
 // ── Salary API Types ────────────────────────────────────────────────
 export interface CreateSalaryRequest {
     employeeId: string;
-    basic: number;
+    salaryType?: 'yearly' | 'monthly';
+    compensationType?: 'salary' | 'stipend' | 'contract';
+    basic?: number;
     specialAllowance?: number;
+    annualAmount?: number;
     payoutAccountKey: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     deductions?: { pf?: number; esi?: number; tax?: number; other?: number };
     currency?: string;
-    effectiveFrom: string;
+    effectiveFrom?: string;
+    firstSalaryDate?: string;
+    monthlySchedule?: { month: number; year: number; amount: number; paymentDate: string }[];
+    additionalCompensations?: { name: string; amount: number; redeemableOn: string; isVariable?: boolean }[];
+    isDraft?: boolean;
 }
 
 export interface UpdateSalaryRequest {
+    salaryType?: 'yearly' | 'monthly';
+    compensationType?: 'salary' | 'stipend' | 'contract';
     basic?: number;
     specialAllowance?: number;
+    annualAmount?: number;
     payoutAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     deductions?: { pf?: number; esi?: number; tax?: number; other?: number };
     effectiveFrom?: string;
+    firstSalaryDate?: string;
+    monthlySchedule?: { month: number; year: number; amount: number; paymentDate: string }[];
+    additionalCompensations?: { name: string; amount: number; redeemableOn: string; isVariable?: boolean }[];
+    isDraft?: boolean;
 }
 
 // ── Leave API Types ─────────────────────────────────────────────────
@@ -91,7 +105,7 @@ export interface CreateLeaveRequest {
 export interface UpdateLeaveStatusRequest {
     status: 'approved' | 'rejected' | 'cancelled';
     rejectionReason?: string;
-    type?: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    type?: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity' | 'sabbatical' | 'menstrual' | 'wfh';
     isPaid?: boolean;
 }
 

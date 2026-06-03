@@ -268,6 +268,8 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
         receivedDate: string;
         notes?: string;
         manualExchangeRate?: number;
+        markAsFullyPaid?: boolean;
+        adjustPhaseValue?: boolean;
     }) => {
         try {
             // Mark payment as received

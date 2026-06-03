@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, DollarSign, CheckCircle2, Loader2, AlertCircle, Info } from 'lucide-react';
 import type { ProjectPhase } from '@/features/project';
-import { useGetExchangeRateQuery } from '@/features/finance/api/financeApi';
+import { useGetExchangeRateQuery } from '@/features/finance';
 
 interface PhasePaymentDialogProps {
     phase: ProjectPhase & { _id: string };
@@ -83,6 +83,7 @@ export default function PhasePaymentDialog({
     // Automatically set the received amount once we have calculated the expected INR
     useEffect(() => {
         if (receivedAmount === '' && calculatedExpectedINR > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReceivedAmount(Number(calculatedExpectedINR.toFixed(2)));
         }
     }, [calculatedExpectedINR, receivedAmount]);
@@ -122,14 +123,15 @@ export default function PhasePaymentDialog({
                 adjustPhaseValue: isOverpayment ? adjustPhaseValue : undefined,
             });
             onClose();
-        } catch (err: any) {
-            if (err?.data?.error?.code === 'FX_RATE_REQUIRED') {
+        } catch (err) {
+            const apiErr = err as { data?: { error?: { code?: string }, message?: string } };
+            if (apiErr?.data?.error?.code === 'FX_RATE_REQUIRED') {
                 setNeedsManualFxRate(true);
                 setError(`Automatic FX lookup is unavailable. Enter the INR value for 1 ${currency} to continue.`);
                 setIsSubmitting(false);
                 return;
             }
-            setError(err?.data?.message || 'Failed to mark payment as received');
+            setError(apiErr?.data?.message || 'Failed to mark payment as received');
             setIsSubmitting(false);
         }
     };
@@ -259,8 +261,7 @@ export default function PhasePaymentDialog({
                                                     className="w-4 h-4 border-2 rounded appearance-none cursor-pointer peer"
                                                     style={{ borderColor: 'var(--color-border-default)' }}
                                                 />
-                                                <CheckCircle2 size={12} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
-                                                <div className="absolute inset-0 rounded bg-[var(--color-primary)] opacity-0 peer-checked:opacity-100 pointer-events-none -z-10" />
+                                                <CheckCircle2 size={12} className="absolute opacity-0 peer-checked:opacity-100 pointer-events-none" style={{ color: 'var(--color-success)' }} />
                                             </div>
                                             <span className="text-xs leading-tight select-none pt-0.5" style={{ color: 'var(--color-text-primary)' }}>
                                                 Mark phase as fully paid? 
@@ -281,8 +282,7 @@ export default function PhasePaymentDialog({
                                                     className="w-4 h-4 border-2 rounded appearance-none cursor-pointer peer"
                                                     style={{ borderColor: 'var(--color-border-default)' }}
                                                 />
-                                                <CheckCircle2 size={12} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
-                                                <div className="absolute inset-0 rounded bg-[var(--color-primary)] opacity-0 peer-checked:opacity-100 pointer-events-none -z-10" />
+                                                <CheckCircle2 size={12} className="absolute opacity-0 peer-checked:opacity-100 pointer-events-none" style={{ color: 'var(--color-success)' }} />
                                             </div>
                                             <span className="text-xs leading-tight select-none pt-0.5" style={{ color: 'var(--color-text-primary)' }}>
                                                 Adjust phase value to match received amount?
@@ -327,7 +327,7 @@ export default function PhasePaymentDialog({
                         </label>
                         <select
                             value={bankAccountKey}
-                            onChange={(e) => setBankAccountKey(e.target.value as any)}
+                            onChange={(e) => setBankAccountKey(e.target.value as 'hdfc_gst' | 'sbi_non_gst' | 'cash')}
                             className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
                             style={{
                                 borderColor: 'var(--color-border-default)',

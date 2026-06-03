@@ -109,9 +109,9 @@ export const hrmsApi = api.injectEndpoints({
                     error: 'Failed to delete employee',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getEmployees' as never, undefined as never, (draft: any) => {
+                    hrmsApi.util.updateQueryData('getEmployees', {}, (draft) => {
                        if (draft?.data?.employees) {
-                           draft.data.employees = draft.data.employees.filter((e: any) => e._id !== id);
+                           draft.data.employees = draft.data.employees.filter((e: Employee) => e._id !== id);
                        }
                     })
                 );
@@ -161,9 +161,9 @@ export const hrmsApi = api.injectEndpoints({
                     error: 'Failed to delete announcement',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getAnnouncements' as never, undefined as never, (draft: any) => {
+                    hrmsApi.util.updateQueryData('getAnnouncements', undefined, (draft) => {
                        if (draft?.data?.announcements) {
-                           draft.data.announcements = draft.data.announcements.filter((a: any) => a._id !== id);
+                           draft.data.announcements = draft.data.announcements.filter((a: Announcement) => a._id !== id);
                        }
                     })
                 );
@@ -264,6 +264,7 @@ export const hrmsApi = api.injectEndpoints({
             leaveSummary?: {
                 paid: { requests: number; days: number };
                 unpaid: { requests: number; days: number };
+                wfh?: { requests: number; days: number };
                 totalApprovedRequests: number;
                 totalApprovedDays: number;
             };
@@ -271,6 +272,24 @@ export const hrmsApi = api.injectEndpoints({
             query: (params) => ({
                 url: '/hrms/leaves/balance',
                 params: params || {},
+            }),
+            providesTags: ['Leaves'],
+        }),
+
+        // Admin: get leave balance for a specific employee
+        getEmployeeLeaveBalance: builder.query<ApiResponse<{
+            balance: LeaveBalance[];
+            leaveSummary?: {
+                paid: { requests: number; days: number };
+                unpaid: { requests: number; days: number };
+                wfh?: { requests: number; days: number };
+                totalApprovedRequests: number;
+                totalApprovedDays: number;
+            };
+        }>, { employeeId: string; year?: number }>({
+            query: ({ employeeId, year }) => ({
+                url: `/hrms/leaves/balance/employee/${employeeId}`,
+                params: year ? { year } : {},
             }),
             providesTags: ['Leaves'],
         }),
@@ -299,9 +318,9 @@ export const hrmsApi = api.injectEndpoints({
                     error: 'Failed to delete leave',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getLeaves' as never, undefined as never, (draft: any) => {
+                    hrmsApi.util.updateQueryData('getLeaves', {}, (draft) => {
                        if (draft?.data?.leaves) {
-                           draft.data.leaves = draft.data.leaves.filter((l: any) => l._id !== id);
+                           draft.data.leaves = draft.data.leaves.filter((l: Leave) => l._id !== id);
                        }
                     })
                 );
@@ -563,9 +582,9 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
                     error: 'Failed to delete holiday',
                 });
                 const patchResult = dispatch(
-                    api.util.updateQueryData('getHolidays' as never, undefined as never, (draft: any) => {
+                    holidayApiExtension.util.updateQueryData('getHolidays', {}, (draft) => {
                        if (draft?.data?.holidays) {
-                           draft.data.holidays = draft.data.holidays.filter((h: any) => h._id !== id);
+                           draft.data.holidays = draft.data.holidays.filter((h: Holiday) => h._id !== id);
                        }
                     })
                 );
@@ -630,6 +649,8 @@ export const {
     useBulkMarkAttendanceMutation,
     useGetDailyOverviewQuery,
     useGetMonthlyAttendanceQuery,
+    // Admin leave balance
+    useGetEmployeeLeaveBalanceQuery,
 } = hrmsApi;
 
 export const {
