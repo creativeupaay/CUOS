@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import AddSalaryStructureModal from '@/components/organisms/hrms/AddSalaryStructureModal';
+import type { CreateSalaryRequest } from '@/features/hrms/types/apiTypes';
+import type { Employee, MonthlyEntry, AdditionalCompensation } from '@/features/hrms/types/types';
 
 const PAYOUT_ACCOUNT_OPTIONS = [
     { value: 'hdfc_gst', label: 'HDFC (GST)' },
@@ -24,7 +27,6 @@ const PAYOUT_ACCOUNT_OPTIONS = [
     { value: 'cash', label: 'Cash in Company' },
 ] as const;
 
-type PayoutAccountKey = (typeof PAYOUT_ACCOUNT_OPTIONS)[number]['value'];
 
 // ── Status badge helper ──────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -221,25 +223,6 @@ export default function HrmsEmployeeDetailPage() {
 
     // ── Salary modal ─────────────────────────────────────────────────
     const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
-    const [salaryForm, setSalaryForm] = useState({
-        basic: 0,
-        specialAllowance: 0,
-        payoutAccountKey: 'hdfc_gst' as PayoutAccountKey,
-        effectiveFrom: new Date().toISOString().split('T')[0],
-    });
-
-    useEffect(() => {
-        if (salary && isSalaryModalOpen) {
-            setSalaryForm({
-                basic: salary.basic || 0,
-                specialAllowance: salary.specialAllowance || 0,
-                payoutAccountKey: salary.payoutAccountKey || 'hdfc_gst',
-                effectiveFrom: salary.effectiveFrom
-                    ? salary.effectiveFrom.split('T')[0]
-                    : new Date().toISOString().split('T')[0],
-            });
-        }
-    }, [salary, isSalaryModalOpen]);
 
     const hasOpenModal = isSalaryModalOpen || editModal !== null;
     const renderModal = (content: React.ReactNode) => {
@@ -256,13 +239,12 @@ export default function HrmsEmployeeDetailPage() {
         };
     }, [hasOpenModal]);
 
-    const handleSaveSalary = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSaveSalary = async (data: Partial<CreateSalaryRequest> & { isDraft: boolean }, isDraft: boolean) => {
         try {
             if (salary) {
-                await updateSalary({ id: salary._id, data: salaryForm }).unwrap();
+                await updateSalary({ id: salary._id, data: { ...data, isDraft } }).unwrap();
             } else {
-                await createSalary({ employeeId: id!, ...salaryForm, currency: 'INR' }).unwrap();
+                await createSalary({ employeeId: id!, ...data, isDraft, currency: 'INR' } as CreateSalaryRequest).unwrap();
             }
             setIsSalaryModalOpen(false);
         } catch (err: any) {
@@ -547,6 +529,11 @@ export default function HrmsEmployeeDetailPage() {
                                 <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                                     Salary Structure
                                 </h2>
+                                {salary?.isDraft && (
+                                    <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full uppercase tracking-wider">
+                                        Draft
+                                    </span>
+                                )}
                             </div>
                             <button
                                 onClick={() => setIsSalaryModalOpen(true)}
@@ -560,16 +547,22 @@ export default function HrmsEmployeeDetailPage() {
                         {salary ? (
                             <div className="grid grid-cols-3 gap-4">
                                 {[
-                                    { label: 'Basic', value: salary.basic },
-                                    { label: 'Special Allowance', value: salary.specialAllowance },
+                                    { label: 'Compensation Type', value: salary.compensationType || 'Salary', isText: true },
+                                    {
+                                        label: 'Fixed Total', 
+                                        value: salary.salaryType === 'yearly' 
+                                            ? salary.annualAmount 
+                                            : salary.monthlySchedule?.reduce((acc: number, curr: MonthlyEntry) => acc + (curr.amount || 0), 0) || 0
+                                    },
                                     {
                                         label: 'Payout Account',
                                         value: PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === salary.payoutAccountKey)?.label || 'HDFC (GST)',
                                         isText: true,
                                     },
                                     {
-                                        label: 'Gross Total',
-                                        value: salary.basic + salary.specialAllowance,
+                                        label: 'Gross Total (CTC)',
+                                        value: (salary.salaryType === 'yearly' ? (salary.annualAmount || 0) : (salary.monthlySchedule?.reduce((acc: number, curr: MonthlyEntry) => acc + (curr.amount || 0), 0) || 0)) +
+                                               (salary.additionalCompensations?.reduce((acc: number, curr: AdditionalCompensation) => acc + (curr.amount || 0), 0) || 0),
                                         highlight: true,
                                     },
                                 ].map(({ label, value, highlight, isText }) => (
@@ -580,22 +573,24 @@ export default function HrmsEmployeeDetailPage() {
                                     >
                                         <div className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
                                         <div
-                                            className="text-base font-semibold tabular-nums"
+                                            className="text-base font-semibold tabular-nums capitalize"
                                             style={{ color: highlight ? 'var(--color-primary)' : 'var(--color-text-primary)' }}
                                         >
                                             {isText ? value : `₹${Number(value).toLocaleString('en-IN')}`}
                                         </div>
                                     </div>
                                 ))}
-                                <div
-                                    className="rounded-lg p-3"
-                                    style={{ backgroundColor: 'var(--color-bg-subtle)' }}
-                                >
-                                    <div className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Effective From</div>
-                                    <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                        {new Date(salary.effectiveFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {salary.salaryType === 'yearly' && salary.effectiveFrom && (
+                                    <div
+                                        className="rounded-lg p-3"
+                                        style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+                                    >
+                                        <div className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Effective From</div>
+                                        <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                            {new Date(salary.effectiveFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         ) : (
                             <p className="text-sm py-2" style={{ color: 'var(--color-text-muted)' }}>
@@ -798,137 +793,14 @@ export default function HrmsEmployeeDetailPage() {
             </div>
 
             {/* ── Salary Modal ────────────────────────────────────── */}
-            {isSalaryModalOpen && renderModal(
-                <div className="modal-overlay">
-
-                    <div
-                        className="w-full max-w-md rounded-xl border p-5 shadow-xl"
-                        style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
-                    >
-                        <div className="flex justify-between items-center mb-5">
-                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {salary ? 'Edit Salary Structure' : 'Add Salary Structure'}
-                            </h2>
-                            <button
-                                onClick={() => setIsSalaryModalOpen(false)}
-                                className="p-1 rounded-md hover:bg-gray-100 cursor-pointer"
-                            >
-                                <X size={18} style={{ color: 'var(--color-text-muted)' }} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleSaveSalary} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                {([
-                                    ['basic', 'Basic (₹)', true],
-                                    ['specialAllowance', 'Special Allowance (₹)', false],
-                                ] as const).map(([key, label, required]) => (
-                                    <div key={key}>
-                                        <label
-                                            className="block text-xs font-medium mb-1.5"
-                                            style={{ color: 'var(--color-text-secondary)' }}
-                                        >
-                                            {label}{required ? ' *' : ''}
-                                        </label>
-                                        <input
-                                            type="number"
-                                            required={required}
-                                            min="0"
-                                            value={salaryForm[key]}
-                                            onChange={(e) => setSalaryForm({ ...salaryForm, [key]: Number(e.target.value) })}
-                                            className="w-full px-3 py-2.5 text-sm rounded-lg border"
-                                            style={{
-                                                borderColor: 'var(--color-border-default)',
-                                                backgroundColor: 'var(--color-bg-surface)',
-                                                color: 'var(--color-text-primary)',
-                                            }}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div>
-                                <label
-                                    className="block text-xs font-medium mb-1.5"
-                                    style={{ color: 'var(--color-text-secondary)' }}
-                                >
-                                    Salary Paid From *
-                                </label>
-                                <select
-                                    required
-                                    value={salaryForm.payoutAccountKey}
-                                    onChange={(e) => setSalaryForm({ ...salaryForm, payoutAccountKey: e.target.value as typeof salaryForm.payoutAccountKey })}
-                                    className="w-full px-3 py-2.5 text-sm rounded-lg border"
-                                    style={inputStyle}
-                                >
-                                    {PAYOUT_ACCOUNT_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Gross preview */}
-                            <div
-                                className="rounded-lg px-4 py-3 flex justify-between items-center"
-                                style={{ backgroundColor: '#F0FDF4' }}
-                            >
-                                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                    Gross Total
-                                </span>
-                                <span className="text-base font-bold tabular-nums" style={{ color: '#16A34A' }}>
-                                    ₹{(salaryForm.basic + salaryForm.specialAllowance).toLocaleString('en-IN')}
-                                </span>
-                            </div>
-
-                            <div>
-                                <label
-                                    className="block text-xs font-medium mb-1.5"
-                                    style={{ color: 'var(--color-text-secondary)' }}
-                                >
-                                    Effective From *
-                                </label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={salaryForm.effectiveFrom}
-                                    onChange={(e) => setSalaryForm({ ...salaryForm, effectiveFrom: e.target.value })}
-                                    className="w-full px-3 py-2.5 text-sm rounded-lg border"
-                                    style={{
-                                        borderColor: 'var(--color-border-default)',
-                                        backgroundColor: 'var(--color-bg-surface)',
-                                        color: 'var(--color-text-primary)',
-                                    }}
-                                />
-                            </div>
-
-                            <div className="pt-2 flex gap-3">
-                                <button
-                                    type="submit"
-                                    disabled={isCreatingSalary || isUpdatingSalary}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-60"
-                                    style={{ backgroundColor: 'var(--color-primary)' }}
-                                >
-                                    {(isCreatingSalary || isUpdatingSalary)
-                                        ? <Loader2 size={15} className="animate-spin" />
-                                        : <DollarSign size={15} />}
-                                    Save Salary
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsSalaryModalOpen(false)}
-                                    className="px-4 py-2.5 text-sm font-medium rounded-lg border cursor-pointer"
-                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
+            <AddSalaryStructureModal 
+                isOpen={isSalaryModalOpen} 
+                onClose={() => setIsSalaryModalOpen(false)} 
+                employee={employee as Employee} 
+                existingSalary={salary} 
+                onSave={handleSaveSalary} 
+                isSaving={isCreatingSalary || isUpdatingSalary} 
+            />
             {/* ── Personal Info Edit Modal ─────────────────────────── */}
             {editModal === 'personal' && renderModal(
                 <div className="modal-overlay">

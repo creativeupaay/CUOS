@@ -5,6 +5,7 @@ import {
     useCreateLeaveMutation,
     useUpdateLeaveStatusMutation,
     useDeleteLeaveMutation,
+    useGetEmployeeLeaveBalanceQuery,
 } from '@/features/hrms/hrmsApi';
 import {
     Plus, X, Check, XCircle, Clock, Calendar, ChevronRight,
@@ -13,7 +14,7 @@ import {
 import ModalPortal from '@/components/ui/ModalPortal';
 
 // ── Types ────────────────────────────────────────────────────────────
-const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity'] as const;
+const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity', 'sabbatical', 'menstrual', 'wfh'] as const;
 type LeaveType = typeof LEAVE_TYPES[number];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -34,6 +35,9 @@ function typeCfg(t: string) {
         unpaid: { bg: '#F3E8FF', color: '#6B21A8' },
         maternity: { bg: '#FCE7F3', color: '#9D174D' },
         paternity: { bg: '#FFEDD5', color: '#9A3412' },
+        sabbatical: { bg: '#F3E8FF', color: '#6B21A8' },
+        menstrual: { bg: '#FEE2E2', color: '#991B1B' },
+        wfh: { bg: '#FEF3C7', color: '#B45309' },
     };
     return m[t] || { bg: '#F3F4F6', color: '#6B7280' };
 }
@@ -708,22 +712,29 @@ function ApplyLeaveModal({ onClose }: { onClose: () => void }) {
     );
 }
 
-// ── Employee Leave Detail View ────────────────────────────────────────
+// ── Employee Leave Detail View ───────────────────────────────────────────────
 function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) {
-    const { data, isLoading } = useGetLeavesQuery({ employeeId: emp._id });
-    const leaves = (data?.data?.leaves || []) as any[];
     const currentYear = new Date().getFullYear();
-    const approvedThisYear = leaves.filter((l: any) => l.status === 'approved' && new Date(l.startDate).getFullYear() === currentYear);
+    const { data, isLoading } = useGetLeavesQuery({ employeeId: emp._id });
+    const { data: balanceData } = useGetEmployeeLeaveBalanceQuery(
+        { employeeId: emp._id, year: currentYear },
+        { refetchOnMountOrArgChange: true }
+    );
 
-    const totalPaid = approvedThisYear
-        .filter((l: any) => (l.isPaid !== false) && l.type !== 'unpaid')
-        .reduce((s: number, l: any) => s + l.days, 0);
-    const totalUnpaid = approvedThisYear
-        .filter((l: any) => (l.isPaid === false) || l.type === 'unpaid')
-        .reduce((s: number, l: any) => s + l.days, 0);
+    const leaves = (data?.data?.leaves || []) as any[];
+    const balanceArr = (balanceData?.data?.balance || []) as any[];
+    const leaveSummary = balanceData?.data?.leaveSummary;
+
+    // Use real balance data from LeaveBalance model (synced by backend)
+    const earnedBalance = balanceArr.find((b: any) => b.type === 'earned');
+    const paidQuota = earnedBalance?.quota ?? (emp as any).paidLeavesPerYear ?? 12;
+    const totalPaid = earnedBalance?.used ?? leaveSummary?.paid?.days ?? 0;
+    const paidRemaining = earnedBalance?.pending ?? Math.max(0, paidQuota - totalPaid);
+
+    // WFH is separate — not paid or unpaid leave
+    const totalUnpaid = leaveSummary?.unpaid?.days ?? 0;
+    const totalWfh = leaveSummary?.wfh?.days ?? 0;
     const pending = leaves.filter((l: any) => l.status === 'pending').length;
-    const paidQuota = (emp as any).paidLeavesPerYear ?? 12;
-    const paidRemaining = Math.max(0, paidQuota - totalPaid);
 
     return (
         <div>
@@ -754,11 +765,12 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
             </div>
 
             {/* Summary stats */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-5 gap-4 mb-6">
                 {[
                     { label: `Paid Leaves Remaining (${currentYear})`, value: `${paidRemaining}/${paidQuota}`, color: '#2563EB' },
                     { label: `Paid Leaves Taken (${currentYear})`, value: totalPaid, color: '#16A34A' },
                     { label: `Unpaid Leaves Taken (${currentYear})`, value: totalUnpaid, color: '#EF4444' },
+                    { label: `WFH Days (${currentYear})`, value: totalWfh, color: '#B45309' },
                     { label: 'Pending Requests', value: pending, color: '#F59E0B' },
                 ].map(({ label, value, color }) => (
                     <div
@@ -805,15 +817,24 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
                                     </td>
                                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                     <td className="px-4 py-3">
-                                        <span
-                                            className="text-xs font-medium px-2 py-0.5 rounded-full"
-                                            style={{
-                                                backgroundColor: leave.isPaid ? '#DCFCE7' : '#FEE2E2',
-                                                color: leave.isPaid ? '#15803D' : '#991B1B',
-                                            }}
-                                        >
-                                            {leave.isPaid ? 'Paid' : 'Unpaid'}
-                                        </span>
+                                        {leave.type === 'wfh' ? (
+                                            <span
+                                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                                style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}
+                                            >
+                                                WFH
+                                            </span>
+                                        ) : (
+                                            <span
+                                                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                                style={{
+                                                    backgroundColor: leave.isPaid ? '#DCFCE7' : '#FEE2E2',
+                                                    color: leave.isPaid ? '#15803D' : '#991B1B',
+                                                }}
+                                            >
+                                                {leave.isPaid ? 'Paid' : 'Unpaid'}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 text-sm max-w-[180px] truncate" style={{ color: 'var(--color-text-muted)' }}>
                                         {leave.reason}
@@ -1136,15 +1157,24 @@ export default function HrmsLeavesPage() {
                                                 </td>
                                                 <td className="px-4 py-3"><LeaveBadge type={leave.type} /></td>
                                                 <td className="px-4 py-3">
-                                                    <span
-                                                        className="text-xs font-medium px-2 py-0.5 rounded-full"
-                                                        style={{
-                                                            backgroundColor: leave.isPaid ? '#DCFCE7' : '#FEE2E2',
-                                                            color: leave.isPaid ? '#15803D' : '#991B1B',
-                                                        }}
-                                                    >
-                                                        {leave.isPaid !== false ? 'Paid' : 'Unpaid'}
-                                                    </span>
+                                                    {leave.type === 'wfh' ? (
+                                                        <span
+                                                            className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                                            style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}
+                                                        >
+                                                            WFH
+                                                        </span>
+                                                    ) : (
+                                                        <span
+                                                            className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                                            style={{
+                                                                backgroundColor: leave.isPaid ? '#DCFCE7' : '#FEE2E2',
+                                                                color: leave.isPaid ? '#15803D' : '#991B1B',
+                                                            }}
+                                                        >
+                                                            {leave.isPaid !== false ? 'Paid' : 'Unpaid'}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                     {formatLeaveDateRange(leave.startDate, leave.endDate, false)}

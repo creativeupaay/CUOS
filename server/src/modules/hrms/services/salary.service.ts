@@ -16,6 +16,12 @@ class SalaryService {
             hra: 0,
             da: 0,
             payoutAccountKey: data.payoutAccountKey || 'hdfc_gst',
+            salaryType: data.salaryType || 'yearly',
+            compensationType: data.compensationType || 'salary',
+            annualAmount: data.annualAmount || 0,
+            monthlySchedule: data.monthlySchedule || [],
+            additionalCompensations: data.additionalCompensations?.map(c => ({ ...c, redeemableOn: new Date(c.redeemableOn) })) || [],
+            isDraft: data.isDraft || false,
         });
 
         return salary;
@@ -85,6 +91,18 @@ class SalaryService {
         if (data.basic !== undefined) salary.basic = data.basic;
         if (data.specialAllowance !== undefined) salary.specialAllowance = data.specialAllowance;
         if (data.payoutAccountKey !== undefined) salary.payoutAccountKey = data.payoutAccountKey;
+        if (data.salaryType !== undefined) salary.salaryType = data.salaryType;
+        if (data.compensationType !== undefined) salary.compensationType = data.compensationType;
+        if (data.annualAmount !== undefined) salary.annualAmount = data.annualAmount;
+        if (data.isDraft !== undefined) salary.isDraft = data.isDraft;
+        if (data.monthlySchedule !== undefined) salary.monthlySchedule = data.monthlySchedule;
+        if (data.additionalCompensations !== undefined) {
+            salary.additionalCompensations = data.additionalCompensations.map(c => ({
+                ...c,
+                redeemableOn: new Date(c.redeemableOn)
+            })) as any;
+        }
+        if (data.firstSalaryDate) salary.firstSalaryDate = new Date(data.firstSalaryDate);
         if (data.hra !== undefined) salary.hra = 0;
         if (data.da !== undefined) salary.da = 0;
         if (data.deductions) {

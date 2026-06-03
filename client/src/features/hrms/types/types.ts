@@ -84,6 +84,20 @@ export interface SalaryDeductions {
 
 export type SalaryPayoutAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
 
+export interface MonthlyEntry {
+    month: number;
+    year: number;
+    amount: number;
+    paymentDate: string;
+}
+
+export interface AdditionalCompensation {
+    name: string;
+    amount: number;
+    redeemableOn: string;
+    isVariable: boolean;
+}
+
 export interface SalaryRevision {
     _id: string;
     basic: number;
@@ -96,12 +110,19 @@ export interface SalaryRevision {
 export interface SalaryStructure {
     _id: string;
     employeeId: Employee | string;
+    salaryType: 'yearly' | 'monthly';
+    compensationType: 'salary' | 'stipend' | 'contract';
     basic: number;
     specialAllowance: number;
+    annualAmount: number;
     payoutAccountKey: SalaryPayoutAccountKey;
     deductions: SalaryDeductions;
     currency: string;
     effectiveFrom: string;
+    firstSalaryDate?: string;
+    monthlySchedule: MonthlyEntry[];
+    additionalCompensations: AdditionalCompensation[];
+    isDraft: boolean;
     revisionHistory: SalaryRevision[];
     createdAt: string;
     updatedAt: string;
@@ -112,7 +133,7 @@ export interface SalaryStructure {
 export interface Leave {
     _id: string;
     employeeId: Employee | string;
-    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity' | 'sabbatical' | 'menstrual' | 'wfh';
     isPaid: boolean;
     startDate: string;
     endDate: string;

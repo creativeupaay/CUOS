@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface ILeave extends Document {
     _id: Types.ObjectId;
     employeeId: Types.ObjectId;
-    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity' | 'sabbatical' | 'menstrual' | 'wfh';
     startDate: Date;
     endDate: Date;
     days: number;
@@ -26,7 +26,7 @@ const LeaveSchema = new Schema<ILeave>(
         type: {
             type: String,
             required: true,
-            enum: ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity'],
+            enum: ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity', 'sabbatical', 'menstrual', 'wfh'],
         },
         startDate: { type: Date, required: true },
         endDate: { type: Date, required: true },

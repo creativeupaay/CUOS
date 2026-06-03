@@ -78,8 +78,10 @@ const DeletedRecordSchema = new Schema<IDeletedRecord>(
         },
         purgeAt: {
             type: Date,
-            default: function calculatePurgeAt(this: IDeletedRecord) {
-                const deletedAt = this.deletedAt ?? new Date();
+            default: function calculatePurgeAt(this: IDeletedRecord | null) {
+                // `this` can be null when Mongoose evaluates setDefaultsOnInsert
+                // in a findOneAndUpdate that matches an existing doc (no insert).
+                const deletedAt = this?.deletedAt ?? new Date();
                 return new Date(deletedAt.getTime() + ARCHIVE_RETENTION_MS);
             },
             required: true,

@@ -264,6 +264,7 @@ export const hrmsApi = api.injectEndpoints({
             leaveSummary?: {
                 paid: { requests: number; days: number };
                 unpaid: { requests: number; days: number };
+                wfh?: { requests: number; days: number };
                 totalApprovedRequests: number;
                 totalApprovedDays: number;
             };
@@ -271,6 +272,24 @@ export const hrmsApi = api.injectEndpoints({
             query: (params) => ({
                 url: '/hrms/leaves/balance',
                 params: params || {},
+            }),
+            providesTags: ['Leaves'],
+        }),
+
+        // Admin: get leave balance for a specific employee
+        getEmployeeLeaveBalance: builder.query<ApiResponse<{
+            balance: LeaveBalance[];
+            leaveSummary?: {
+                paid: { requests: number; days: number };
+                unpaid: { requests: number; days: number };
+                wfh?: { requests: number; days: number };
+                totalApprovedRequests: number;
+                totalApprovedDays: number;
+            };
+        }>, { employeeId: string; year?: number }>({
+            query: ({ employeeId, year }) => ({
+                url: `/hrms/leaves/balance/employee/${employeeId}`,
+                params: year ? { year } : {},
             }),
             providesTags: ['Leaves'],
         }),
@@ -630,6 +649,8 @@ export const {
     useBulkMarkAttendanceMutation,
     useGetDailyOverviewQuery,
     useGetMonthlyAttendanceQuery,
+    // Admin leave balance
+    useGetEmployeeLeaveBalanceQuery,
 } = hrmsApi;
 
 export const {

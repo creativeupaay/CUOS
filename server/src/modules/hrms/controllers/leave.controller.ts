@@ -83,7 +83,9 @@ export const deleteLeave = asyncHandler(async (req: Request, res: Response) => {
 export const getLeaveBalance = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
-    const result = await leaveService.getLeaveBalance(userId, year);
+    // Admin route /leaves/balance/employee/:employeeId or query param ?employeeId=
+    const employeeId = (req.params.employeeId as string | undefined) ?? (req.query.employeeId as string | undefined);
+    const result = await leaveService.getLeaveBalance(userId, year, employeeId);
 
     res.json({
         status: 'success',
