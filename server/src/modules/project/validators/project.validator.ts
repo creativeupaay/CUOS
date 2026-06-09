@@ -15,10 +15,10 @@ export const createProjectSchema = z.object({
         endDate: z.string().or(z.date()).optional(),
         deadline: z.string().or(z.date()).optional(),
 
-        budget: z.number().positive().optional(),
+        budget: z.number().nonnegative().optional(),
         currency: z.string().default('USD'),
         billingType: z.enum(['fixed', 'hourly', 'milestone']).default('fixed'),
-        hourlyRate: z.number().positive().optional(),
+        hourlyRate: z.number().nonnegative().optional(),
         defaultBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
 
         invoiceDetails: z.object({
@@ -90,10 +90,10 @@ export const updateProjectSchema = z.object({
         endDate: z.string().or(z.date()).optional(),
         deadline: z.string().or(z.date()).optional(),
 
-        budget: z.number().positive().optional(),
+        budget: z.number().nonnegative().optional(),
         currency: z.string().optional(),
         billingType: z.enum(['fixed', 'hourly', 'milestone']).optional(),
-        hourlyRate: z.number().positive().optional(),
+        hourlyRate: z.number().nonnegative().optional(),
         defaultBankAccount: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
 
         invoiceDetails: z.object({
