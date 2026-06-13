@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ILeaveBalanceItem {
-    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+    type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity' | 'sabbatical' | 'menstrual' | 'wfh';
     quota: number;
     used: number;
     pending: number;
@@ -21,7 +21,7 @@ const LeaveBalanceItemSchema = new Schema<ILeaveBalanceItem>(
         type: {
             type: String,
             required: true,
-            enum: ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity'],
+            enum: ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity', 'sabbatical', 'menstrual', 'wfh'],
         },
         quota: { type: Number, required: true, min: 0 },
         used: { type: Number, default: 0, min: 0 },

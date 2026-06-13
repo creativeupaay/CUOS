@@ -120,13 +120,29 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
         }
 
         let deduct = 0;
+        const startD = new Date(form.startDate);
         const startIsWorking =
-            new Date(form.startDate).getUTCDay() !== 0 &&
-            !holidays.some((h) => h.date.startsWith(form.startDate));
+            startD.getUTCDay() !== 0 &&
+            !holidays.some((h) => {
+                const hd = new Date(h.date);
+                return (
+                    hd.getUTCFullYear() === startD.getUTCFullYear() &&
+                    hd.getUTCMonth() === startD.getUTCMonth() &&
+                    hd.getUTCDate() === startD.getUTCDate()
+                );
+            });
+        const endD = form.endDate ? new Date(form.endDate) : null;
         const endIsWorking =
-            form.endDate &&
-            new Date(form.endDate).getUTCDay() !== 0 &&
-            !holidays.some((h) => h.date.startsWith(form.endDate));
+            endD !== null &&
+            endD.getUTCDay() !== 0 &&
+            !holidays.some((h) => {
+                const hd = new Date(h.date);
+                return (
+                    hd.getUTCFullYear() === endD.getUTCFullYear() &&
+                    hd.getUTCMonth() === endD.getUTCMonth() &&
+                    hd.getUTCDate() === endD.getUTCDate()
+                );
+            });
 
         if (form.startHalfDay && startIsWorking) deduct += 0.5;
         if (form.endHalfDay && endIsWorking && form.startDate !== form.endDate) deduct += 0.5;
@@ -162,6 +178,11 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
     };
 
     const isOverlapping = checkOverlap();
+
+    // Block submission when the user selects Paid Leave but requests more days than remaining balance.
+    // We do not silently split paid/unpaid on the client — the user must explicitly choose Unpaid instead.
+    const isExceedingBalance =
+        form.type !== 'wfh' && form.isPaid && days > 0 && days > paidRemaining;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -596,13 +617,23 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                                             <strong className="block mb-1">Note:</strong>
                                             You currently have <strong>{paidRemaining}</strong> paid leave days
                                             remaining.
-                                            {days > paidRemaining && form.isPaid && (
-                                                <span className="block mt-1 text-red-600">
-                                                    Warning: You are requesting {days - paidRemaining} more paid day(s)
-                                                    than you have left! These extra days will be treated as unpaid
-                                                    leaves.
-                                                </span>
-                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Hard block when paid days requested exceed balance */}
+                                    {isExceedingBalance && (
+                                        <div
+                                            className="p-3 rounded-lg border text-sm"
+                                            style={{
+                                                backgroundColor: '#FEF2F2',
+                                                borderColor: '#FECACA',
+                                                color: '#991B1B',
+                                            }}
+                                        >
+                                            <strong className="block mb-1">Cannot submit:</strong>
+                                            You are requesting <strong>{days}</strong> paid day(s) but only have{' '}
+                                            <strong>{paidRemaining}</strong> remaining. Switch to{' '}
+                                            <strong>Unpaid Leave</strong> or reduce the date range.
                                         </div>
                                     )}
                                 </div>
@@ -629,7 +660,7 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                             </button>
                             <button
                                 type="submit"
-                                disabled={isLoading || days === 0 || isOverlapping}
+                                disabled={isLoading || days === 0 || isOverlapping || isExceedingBalance}
                                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95"
                                 style={{ backgroundColor: 'var(--color-primary)' }}
                             >
