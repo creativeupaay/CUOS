@@ -32,6 +32,9 @@ export interface CreateProjectData {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     invoiceDetails?: any;
+    // Project-level GST configuration
+    gstApplicable?: boolean;
+    gstRate?: number;
     phases?: any[];
     assignees?: Array<{
         employeeId?: string;
@@ -68,6 +71,9 @@ export interface UpdateProjectData {
     hourlyRate?: number;
     invoiceDetails?: any;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    // Project-level GST configuration
+    gstApplicable?: boolean;
+    gstRate?: number;
     phases?: any[];
 }
 
@@ -78,6 +84,19 @@ export interface DeleteProjectOptions {
 }
 
 const roundMoney = (value: number) => Math.round(Number(value || 0) * 100) / 100;
+
+/**
+ * Compute the total budget including GST (exclusive model: GST added on top).
+ * Returns undefined if budget is not provided or GST is not applicable.
+ */
+const computeBudgetWithGst = (
+    budget?: number,
+    gstApplicable?: boolean,
+    gstRate: number = 18
+): number | undefined => {
+    if (!budget || !gstApplicable) return budget || undefined;
+    return roundMoney(budget * (1 + gstRate / 100));
+};
 
 const getIdString = (value: any): string | undefined => {
     if (!value) return undefined;
@@ -178,6 +197,14 @@ const normalizePhasePaymentFinancials = async (
             delete cleaned.gstRate;
             delete cleaned.tdsDeducted;
             return cleaned;
+        }
+
+        // Inherit project-level gstApplicable as the default when phase doesn't specify it
+        if (cleaned.gstApplicable === undefined || cleaned.gstApplicable === null) {
+            cleaned.gstApplicable = projectDraft.gstApplicable ?? true;
+        }
+        if (cleaned.gstRate === undefined || cleaned.gstRate === null) {
+            cleaned.gstRate = projectDraft.gstRate ?? 18;
         }
 
         const { amount, currency } = getPhaseExpectedAmount(cleaned, projectDraft);
@@ -788,6 +815,13 @@ export const createProject = async (
         projectData.phases = await normalizePhasePaymentFinancials(projectData, projectData.phases);
     }
 
+    // Compute and persist budgetWithGst
+    projectData.budgetWithGst = computeBudgetWithGst(
+        projectData.budget,
+        projectData.gstApplicable,
+        projectData.gstRate ?? 18
+    );
+
     const project = await Project.create(projectData);
 
     // Auto-create the client-shared "Shared Files" folder for every new project
@@ -984,6 +1018,16 @@ export const updateProject = async (
     );
 
     if (!project) return null;
+
+    // Recompute budgetWithGst whenever budget or GST settings change
+    const budgetForCompute = (dataToSave as any).budget ?? existingProject.budget;
+    const gstApplicableForCompute = (dataToSave as any).gstApplicable ?? existingProject.gstApplicable;
+    const gstRateForCompute = (dataToSave as any).gstRate ?? existingProject.gstRate ?? 18;
+    const newBudgetWithGst = computeBudgetWithGst(budgetForCompute, gstApplicableForCompute, gstRateForCompute);
+    if (newBudgetWithGst !== undefined) {
+        await Project.findByIdAndUpdate(projectId, { $set: { budgetWithGst: newBudgetWithGst } });
+        project.budgetWithGst = newBudgetWithGst;
+    }
 
     for (const transactionId of new Set(removedOrDisabledFinancials.transactionIds)) {
         await deleteBankTransactionAndAdjustBalance(transactionId);

@@ -62,6 +62,11 @@ export interface Project {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
 
+    // Project-level GST configuration
+    gstApplicable?: boolean;  // Whether GST (18%) is applicable on top of the base budget
+    gstRate?: number;         // GST rate — fixed at 18 for now
+    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true
+
     invoiceDetails?: InvoiceDetails;
 
     documents: ProjectDocument[];

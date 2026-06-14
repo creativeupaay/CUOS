@@ -488,8 +488,14 @@ export class RevenueService {
                         });
                     }
 
+                    const gstApplicable = phase.gstApplicable ?? project.gstApplicable ?? true;
+                    const gstRate = phase.gstRate ?? project.gstRate ?? 18;
+                    const gst = gstApplicable ? roundMoney((expected * gstRate) / 100) : 0;
+                    const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? 0));
+                    const totalExpected = roundMoney(expected + gst - tdsDeducted);
+
                     const received = roundMoney(Number(phase.paymentReceivedAmountINR ?? phase.paymentReceivedAmount ?? 0));
-                    const outstanding = Math.max(0, roundMoney(expected - received));
+                    const outstanding = Math.max(0, roundMoney(totalExpected - received));
                     const statusRaw = String(phase.paymentStatus || 'pending').toLowerCase();
 
                     if (outstanding <= 0 || !['pending', 'partial'].includes(statusRaw)) return null;
@@ -508,7 +514,7 @@ export class RevenueService {
                         status,
                         dueDate,
                         outstanding,
-                        expected,
+                        expected: totalExpected,
                         received,
                         currency: 'INR',
                         originalCurrency: currency,

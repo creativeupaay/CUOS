@@ -6,7 +6,7 @@ import {
 } from '@/features/project';
 import { useCreateClientMutation, useGetClientsQuery } from '@/features/client/clientApi';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Copy, DollarSign, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Copy, DollarSign, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ProjectPhase } from '@/features/project/types/types';
 import { createPortal } from 'react-dom';
@@ -1288,20 +1288,6 @@ export default function ProjectFormPage({
                                                                         className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
                                                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                                                                     />
-                                                                    {Number(phase.paymentPercentage || 0) > 0 && (
-                                                                        <div className="mt-1">
-                                                                            {Number(form.budget || 0) > 0 ? (
-                                                                                <p className="text-[10px] font-medium" style={{ color: 'var(--color-success)' }}>
-                                                                                    ≈ {phase.paymentCurrency || form.currency || 'INR'} {((Number(form.budget || 0) * Number(phase.paymentPercentage || 0)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                                                                </p>
-                                                                            ) : (
-                                                                                <p className="text-[10px] font-medium flex items-center gap-1" style={{ color: 'var(--color-warning)' }}>
-                                                                                    <AlertTriangle size={10} />
-                                                                                    Set project budget first
-                                                                                </p>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
                                                                 </div>
                                                             </div>
 
@@ -1393,6 +1379,35 @@ export default function ProjectFormPage({
                                                                     </div>
                                                                 )}
                                                             </div>
+
+                                                            {Number(phase.paymentAmount || 0) > 0 && (
+                                                                <div className="mt-4 p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                                                    <div className="flex justify-between items-center text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                        <span>Base Amount</span>
+                                                                        <span>{phase.paymentCurrency || form.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                    </div>
+                                                                    {phase.gstApplicable !== false && (
+                                                                        <div className="flex justify-between items-center text-xs font-medium mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                            <span>+ GST ({phase.gstRate || 18}%)</span>
+                                                                            <span>{phase.paymentCurrency || form.currency || 'INR'} {(Number(phase.paymentAmount || 0) * (Number(phase.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {Number(phase.tdsDeducted || 0) > 0 && (
+                                                                        <div className="flex justify-between items-center text-xs font-medium mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                            <span>- TDS Deducted</span>
+                                                                            <span style={{ color: 'var(--color-error)' }}>{phase.paymentCurrency || form.currency || 'INR'} {Number(phase.tdsDeducted || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex justify-between items-center text-xs font-bold mt-2.5 pt-2.5 border-t" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                                                                        <span>Total Billing Amount</span>
+                                                                        <span>{phase.paymentCurrency || form.currency || 'INR'} {(
+                                                                            Number(phase.paymentAmount || 0) +
+                                                                            (phase.gstApplicable !== false ? Number(phase.paymentAmount || 0) * (Number(phase.gstRate || 18) / 100) : 0) -
+                                                                            Number(phase.tdsDeducted || 0)
+                                                                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </>
                                                     )}
                                                 </div>

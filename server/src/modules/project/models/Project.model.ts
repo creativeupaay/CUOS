@@ -92,6 +92,11 @@ export interface IProject extends Document {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
 
+    // Project-level GST configuration
+    gstApplicable?: boolean;  // Whether GST (18%) is applicable on top of the base budget
+    gstRate?: number;         // GST rate — fixed at 18 (stored for future flexibility)
+    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true
+
     invoiceDetails?: IInvoiceDetails;
 
     documents: IProjectDocument[];
@@ -275,6 +280,11 @@ const ProjectSchema = new Schema<IProject>(
             type: String,
             enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
         },
+
+        // Project-level GST configuration
+        gstApplicable: { type: Boolean, default: false },
+        gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
+        budgetWithGst: { type: Number, min: 0 },
 
         invoiceDetails: InvoiceDetailsSchema,
 
