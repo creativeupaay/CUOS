@@ -3,12 +3,14 @@ import {
     useCreateProjectMutation,
     useUpdateProjectMutation,
     useGetProjectByIdQuery,
+    type ProjectPhase,
+    type CreateProjectRequest,
+    type UpdateProjectRequest,
 } from '@/features/project';
-import { useCreateClientMutation, useGetClientsQuery } from '@/features/client/clientApi';
+import { useCreateClientMutation, useGetClientsQuery, type Client } from '@/features/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Copy, DollarSign, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { ProjectPhase } from '@/features/project/types/types';
 import { createPortal } from 'react-dom';
 import CurrencyInput from 'react-currency-input-field';
 import SelectCurrency from '@/components/ui/CurrencySelect';
@@ -41,8 +43,9 @@ function QuickAddPartnerModal({
         try {
             const result = await createPartner(form).unwrap();
             onCreated(result.data.partner._id);
-        } catch (err: any) {
-            alert(err?.data?.message || 'Failed to create partner');
+        } catch (err) {
+            const apiError = err as { data?: { message?: string } };
+            alert(apiError?.data?.message || 'Failed to create partner');
         }
     };
 
@@ -147,8 +150,9 @@ function QuickAddClientModal({
                 partnerId: partnerId || undefined,
             }).unwrap();
             onCreated(result.data.client._id, result.data.client.billingDetails?.currency || form.currency);
-        } catch (err: any) {
-            alert(err?.data?.message || 'Failed to create client');
+        } catch (err) {
+            const apiError = err as { data?: { message?: string } };
+            alert(apiError?.data?.message || 'Failed to create client');
         }
     };
 
@@ -271,12 +275,12 @@ export default function ProjectFormPage({
     const user = useAppSelector((state) => state.auth.user);
     const roleName = user?.role
         ? typeof user.role === 'object'
-            ? String((user.role as any).name || '')
+            ? String((user.role as { name?: string }).name || '')
             : String(user.role)
         : '';
     const isPartnerUser = roleName.toLowerCase() === 'partner';
     const isAdminUser = ['super-admin', 'super_admin', 'admin'].includes(roleName.toLowerCase());
-    const userPartnerId = typeof user?.partnerId === 'object' ? (user.partnerId as any)?._id : user?.partnerId;
+    const userPartnerId = typeof user?.partnerId === 'object' ? (user.partnerId as { _id?: string })?._id : user?.partnerId;
 
     const { data: projectData, isLoading: isProjectLoading } = useGetProjectByIdQuery(id!, { skip: !id, refetchOnMountOrArgChange: 30 });
     const project = projectData?.data;
@@ -290,7 +294,9 @@ export default function ProjectFormPage({
     });
     const { data: partnersData, refetch: refetchPartners } = useGetPartnersQuery({ limit: 200 }, { skip: !isAdminUser });
     const partners = partnersData?.data?.partners || [];
-    const clients = (clientsData as any)?.data?.clients || clientsData?.data || [];
+    const clients = clientsData?.data && 'clients' in clientsData.data && Array.isArray(clientsData.data.clients)
+        ? clientsData.data.clients
+        : (Array.isArray(clientsData?.data) ? (clientsData.data as unknown as Client[]) : []);
 
     const [createProject, { isLoading: isCreating }] = useCreateProjectMutation();
     const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation();
@@ -329,7 +335,7 @@ export default function ProjectFormPage({
                 description: project.description || '',
                 status: project.status || 'planning',
                 priority: project.priority || 'medium',
-                clientId: typeof project.clientId === 'object' ? project.clientId._id : project.clientId || '',
+                clientId: typeof project.clientId === 'object' ? ((project.clientId as { _id?: string })?._id || '') : (project.clientId || ''),
                 startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
                 endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
                 deadline: project.deadline ? new Date(project.deadline).toISOString().split('T')[0] : '',
@@ -340,7 +346,7 @@ export default function ProjectFormPage({
                 defaultBankAccount: project.defaultBankAccount || '',
                 gstApplicable: project.gstApplicable !== false,
                 gstRate: project.gstRate || 18,
-                phases: project.phases ? project.phases.map((p: any) => ({
+                phases: project.phases ? project.phases.map((p: ProjectPhase) => ({
                     _id: p._id,
                     name: p.name,
                     status: p.status,
@@ -371,7 +377,7 @@ export default function ProjectFormPage({
                 })) : [],
             });
             const existingPartnerId =
-                typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
+                typeof project.partnerId === 'object' ? (project.partnerId as { _id?: string })?._id : project.partnerId;
             if (existingPartnerId) {
                 setSelectedPartnerId(String(existingPartnerId));
             }
@@ -450,7 +456,7 @@ export default function ProjectFormPage({
         });
     };
 
-    const handlePhaseChange = (index: number, field: keyof ProjectPhase, value: any) => {
+    const handlePhaseChange = (index: number, field: keyof ProjectPhase, value: unknown) => {
         setForm((prev) => {
             const updatedPhases = [...prev.phases];
             const currentPhase = updatedPhases[index];
@@ -470,7 +476,7 @@ export default function ProjectFormPage({
             }
 
             if (field === 'endDate' && currentPhase.hasPayment && (!currentPhase.paymentDueDate || currentPhase.paymentDueDate === currentPhase.endDate)) {
-                nextPhase.paymentDueDate = value || undefined;
+                nextPhase.paymentDueDate = (value as string) || undefined;
             }
 
             updatedPhases[index] = nextPhase;
@@ -536,7 +542,7 @@ export default function ProjectFormPage({
     const cleanPhasesForSave = (phaseList = form.phases) => phaseList
         .filter((p) => p.name.trim())
         .map((p) => {
-            const phase: any = { ...p };
+            const phase: Partial<ProjectPhase> = { ...p };
 
             if (!phase.startDate) delete phase.startDate;
             if (!phase.endDate) delete phase.endDate;
@@ -602,16 +608,16 @@ export default function ProjectFormPage({
 
         const cleanedPhases = cleanPhasesForSave();
 
-        const buildPayload = (phasesForPayload: any[]) => {
-            let nextPayload: any = {};
+        const buildPayload = (phasesForPayload: Array<Partial<ProjectPhase>>) => {
+            let nextPayload: Partial<CreateProjectRequest & UpdateProjectRequest> = {};
 
             if (mode === 'details' || !isEditing) {
                 nextPayload = {
                     ...nextPayload,
                     name: form.name.trim(),
                     description: form.description.trim() || undefined,
-                    status: form.status,
-                    priority: form.priority,
+                    status: form.status as CreateProjectRequest['status'],
+                    priority: form.priority as CreateProjectRequest['priority'],
                     clientId: form.clientId,
                     partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
                     startDate: form.startDate,
@@ -619,16 +625,18 @@ export default function ProjectFormPage({
                     deadline: form.deadline || undefined,
                     budget: form.budget !== undefined && form.budget !== '' && form.budget !== null ? Number(form.budget) : 0,
                     currency: form.currency,
-                    billingType: form.billingType,
+                    billingType: form.billingType as CreateProjectRequest['billingType'],
                     hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
-                    defaultBankAccount: form.defaultBankAccount || undefined,
+                    defaultBankAccount: form.defaultBankAccount ? (form.defaultBankAccount as CreateProjectRequest['defaultBankAccount']) : undefined,
+                    gstApplicable: form.gstApplicable,
+                    gstRate: form.gstRate,
                 };
             }
 
             if (mode === 'phases' || !isEditing) {
                 nextPayload = {
                     ...nextPayload,
-                    phases: phasesForPayload.length > 0 ? phasesForPayload : undefined,
+                    phases: phasesForPayload.length > 0 ? (phasesForPayload as unknown as CreateProjectRequest['phases'] & UpdateProjectRequest['phases']) : undefined,
                 };
             }
 
@@ -638,25 +646,26 @@ export default function ProjectFormPage({
         try {
             const payload = buildPayload(cleanedPhases);
             if (isEditing && id) {
-                await updateProject({ id, data: payload }).unwrap();
+                await updateProject({ id, data: payload as UpdateProjectRequest }).unwrap();
                 if (onSaved) {
                     onSaved();
                 } else {
                     navigate(`/projects/${id}`);
                 }
             } else {
-                const result = await createProject(payload).unwrap();
+                const result = await createProject(payload as CreateProjectRequest).unwrap();
                 navigate(`/projects/${result.data?._id || ''}`);
             }
-        } catch (err: any) {
-            const code = err?.data?.error?.code;
-            const requirements = err?.data?.error?.details?.requirements;
+        } catch (err) {
+            const apiError = err as { data?: { message?: string; error?: { code?: string; details?: { requirements?: ManualFxRateRequirement[] } } } };
+            const code = apiError?.data?.error?.code;
+            const requirements = apiError?.data?.error?.details?.requirements;
             if (code === 'FX_RATE_REQUIRED' && Array.isArray(requirements)) {
                 setManualFxRequirements(requirements);
                 setError('');
                 return;
             }
-            setError(err?.data?.message || 'Failed to save project');
+            setError(apiError?.data?.message || 'Failed to save project');
         }
     };
 
@@ -681,14 +690,14 @@ export default function ProjectFormPage({
         setManualFxRequirements([]);
 
         const cleanedPhases = cleanPhasesForSave(phasesWithManualRates);
-        let payload: any = {};
+        let payload: Partial<CreateProjectRequest & UpdateProjectRequest> = {};
         if (mode === 'details' || !isEditing) {
             payload = {
                 ...payload,
                 name: form.name.trim(),
                 description: form.description.trim() || undefined,
-                status: form.status,
-                priority: form.priority,
+                status: form.status as CreateProjectRequest['status'],
+                priority: form.priority as CreateProjectRequest['priority'],
                 clientId: form.clientId,
                 partnerId: isPartnerUser ? String(userPartnerId || '') : selectedPartnerId || undefined,
                 startDate: form.startDate,
@@ -696,32 +705,35 @@ export default function ProjectFormPage({
                 deadline: form.deadline || undefined,
                 budget: form.budget !== undefined && form.budget !== '' && form.budget !== null ? Number(form.budget) : 0,
                 currency: form.currency,
-                billingType: form.billingType,
+                billingType: form.billingType as CreateProjectRequest['billingType'],
                 hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
-                defaultBankAccount: form.defaultBankAccount || undefined,
+                defaultBankAccount: form.defaultBankAccount ? (form.defaultBankAccount as CreateProjectRequest['defaultBankAccount']) : undefined,
+                gstApplicable: form.gstApplicable,
+                gstRate: form.gstRate,
             };
         }
         if (mode === 'phases' || !isEditing) {
-            payload = { ...payload, phases: cleanedPhases.length > 0 ? cleanedPhases : undefined };
+            payload = { ...payload, phases: cleanedPhases.length > 0 ? (cleanedPhases as unknown as CreateProjectRequest['phases'] & UpdateProjectRequest['phases']) : undefined };
         }
 
         try {
             if (isEditing && id) {
-                await updateProject({ id, data: payload }).unwrap();
+                await updateProject({ id, data: payload as UpdateProjectRequest }).unwrap();
                 if (onSaved) onSaved();
                 else navigate(`/projects/${id}`);
             } else {
-                const result = await createProject(payload).unwrap();
+                const result = await createProject(payload as CreateProjectRequest).unwrap();
                 navigate(`/projects/${result.data?._id || ''}`);
             }
-        } catch (err: any) {
-            const code = err?.data?.error?.code;
-            const requirements = err?.data?.error?.details?.requirements;
+        } catch (err) {
+            const apiError = err as { data?: { message?: string; error?: { code?: string; details?: { requirements?: ManualFxRateRequirement[] } } } };
+            const code = apiError?.data?.error?.code;
+            const requirements = apiError?.data?.error?.details?.requirements;
             if (code === 'FX_RATE_REQUIRED' && Array.isArray(requirements)) {
                 setManualFxRequirements(requirements);
                 return;
             }
-            setError(err?.data?.message || 'Failed to save project');
+            setError(apiError?.data?.message || 'Failed to save project');
         }
     };
 
@@ -884,7 +896,7 @@ export default function ProjectFormPage({
                                             style={inputStyle}
                                         >
                                             <option value="">No Partner</option>
-                                            {partners.map((partner: any) => (
+                                            {partners.map((partner) => (
                                                 <option key={partner._id} value={partner._id}>
                                                     {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
                                                 </option>
@@ -909,7 +921,7 @@ export default function ProjectFormPage({
                                         value={form.clientId}
                                         onChange={(e) => {
                                             const selectedClientId = e.target.value;
-                                            const selectedClient = clients.find((c: any) => c._id === selectedClientId);
+                                            const selectedClient = clients.find((c) => c._id === selectedClientId);
 
                                             setForm({
                                                 ...form,
@@ -923,7 +935,7 @@ export default function ProjectFormPage({
                                         style={inputStyle}
                                     >
                                         <option value="">Select a client</option>
-                                        {clients.map((client: any) => (
+                                        {clients.map((client) => (
                                             <option key={client._id} value={client._id}>
                                                 {client.name} {client.companyName ? `(${client.companyName})` : ''}
                                             </option>

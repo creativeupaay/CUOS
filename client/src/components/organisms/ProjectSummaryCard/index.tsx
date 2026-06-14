@@ -12,6 +12,9 @@ export interface ProjectSummaryCardProps {
     budget?: number;
     currency?: string;
     hourlyRate?: number;
+    gstApplicable?: boolean;
+    gstRate?: number;
+    budgetWithGst?: number;
     partnerName?: string;
     client?: {
         _id: string;
@@ -32,6 +35,9 @@ export function ProjectSummaryCard({
     budget,
     currency,
     hourlyRate,
+    gstApplicable,
+    gstRate,
+    budgetWithGst,
     partnerName,
     client,
     isAdminUser,
@@ -60,8 +66,26 @@ export function ProjectSummaryCard({
                             <InfoItem label="Deadline" value={new Date(deadline).toLocaleDateString()} />
                         )}
                         <InfoItem label="Billing Type" value={billingType} capitalize />
-                        {budget && (
-                            <InfoItem label="Budget" value={`${currency || ''} ${budget.toLocaleString()}`} />
+                        {budget && !gstApplicable && (
+                            <InfoItem label="Budget" value={`${currency || ''} ${budget.toLocaleString('en-IN')}`} />
+                        )}
+                        {budget && gstApplicable && (
+                            <InfoItem
+                                label="Budget (excl. GST)"
+                                value={`${currency || ''} ${budget.toLocaleString('en-IN')}`}
+                            />
+                        )}
+                        {gstApplicable && gstRate && (
+                            <InfoItem
+                                label={`GST (${gstRate}%)`}
+                                value={budget ? `${currency || ''} ${(budget * gstRate / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            />
+                        )}
+                        {gstApplicable && (budgetWithGst ?? (budget && gstRate ? budget * (1 + gstRate / 100) : undefined)) && (
+                            <InfoItem
+                                label="Total Budget (incl. GST)"
+                                value={`${currency || ''} ${(budgetWithGst ?? (budget! * (1 + gstRate! / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            />
                         )}
                         {hourlyRate && (
                             <InfoItem label="Hourly Rate" value={`${currency || ''} ${hourlyRate}`} />
