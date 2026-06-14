@@ -522,7 +522,12 @@ async function ensureProjectInPermissions(userId: string, projectId: string, sub
     );
 }
 
-function serializeAssignee(assignee: any) {
+function serializeAssignee(assignee: any, rawAssignee?: any) {
+    const rawEmployeeId = (rawAssignee?.employeeId || assignee?.employeeId)?.toString?.() ?? '';
+    const rawPartnerEmployeeId = (rawAssignee?.partnerEmployeeId || assignee?.partnerEmployeeId)?.toString?.() ?? '';
+    const rawPartnerId = (rawAssignee?.partnerId || assignee?.partnerId)?.toString?.() ?? '';
+    const rawUserId = (rawAssignee?.userId || assignee?.userId)?.toString?.() ?? '';
+
     const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
     const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object'
         ? assignee.partnerEmployeeId
@@ -536,9 +541,17 @@ function serializeAssignee(assignee: any) {
     if (assignee?.memberType === 'partner' || partner) {
         const partnerUser = partner?.userId && typeof partner.userId === 'object' ? partner.userId : null;
 
+        const resolvedMemberId = partner?._id?.toString()
+            || rawPartnerId
+            || plainUser?._id?.toString()
+            || rawUserId
+            || assignee?.partnerId?.toString?.()
+            || assignee?.userId?.toString?.()
+            || '';
+
         return {
             ...assignee,
-            memberId: partner?._id?.toString() || assignee?.partnerId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+            memberId: resolvedMemberId,
             displayName: partnerUser?.name || partner?.contactPerson || partner?.companyName || 'Partner',
             displayEmail: partnerUser?.email || partner?.email || '',
             displayDesignation: 'Partner Admin',
@@ -550,9 +563,14 @@ function serializeAssignee(assignee: any) {
     }
 
     if (assignee?.memberType === 'partner-employee' || partnerEmployee) {
+        const resolvedMemberId = partnerEmployee?._id?.toString()
+            || rawPartnerEmployeeId
+            || assignee?.partnerEmployeeId?.toString?.()
+            || '';
+
         return {
             ...assignee,
-            memberId: partnerEmployee?._id?.toString() || assignee?.partnerEmployeeId?.toString?.() || '',
+            memberId: resolvedMemberId,
             displayName: partnerEmployee?.name || 'Partner Team Member',
             displayEmail: partnerEmployee?.email || '',
             displayDesignation: partnerEmployee?.designation || '',
@@ -563,9 +581,17 @@ function serializeAssignee(assignee: any) {
         };
     }
 
+    const resolvedMemberId = employee?._id?.toString()
+        || rawEmployeeId
+        || plainUser?._id?.toString()
+        || rawUserId
+        || assignee?.employeeId?.toString?.()
+        || assignee?.userId?.toString?.()
+        || '';
+
     return {
         ...assignee,
-        memberId: employee?._id?.toString() || assignee?.employeeId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+        memberId: resolvedMemberId,
         displayName: employeeUser?.name || plainUser?.name || 'Creative Upaay Member',
         displayEmail: employeeUser?.email || plainUser?.email || '',
         displayDesignation: employee?.designation || '',
@@ -576,12 +602,18 @@ function serializeAssignee(assignee: any) {
     };
 }
 
-function serializeProjectAssignees(project: any) {
+async function serializeProjectAssignees(project: any) {
     if (!project?.assignees) return project;
+
+    // Fetch the raw project assignee list from the database to retain original unpopulated ObjectIds
+    const rawProject = await Project.findById(project._id).select('assignees').lean();
+    const rawAssignees = rawProject?.assignees || [];
 
     return {
         ...project,
-        assignees: project.assignees.map((assignee: any) => serializeAssignee(assignee)),
+        assignees: project.assignees.map((assignee: any, idx: number) =>
+            serializeAssignee(assignee, rawAssignees[idx])
+        ),
     };
 }
 
@@ -879,7 +911,9 @@ export const getProjects = async (
         .sort({ createdAt: -1 })
         .lean();
 
-    const serializedProjects = projects.map((project: any) => serializeProjectAssignees(project));
+    const serializedProjects = await Promise.all(
+        projects.map((project: any) => serializeProjectAssignees(project))
+    );
     return attachComputedOverdueDate(serializedProjects) as any;
 };
 
@@ -914,7 +948,7 @@ export const getProjectById = async (
 
     if (!project) return null;
 
-    const serializedProject = serializeProjectAssignees(project);
+    const serializedProject = await serializeProjectAssignees(project);
     return attachComputedOverdueDate(serializedProject) as any;
 };
 
