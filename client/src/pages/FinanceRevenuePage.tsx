@@ -10,15 +10,27 @@ import {
     RevenueFilters, 
     RevenueList, 
     RevenueFormModal, 
-    DeleteRevenueModal 
+    DeleteRevenueModal,
+    DateRangeFilter,
+    type DateRange
 } from '@/components/organisms/finance';
 import type { RevenueStatusFilter, RevenueSourceFilter } from '@/components/organisms/finance/RevenueFilters';
+import { getCurrentFiscalYearRange, toDateInputValue } from '@/lib/utils/date';
 
 const FinanceRevenuePage: React.FC = () => {
     // State for filters
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<RevenueStatusFilter>('all');
     const [filterSource, setFilterSource] = useState<RevenueSourceFilter>('all');
+    
+    // Default to current fiscal year
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        const fy = getCurrentFiscalYearRange();
+        return {
+            startDate: toDateInputValue(fy.startDate),
+            endDate: toDateInputValue(fy.endDate)
+        };
+    });
 
     // State for Modals
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,7 +42,9 @@ const FinanceRevenuePage: React.FC = () => {
     const { data: revenuesData, isLoading } = useGetRevenuesQuery({ 
         search: searchQuery || undefined, 
         status: filterStatus === 'all' ? undefined : filterStatus,
-        source: filterSource === 'all' ? undefined : filterSource
+        source: filterSource === 'all' ? undefined : filterSource,
+        startDate: dateRange.startDate || undefined,
+        endDate: dateRange.endDate || undefined
     });
 
     const revenues = revenuesData?.data?.revenues || [];
@@ -86,6 +100,8 @@ const FinanceRevenuePage: React.FC = () => {
 
             {/* Content Card */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <DateRangeFilter dateRange={dateRange} onDateRangeChange={setDateRange} />
+                
                 <RevenueFilters
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}

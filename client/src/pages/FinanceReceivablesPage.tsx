@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
 import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
+import { formatCurrency, formatShortCurrency as formatCompactCurrency } from '@/features/finance/utils/currency';
 
 type ReceivableSource = 'finance-revenue' | 'phase-payment';
 type ReceivableStatus = 'pending' | 'partial' | 'overdue';
@@ -30,18 +31,7 @@ type ReceivableItem = {
     received: number;
 };
 
-const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-}).format(value);
-
-const formatCompactCurrency = (value: number) => {
-    if (Math.abs(value) >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
-    if (Math.abs(value) >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
-    if (Math.abs(value) >= 1000) return `₹${(value / 1000).toFixed(1)} K`;
-    return formatCurrency(value);
-};
+// Currency Formatters imported from @/features/finance/utils/currency
 
 const formatDate = (date: Date | null) => {
     if (!date) return 'No due date';
@@ -215,8 +205,8 @@ export default function FinanceReceivablesPage() {
                             className="w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm"
                             style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white', color: 'var(--color-text-primary)' }}
                         >
-                            <option value="all">All Dates</option>
-                            <option value="due">Not Overdue</option>
+                            <option value="all">All Status</option>
+                            <option value="due">Upcoming</option>
                             <option value="overdue">Overdue Only</option>
                         </select>
                     </div>

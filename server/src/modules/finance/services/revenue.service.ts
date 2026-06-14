@@ -490,7 +490,11 @@ export class RevenueService {
 
                     const gstApplicable = phase.gstApplicable ?? project.gstApplicable ?? true;
                     const gstRate = phase.gstRate ?? project.gstRate ?? 18;
-                    const gst = gstApplicable ? roundMoney((expected * gstRate) / 100) : 0;
+                    // Match phasePayment.service.ts convention: isGstInclusive defaults to true
+                    // (backward-compat: legacy phases without this field are treated as inclusive)
+                    const isGstInclusive: boolean = phase.isGstInclusive !== false;
+                    // Only add GST on top when it is NOT inclusive (exclusive contract: GST charged separately)
+                    const gst = (gstApplicable && !isGstInclusive) ? roundMoney((expected * gstRate) / 100) : 0;
                     const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? 0));
                     const totalExpected = roundMoney(expected + gst - tdsDeducted);
 

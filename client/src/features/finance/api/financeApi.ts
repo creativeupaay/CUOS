@@ -20,6 +20,7 @@ export interface Revenue {
     tdsDeducted: number;
     totalAmount: number;
     receivedAmount: number;
+    pendingAmount: number;
     source: 'manual' | 'invoice' | 'project';
     status: 'received' | 'pending' | 'partial' | 'overdue';
     invoiceNumber?: string;
@@ -85,6 +86,7 @@ export interface Expense {
     notes?: string;
     isRecurring: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    gstClaimable?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -148,6 +150,8 @@ export interface DashboardMetrics {
     runwayLeft: number;
     cashInBank: number;
     receivables: number;
+    moneyInBank: number;
+    gstPayable: number;
 }
 
 export interface MonthlyData {

@@ -55,3 +55,49 @@ export function formatRelative(date: string | Date | null | undefined): string {
     if (Math.abs(diffHours) < 24) return rtf.format(diffHours, 'hour');
     return rtf.format(diffDays, 'day');
 }
+
+/**
+ * Timezone-safe start of day
+ */
+export function getLocalStartOfDay(date: Date = new Date()): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+/**
+ * Timezone-safe end of day
+ */
+export function getLocalEndOfDay(date: Date = new Date()): Date {
+    const d = new Date(date);
+    d.setHours(23, 59, 59, 999);
+    return d;
+}
+
+/**
+ * Returns current Indian Fiscal Year (April 1 to March 31)
+ */
+export function getCurrentFiscalYearRange(): { startDate: Date; endDate: Date } {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const isAfterMarch = now.getMonth() >= 3; // April is 3
+    const startYear = isAfterMarch ? currentYear : currentYear - 1;
+    
+    return {
+        startDate: new Date(startYear, 3, 1, 0, 0, 0, 0),
+        endDate: new Date(startYear + 1, 2, 31, 23, 59, 59, 999)
+    };
+}
+
+/**
+ * Returns previous Indian Fiscal Year
+ */
+export function getPreviousFiscalYearRange(): { startDate: Date; endDate: Date } {
+    const { startDate } = getCurrentFiscalYearRange();
+    const startYear = startDate.getFullYear() - 1;
+    
+    return {
+        startDate: new Date(startYear, 3, 1, 0, 0, 0, 0),
+        endDate: new Date(startYear + 1, 2, 31, 23, 59, 59, 999)
+    };
+}

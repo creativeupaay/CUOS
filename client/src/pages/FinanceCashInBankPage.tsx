@@ -34,6 +34,7 @@ import {
     useUpdateOtherBankAccountMutation,
 } from '@/features/finance/api/financeApi';
 import { logger } from '@/utils/logger';
+import { formatCurrency, formatShortCurrency as formatCompactCurrency } from '@/features/finance/utils/currency';
 import type {
     BankAccountKey,
     BankAccountDetail,
@@ -96,18 +97,7 @@ const ACCOUNT_TYPE_OPTIONS: Array<{ value: OtherBankAccountRequest['accountType'
     { value: 'cash', label: 'Cash' },
 ];
 
-const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-}).format(value);
-
-const formatCompactCurrency = (value: number) => {
-    if (Math.abs(value) >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
-    if (Math.abs(value) >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
-    if (Math.abs(value) >= 1000) return `₹${(value / 1000).toFixed(1)} K`;
-    return formatCurrency(value);
-};
+// Currency Formatters imported from @/features/finance/utils/currency
 
 const ACCOUNT_TABS: { key: BankAccountKey; label: string; subtitle: string; icon: typeof Landmark }[] = [
     { key: 'hdfc_gst', label: 'HDFC (GST)', subtitle: 'GST receipts account', icon: Landmark },

@@ -26,8 +26,8 @@ export interface IPayroll extends Document {
     penaltyAmount: number;
     deductions: IPayrollDeductions;
     netSalary: number;
-    payoutAccountKey: SalaryPayoutAccountKey;
-    status: 'draft' | 'approved' | 'paid';
+    payoutAccountKey?: SalaryPayoutAccountKey;
+    status: 'draft' | 'approved' | 'paid' | 'pending_account';
     generatedBy: Types.ObjectId;
     approvedBy?: Types.ObjectId;
     paidAt?: Date;
@@ -73,12 +73,10 @@ const PayrollSchema = new Schema<IPayroll>(
         payoutAccountKey: {
             type: String,
             enum: ['hdfc_gst', 'sbi_non_gst', 'cash'],
-            required: true,
-            default: 'hdfc_gst',
         },
         status: {
             type: String,
-            enum: ['draft', 'approved', 'paid'],
+            enum: ['draft', 'approved', 'paid', 'pending_account'],
             default: 'draft',
         },
         generatedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

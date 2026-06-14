@@ -20,10 +20,13 @@ import {
     useApproveFixedExpenseMutation,
     useRejectFixedExpenseMutation,
 } from '@/features/finance/api/financeApi';
-import { useGetSalariesQuery } from '@/features/hrms/hrmsApi';
+
 import ModalPortal from '@/components/ui/ModalPortal';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { logger } from '@/utils/logger';
+import { formatCurrency, formatShortCurrency } from '@/features/finance/utils/currency';
+import { DateRangeFilter, type DateRange } from '@/components/organisms/finance';
+import { getCurrentFiscalYearRange, toDateInputValue } from '@/lib/utils/date';
 
 type ExpenseLevel = 'company' | 'project';
 type ExpenseType = 'fixed' | 'variable';
@@ -46,6 +49,7 @@ interface ExpenseFormData {
     notes?: string;
     isRecurring: boolean;
     recurringFrequency?: FixedExpenseFrequency;
+    gstClaimable: boolean;
 }
 
 interface FixedExpenseFormData {
@@ -97,24 +101,12 @@ const EXPENSE_CATEGORIES = [
     'Internet & Communication',
     'Insurance',
     'Legal & Compliance',
+    'GST Payment',
+    'Tax Payment',
     'Other',
 ];
 
-const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(value);
-};
-
-const formatShortCurrency = (value: number) => {
-    if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
-    if (value >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(1)} K`;
-    return formatCurrency(value);
-};
-
+// Format Currency imported from @/features/finance/utils/currency
 const formatDueLabel = (day: number, frequency: FixedExpenseFrequency) => {
     const suffix =
         day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
@@ -145,8 +137,10 @@ const LevelBadge = ({ level }: { level: ExpenseLevel }) => {
 };
 
 const EmptyState = () => (
-    <div className="text-center py-12">
-        <Receipt size={48} className="mx-auto mb-3" style={{ color: '#9CA3AF' }} />
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+        <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center justify-center mb-4">
+            <Receipt className="w-6 h-6" style={{ color: '#9CA3AF' }} />
+        </div>
         <p className="text-sm" style={{ color: '#6B7280' }}>No expenses found</p>
         <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>Add your first expense entry to get started</p>
     </div>
@@ -170,6 +164,16 @@ export default function FinanceExpensesPage() {
     const [filterType, setFilterType] = useState<ExpenseType | 'all'>('all');
     const [filterCategory, setFilterCategory] = useState('all');
     const [activeTab, setActiveTab] = useState<'all' | 'company' | 'project'>('all');
+    
+    // Default to current fiscal year
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        const fy = getCurrentFiscalYearRange();
+        return {
+            startDate: toDateInputValue(fy.startDate),
+            endDate: toDateInputValue(fy.endDate)
+        };
+    });
+
     const [showFixedDrawer, setShowFixedDrawer] = useState(false);
     const [renderFixedDrawer, setRenderFixedDrawer] = useState(false);
     const [isFixedDrawerVisible, setIsFixedDrawerVisible] = useState(false);
@@ -197,6 +201,7 @@ export default function FinanceExpensesPage() {
         notes: '',
         isRecurring: false,
         recurringFrequency: 'monthly',
+        gstClaimable: false,
     };
 
     const initialFixedFormData: FixedExpenseFormData = {
@@ -224,11 +229,15 @@ export default function FinanceExpensesPage() {
         type: filterType !== 'all' ? filterType : undefined,
         category: filterCategory !== 'all' ? filterCategory : undefined,
         search: searchQuery || undefined,
+        startDate: dateRange.startDate || undefined,
+        endDate: dateRange.endDate || undefined,
     });
     const { data: fixedExpensesData, isLoading: isLoadingFixedExpenses } = useGetFixedExpensesQuery();
     const { data: approvalsData, isLoading: isLoadingApprovals } = useGetFixedExpenseApprovalsQuery();
     const { data: fixedTransactionsData, isLoading: isLoadingFixedTransactions } = useGetFixedExpenseTransactionsQuery();
-    const { data: salariesData } = useGetSalariesQuery({ limit: 1000 });
+
+    // Query synced salary expenses directly (single source of truth from Expense collection)
+    const { data: salaryExpensesData } = useGetExpensesQuery({ category: 'Salaries', limit: 9999 });
     const [createExpense, { isLoading: isCreating }] = useCreateExpenseMutation();
     const [updateExpense, { isLoading: isUpdating }] = useUpdateExpenseMutation();
     const [deleteExpense] = useDeleteExpenseMutation();
@@ -245,9 +254,12 @@ export default function FinanceExpensesPage() {
     const pendingApprovalCount = approvalsData?.data?.pendingCount || 0;
 
     const totalSalaries = useMemo(() => {
-        const salariesList = salariesData?.data?.salaries || [];
-        return salariesList.reduce((sum, s) => sum + (s.basic || 0) + (s.specialAllowance || 0), 0);
-    }, [salariesData]);
+        // Use actual synced Expense records as source of truth, not HRMS Salary definitions
+        const salaryExpenses = salaryExpensesData?.data?.expenses || [];
+        return salaryExpenses
+            .filter((e) => !(e as typeof e & { isAllocated?: boolean }).isAllocated)
+            .reduce((sum, e) => sum + (e.amount || 0), 0);
+    }, [salaryExpensesData]);
 
     useEffect(() => {
         if (!approvalItems.length) return;
@@ -272,11 +284,12 @@ export default function FinanceExpensesPage() {
     }, [approvalItems]);
 
     const metrics = useMemo(() => {
+        const nonAllocated = expenses.filter((e: any) => !e.isAllocated);
         return {
-            totalExpenses: expenses.reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            projectExpenses: expenses.filter((e: any) => e.level === 'project').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            fixedCosts: expenses.filter((e: any) => e.type === 'fixed').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            variableCosts: expenses.filter((e: any) => e.type === 'variable').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
+            totalExpenses: nonAllocated.reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
+            projectExpenses: nonAllocated.filter((e: any) => e.level === 'project').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
+            fixedCosts: nonAllocated.filter((e: any) => e.type === 'fixed').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
+            variableCosts: nonAllocated.filter((e: any) => e.type === 'variable').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
         };
     }, [expenses]);
 
@@ -510,7 +523,11 @@ export default function FinanceExpensesPage() {
                 ))}
             </div>
 
-            <div className="rounded-xl border p-4" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+            <div className="rounded-xl border p-4 shadow-sm" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                <div className="-mx-4 -mt-4 mb-4 border-b border-gray-100 rounded-t-xl overflow-hidden">
+                    <DateRangeFilter dateRange={dateRange} onDateRangeChange={setDateRange} />
+                </div>
+                
                 <div className="flex items-center gap-1 mb-4 p-1 rounded-lg" style={{ backgroundColor: '#F3F4F6', width: 'fit-content' }}>
                     {(['all', 'company', 'project'] as const).map((tab) => (
                         <button
@@ -816,6 +833,17 @@ export default function FinanceExpensesPage() {
                                     className="w-full px-3 py-2 rounded-lg border text-sm"
                                     style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
                                 />
+                                {formData.vendor && (
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.gstClaimable}
+                                            onChange={(e) => setFormData({ ...formData, gstClaimable: e.target.checked })}
+                                            className="rounded border-gray-300"
+                                        />
+                                        <label className="text-sm text-gray-700">Vendor bill has claimable GST (18%)</label>
+                                    </div>
+                                )}
                             </div>
 
                             <div>
@@ -1009,7 +1037,7 @@ export default function FinanceExpensesPage() {
                                                                             color: fixedExpense.isActive ? '#166534' : '#6B7280',
                                                                         }}
                                                                     >
-                                                                        {fixedExpense.isActive ? 'Active' : 'Inactive'}
+                                                                        {fixedExpense.isActive ? 'Active' : 'Cancelled'}
                                                                     </span>
                                                                     <LevelBadge level={fixedExpense.level} />
                                                                 </div>
@@ -1033,7 +1061,7 @@ export default function FinanceExpensesPage() {
                                                                         color: fixedExpense.isActive ? '#92400E' : '#166534',
                                                                     }}
                                                                 >
-                                                                    {fixedExpense.isActive ? 'Deactivate' : 'Activate'}
+                                                                    {fixedExpense.isActive ? 'Cancel' : 'Resume'}
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleEditFixedExpense(fixedExpense)}

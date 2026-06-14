@@ -25,6 +25,7 @@ interface CreateExpenseData {
     sourceAccountKey?: BankAccountKey;
     isRecurring?: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    gstClaimable?: boolean;
     notes?: string;
     createdBy: Types.ObjectId;
 }
@@ -347,23 +348,12 @@ export class ExpenseService {
                 const employee = payroll.employeeId as any;
                 if (!employee) continue;
 
-                // Check if already synced
-                const existingExpense = await Expense.findOne({
-                    payrollId: payroll._id,
-                    isSynced: true,
-                });
-
-                if (existingExpense) {
-                    continue; // Already synced
-                }
-
-                // Get time logs for this employee in this month
+                // Step 1: Fetch time logs FIRST — we need them to know if project allocation is needed
                 const timeLogs = await TimeLog.find({
                     userId: employee.userId,
                     date: { $gte: startDate, $lte: endDate },
                 });
 
-                // Calculate total hours worked
                 const totalMinutes = timeLogs.reduce((sum, log) => sum + log.duration, 0);
                 const totalHours = totalMinutes / 60;
 
@@ -374,6 +364,23 @@ export class ExpenseService {
                     const existing = projectHoursMap.get(key) || { hours: 0, projectId: log.projectId };
                     existing.hours += log.duration / 60;
                     projectHoursMap.set(key, existing);
+                }
+
+                // Step 2: Check if project allocation already done (isAllocated: true records exist)
+                if (projectHoursMap.size > 0) {
+                    const existingAllocated = await Expense.findOne({
+                        payrollId: payroll._id,
+                        isAllocated: true,
+                    });
+                    if (existingAllocated) continue; // Project allocation already synced
+                } else {
+                    // No project time — check if company-level expense already exists
+                    const existingCompanyExpense = await Expense.findOne({
+                        payrollId: payroll._id,
+                        level: 'company',
+                        isSynced: true,
+                    });
+                    if (existingCompanyExpense) continue; // Company expense already synced
                 }
 
                 const netSalary = payroll.netSalary;
@@ -447,6 +454,7 @@ export class ExpenseService {
     }> {
         const expenses = await Expense.find({
             date: { $gte: startDate, $lte: endDate },
+            isAllocated: { $ne: true },
         }).lean();
 
         const summary = {
@@ -489,6 +497,7 @@ export class ExpenseService {
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
+                    isAllocated: { $ne: true }, // exclude allocated salaries from company totals
                 },
             },
             {
@@ -500,7 +509,12 @@ export class ExpenseService {
                     expense: { $sum: '$amount' },
                     fixed: {
                         $sum: {
-                            $cond: [{ $eq: ['$type', 'fixed'] }, '$amount', 0],
+                            $cond: [
+                                // Fixed costs: type=fixed AND not a Salary category
+                                { $and: [{ $eq: ['$type', 'fixed'] }, { $ne: ['$category', 'Salaries'] }] },
+                                '$amount',
+                                0,
+                            ],
                         },
                     },
                     variable: {
@@ -510,7 +524,12 @@ export class ExpenseService {
                     },
                     salaries: {
                         $sum: {
-                            $cond: [{ $eq: ['$category', 'Salaries'] }, '$amount', 0],
+                            $cond: [
+                                // Salaries: category=Salaries AND company-level (isAllocated already filtered out above)
+                                { $eq: ['$category', 'Salaries'] },
+                                '$amount',
+                                0,
+                            ],
                         },
                     },
                 },

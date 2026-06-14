@@ -142,7 +142,8 @@ class PayrollService {
                 other: Math.round(otherDeduction * 100) / 100,
             },
             netSalary: Math.round(netSalary * 100) / 100,
-            payoutAccountKey: salary.payoutAccountKey || 'hdfc_gst',
+            ...(salary.payoutAccountKey ? { payoutAccountKey: salary.payoutAccountKey } : {}),
+            status: salary.payoutAccountKey ? 'draft' : 'pending_account',
             generatedBy,
         });
 

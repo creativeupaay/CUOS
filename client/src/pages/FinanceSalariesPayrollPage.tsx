@@ -27,7 +27,7 @@ import {
     useUpdatePayrollStatusMutation,
     useUpdateSalaryMutation,
 } from '@/features/hrms/hrmsApi';
-
+import { formatCurrency } from '@/features/finance/utils/currency';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const PAYOUT_ACCOUNT_OPTIONS = [
     { value: 'hdfc_gst', label: 'HDFC (GST)', icon: Landmark },
@@ -43,11 +43,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
     paid: { bg: '#D1FAE5', color: '#059669', label: 'Paid' },
 };
 
-const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-}).format(value);
+// Currency Formatters imported from @/features/finance/utils/currency
 
 const buildPayDate = (month: number, year: number) => new Date(Date.UTC(year, month, 1)).toISOString().split('T')[0];
 

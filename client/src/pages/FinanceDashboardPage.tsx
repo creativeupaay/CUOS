@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     TrendingUp, TrendingDown, IndianRupee, Wallet,
     Receipt, Calendar, ChevronDown, Filter, Loader2, X, Clock3, AlertTriangle,
+    Landmark, PiggyBank,
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -12,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery, useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
+import { formatCurrency as formatFullCurrency, formatShortCurrency as formatCurrency } from '@/features/finance/utils/currency';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type FilterType = 'fiscal-year' | 'quarter' | 'month' | 'custom';
@@ -49,20 +51,7 @@ const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', '
 const QUARTERS = ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)'];
 
 // ── Format Currency ───────────────────────────────────────────────────────
-const formatCurrency = (value: number) => {
-    if (value >= 10000000) return `${(value / 10000000).toFixed(2)} Cr`;
-    if (value >= 100000) return `${(value / 100000).toFixed(2)} L`;
-    if (value >= 1000) return `${(value / 1000).toFixed(1)} K`;
-    return value.toLocaleString('en-IN');
-};
-
-const formatFullCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(value);
-};
+// Imported from @/features/finance/utils/currency
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAYS_PER_MONTH = 30.44;
@@ -242,6 +231,8 @@ export default function FinanceDashboardPage() {
         runwayLeft: 0,
         cashInBank: 0,
         receivables: 0,
+        moneyInBank: 0,
+        gstPayable: 0,
     };
 
     const monthlyData = visibleDashboardData?.data?.monthlyData || [];
@@ -505,6 +496,22 @@ export default function FinanceDashboardPage() {
             color: '#F59E0B',
             bg: '#FFFBEB',
         },
+        {
+            label: 'GST Payable',
+            value: formatCurrency(metrics.gstPayable),
+            fullValue: formatFullCurrency(metrics.gstPayable),
+            icon: Landmark,
+            color: '#EC4899',
+            bg: '#FDF2F8',
+        },
+        {
+            label: 'Money in Bank',
+            value: formatCurrency(metrics.moneyInBank),
+            fullValue: formatFullCurrency(metrics.moneyInBank),
+            icon: PiggyBank,
+            color: '#14B8A6',
+            bg: '#F0FDFA',
+        },
     ];
 
     const getFilterLabel = () => {
@@ -744,7 +751,7 @@ export default function FinanceDashboardPage() {
                 )}
 
                 {/* ── Metric Cards ────────────────────────────────────────────── */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
                     {metricCards.map((card) => (
                         <div
                             key={card.label}

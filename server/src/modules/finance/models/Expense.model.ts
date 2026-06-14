@@ -35,6 +35,7 @@ export interface IExpense extends Document {
     paymentMethod?: 'cash' | 'bank_transfer' | 'credit_card' | 'upi' | 'cheque';
     transactionRef?: string;
     bankTransactionId?: Types.ObjectId;
+    gstClaimable?: boolean;
 
     // Recurring
     isRecurring: boolean;
@@ -131,6 +132,7 @@ const ExpenseSchema = new Schema<IExpense>(
             enum: ['monthly', 'quarterly', 'yearly'],
         },
         isSynced: { type: Boolean, default: false },
+        gstClaimable: { type: Boolean, default: false },
 
         // Additional
         notes: { type: String, trim: true },

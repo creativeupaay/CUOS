@@ -7,7 +7,9 @@ import {
 } from '@/features/finance';
 import ModalPortal from '@/components/ui/ModalPortal';
 import { logger } from '@/utils/logger';
-import { formatCurrency, type Currency } from '@/features/finance/utils/currency';
+import { formatCurrency } from '@/features/finance/utils/currency';
+
+export type Currency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
 
 export interface RevenueFormModalProps {
     isOpen: boolean;

@@ -1,8 +1,7 @@
 import React from 'react';
-import { Calendar, Globe, Building2, Edit2, Trash2, Loader2, Receipt } from 'lucide-react';
+import { Calendar, Building2, Edit2, Trash2, Loader2, Receipt } from 'lucide-react';
 import { type Revenue, formatCurrency } from '@/features/finance';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
-import { Badge, type BadgeVariant } from '@/components/atoms/Badge';
 
 export interface RevenueListProps {
     revenues: Revenue[];
@@ -18,21 +17,6 @@ const EmptyState = () => (
         <p className="text-xs mt-1 text-gray-400">Add your first revenue entry to get started</p>
     </div>
 );
-
-const SourceBadge = ({ source }: { source: Revenue['source'] }) => {
-    const config: Record<Revenue['source'], { label: string; variant: BadgeVariant }> = {
-        manual: { label: 'Manual', variant: 'purple' },
-        invoice: { label: 'Invoice', variant: 'info' },
-        project: { label: 'Project', variant: 'success' },
-    };
-    const { label, variant } = config[source] || { label: source, variant: 'neutral' };
-
-    return (
-        <Badge variant={variant}>
-            {label}
-        </Badge>
-    );
-};
 
 export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, onEdit, onDelete }) => {
     if (isLoading) {
@@ -60,12 +44,12 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                     <thead>
                         <tr className="bg-gray-50">
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Date</th>
-                            <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Description</th>
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Client</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Total Amount (INR)</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Received</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">TDS</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">GST</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
-                            <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Source</th>
                             <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
                             <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                         </tr>
@@ -85,20 +69,6 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                     </div>
                                 </td>
                                 <td className="px-5 py-3">
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900">{entry.description}</p>
-                                        {entry.invoiceNumber && <p className="text-xs mt-0.5 text-gray-400">{entry.invoiceNumber}</p>}
-                                        {entry.currency !== 'INR' && (
-                                            <p className="text-xs mt-0.5 flex items-center gap-1 text-indigo-500">
-                                                <Globe size={10} />
-                                                {formatCurrency(entry.amount, entry.currency)} @ {entry.exchangeRate}
-                                                {entry.exchangeRateDate ? ` on ${new Date(entry.exchangeRateDate).toLocaleDateString('en-IN')}` : ''}
-                                                {entry.exchangeRateProvider ? ` via ${entry.exchangeRateProvider}` : ''}
-                                            </p>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-5 py-3">
                                     <div className="flex items-center gap-2">
                                         <Building2 size={14} className="text-gray-400" />
                                         <div>
@@ -107,17 +77,20 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-5 py-3 text-sm text-right font-semibold text-green-500">
+                                <td className="px-5 py-3 text-sm text-right font-semibold text-gray-900">
                                     {formatCurrency(entry.totalAmount || entry.amountINR || entry.amount)}
+                                </td>
+                                <td className="px-5 py-3 text-sm text-right font-semibold text-green-500">
+                                    {formatCurrency(entry.receivedAmount || 0)}
+                                </td>
+                                <td className="px-5 py-3 text-sm text-right text-gray-400">
+                                    {formatCurrency(entry.tdsDeducted || 0)}
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-400">
                                     {formatCurrency(entry.gst || 0)}
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-900">
                                     {formatCurrency(entry.amountINR || entry.amount || 0)}
-                                </td>
-                                <td className="px-5 py-3 text-center">
-                                    <SourceBadge source={entry.source} />
                                 </td>
                                 <td className="px-5 py-3 text-center">
                                     <StatusBadge status={entry.status} />
