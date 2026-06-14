@@ -32,6 +32,7 @@ export interface CreateProjectRequest {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     invoiceDetails?: InvoiceDetails;
     assignees?: Array<{
@@ -56,6 +57,7 @@ export interface UpdateProjectRequest {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     invoiceDetails?: InvoiceDetails;
     phases?: ProjectPhase[];

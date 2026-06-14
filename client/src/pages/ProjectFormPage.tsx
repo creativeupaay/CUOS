@@ -318,6 +318,7 @@ export default function ProjectFormPage({
         hourlyRate: '',
         defaultBankAccount: '',
         gstApplicable: true,
+        isGstInclusive: false,
         gstRate: 18,
         phases: [] as ProjectPhase[],
     });
@@ -344,7 +345,8 @@ export default function ProjectFormPage({
                 billingType: project.billingType || 'fixed',
                 hourlyRate: project.hourlyRate?.toString() || '',
                 defaultBankAccount: project.defaultBankAccount || '',
-                gstApplicable: project.gstApplicable !== false,
+                gstApplicable: project.gstApplicable !== false && project.isGstInclusive !== true,
+                isGstInclusive: project.isGstInclusive || false,
                 gstRate: project.gstRate || 18,
                 phases: project.phases ? project.phases.map((p: ProjectPhase) => ({
                     _id: p._id,
@@ -634,6 +636,7 @@ export default function ProjectFormPage({
                     hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
                     defaultBankAccount: form.defaultBankAccount ? (form.defaultBankAccount as CreateProjectRequest['defaultBankAccount']) : undefined,
                     gstApplicable: form.gstApplicable,
+                    isGstInclusive: form.isGstInclusive,
                     gstRate: form.gstRate,
                 };
             }
@@ -714,6 +717,7 @@ export default function ProjectFormPage({
                 hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : undefined,
                 defaultBankAccount: form.defaultBankAccount ? (form.defaultBankAccount as CreateProjectRequest['defaultBankAccount']) : undefined,
                 gstApplicable: form.gstApplicable,
+                isGstInclusive: form.isGstInclusive,
                 gstRate: form.gstRate,
             };
         }
@@ -1120,20 +1124,35 @@ export default function ProjectFormPage({
                             
                             {/* GST Selection Block */}
                             <div className="col-span-2 mt-2 p-3 rounded-lg border flex items-center justify-between" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
-                                <div className="flex items-center gap-2">
-                                    <input 
-                                        type="checkbox" 
-                                        id="gstApplicable"
-                                        checked={form.gstApplicable}
-                                        onChange={(e) => setForm({ ...form, gstApplicable: e.target.checked })}
-                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="gstApplicable" className="text-xs font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
-                                        GST Applicable
-                                    </label>
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="gstApplicable"
+                                            checked={form.gstApplicable}
+                                            onChange={(e) => setForm({ ...form, gstApplicable: e.target.checked, isGstInclusive: e.target.checked ? false : form.isGstInclusive })}
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <label htmlFor="gstApplicable" className="text-xs font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                            GST Applicable (Add-on)
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="isGstInclusive"
+                                            checked={form.isGstInclusive}
+                                            onChange={(e) => setForm({ ...form, isGstInclusive: e.target.checked, gstApplicable: e.target.checked ? false : form.gstApplicable })}
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <label htmlFor="isGstInclusive" className="text-xs font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                            GST Inclusive
+                                        </label>
+                                    </div>
                                 </div>
                                 
-                                {form.gstApplicable && (
+                                {(form.gstApplicable || form.isGstInclusive) && (
                                     <div className="flex items-center gap-2">
                                         <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>GST Rate:</label>
                                         <select
@@ -1151,12 +1170,30 @@ export default function ProjectFormPage({
                                 )}
                             </div>
 
-                            {form.gstApplicable && form.budget && Number(form.budget) > 0 && (
-                                <div className="col-span-2">
-                                    <div className="flex justify-between items-center px-3 py-2 mt-1 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}>
-                                        <span>Total Budget with GST:</span>
-                                        <span>{form.currency || 'INR'} {(Number(form.budget) * (1 + (form.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
+                            {(form.gstApplicable || form.isGstInclusive) && form.budget && Number(form.budget) > 0 && (
+                                <div className="col-span-2 space-y-1">
+                                    {form.gstApplicable && (
+                                        <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}>
+                                            <span>Total Budget with GST:</span>
+                                            <span>{form.currency || 'INR'} {(Number(form.budget) * (1 + (form.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    )}
+                                    {form.isGstInclusive && (
+                                        <>
+                                            <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                <span>Base Amount (Revenue):</span>
+                                                <span>{form.currency || 'INR'} {(Number(form.budget) / (1 + (form.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                <span>GST Amount:</span>
+                                                <span>{form.currency || 'INR'} {(Number(form.budget) - (Number(form.budget) / (1 + (form.gstRate || 18) / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}>
+                                                <span>Total Budget (Inclusive):</span>
+                                                <span>{form.currency || 'INR'} {Number(form.budget).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>

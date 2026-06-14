@@ -64,8 +64,9 @@ export interface Project {
 
     // Project-level GST configuration
     gstApplicable?: boolean;  // Whether GST (18%) is applicable on top of the base budget
+    isGstInclusive?: boolean; // Whether the budget provided includes GST
     gstRate?: number;         // GST rate — fixed at 18 for now
-    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true
+    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true, or just budget when isGstInclusive = true
 
     invoiceDetails?: InvoiceDetails;
 

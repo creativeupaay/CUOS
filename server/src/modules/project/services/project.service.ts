@@ -34,6 +34,7 @@ export interface CreateProjectData {
     invoiceDetails?: any;
     // Project-level GST configuration
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     phases?: any[];
     assignees?: Array<{
@@ -73,6 +74,7 @@ export interface UpdateProjectData {
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     // Project-level GST configuration
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     phases?: any[];
 }
@@ -92,10 +94,13 @@ const roundMoney = (value: number) => Math.round(Number(value || 0) * 100) / 100
 const computeBudgetWithGst = (
     budget?: number,
     gstApplicable?: boolean,
+    isGstInclusive?: boolean,
     gstRate: number = 18
 ): number | undefined => {
-    if (!budget || !gstApplicable) return budget || undefined;
-    return roundMoney(budget * (1 + gstRate / 100));
+    if (!budget) return undefined;
+    if (gstApplicable) return roundMoney(budget * (1 + gstRate / 100));
+    if (isGstInclusive) return budget;
+    return budget;
 };
 
 const getIdString = (value: any): string | undefined => {
@@ -465,11 +470,21 @@ const syncLinkedProjectFinancials = async (
             ? roundMoney(expectedAmount * storedExchangeRate)
             : roundMoney(Number(revenue?.amountINR ?? phase.paymentExpectedAmountINR ?? 0));
         const receivedAmount = roundMoney(Number(phase.paymentReceivedAmountINR ?? phase.paymentReceivedAmount ?? revenue?.receivedAmount ?? 0));
-        const gstApplicable = phase.gstApplicable ?? revenue?.gstApplicable ?? true;
-        const gstRate = phase.gstRate ?? revenue?.gstRate ?? 18;
-        const gst = gstApplicable ? roundMoney((amountINR * gstRate) / 100) : 0;
+        const gstApplicable = phase.gstApplicable ?? revenue?.gstApplicable ?? project.gstApplicable ?? true;
+        const isGstInclusive = phase.isGstInclusive ?? revenue?.isGstInclusive ?? project.isGstInclusive ?? false;
+        const gstRate = phase.gstRate ?? revenue?.gstRate ?? project.gstRate ?? 18;
+        
+        let gst = 0;
+        let baseAmountINR = amountINR;
+        if (gstApplicable) {
+            gst = roundMoney((amountINR * gstRate) / 100);
+        } else if (isGstInclusive) {
+            baseAmountINR = roundMoney(amountINR / (1 + gstRate / 100));
+            gst = roundMoney(amountINR - baseAmountINR);
+        }
+        
         const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? revenue?.tdsDeducted ?? 0));
-        const totalAmount = roundMoney(amountINR + gst - tdsDeducted);
+        const totalAmount = roundMoney(baseAmountINR + gst - tdsDeducted);
         const dueDate = phase.paymentDueDate || phase.endDate;
         const description = `Payment for ${project.name} - ${phase.name}`;
 
@@ -482,8 +497,9 @@ const syncLinkedProjectFinancials = async (
             revenue.exchangeRate = hasStoredExchangeRate ? storedExchangeRate : revenue.exchangeRate;
             revenue.exchangeRateDate = exchangeRateDate ? new Date(exchangeRateDate) : revenue.exchangeRateDate;
             revenue.exchangeRateProvider = revenue.exchangeRateProvider || 'frankfurter';
-            revenue.amountINR = amountINR;
+            revenue.amountINR = baseAmountINR;
             revenue.gstApplicable = gstApplicable;
+            revenue.isGstInclusive = isGstInclusive;
             revenue.gstRate = gstRate;
             revenue.gst = gst;
             revenue.tdsDeducted = tdsDeducted;
@@ -819,6 +835,7 @@ export const createProject = async (
     projectData.budgetWithGst = computeBudgetWithGst(
         projectData.budget,
         projectData.gstApplicable,
+        projectData.isGstInclusive,
         projectData.gstRate ?? 18
     );
 
@@ -1022,8 +1039,9 @@ export const updateProject = async (
     // Recompute budgetWithGst whenever budget or GST settings change
     const budgetForCompute = (dataToSave as any).budget ?? existingProject.budget;
     const gstApplicableForCompute = (dataToSave as any).gstApplicable ?? existingProject.gstApplicable;
+    const isGstInclusiveForCompute = (dataToSave as any).isGstInclusive ?? existingProject.isGstInclusive;
     const gstRateForCompute = (dataToSave as any).gstRate ?? existingProject.gstRate ?? 18;
-    const newBudgetWithGst = computeBudgetWithGst(budgetForCompute, gstApplicableForCompute, gstRateForCompute);
+    const newBudgetWithGst = computeBudgetWithGst(budgetForCompute, gstApplicableForCompute, isGstInclusiveForCompute, gstRateForCompute);
     if (newBudgetWithGst !== undefined) {
         await Project.findByIdAndUpdate(projectId, { $set: { budgetWithGst: newBudgetWithGst } });
         project.budgetWithGst = newBudgetWithGst;

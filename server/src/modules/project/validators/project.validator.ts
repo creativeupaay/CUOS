@@ -23,6 +23,7 @@ export const createProjectSchema = z.object({
 
         // Project-level GST configuration
         gstApplicable: z.boolean().optional(),
+        isGstInclusive: z.boolean().optional(),
         gstRate: z.number().min(0).max(28).optional(),
 
         invoiceDetails: z.object({
@@ -102,6 +103,7 @@ export const updateProjectSchema = z.object({
 
         // Project-level GST configuration
         gstApplicable: z.boolean().optional(),
+        isGstInclusive: z.boolean().optional(),
         gstRate: z.number().min(0).max(28).optional(),
 
         invoiceDetails: z.object({

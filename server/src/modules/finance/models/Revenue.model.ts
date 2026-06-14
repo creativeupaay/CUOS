@@ -20,6 +20,7 @@ export interface IRevenue extends Document {
 
     // Tax details
     gstApplicable: boolean;
+    isGstInclusive?: boolean;
     gstRate: number; // 5, 12, 18, or 28
     gst: number;
     tdsDeducted: number;

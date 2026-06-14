@@ -94,8 +94,9 @@ export interface IProject extends Document {
 
     // Project-level GST configuration
     gstApplicable?: boolean;  // Whether GST (18%) is applicable on top of the base budget
+    isGstInclusive?: boolean; // Whether the budget provided includes GST
     gstRate?: number;         // GST rate — fixed at 18 (stored for future flexibility)
-    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true
+    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true, or just budget when isGstInclusive = true
 
     invoiceDetails?: IInvoiceDetails;
 
@@ -283,6 +284,7 @@ const ProjectSchema = new Schema<IProject>(
 
         // Project-level GST configuration
         gstApplicable: { type: Boolean, default: false },
+        isGstInclusive: { type: Boolean, default: false },
         gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
         budgetWithGst: { type: Number, min: 0 },
 
