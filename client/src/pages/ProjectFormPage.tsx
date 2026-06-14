@@ -311,6 +311,8 @@ export default function ProjectFormPage({
         billingType: 'fixed' as string,
         hourlyRate: '',
         defaultBankAccount: '',
+        gstApplicable: true,
+        gstRate: 18,
         phases: [] as ProjectPhase[],
     });
 
@@ -336,6 +338,8 @@ export default function ProjectFormPage({
                 billingType: project.billingType || 'fixed',
                 hourlyRate: project.hourlyRate?.toString() || '',
                 defaultBankAccount: project.defaultBankAccount || '',
+                gstApplicable: project.gstApplicable !== false,
+                gstRate: project.gstRate || 18,
                 phases: project.phases ? project.phases.map((p: any) => ({
                     _id: p._id,
                     name: p.name,
@@ -1096,6 +1100,48 @@ export default function ProjectFormPage({
                                     <option value="cash">Cash</option>
                                 </select>
                             </div>
+                            
+                            {/* GST Selection Block */}
+                            <div className="col-span-2 mt-2 p-3 rounded-lg border flex items-center justify-between" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        id="gstApplicable"
+                                        checked={form.gstApplicable}
+                                        onChange={(e) => setForm({ ...form, gstApplicable: e.target.checked })}
+                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <label htmlFor="gstApplicable" className="text-xs font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                        GST Applicable
+                                    </label>
+                                </div>
+                                
+                                {form.gstApplicable && (
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>GST Rate:</label>
+                                        <select
+                                            value={form.gstRate || 18}
+                                            onChange={(e) => setForm({ ...form, gstRate: Number(e.target.value) })}
+                                            className="px-2 py-1 rounded border text-xs outline-none"
+                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
+                                        >
+                                            <option value={18}>18%</option>
+                                            <option value={12}>12%</option>
+                                            <option value={5}>5%</option>
+                                            <option value={0}>0%</option>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+
+                            {form.gstApplicable && form.budget && Number(form.budget) > 0 && (
+                                <div className="col-span-2">
+                                    <div className="flex justify-between items-center px-3 py-2 mt-1 rounded text-xs font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-primary)' }}>
+                                        <span>Total Budget with GST:</span>
+                                        <span>{form.currency || 'INR'} {(Number(form.budget) * (1 + (form.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
