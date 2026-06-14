@@ -1133,22 +1133,31 @@ export const removeAssignee = async (
 
     // Pull the project completely from the user's personal modulePermissions
     // This ensures it is hidden from the user's dashboard
-    if (assigneeToRemove?.memberType === 'employee' && assigneeToRemove.employeeId) {
-        const employee = await Employee.findById(assigneeToRemove.employeeId);
-        if (!employee) {
-            return getProjectById(projectId) as any;
+    if (assigneeToRemove?.memberType === 'employee') {
+        // Resolve the userId to clean from modulePermissions.
+        // The employee record might not exist if they were hard-deleted from the platform.
+        let userIdToClean: string | null = null;
+
+        if (assigneeToRemove.employeeId) {
+            const employee = await Employee.findById(assigneeToRemove.employeeId)
+                .select('userId').lean();
+            userIdToClean = employee
+                ? (employee.userId as any)?.toString?.() ?? null
+                : assigneeToRemove.userId?.toString?.() ?? null;
+        } else {
+            userIdToClean = assigneeToRemove.userId?.toString?.() ?? null;
         }
 
-        await User.updateOne(
-            { _id: employee.userId },
-            {
-                $pull: {
-                    'modulePermissions.projectManagement.projectPermissions': { projectId }
+        if (userIdToClean) {
+            await User.updateOne(
+                { _id: userIdToClean },
+                {
+                    $pull: {
+                        'modulePermissions.projectManagement.projectPermissions': { projectId }
+                    }
                 }
-            }
-        );
-
-        return getProjectById(projectId) as any;
+            );
+        }
     }
     return getProjectById(projectId) as any;
 };

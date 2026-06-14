@@ -445,6 +445,7 @@ export const deactivateUser = async (id: string, adminId: string) => {
     }
 
     const partner = await Partner.findOne({ userId: id }).select('_id').lean();
+    const employee = await Employee.findOne({ userId: id }).select('_id').lean();
 
     if (partner) {
         const partnerService = new PartnerService();
@@ -453,6 +454,10 @@ export const deactivateUser = async (id: string, adminId: string) => {
         user.isActive = false;
         await user.save();
     }
+
+    // Remove user's presence from project assignees, meetings, tasks etc.
+    // so they no longer appear as ghost members in the UI.
+    await cleanupUserMemberships(id, employee?._id?.toString());
 
     await AuditLog.create({
         userId: adminId,
