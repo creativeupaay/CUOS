@@ -1511,7 +1511,11 @@ export default function ProjectFormPage({
                                                                 <div className="mt-4 p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
                                                                     <div className="flex justify-between items-center text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                                                                         <span>Base Amount</span>
-                                                                        <span>{phase.paymentCurrency || form.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        <span>{phase.paymentCurrency || form.currency || 'INR'} {(
+                                                                            phase.gstApplicable !== false && phase.isGstInclusive !== false
+                                                                                ? Number(phase.paymentAmount || 0) / (1 + Number(phase.gstRate || 18) / 100)
+                                                                                : Number(phase.paymentAmount || 0)
+                                                                        ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                     </div>
                                                                     {phase.gstApplicable !== false && (
                                                                         <>

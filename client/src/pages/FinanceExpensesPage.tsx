@@ -257,7 +257,7 @@ export default function FinanceExpensesPage() {
         // Use actual synced Expense records as source of truth, not HRMS Salary definitions
         const salaryExpenses = salaryExpensesData?.data?.expenses || [];
         return salaryExpenses
-            .filter((e) => !(e as typeof e & { isAllocated?: boolean }).isAllocated)
+            .filter((e) => !e.isAllocated)
             .reduce((sum, e) => sum + (e.amount || 0), 0);
     }, [salaryExpensesData]);
 

@@ -87,6 +87,8 @@ export interface Expense {
     isRecurring: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
     gstClaimable?: boolean;
+    gstRate?: number;
+    isAllocated?: boolean;
     createdAt: string;
     updatedAt: string;
 }

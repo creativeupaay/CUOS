@@ -44,13 +44,13 @@ async function migratePhasePayments() {
                             projectId: project._id,
                             phaseId: phase._id,
                             source: 'project',
-                            status: 'received'
+                            status: { $in: ['received', 'partial'] }
                         });
 
                         let totalReceivedINR = 0;
                         if (revenues.length > 0) {
                             // Sum up the received amounts from revenues
-                            totalReceivedINR = revenues.reduce((sum, rev) => sum + (rev.amountINR || 0), 0);
+                            totalReceivedINR = revenues.reduce((sum, rev) => sum + (rev.receivedAmount || 0), 0);
                         } else if (phase.paymentStatus === 'received' && phase.paymentExpectedAmountINR) {
                             // Fallback for older records without revenues or if expected amount is available
                             totalReceivedINR = phase.paymentExpectedAmountINR;
@@ -66,7 +66,7 @@ async function migratePhasePayments() {
                 }
 
                 if (projectModified) {
-                    await project.save({ validateModifiedOnly: true });
+                    await project.save({ validateModifiedOnly: true, session });
                     projectsUpdated++;
                 }
             }

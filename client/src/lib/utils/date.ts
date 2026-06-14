@@ -79,8 +79,10 @@ export function getLocalEndOfDay(date: Date = new Date()): Date {
  */
 export function getCurrentFiscalYearRange(): { startDate: Date; endDate: Date } {
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const isAfterMarch = now.getMonth() >= 3; // April is 3
+    // Use Intl to get date in IST
+    const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentYear = istDate.getFullYear();
+    const isAfterMarch = istDate.getMonth() >= 3; // April is 3
     const startYear = isAfterMarch ? currentYear : currentYear - 1;
     
     return {

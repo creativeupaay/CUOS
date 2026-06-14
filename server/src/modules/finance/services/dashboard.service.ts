@@ -103,27 +103,47 @@ export class DashboardService {
             ? (ledgerResult[0].totalCredit - ledgerResult[0].totalDebit) 
             : 0;
 
-        // GST Calculations
-        const gstClaimableResult = await Expense.aggregate([
+        // GST Calculations (All-time cumulative to align with all-time cashInBank)
+        const allTimeRevenueGstResult = await Revenue.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalGST: { $sum: '$gst' },
+                },
+            },
+        ]);
+        const allTimeTotalGST = allTimeRevenueGstResult[0]?.totalGST ?? 0;
+
+        const allTimeGstClaimableResult = await Expense.aggregate([
             {
                 $match: {
-                    date: { $gte: startDate, $lte: endDate },
                     gstClaimable: true,
                 },
             },
             {
                 $group: {
                     _id: null,
-                    total: { $sum: { $multiply: ['$amount', 18 / 118] } },
+                    total: {
+                        $sum: {
+                            $multiply: [
+                                '$amount',
+                                {
+                                    $divide: [
+                                        { $ifNull: ['$gstRate', 18] },
+                                        { $add: [100, { $ifNull: ['$gstRate', 18] }] }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
                 },
             },
         ]);
-        const gstClaimable = gstClaimableResult[0]?.total ?? 0;
+        const allTimeGstClaimable = allTimeGstClaimableResult[0]?.total ?? 0;
 
-        const gstPaymentsResult = await Expense.aggregate([
+        const allTimeGstPaymentsResult = await Expense.aggregate([
             {
                 $match: {
-                    date: { $gte: startDate, $lte: endDate },
                     category: { $in: ['GST Payment', 'Tax Payment'] },
                 },
             },
@@ -134,9 +154,9 @@ export class DashboardService {
                 },
             },
         ]);
-        const gstPayments = gstPaymentsResult[0]?.total ?? 0;
+        const allTimeGstPayments = allTimeGstPaymentsResult[0]?.total ?? 0;
 
-        const gstPayable = Math.max(0, revenueSummary.totalGST - gstClaimable - gstPayments);
+        const gstPayable = Math.max(0, allTimeTotalGST - allTimeGstClaimable - allTimeGstPayments);
         const moneyInBank = cashInBank - gstPayable;
 
         // Calculate EBIDTA using de-duplicated company expense total

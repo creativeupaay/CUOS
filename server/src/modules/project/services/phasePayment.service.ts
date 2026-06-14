@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { Project, IProject, IProjectPhase } from '../models/Project.model';
 import { Revenue, IRevenue } from '../../finance/models/Revenue.model';
-import { IBankTransaction } from '../../finance/models/BankTransaction.model';
+import { BankTransaction, IBankTransaction } from '../../finance/models/BankTransaction.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
 import { ExchangeRateService } from '../../finance/services/exchangeRate.service';
 import { IClient } from '../../client/models/Client.model';
@@ -309,7 +309,7 @@ export class PhasePaymentService {
         });
 
         // Update phase with payment info
-        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedINR);
+        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + finalAmountOriginal);
         const newPaymentStatus = isFullyPaid ? 'received' : 'partial';
 
         // $set fields that are safe to overwrite on each payment
@@ -342,14 +342,34 @@ export class PhasePaymentService {
             setFields['phases.$.paymentExpectedAmountINR'] = finalTotalAmountINR;
         }
 
-        await Project.updateOne(
-            { _id: project._id, 'phases._id': phaseObjectId },
+        const updateResult = await Project.findOneAndUpdate(
+            { 
+                _id: project._id, 
+                'phases._id': phaseObjectId,
+                'phases': {
+                    $elemMatch: {
+                        _id: phaseObjectId,
+                        $or: [
+                            { paymentStatus: { $ne: 'received' } },
+                            { paymentReceivedAmountINR: { $lt: finalTotalAmountINR } }
+                        ]
+                    }
+                }
+            },
             {
                 $set: setFields,
                 // Accumulate received INR — never overwrite the total
                 $inc: { 'phases.$.paymentReceivedAmountINR': actualReceivedINR },
-            }
+            },
+            { new: true }
         );
+
+        if (!updateResult) {
+            // Delete revenue and bank tx
+            await Revenue.findByIdAndDelete(revenue._id);
+            await BankTransaction.findByIdAndDelete(bankTransaction._id);
+            throw new AppError('Concurrent payment prevented because phase is already fully paid', 400);
+        }
 
         const updatedProject = (await Project.findById(project._id).lean()) as unknown as IProject;
 

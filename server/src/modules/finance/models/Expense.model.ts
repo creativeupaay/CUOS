@@ -133,6 +133,7 @@ const ExpenseSchema = new Schema<IExpense>(
         },
         isSynced: { type: Boolean, default: false },
         gstClaimable: { type: Boolean, default: false },
+        gstRate: { type: Number, min: 0 },
 
         // Additional
         notes: { type: String, trim: true },

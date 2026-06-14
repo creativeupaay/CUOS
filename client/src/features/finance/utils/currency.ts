@@ -10,19 +10,25 @@ export const formatCurrency = (value: number | string | undefined | null, curren
     }).format(numValue);
 };
 
+const getCurrencySymbol = (code: string) => {
+    const parts = new Intl.NumberFormat('en-IN', { style: 'currency', currency: code }).formatToParts(0);
+    return parts.find(p => p.type === 'currency')?.value || '₹';
+};
+
 export const formatShortCurrency = (value: number | string | undefined | null, currencyCode: string = 'INR'): string => {
-    if (value === undefined || value === null) return '₹0';
+    const symbol = getCurrencySymbol(currencyCode);
+    if (value === undefined || value === null) return `${symbol}0`;
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(numValue) || numValue === 0) return '₹0';
+    if (isNaN(numValue) || numValue === 0) return `${symbol}0`;
     
     if (numValue >= 10000000) {
-        return `₹${(numValue / 10000000).toFixed(2)} Cr`;
+        return `${symbol}${(numValue / 10000000).toFixed(2)} Cr`;
     }
     if (numValue >= 100000) {
-        return `₹${(numValue / 100000).toFixed(2)} L`;
+        return `${symbol}${(numValue / 100000).toFixed(2)} L`;
     }
     if (numValue >= 1000) {
-        return `₹${(numValue / 1000).toFixed(1)} K`;
+        return `${symbol}${(numValue / 1000).toFixed(1)} K`;
     }
     
     return formatCurrency(numValue, currencyCode);

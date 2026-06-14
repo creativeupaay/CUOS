@@ -85,12 +85,12 @@ Inputs: Entered_Price: 100, Currency: USD, FX_Rate: 95.11, GST_Applicable: Yes, 
 Execution:
 
 * Converted_Price_INR = 9511
-* True_Revenue = 8060.16 (9511 / 1.18)
-* GST_Payable = 1450.83 (9511 - 8060.16)
+* True_Revenue = 8060.17 (9511 / 1.18)
+* GST_Payable = 1450.83 (9511 - 8060.17)
 * Total_Invoice_Value = 9511
 * TDS_Amount = 0
 * Amount_Received = 9511
-* Money_In_Bank = 8060.16 (9511 - 1450.83)
+* Money_In_Bank = 8060.17 (9511 - 1450.83)
 
 Test Case 3: Foreign Project (No GST, No TDS)
 Inputs: Entered_Price: 100, Currency: USD, FX_Rate: 95.11, GST_Applicable: No, TDS_Applicable: No.
