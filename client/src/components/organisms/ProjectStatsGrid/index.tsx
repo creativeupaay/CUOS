@@ -73,7 +73,9 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                 paymentAmount: 0,
                 paymentPercentage: 0,
                 paymentCurrency: (project.currency as ProjectPhase['paymentCurrency']) || 'INR',
+                paymentBankAccount: project.defaultBankAccount,
                 gstApplicable: true,
+                isGstInclusive: true,
                 gstRate: 18,
                 tdsDeducted: 0,
             }];
@@ -131,8 +133,9 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
         paymentPercentage: phase.paymentPercentage,
         paymentCurrency: phase.paymentCurrency || (project.currency as ProjectPhase['paymentCurrency']) || 'INR',
         paymentDueDate: phase.paymentDueDate || phase.endDate,
-        paymentBankAccount: phase.paymentBankAccount,
+        paymentBankAccount: phase.paymentBankAccount || project.defaultBankAccount,
         gstApplicable: phase.gstApplicable !== false,
+        isGstInclusive: phase.isGstInclusive !== false,
         gstRate: phase.gstRate || 18,
         tdsDeducted: phase.tdsDeducted || 0,
     });
@@ -183,6 +186,7 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                 delete phase.paymentFxRequestedDate;
                 delete phase.paymentFxFallbackUsed;
                 delete phase.gstApplicable;
+                delete phase.isGstInclusive;
                 delete phase.gstRate;
                 delete phase.tdsDeducted;
             } else {
@@ -190,6 +194,10 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                 if (!phase.paymentAmount || phase.paymentAmount === 0) delete phase.paymentAmount;
                 if (!phase.paymentPercentage || phase.paymentPercentage === 0) delete phase.paymentPercentage;
                 if (!phase.tdsDeducted || phase.tdsDeducted === 0) delete phase.tdsDeducted;
+                if (phase.gstApplicable === false) {
+                    delete phase.isGstInclusive;
+                    delete phase.gstRate;
+                }
             }
 
             return phase;
@@ -709,13 +717,33 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                                             </div>
                                                         </div>
 
+                                                        {/* Payment Bank Account */}
+                                                        <div>
+                                                            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Payment Bank Account</label>
+                                                            <select
+                                                                value={phase.paymentBankAccount || project.defaultBankAccount || ''}
+                                                                onChange={e => updatePhaseField(idx, 'paymentBankAccount', e.target.value || undefined)}
+                                                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                            >
+                                                                <option value="">Use default bank account</option>
+                                                                <option value="hdfc_gst">HDFC Bank (GST)</option>
+                                                                <option value="sbi_non_gst">SBI Bank (Non-GST)</option>
+                                                                <option value="indian_bank">Indian Bank</option>
+                                                                <option value="cash">Cash / UPI</option>
+                                                            </select>
+                                                        </div>
+
                                                         {/* GST & TDS */}
                                                         <div className="space-y-2">
                                                             <label className="flex items-center gap-2 cursor-pointer">
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={phase.gstApplicable !== false}
-                                                                    onChange={e => updatePhaseField(idx, 'gstApplicable', e.target.checked)}
+                                                                    onChange={e => {
+                                                                        updatePhaseField(idx, 'gstApplicable', e.target.checked);
+                                                                        if (e.target.checked) updatePhaseField(idx, 'isGstInclusive', false);
+                                                                    }}
                                                                     className="w-4 h-4 rounded border-gray-300"
                                                                 />
                                                                 <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
@@ -724,35 +752,99 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                                             </label>
 
                                                             {phase.gstApplicable !== false && (
-                                                                <div className="grid grid-cols-2 gap-3">
+                                                                <div className="space-y-3">
                                                                     <div>
-                                                                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>GST Rate (%)</label>
-                                                                        <select
-                                                                            value={phase.gstRate || 18}
-                                                                            onChange={e => updatePhaseField(idx, 'gstRate', parseInt(e.target.value))}
-                                                                            className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
-                                                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                                                                        >
-                                                                            <option value="0">0%</option>
-                                                                            <option value="5">5%</option>
-                                                                            <option value="12">12%</option>
-                                                                            <option value="18">18%</option>
-                                                                            <option value="28">28%</option>
-                                                                        </select>
+                                                                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>GST Calculation Method</label>
+                                                                        <div className="flex gap-4 p-2 rounded-lg border bg-opacity-50" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                                <input
+                                                                                    type="radio"
+                                                                                    name={`isGstInclusive-${idx}`}
+                                                                                    checked={phase.isGstInclusive !== false}
+                                                                                    onChange={() => updatePhaseField(idx, 'isGstInclusive', true)}
+                                                                                    className="w-3.5 h-3.5"
+                                                                                />
+                                                                                <span className="text-xs" style={{ color: 'var(--color-text-primary)' }}>Inclusive (GST inside amount)</span>
+                                                                            </label>
+                                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                                <input
+                                                                                    type="radio"
+                                                                                    name={`isGstInclusive-${idx}`}
+                                                                                    checked={phase.isGstInclusive === false}
+                                                                                    onChange={() => updatePhaseField(idx, 'isGstInclusive', false)}
+                                                                                    className="w-3.5 h-3.5"
+                                                                                />
+                                                                                <span className="text-xs" style={{ color: 'var(--color-text-primary)' }}>Exclusive (GST added on top)</span>
+                                                                            </label>
+                                                                        </div>
                                                                     </div>
-                                                                    <div>
-                                                                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>TDS Deducted</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={phase.tdsDeducted || ''}
-                                                                            onChange={e => updatePhaseField(idx, 'tdsDeducted', parseFloat(e.target.value) || 0)}
-                                                                            placeholder="0"
-                                                                            className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
-                                                                            style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
-                                                                        />
+
+                                                                    <div className="grid grid-cols-2 gap-3">
+                                                                        <div>
+                                                                            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>GST Rate (%)</label>
+                                                                            <select
+                                                                                value={phase.gstRate || 18}
+                                                                                onChange={e => updatePhaseField(idx, 'gstRate', parseInt(e.target.value))}
+                                                                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                            >
+                                                                                <option value="0">0%</option>
+                                                                                <option value="5">5%</option>
+                                                                                <option value="12">12%</option>
+                                                                                <option value="18">18%</option>
+                                                                                <option value="28">28%</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-text-secondary)' }}>TDS Deducted</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                value={phase.tdsDeducted || ''}
+                                                                                onChange={e => updatePhaseField(idx, 'tdsDeducted', parseFloat(e.target.value) || 0)}
+                                                                                placeholder="0"
+                                                                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                                                                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                                                                            />
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             )}
+                                                            
+                                                            <div className="space-y-1 pt-2">
+                                                                {phase.isGstInclusive !== false ? (
+                                                                    <>
+                                                                        <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                            <span>Base Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) / (1 + (phase.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                            <span>GST ({(phase.gstRate || 18)}%) — inclusive:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) - (Number(phase.paymentAmount || 0) / (1 + (phase.gstRate || 18) / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-bold mt-1" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)' }}>
+                                                                            <span>Total Billing Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                            <span>Base Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                        {phase.gstApplicable !== false && (
+                                                                            <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                                <span>GST ({(phase.gstRate || 18)}%) — added on top:</span>
+                                                                                <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-bold mt-1" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)' }}>
+                                                                            <span>Total Billing Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) + (phase.gstApplicable !== false ? (Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100)) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
 
                                                         {/* Mark Payment Received Button */}

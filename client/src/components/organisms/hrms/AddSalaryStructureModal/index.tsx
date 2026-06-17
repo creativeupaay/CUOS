@@ -27,6 +27,59 @@ const PAYOUT_ACCOUNT_OPTIONS = [
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+const getFinancialYear = (date: Date) => {
+    const month = date.getMonth(); // 0-11
+    const year = date.getFullYear();
+    if (month < 3) { // Jan-Mar belong to previous year's FY
+        return `${year - 1}-${year}`;
+    }
+    return `${year}-${year + 1}`;
+};
+
+const ensureFYMonths = (fy: string, currentSchedule: MonthlyEntry[]) => {
+    const [startYearStr, endYearStr] = fy.split('-');
+    const startYear = parseInt(startYearStr);
+    const endYear = parseInt(endYearStr);
+
+    const expectedMonths = [
+        { month: 4, year: startYear },
+        { month: 5, year: startYear },
+        { month: 6, year: startYear },
+        { month: 7, year: startYear },
+        { month: 8, year: startYear },
+        { month: 9, year: startYear },
+        { month: 10, year: startYear },
+        { month: 11, year: startYear },
+        { month: 12, year: startYear },
+        { month: 1, year: endYear },
+        { month: 2, year: endYear },
+        { month: 3, year: endYear }
+    ];
+
+    const newSchedule = [...currentSchedule];
+
+    expectedMonths.forEach(em => {
+        const exists = newSchedule.find(s => s.month === em.month && s.year === em.year);
+        if (!exists) {
+            const pd = new Date(Date.UTC(em.year, em.month, 1));
+            newSchedule.push({
+                month: em.month,
+                year: em.year,
+                amount: 0,
+                paymentDate: pd.toISOString().split('T')[0]
+            });
+        }
+    });
+
+    // Sort chronologically
+    newSchedule.sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+    });
+
+    return newSchedule;
+};
+
 export default function AddSalaryStructureModal({
     isOpen,
     onClose,
@@ -48,6 +101,7 @@ export default function AddSalaryStructureModal({
     
     // Monthly
     const [monthlySchedule, setMonthlySchedule] = useState<MonthlyEntry[]>([]);
+    const [selectedFY, setSelectedFY] = useState<string>('');
     
     // Additional Compensation
     const [additionalCompensations, setAdditionalCompensations] = useState<AdditionalCompensation[]>([]);
@@ -62,7 +116,14 @@ export default function AddSalaryStructureModal({
             setAnnualAmount(existingSalary.annualAmount || 0);
             setEffectiveFrom(existingSalary.effectiveFrom ? existingSalary.effectiveFrom.split('T')[0] : '');
             setFirstSalaryDate(existingSalary.firstSalaryDate ? existingSalary.firstSalaryDate.split('T')[0] : '');
-            setMonthlySchedule(existingSalary.monthlySchedule || []);
+            
+            const schedule = existingSalary.monthlySchedule || [];
+            
+            const fyDate = existingSalary.effectiveFrom ? new Date(existingSalary.effectiveFrom) : new Date();
+            const fy = getFinancialYear(fyDate);
+            setSelectedFY(fy);
+            
+            setMonthlySchedule(ensureFYMonths(fy, schedule));
             setAdditionalCompensations(existingSalary.additionalCompensations || []);
         } else {
             // Defaults
@@ -70,38 +131,23 @@ export default function AddSalaryStructureModal({
             setCompensationType('salary');
             setPayoutAccountKey('hdfc_gst');
             setAnnualAmount(0);
+            
             const today = new Date();
             const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
             setEffectiveFrom(todayUtc.toISOString().split('T')[0]);
             
-            // Calculate first salary date based on probation
             let firstPaidDate = new Date();
             if (employee.probationEndDate) {
                 firstPaidDate = new Date(employee.probationEndDate);
             }
-            // default to 1st of next month after firstPaidDate
             const firstPaidYear = firstPaidDate.getFullYear();
             const firstPaidMonth = firstPaidDate.getMonth();
             const firstSalaryDateUtc = new Date(Date.UTC(firstPaidYear, firstPaidMonth + 1, 1));
             setFirstSalaryDate(firstSalaryDateUtc.toISOString().split('T')[0]);
 
-            // Initialize monthly schedule for next 12 months
-            const initSchedule: MonthlyEntry[] = [];
-            const currentMonth = today.getMonth();
-            let currentYear = today.getFullYear();
-            for (let i = 0; i < 12; i++) {
-                let m = (currentMonth + i) % 12 + 1; // 1-12
-                let y = currentYear + Math.floor((currentMonth + i) / 12);
-                // default payment date is 1st of next month
-                let pd = new Date(Date.UTC(y, m, 1));
-                initSchedule.push({
-                    month: m,
-                    year: y,
-                    amount: 0,
-                    paymentDate: pd.toISOString().split('T')[0]
-                });
-            }
-            setMonthlySchedule(initSchedule);
+            const currentFY = getFinancialYear(today);
+            setSelectedFY(currentFY);
+            setMonthlySchedule(ensureFYMonths(currentFY, []));
             setAdditionalCompensations([]);
         }
     }, [isOpen, existingSalary, employee]);
@@ -146,18 +192,72 @@ export default function AddSalaryStructureModal({
         setAdditionalCompensations(additionalCompensations.filter((_, i) => i !== index));
     };
 
-    const updateMonthly = (index: number, field: keyof MonthlyEntry, value: string | number) => {
+    const updateMonthly = (month: number, year: number, field: keyof MonthlyEntry, value: string | number) => {
         const newSched = [...monthlySchedule];
-        newSched[index] = { ...newSched[index], [field]: value };
-        setMonthlySchedule(newSched);
+        const index = newSched.findIndex(e => e.month === month && e.year === year);
+        if (index > -1) {
+            newSched[index] = { ...newSched[index], [field]: value };
+            setMonthlySchedule(newSched);
+        }
     };
 
-    // Calculate Summary
+    const getIsBeforeJoining = (month: number, year: number) => {
+        if (!employee?.joiningDate) return false;
+        const jd = new Date(employee.joiningDate);
+        const joinYear = jd.getFullYear();
+        const joinMonth = jd.getMonth() + 1; // 1-12
+        if (year < joinYear) return true;
+        if (year === joinYear && month < joinMonth) return true;
+        return false;
+    };
+
+    // Calculate Summary and Display
+    const getMonthsForFY = (fy: string) => {
+        if (!fy) return [];
+        const [startYearStr, endYearStr] = fy.split('-');
+        const startYear = parseInt(startYearStr);
+        const endYear = parseInt(endYearStr);
+
+        return monthlySchedule.filter(entry => 
+            (entry.year === startYear && entry.month >= 4) || 
+            (entry.year === endYear && entry.month <= 3)
+        );
+    };
+
+    const displayedMonths = getMonthsForFY(selectedFY);
+
     const fixedTotal = tab === 'yearly' 
         ? annualAmount 
-        : monthlySchedule.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-    const variableTotal = additionalCompensations.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+        : displayedMonths.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+
+    const getVariableForFY = (fy: string) => {
+        if (!fy) return [];
+        const [startYearStr, endYearStr] = fy.split('-');
+        const startYear = parseInt(startYearStr);
+        const endYear = parseInt(endYearStr);
+        const fyStartDate = new Date(Date.UTC(startYear, 3, 1)); // Apr 1
+        const fyEndDate = new Date(Date.UTC(endYear, 2, 31, 23, 59, 59)); // Mar 31
+
+        return additionalCompensations.filter(comp => {
+            if (!comp.redeemableOn) return false;
+            const rd = new Date(comp.redeemableOn);
+            return rd >= fyStartDate && rd <= fyEndDate;
+        });
+    };
+
+    const variableTotal = getVariableForFY(selectedFY).reduce((acc, curr) => acc + (curr.amount || 0), 0);
     const ctcTotal = fixedTotal + variableTotal;
+
+    // FY Dropdown Options
+    const currentYear = new Date().getFullYear();
+    const currentMonthIndex = new Date().getMonth();
+    const baseYear = currentMonthIndex < 3 ? currentYear - 1 : currentYear;
+    const fyOptions = [
+        `${baseYear - 1}-${baseYear}`,
+        `${baseYear}-${baseYear + 1}`,
+        `${baseYear + 1}-${baseYear + 2}`,
+        `${baseYear + 2}-${baseYear + 3}`
+    ];
 
     const modalContent = (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
@@ -259,7 +359,25 @@ export default function AddSalaryStructureModal({
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <h3 className="text-sm font-semibold text-gray-800">Monthly Schedule</h3>
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-sm font-semibold text-gray-800">Monthly Schedule</h3>
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-medium text-gray-600">Financial Year:</label>
+                                        <select
+                                            value={selectedFY}
+                                            onChange={(e) => {
+                                                const newFY = e.target.value;
+                                                setSelectedFY(newFY);
+                                                setMonthlySchedule(prev => ensureFYMonths(newFY, prev));
+                                            }}
+                                            className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-medium"
+                                        >
+                                            {fyOptions.map(opt => (
+                                                <option key={opt} value={opt}>FY {opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                                     <table className="w-full text-sm text-left text-gray-500">
                                         <thead className="text-xs text-gray-700 uppercase bg-gray-50">
@@ -270,30 +388,37 @@ export default function AddSalaryStructureModal({
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {monthlySchedule.map((entry, idx) => (
-                                                <tr key={idx} className="border-t border-gray-200">
-                                                    <td className="px-4 py-2 font-medium text-gray-900">
-                                                        {MONTHS[entry.month - 1]} {entry.year}
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <input 
-                                                            type="number" 
-                                                            min="0"
-                                                            value={entry.amount}
-                                                            onChange={(e) => updateMonthly(idx, 'amount', Number(e.target.value))}
-                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <input 
-                                                            type="date" 
-                                                            value={entry.paymentDate}
-                                                            onChange={(e) => updateMonthly(idx, 'paymentDate', e.target.value)}
-                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {displayedMonths.map((entry) => {
+                                                const rowKey = `${entry.year}-${entry.month}`;
+                                                const isBeforeJoin = getIsBeforeJoining(entry.month, entry.year);
+                                                return (
+                                                    <tr key={rowKey} className={`border-t border-gray-200 ${isBeforeJoin ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'}`}>
+                                                        <td className="px-4 py-2 font-medium text-gray-900">
+                                                            {MONTHS[entry.month - 1]} {entry.year}
+                                                            {isBeforeJoin && <span className="ml-2 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Pre-Joining</span>}
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input 
+                                                                type="number" 
+                                                                min="0"
+                                                                disabled={isBeforeJoin}
+                                                                value={entry.amount}
+                                                                onChange={(e) => updateMonthly(entry.month, entry.year, 'amount', Number(e.target.value))}
+                                                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input 
+                                                                type="date" 
+                                                                disabled={isBeforeJoin}
+                                                                value={entry.paymentDate}
+                                                                onChange={(e) => updateMonthly(entry.month, entry.year, 'paymentDate', e.target.value)}
+                                                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -368,7 +493,12 @@ export default function AddSalaryStructureModal({
                 {/* Right Panel: Summary */}
                 <div className="w-full md:w-80 bg-gray-50 flex flex-col">
                     <div className="p-6 flex-1 border-b border-gray-200">
-                        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Compensation Summary</h3>
+                        <div className="mb-6 flex justify-between items-center">
+                            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Compensation Summary</h3>
+                            {tab === 'monthly' && selectedFY && (
+                                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">FY {selectedFY}</span>
+                            )}
+                        </div>
                         
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
@@ -385,6 +515,11 @@ export default function AddSalaryStructureModal({
                                     <span className="text-lg font-bold text-green-600">₹{ctcTotal.toLocaleString('en-IN')}</span>
                                 </div>
                             </div>
+                            {tab === 'monthly' && (
+                                <p className="text-xs text-gray-500 mt-2 italic text-center">
+                                    Values represent the selected financial year only.
+                                </p>
+                            )}
                         </div>
                     </div>
 
