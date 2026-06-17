@@ -415,9 +415,9 @@ export default function ProjectFormPage({
                         paymentAmount: 0,
                         paymentPercentage: 0,
                         paymentCurrency: toPaymentCurrency(prev.currency),
-                        gstApplicable: true,
-                        isGstInclusive: true,
-                        gstRate: 18,
+                        gstApplicable: prev.gstApplicable ?? true,
+                        isGstInclusive: prev.isGstInclusive ?? false,
+                        gstRate: prev.gstRate ?? 18,
                         tdsDeducted: 0,
                     }
                 ]

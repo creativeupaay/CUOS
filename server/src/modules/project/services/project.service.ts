@@ -477,10 +477,12 @@ const syncLinkedProjectFinancials = async (
         let gst = 0;
         let baseAmountINR = amountINR;
         if (gstApplicable) {
-            gst = roundMoney((amountINR * gstRate) / 100);
-        } else if (isGstInclusive) {
-            baseAmountINR = roundMoney(amountINR / (1 + gstRate / 100));
-            gst = roundMoney(amountINR - baseAmountINR);
+            if (isGstInclusive) {
+                baseAmountINR = roundMoney(amountINR / (1 + gstRate / 100));
+                gst = roundMoney(amountINR - baseAmountINR);
+            } else {
+                gst = roundMoney((amountINR * gstRate) / 100);
+            }
         }
         
         const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? revenue?.tdsDeducted ?? 0));

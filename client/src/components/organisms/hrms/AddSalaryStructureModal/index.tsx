@@ -61,7 +61,7 @@ const ensureFYMonths = (fy: string, currentSchedule: MonthlyEntry[]) => {
     expectedMonths.forEach(em => {
         const exists = newSchedule.find(s => s.month === em.month && s.year === em.year);
         if (!exists) {
-            const pd = new Date(Date.UTC(em.year, em.month, 1));
+            const pd = new Date(Date.UTC(em.year, em.month - 1, 1));
             newSchedule.push({
                 month: em.month,
                 year: em.year,

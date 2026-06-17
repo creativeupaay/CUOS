@@ -277,6 +277,7 @@ export class PhasePaymentService {
             exchangeRateProvider: conversion.provider,
             amountINR: finalBaseINR,          // base amount (without GST)
             gstApplicable,
+            isGstInclusive,
             gstRate,
             gst: finalGst,                    // GST component extracted from received amount
             tdsDeducted: finalTds,
@@ -367,7 +368,7 @@ export class PhasePaymentService {
         if (!updateResult) {
             // Delete revenue and bank tx
             await Revenue.findByIdAndDelete(revenue._id);
-            await BankTransaction.findByIdAndDelete(bankTransaction._id);
+            await BankTransactionService.delete(bankTransaction._id);
             throw new AppError('Concurrent payment prevented because phase is already fully paid', 400);
         }
 

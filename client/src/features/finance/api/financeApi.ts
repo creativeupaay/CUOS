@@ -15,6 +15,7 @@ export interface Revenue {
     exchangeRateProvider?: string;
     amountINR: number;
     gstApplicable: boolean;
+    isGstInclusive?: boolean;
     gstRate: number;
     gst: number;
     tdsDeducted: number;

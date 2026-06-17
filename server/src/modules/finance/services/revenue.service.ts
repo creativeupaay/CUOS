@@ -24,6 +24,7 @@ interface CreateRevenueData {
     totalAmount?: number;
     pendingAmount?: number;
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     tdsDeducted?: number;
     receivedAmount?: number;
@@ -230,6 +231,7 @@ export class RevenueService {
         const amountINR = conversion.amountINR;
 
         const gstApplicable = data.gstApplicable ?? existing.gstApplicable;
+        const isGstInclusive = data.isGstInclusive ?? existing.isGstInclusive ?? true;  
         const gstRate = data.gstRate ?? existing.gstRate;
         const gst = gstApplicable ? roundMoney((amountINR * gstRate) / 100) : 0;
         const tdsDeducted = data.tdsDeducted ?? existing.tdsDeducted;
@@ -246,6 +248,7 @@ export class RevenueService {
                 exchangeRateProvider: conversion.provider,
                 amountINR,
                 gstApplicable,
+                isGstInclusive,
                 gstRate,
                 gst,
                 totalAmount,
@@ -415,13 +418,17 @@ export class RevenueService {
                 const expected = Number(item.totalAmount || item.amountINR || item.amount || 0);
                 // Use historical received amount instead of current receivedAmount
                 const received = revPaymentMap.get(item._id.toString()) || 0;
-                const outstanding = Math.max(0, roundMoney(expected - received));
+                const fxFeesINR = Number(item.fxFeesINR || 0);
+                // For finance items, tip is just part of received technically, or we could add it.
+                // Assuming effectiveReceived uses fxFeesINR so the FX difference isn't outstanding.
+                const effectiveReceived = received + fxFeesINR;
+                const outstanding = Math.max(0, roundMoney(expected - effectiveReceived));
                 if (outstanding <= 0) return null;
 
                 const dueDate = item.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
                 const status: ReceivableItem['status'] = dueDate && dueDate < today
                     ? 'overdue'
-                    : (received > 0 ? 'partial' : 'pending');
+                    : (effectiveReceived > 0 ? 'partial' : 'pending');
 
                 return {
                     id: String(item._id || ''),
@@ -455,6 +462,12 @@ export class RevenueService {
             { $group: { _id: '$phaseId', totalPaid: { $sum: '$amount' } } }
         ]);
         const phasePaymentMap = new Map(phasePayments.map(p => [p._id.toString(), p.totalPaid]));
+
+        const phaseRevenues = await Revenue.aggregate([
+            { $match: { phaseId: { $in: allPhaseIds }, date: { $lte: endDate } } },
+            { $group: { _id: '$phaseId', totalFxFees: { $sum: '$fxFeesINR' }, totalTip: { $sum: '$tipINR' } } }
+        ]);
+        const phaseRevenueMap = new Map(phaseRevenues.map(r => [r._id.toString(), { fxFees: r.totalFxFees || 0, tip: r.totalTip || 0 }]));
 
         const phaseItemLists = await Promise.all(projects.flatMap((project: any) => {
             const phases = project.phases || [];
@@ -517,14 +530,16 @@ export class RevenueService {
                     const totalExpected = roundMoney(expected + gst - tdsDeducted);
 
                     const received = phasePaymentMap.get(String(phase._id)) || 0;
-                    const outstanding = Math.max(0, roundMoney(totalExpected - received));
+                    const revenueAdjustments = phaseRevenueMap.get(String(phase._id)) || { fxFees: 0, tip: 0 };
+                    const effectiveReceived = received + revenueAdjustments.fxFees;
+                    const outstanding = Math.max(0, roundMoney(totalExpected - effectiveReceived));
 
                     if (outstanding <= 0) return null;
 
                     const dueDate = dueDateRaw ? getStartOfDay(new Date(dueDateRaw)) : null;
                     const status = dueDate && dueDate < today
                         ? 'overdue'
-                        : (received > 0 ? 'partial' : 'pending');
+                        : (effectiveReceived > 0 ? 'partial' : 'pending');
 
                     return {
                         id: `${String(project?._id || 'project')}-${String(phase?._id || index)}`,

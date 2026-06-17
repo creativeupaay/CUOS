@@ -75,7 +75,7 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                 paymentCurrency: (project.currency as ProjectPhase['paymentCurrency']) || 'INR',
                 paymentBankAccount: project.defaultBankAccount,
                 gstApplicable: true,
-                isGstInclusive: true,
+                isGstInclusive: false,
                 gstRate: 18,
                 tdsDeducted: 0,
             }];
@@ -811,7 +811,18 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                                             )}
                                                             
                                                             <div className="space-y-1 pt-2">
-                                                                {phase.isGstInclusive !== false ? (
+                                                                {phase.gstApplicable === false ? (
+                                                                    <>
+                                                                        <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                            <span>Base Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-bold mt-1" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)' }}>
+                                                                            <span>Total Billing Amount:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : phase.isGstInclusive !== false ? (
                                                                     <>
                                                                         <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
                                                                             <span>Base Amount:</span>
@@ -832,15 +843,13 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                                                             <span>Base Amount:</span>
                                                                             <span>{phase.paymentCurrency || project.currency || 'INR'} {Number(phase.paymentAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                         </div>
-                                                                        {phase.gstApplicable !== false && (
-                                                                            <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
-                                                                                <span>GST ({(phase.gstRate || 18)}%) — added on top:</span>
-                                                                                <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                                                            </div>
-                                                                        )}
+                                                                        <div className="flex justify-between items-center px-3 py-1.5 rounded text-[11px] font-medium" style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)' }}>
+                                                                            <span>GST ({(phase.gstRate || 18)}%) — added on top:</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                        </div>
                                                                         <div className="flex justify-between items-center px-3 py-2 rounded text-xs font-bold mt-1" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)' }}>
                                                                             <span>Total Billing Amount:</span>
-                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) + (phase.gstApplicable !== false ? (Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100)) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                            <span>{phase.paymentCurrency || project.currency || 'INR'} {(Number(phase.paymentAmount || 0) + (Number(phase.paymentAmount || 0) * ((phase.gstRate || 18) / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                         </div>
                                                                     </>
                                                                 )}
