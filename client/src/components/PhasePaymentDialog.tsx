@@ -65,7 +65,7 @@ export default function PhasePaymentDialog({
     const currency = phase.paymentCurrency || projectCurrency || 'INR';
 
     // Fetch exchange rate if currency is not INR
-    const { data: exchangeRateData, isLoading: isFxLoading, error: fxError } = useGetExchangeRateQuery(currency, {
+    const { data: exchangeRateData, isLoading: isFxLoading, error: fxError } = useGetExchangeRateQuery({ currency, date: receivedDate }, {
         skip: currency === 'INR',
     });
 
