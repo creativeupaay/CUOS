@@ -282,16 +282,17 @@ class PayrollService {
 
     private calculatePayableDays(
         joiningDate: Date,
-        salaryEffectiveFrom: Date,
+        salaryEffectiveFrom: Date | undefined | null,
         month: number,
         year: number
     ): number {
         const periodStart = new Date(year, month - 1, 1);
         const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
+        const effectiveFromTime = salaryEffectiveFrom ? new Date(salaryEffectiveFrom).getTime() : 0;
         const payableFrom = new Date(
             Math.max(
                 new Date(joiningDate).getTime(),
-                new Date(salaryEffectiveFrom).getTime(),
+                effectiveFromTime,
                 periodStart.getTime()
             )
         );

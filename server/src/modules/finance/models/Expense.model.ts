@@ -36,6 +36,7 @@ export interface IExpense extends Document {
     transactionRef?: string;
     bankTransactionId?: Types.ObjectId;
     gstClaimable?: boolean;
+    gstRate?: number;
 
     // Recurring
     isRecurring: boolean;
