@@ -71,7 +71,8 @@ export default function AddSalaryStructureModal({
             setPayoutAccountKey('hdfc_gst');
             setAnnualAmount(0);
             const today = new Date();
-            setEffectiveFrom(today.toISOString().split('T')[0]);
+            const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            setEffectiveFrom(todayUtc.toISOString().split('T')[0]);
             
             // Calculate first salary date based on probation
             let firstPaidDate = new Date();
@@ -79,9 +80,10 @@ export default function AddSalaryStructureModal({
                 firstPaidDate = new Date(employee.probationEndDate);
             }
             // default to 1st of next month after firstPaidDate
-            firstPaidDate.setMonth(firstPaidDate.getMonth() + 1);
-            firstPaidDate.setDate(1);
-            setFirstSalaryDate(firstPaidDate.toISOString().split('T')[0]);
+            const firstPaidYear = firstPaidDate.getFullYear();
+            const firstPaidMonth = firstPaidDate.getMonth();
+            const firstSalaryDateUtc = new Date(Date.UTC(firstPaidYear, firstPaidMonth + 1, 1));
+            setFirstSalaryDate(firstSalaryDateUtc.toISOString().split('T')[0]);
 
             // Initialize monthly schedule for next 12 months
             const initSchedule: MonthlyEntry[] = [];
@@ -91,7 +93,7 @@ export default function AddSalaryStructureModal({
                 let m = (currentMonth + i) % 12 + 1; // 1-12
                 let y = currentYear + Math.floor((currentMonth + i) / 12);
                 // default payment date is 1st of next month
-                let pd = new Date(y, m, 1);
+                let pd = new Date(Date.UTC(y, m, 1));
                 initSchedule.push({
                     month: m,
                     year: y,
@@ -124,10 +126,12 @@ export default function AddSalaryStructureModal({
     };
 
     const addBonus = () => {
+        const today = new Date();
+        const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
         setAdditionalCompensations([...additionalCompensations, {
             name: '',
             amount: 0,
-            redeemableOn: new Date().toISOString().split('T')[0],
+            redeemableOn: todayUtc.toISOString().split('T')[0],
             isVariable: true
         }]);
     };

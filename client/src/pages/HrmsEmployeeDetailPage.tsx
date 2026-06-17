@@ -451,7 +451,7 @@ export default function HrmsEmployeeDetailPage() {
                             <FieldRow label="Hours / Day">
                                 {employee.workSchedule?.hoursPerDay ?? 8} hrs
                             </FieldRow>
-                            <FieldRow label="Paid Leaves / Year">
+                            <FieldRow label="Paid Leaves Available">
                                 <div className="flex items-center gap-1.5">
                                     <Calendar size={14} style={{ color: 'var(--color-primary)' }} />
                                     <span className="font-medium">

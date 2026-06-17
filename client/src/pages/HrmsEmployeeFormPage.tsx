@@ -273,7 +273,7 @@ export default function HrmsEmployeeFormPage() {
                         </div>
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                Paid Leaves / Year
+                                Paid Leaves Available
                                 <span className="ml-1 text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>(used in payroll)</span>
                             </label>
                             <input

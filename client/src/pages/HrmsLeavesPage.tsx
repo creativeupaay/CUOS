@@ -1051,7 +1051,7 @@ export default function HrmsLeavesPage() {
                             <table className="w-full">
                                 <thead>
                                     <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                        {['Employee', 'Department', 'Designation', 'Paid Leaves / Year', 'Details'].map((h) => (
+                                        {['Employee', 'Department', 'Designation', 'Paid Leaves Available', 'Details'].map((h) => (
                                             <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider"
                                                 style={{ color: 'var(--color-text-muted)' }}>{h}</th>
                                         ))}
