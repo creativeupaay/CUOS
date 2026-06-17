@@ -22,6 +22,7 @@ export interface Revenue {
     totalAmount: number;
     receivedAmount: number;
     pendingAmount: number;
+    fxFeesINR?: number;
     source: 'manual' | 'invoice' | 'project';
     status: 'received' | 'pending' | 'partial' | 'overdue';
     invoiceNumber?: string;
