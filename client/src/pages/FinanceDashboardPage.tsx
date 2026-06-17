@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery, useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
+import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery } from '@/features/finance/api/financeApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
 import { formatCurrency as formatFullCurrency, formatShortCurrency as formatCurrency } from '@/features/finance/utils/currency';
@@ -216,7 +216,7 @@ export default function FinanceDashboardPage() {
         isLoading: isCashSummaryLoading,
     } = useGetBankTransactionsQuery({ page: 1, limit: 1 }, { refetchOnMountOrArgChange: true });
 
-    const { data: receivablesData } = useGetFinanceReceivablesQuery();
+    // Receivables are now included in the dashboard API response
 
     // Use currentData directly — undefined until a fresh response for the current filter set arrives.
     const visibleDashboardData = currentDashboardData;
@@ -238,7 +238,7 @@ export default function FinanceDashboardPage() {
     const monthlyData = visibleDashboardData?.data?.monthlyData || [];
     const breakdownData = visibleDashboardData?.data?.breakdownData || [];
 
-    const receivableItems = useMemo(() => (receivablesData?.data?.items || []).map((item: any) => ({
+    const receivableItems = useMemo(() => (visibleDashboardData?.data?.receivables?.items || []).map((item: any) => ({
         id: String(item.id || ''),
         client: String(item.party || 'Unknown'),
         description: String(item.title || 'Receivable'),
@@ -251,12 +251,12 @@ export default function FinanceDashboardPage() {
         status: String(item.status || 'pending'),
         expected: Number(item.expected || 0),
         received: Number(item.received || 0),
-    })), [receivablesData]);
+    })), [visibleDashboardData]);
 
-    const receivablesSummary = receivablesData?.data?.summary;
+    const receivablesSummary = visibleDashboardData?.data?.receivables?.summary;
     const fxRateRequiredWarnings = useMemo<FxRateRequiredWarning[]>(
         () =>
-            (receivablesData?.data?.warnings ?? []).filter(
+            (visibleDashboardData?.data?.receivables?.warnings ?? []).filter(
                 (w): w is FxRateRequiredWarning =>
                     w.code === 'FX_RATE_REQUIRED' &&
                     Boolean(w.projectId) &&
@@ -264,7 +264,7 @@ export default function FinanceDashboardPage() {
                     Boolean(w.currency) &&
                     Boolean(w.date)
             ),
-        [receivablesData]
+        [visibleDashboardData]
     );
     const combinedReceivablesValue = Math.max(0, Number(receivablesSummary?.totalOpen ?? metrics.receivables ?? 0));
 

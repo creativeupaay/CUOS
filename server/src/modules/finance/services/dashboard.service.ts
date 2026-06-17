@@ -1,4 +1,4 @@
-import { RevenueService } from './revenue.service';
+import { RevenueService, ReceivablesResult } from './revenue.service';
 import { ExpenseService } from './expense.service';
 import { BankAccount } from '../models/BankAccount.model';
 import { BankTransaction } from '../models/BankTransaction.model';
@@ -41,6 +41,7 @@ export class DashboardService {
         metrics: DashboardMetrics;
         monthlyData: MonthlyChartData[];
         breakdownData: BreakdownData[];
+        receivables: ReceivablesResult | null;
     }> {
         // Get revenue summary (unchanged — all revenue is valid)
         const [revenueSummary, revenueMonthly, expenseMonthly] = await Promise.all([
@@ -69,9 +70,10 @@ export class DashboardService {
         const companyTotalExpense: number = companyExpenseResult[0]?.total ?? 0;
 
         let receivablesTotal = revenueSummary.totalPending;
+        let receivablesData: ReceivablesResult | null = null;
         try {
-            const receivables = await RevenueService.getReceivables();
-            receivablesTotal = receivables.summary.totalOpen;
+            receivablesData = await RevenueService.getReceivables(endDate);
+            receivablesTotal = receivablesData.summary.totalOpen;
         } catch {
             receivablesTotal = revenueSummary.totalPending;
         }
@@ -81,7 +83,7 @@ export class DashboardService {
         const activeAccountKeys = bankAccounts.map(acc => acc.accountKey).filter(Boolean);
 
         const ledgerResult = await BankTransaction.aggregate([
-            { $match: { accountKey: { $in: activeAccountKeys } } },
+            { $match: { accountKey: { $in: activeAccountKeys }, date: { $lte: endDate } } },
             {
                 $group: {
                     _id: null,
@@ -105,6 +107,7 @@ export class DashboardService {
 
         // GST Calculations (All-time cumulative to align with all-time cashInBank)
         const allTimeRevenueGstResult = await Revenue.aggregate([
+            { $match: { date: { $lte: endDate } } },
             {
                 $group: {
                     _id: null,
@@ -118,6 +121,7 @@ export class DashboardService {
             {
                 $match: {
                     gstClaimable: true,
+                    date: { $lte: endDate }
                 },
             },
             {
@@ -145,6 +149,7 @@ export class DashboardService {
             {
                 $match: {
                     category: { $in: ['GST Payment', 'Tax Payment'] },
+                    date: { $lte: endDate }
                 },
             },
             {
@@ -248,6 +253,7 @@ export class DashboardService {
             },
             monthlyData,
             breakdownData,
+            receivables: receivablesData,
         };
     }
 

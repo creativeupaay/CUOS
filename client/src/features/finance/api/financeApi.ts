@@ -177,6 +177,7 @@ export interface DashboardResponse {
     metrics: DashboardMetrics;
     monthlyData: MonthlyData[];
     breakdownData: BreakdownData[];
+    receivables: FinanceReceivablesResponse | null;
 }
 
 export type BankAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
