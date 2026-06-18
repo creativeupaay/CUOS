@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useGetFinanceReceivablesQuery } from '@/features/finance/api/financeApi';
 import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
-import { formatCurrency, formatShortCurrency as formatCompactCurrency } from '@/features/finance/utils/currency';
+import { formatCurrency } from '@/features/finance/utils/currency';
 
 type ReceivableSource = 'finance-revenue' | 'phase-payment';
 type ReceivableStatus = 'pending' | 'partial' | 'overdue';
@@ -166,7 +166,7 @@ export default function FinanceReceivablesPage() {
                             </div>
                         </div>
                         <p className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                        <p className="mt-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{formatCompactCurrency(card.value)}</p>
+                        <p className="mt-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(card.value)}</p>
                         <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>{formatCurrency(card.value)}</p>
                     </div>
                 ))}

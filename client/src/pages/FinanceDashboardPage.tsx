@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetBankTransactionsQuery, useGetFinanceDashboardQuery } from '@/features/finance/api/financeApi';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import ResolveFxRatesModal, { type FxRateRequiredWarning } from '@/components/ResolveFxRatesModal';
-import { formatCurrency as formatFullCurrency, formatShortCurrency as formatCurrency } from '@/features/finance/utils/currency';
+import { formatCurrency, formatCurrency as formatFullCurrency } from '@/features/finance/utils/currency';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type FilterType = 'fiscal-year' | 'quarter' | 'month' | 'custom';
@@ -505,7 +505,7 @@ export default function FinanceDashboardPage() {
             bg: '#FDF2F8',
         },
         {
-            label: 'Money in Bank',
+            label: 'Money left in Bank',
             value: formatCurrency(metrics.moneyInBank),
             fullValue: formatFullCurrency(metrics.moneyInBank),
             icon: PiggyBank,

@@ -8,7 +8,6 @@ import {
     CreditCard,
     Copy,
     Eye,
-    IndianRupee,
     Landmark,
     Loader2,
     Pencil,
@@ -34,7 +33,7 @@ import {
     useUpdateOtherBankAccountMutation,
 } from '@/features/finance/api/financeApi';
 import { logger } from '@/utils/logger';
-import { formatCurrency, formatShortCurrency as formatCompactCurrency } from '@/features/finance/utils/currency';
+import { formatCurrency } from '@/features/finance/utils/currency';
 import type {
     BankAccountKey,
     BankAccountDetail,
@@ -210,24 +209,21 @@ export default function FinanceCashInBankPage() {
     const metricCards = useMemo(() => ([
         {
             label: 'Total Cash in Bank',
-            value: formatCompactCurrency(summary?.totalCashInBank || 0),
-            fullValue: formatCurrency(summary?.totalCashInBank || 0),
+            value: formatCurrency(summary?.totalCashInBank || 0),
             icon: Wallet,
             color: '#0EA5E9',
             bg: '#F0F9FF',
         },
         {
             label: 'Total Credit',
-            value: formatCompactCurrency(summary?.totalCredit || 0),
-            fullValue: formatCurrency(summary?.totalCredit || 0),
+            value: formatCurrency(summary?.totalCredit || 0),
             icon: ArrowDownLeft,
             color: '#16A34A',
             bg: '#F0FDF4',
         },
         {
             label: 'Total Debit',
-            value: formatCompactCurrency(summary?.totalDebit || 0),
-            fullValue: formatCurrency(summary?.totalDebit || 0),
+            value: formatCurrency(summary?.totalDebit || 0),
             icon: ArrowUpRight,
             color: '#DC2626',
             bg: '#FEF2F2',
@@ -562,11 +558,7 @@ export default function FinanceCashInBankPage() {
                             </div>
                         </div>
                         <p className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                        <p className="mt-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }} title={card.fullValue}>{card.value}</p>
-                        <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                            <IndianRupee size={14} />
-                            {card.fullValue}
-                        </div>
+                        <p className="mt-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{card.value}</p>
                     </div>
                 ))}
             </div>
@@ -625,7 +617,7 @@ export default function FinanceCashInBankPage() {
                                 <div className="ml-3 flex shrink-0 items-start gap-2">
                                     <div className="text-right">
                                         <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: isActive ? 'rgba(255,255,255,0.70)' : '#9CA3AF' }}>Balance</p>
-                                        <p className="mt-1 text-sm font-semibold">{formatCompactCurrency(balance)}</p>
+                                        <p className="mt-1 text-sm font-semibold">{formatCurrency(balance)}</p>
                                     </div>
                                     {canViewAccountDetails && (
                                         <div

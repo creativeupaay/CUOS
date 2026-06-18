@@ -42,7 +42,6 @@ export const MetricCardSet: React.FC<MetricCardSetProps> = ({ cards, columns = 4
                         <p className="text-xs font-medium mb-1 text-[var(--color-text-muted)]">{card.label}</p>
                         <CurrencyDisplay
                             amount={card.amount}
-                            compact
                             className="text-xl font-bold text-[var(--color-text-primary)]"
                         />
                     </>

@@ -24,7 +24,7 @@ import {
 import ModalPortal from '@/components/ui/ModalPortal';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { logger } from '@/utils/logger';
-import { formatCurrency, formatShortCurrency } from '@/features/finance/utils/currency';
+import { formatCurrency } from '@/features/finance/utils/currency';
 import { DateRangeFilter, type DateRange } from '@/components/organisms/finance';
 import { getCurrentFiscalYearRange, toDateInputValue } from '@/lib/utils/date';
 
@@ -294,10 +294,10 @@ export default function FinanceExpensesPage() {
     }, [expenses]);
 
     const metricCards = [
-        { label: 'Total Expenses', value: formatShortCurrency(metrics.totalExpenses), fullValue: formatCurrency(metrics.totalExpenses), icon: TrendingDown, color: '#EF4444', bg: '#FEF2F2' },
-        { label: 'Project Level', value: formatShortCurrency(metrics.projectExpenses), fullValue: formatCurrency(metrics.projectExpenses), icon: FolderKanban, color: '#10B981', bg: '#ECFDF5' },
-        { label: 'Fixed Costs', value: formatShortCurrency(metrics.fixedCosts), fullValue: formatCurrency(metrics.fixedCosts), icon: Wallet, color: '#6366F1', bg: '#EEF2FF' },
-        { label: 'Variable Costs', value: formatShortCurrency(metrics.variableCosts), fullValue: formatCurrency(metrics.variableCosts), icon: Calculator, color: '#F59E0B', bg: '#FFFBEB' },
+        { label: 'Total Expenses', value: formatCurrency(metrics.totalExpenses), fullValue: formatCurrency(metrics.totalExpenses), icon: TrendingDown, color: '#EF4444', bg: '#FEF2F2' },
+        { label: 'Project Level', value: formatCurrency(metrics.projectExpenses), fullValue: formatCurrency(metrics.projectExpenses), icon: FolderKanban, color: '#10B981', bg: '#ECFDF5' },
+        { label: 'Fixed Costs', value: formatCurrency(metrics.fixedCosts), fullValue: formatCurrency(metrics.fixedCosts), icon: Wallet, color: '#6366F1', bg: '#EEF2FF' },
+        { label: 'Variable Costs', value: formatCurrency(metrics.variableCosts), fullValue: formatCurrency(metrics.variableCosts), icon: Calculator, color: '#F59E0B', bg: '#FFFBEB' },
     ];
 
     const handleSubmit = async () => {
