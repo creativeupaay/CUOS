@@ -48,7 +48,7 @@ export const hrmsApi = api.injectEndpoints({
 
         updateMyProfile: builder.mutation<
             ApiResponse<{ employee: Employee }>,
-            { personalInfo?: Record<string, any>; bankDetails?: Record<string, any> }
+            { personalInfo?: Record<string, unknown>; bankDetails?: Record<string, unknown> }
         >({
             query: (data) => ({
                 url: '/hrms/employees/me',
@@ -387,6 +387,14 @@ export const hrmsApi = api.injectEndpoints({
             invalidatesTags: ['Payroll'],
         }),
 
+        deletePayroll: builder.mutation<ApiResponse<void>, string>({
+            query: (id) => ({
+                url: `/hrms/payroll/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Payroll'],
+        }),
+
         updatePayroll: builder.mutation<
             ApiResponse<{ payroll: Payroll }>,
             { id: string; data: UpdatePayrollRequest }
@@ -636,6 +644,7 @@ export const {
     useGetPayrollByIdQuery,
     useUpdatePayrollMutation,
     useUpdatePayrollStatusMutation,
+    useDeletePayrollMutation,
     useGetDashboardStatsQuery,
     useGetUpcomingEventsQuery,
     useGetWorkingHoursQuery,

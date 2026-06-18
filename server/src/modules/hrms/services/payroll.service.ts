@@ -2,8 +2,9 @@ import { Payroll, IPayroll } from '../models/Payroll.model';
 import { Employee } from '../models/Employee.model';
 import { SalaryStructure } from '../models/SalaryStructure.model';
 import { Attendance } from '../models/Attendance.model';
+import { Leave } from '../models/Leave.model';
 import { Task } from '../../project/models/Task.model';
-import { Types } from 'mongoose';
+import { Types, FilterQuery } from 'mongoose';
 import { BankTransaction } from '../../finance/models/BankTransaction.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
 import { ExpenseService } from '../../finance/services/expense.service';
@@ -91,29 +92,71 @@ class PayrollService {
         const incentiveAmount = 0;
         const penaltyAmount = 0;
 
+        // ── Calculate Leave Deductions (LWP) ──────────────────────────
+        const lwpLeaves = await Leave.find({
+            employeeId: employee._id,
+            status: 'approved',
+            isPaid: false,
+            startDate: { $lte: endDate },
+            endDate: { $gte: startDate }
+        });
+
+        let lwpDays = 0;
+        for (const leave of lwpLeaves) {
+            const leaveStart = Math.max(leave.startDate.getTime(), startDate.getTime());
+            const leaveEnd = Math.min(leave.endDate.getTime(), endDate.getTime());
+            if (leaveStart <= leaveEnd) {
+                if (leave.startDate.getTime() >= startDate.getTime() && leave.endDate.getTime() <= endDate.getTime()) {
+                    lwpDays += leave.days; // strictly within month
+                } else {
+                    const diffTime = leaveEnd - leaveStart;
+                    lwpDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // crossing month
+                }
+            }
+        }
+
         // ── Calculate salary ────────────────────────────────────────
+        const daysInMonth = new Date(year, month, 0).getDate();
         let grossSalary = 0;
-        let basicComponent = 0;
-        let payableDays = 30;
+        let payableDays = daysInMonth;
+        let leavesDeduction = 0;
 
         if (employee.employmentType === 'contract' && salary.hourlyRate > 0) {
             grossSalary = totalHoursWorked * salary.hourlyRate;
-            basicComponent = grossSalary;
+            payableDays = presentDays; // use present days for hourly
+            // lwp doesn't apply to hourly wages logically, as they are paid per hour worked
         } else {
-            const monthlySalary = salary.basic + salary.specialAllowance;
-            basicComponent = salary.basic;
+            let monthlySalary = 0;
+            if (salary.salaryType === 'monthly' && salary.monthlySchedule && salary.monthlySchedule.length > 0) {
+                const scheduled = salary.monthlySchedule.find(m => m.month === month && m.year === year);
+                monthlySalary = scheduled ? scheduled.amount : 0;
+            } else {
+                monthlySalary = salary.basic + salary.specialAllowance;
+                if (monthlySalary === 0 && salary.annualAmount > 0) {
+                    monthlySalary = salary.annualAmount / 12;
+                }
+            }
+
             payableDays = this.calculatePayableDays(employee.joiningDate, salary.effectiveFrom, month, year);
-            grossSalary = (monthlySalary / 30) * payableDays;
+            
+            // If the employee is mapped to 0 salary, avoid division issues
+            if (monthlySalary > 0) {
+                const perDaySalary = monthlySalary / daysInMonth;
+                grossSalary = perDaySalary * payableDays;
+                
+                // Deduct LWP
+                leavesDeduction = lwpDays * perDaySalary;
+            }
         }
 
         // Statutory deductions
-        // PF and ESI are currently not deducted — set to 0
-        const pfDeduction = 0;
-        const esiDeduction = 0;
-        const taxDeduction = salary.deductions.tax || 0;
-        const otherDeduction = salary.deductions.other || 0;
+        // Values dynamically map from SalaryStructure. (Defaults to 0 in UI)
+        const pfDeduction = salary.deductions?.pf || 0;
+        const esiDeduction = salary.deductions?.esi || 0;
+        const taxDeduction = salary.deductions?.tax || 0;
+        const otherDeduction = salary.deductions?.other || 0;
 
-        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + otherDeduction;
+        const totalDeductions = pfDeduction + esiDeduction + taxDeduction + leavesDeduction + otherDeduction;
 
         const netSalary = grossSalary + incentiveAmount - totalDeductions;
 
@@ -137,7 +180,7 @@ class PayrollService {
                 pf: Math.round(pfDeduction * 100) / 100,
                 esi: Math.round(esiDeduction * 100) / 100,
                 tax: Math.round(taxDeduction * 100) / 100,
-                leaves: 0,
+                leaves: Math.round(leavesDeduction * 100) / 100,
                 penalties: Math.round(penaltyAmount * 100) / 100,
                 other: Math.round(otherDeduction * 100) / 100,
             },
@@ -180,10 +223,11 @@ class PayrollService {
 
                 await this.generatePayroll(emp._id.toString(), month, year, generatedBy, payDate);
                 generated++;
-            } catch (err: any) {
+            } catch (err) {
+                const error = err as Error;
                 failed++;
                 const empName = emp.employeeId || emp._id.toString();
-                errors.push(`${empName}: ${err.message || 'Unknown error'}`);
+                errors.push(`${empName}: ${error.message || 'Unknown error'}`);
             }
         }
 
@@ -212,7 +256,7 @@ class PayrollService {
         }).populate('projectId', 'name');
 
         let totalScore = 0;
-        const incentiveRecords: any[] = [];
+        const incentiveRecords: Record<string, unknown>[] = [];
 
         for (const task of tasks) {
             let score = 0;
@@ -301,17 +345,18 @@ class PayrollService {
             return 0;
         }
 
+        const daysInMonth = periodEnd.getDate();
+
         if (payableFrom.getMonth() !== month - 1 || payableFrom.getFullYear() !== year) {
-            return 30;
+            return daysInMonth;
         }
 
         const effectiveDay = payableFrom.getDate();
         if (effectiveDay <= 1) {
-            return 30;
+            return daysInMonth;
         }
 
-        // Company payroll uses a 30-day basis and expects 15th -> 15 payable days.
-        return Math.max(1, 30 - effectiveDay);
+        return Math.max(1, daysInMonth - effectiveDay + 1);
     }
 
     private getMonthLabel(month: number): string {
@@ -326,7 +371,7 @@ class PayrollService {
         limit?: number;
     }) {
         const { month, year, status, page = 1, limit = 20 } = filters;
-        const query: any = {};
+        const query: FilterQuery<IPayroll> = {};
 
         if (month) query.month = month;
         if (year) query.year = year;
@@ -431,12 +476,12 @@ class PayrollService {
         }
 
         payroll.status = status;
-        if (status === 'approved') payroll.approvedBy = userId as any;
+        if (status === 'approved') payroll.approvedBy = new Types.ObjectId(userId);
         if (status === 'paid') {
             payroll.paidAt = new Date();
 
             const employee = await Employee.findById(payroll.employeeId).populate('userId', 'name');
-            const employeeName = (employee?.userId as any)?.name || employee?.employeeId || 'Employee';
+            const employeeName = (employee?.userId as unknown as { name?: string })?.name || employee?.employeeId || 'Employee';
 
             let payoutTransaction = await BankTransaction.findOne({ payrollId: payroll._id });
             if (!payoutTransaction) {
@@ -479,8 +524,9 @@ class PayrollService {
         id: string,
         data: {
             incentiveAmount?: number;
+            penaltyAmount?: number;
             payoutAccountKey?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
-            deductions?: { tax?: number; other?: number };
+            deductions?: { tax?: number; other?: number; penalties?: number };
         },
         userId: string
     ): Promise<IPayroll> {
@@ -489,6 +535,10 @@ class PayrollService {
 
         if (data.incentiveAmount !== undefined) {
             payroll.incentiveAmount = Math.round(data.incentiveAmount * 100) / 100;
+        }
+
+        if (data.penaltyAmount !== undefined) {
+            payroll.penaltyAmount = Math.round(data.penaltyAmount * 100) / 100;
         }
 
         if (data.payoutAccountKey !== undefined) {
@@ -503,13 +553,17 @@ class PayrollService {
             payroll.deductions.other = Math.round(data.deductions.other * 100) / 100;
         }
 
+        if (data.deductions?.penalties !== undefined) {
+            payroll.deductions.penalties = Math.round(data.deductions.penalties * 100) / 100;
+        }
+
         payroll.netSalary = this.calculateNetSalary(payroll);
 
         await payroll.save();
 
         if (payroll.status === 'paid') {
             const employee = await Employee.findById(payroll.employeeId).populate('userId', 'name');
-            const employeeName = (employee?.userId as any)?.name || employee?.employeeId || 'Employee';
+            const employeeName = (employee?.userId as unknown as { name?: string })?.name || employee?.employeeId || 'Employee';
             const linkedTransaction = await BankTransaction.findOne({ payrollId: payroll._id });
             if (linkedTransaction) {
                 await BankTransactionService.update(linkedTransaction._id, {

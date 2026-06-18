@@ -26,10 +26,12 @@ export const updatePayrollStatusSchema = z.object({
 export const updatePayrollSchema = z.object({
     body: z.object({
         incentiveAmount: z.number().min(0).optional(),
+        penaltyAmount: z.number().min(0).optional(),
         payoutAccountKey: z.enum(['hdfc_gst', 'sbi_non_gst', 'cash']).optional(),
         deductions: z.object({
             tax: z.number().min(0).optional(),
             other: z.number().min(0).optional(),
+            penalties: z.number().min(0).optional(),
         }).optional(),
     }),
     params: z.object({ id: z.string() }),

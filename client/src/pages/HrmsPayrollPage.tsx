@@ -1,475 +1,662 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-    useGetPayrollsQuery,
-    useGeneratePayrollMutation,
-    useGenerateBulkPayrollMutation,
-    useUpdatePayrollStatusMutation,
-    useGetEmployeesQuery,
-} from '@/features/hrms/hrmsApi';
-import {
-    Plus, DollarSign, Check, CreditCard, X, Loader2,
-    Users, Sparkles, AlertTriangle, CheckCircle2, ChevronDown,
+    Briefcase,
+    ChevronDown,
+    IndianRupee,
+    Loader2,
+    Plus,
+    Users,
+    Check,
+    CreditCard,
+    Trash2,
+    Eye,
+    X,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
+import AddSalaryStructureModal from '@/components/organisms/hrms/AddSalaryStructureModal';
+import GeneratePayrollModal from '@/components/organisms/hrms/GeneratePayrollModal';
+import GenerateBulkPayrollModal from '@/components/organisms/hrms/GenerateBulkPayrollModal';
+import PayslipModal from '@/components/organisms/hrms/PayslipModal';
+import {
+    useCreateSalaryMutation,
+    useGenerateBulkPayrollMutation,
+    useGeneratePayrollMutation,
+    useGetEmployeesQuery,
+    useGetPayrollsQuery,
+    useGetSalariesQuery,
+    useUpdatePayrollMutation,
+    useUpdatePayrollStatusMutation,
+    useUpdateSalaryMutation,
+    useDeletePayrollMutation,
+} from '@/features/hrms/hrmsApi';
+import { formatCurrency } from '@/features/finance';
+import {
+    MONTHS,
+    PAYOUT_ACCOUNT_OPTIONS,
+    PAYOUT_ACCOUNT_LABELS,
+} from '@/features/hrms';
+import type { Employee, Payroll, SalaryStructure, CreateSalaryRequest, UpdateSalaryRequest } from '@/features/hrms';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const PAYOUT_ACCOUNT_LABELS: Record<string, string> = {
-    hdfc_gst: 'HDFC (GST)',
-    sbi_non_gst: 'SBI (non GST)',
-    cash: 'Cash in Company',
-};
-
-const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-    draft: { bg: '#FEF9C3', color: '#92400E', label: 'Draft' },
-    approved: { bg: '#DBEAFE', color: '#1D4ED8', label: 'Approved' },
-    paid: { bg: '#D1FAE5', color: '#059669', label: 'Paid' },
-};
+type PayoutAccountKey = (typeof PAYOUT_ACCOUNT_OPTIONS)[number]['value'];
 
 export default function HrmsPayrollPage() {
     const currentDate = new Date();
     const defaultPayrollDate = new Date(currentDate);
     defaultPayrollDate.setMonth(defaultPayrollDate.getMonth() - 1);
+    const defaultPayrollMonth = defaultPayrollDate.getMonth() + 1;
+    const defaultPayrollYear = defaultPayrollDate.getFullYear();
 
-    const [month, setMonth] = useState(defaultPayrollDate.getMonth() + 1);
-    const [year, setYear] = useState(defaultPayrollDate.getFullYear());
-    const [showSingleModal, setShowSingleModal] = useState(false);
-    const [showBulkModal, setShowBulkModal] = useState(false);
-    const [bulkMonth, setBulkMonth] = useState(defaultPayrollDate.getMonth() + 1);
-    const [bulkYear, setBulkYear] = useState(defaultPayrollDate.getFullYear());
-    const [bulkResult, setBulkResult] = useState<{ generated: number; skipped: number; failed: number; errors: string[] } | null>(null);
-    const [genForm, setGenForm] = useState({ employeeId: '', month: defaultPayrollDate.getMonth() + 1, year: defaultPayrollDate.getFullYear() });
+    const [month, setMonth] = useState(defaultPayrollMonth);
+    const [year, setYear] = useState(defaultPayrollYear);
 
-    const { data, isLoading } = useGetPayrollsQuery({ month, year });
-    const { data: empData } = useGetEmployeesQuery({ limit: 200 });
-    const [generatePayroll, { isLoading: genSingle }] = useGeneratePayrollMutation();
-    const [generateBulkPayroll, { isLoading: genBulk }] = useGenerateBulkPayrollMutation();
-    const [updateStatus] = useUpdatePayrollStatusMutation();
+    // Modals visibility
+    const [showSalaryModal, setShowSalaryModal] = useState(false);
+    const [showEmployeeSelectModal, setShowEmployeeSelectModal] = useState(false);
+    const [showGenerateModal, setShowGenerateModal] = useState(false);
+    const [showGenerateAllModal, setShowGenerateAllModal] = useState(false);
+    const [showPayrollEditModal, setShowPayrollEditModal] = useState(false);
+    const [showSalaryStructures, setShowSalaryStructures] = useState(false);
+    const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
 
-    const payrolls = data?.data?.payrolls || [];
-    const employees = empData?.data?.employees || [];
+    // Selected items
+    const [editingSalary, setEditingSalary] = useState<SalaryStructure | null>(null);
+    const [selectedEmployeeForSalary, setSelectedEmployeeForSalary] = useState<Employee | null>(null);
+    const [selectedEmployeeIdForNewSalary, setSelectedEmployeeIdForNewSalary] = useState<string>('');
+    const [editingPayroll, setEditingPayroll] = useState<Payroll | null>(null);
 
-    /* ── single generate ─────────────────────────────────────── */
-    const handleSingleGenerate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await generatePayroll(genForm).unwrap();
-            setShowSingleModal(false);
-        } catch (err: any) {
-            alert(err?.data?.message || 'Failed to generate payroll');
+    const [payrollEditForm, setPayrollEditForm] = useState({
+        incentiveAmount: 0,
+        payoutAccountKey: 'hdfc_gst' as PayoutAccountKey,
+        tax: 0,
+        other: 0,
+    });
+
+    const { data: salaryData, isLoading: isLoadingSalaries } = useGetSalariesQuery({ page: 1, limit: 200 });
+    const { data: payrollData, isLoading: isLoadingPayrolls } = useGetPayrollsQuery({ month, year, page: 1 });
+    const { data: employeeData } = useGetEmployeesQuery({ limit: 200 });
+    const [createSalary, { isLoading: isCreatingSalary }] = useCreateSalaryMutation();
+    const [updateSalary, { isLoading: isUpdatingSalary }] = useUpdateSalaryMutation();
+    const [generatePayroll, { isLoading: isGeneratingSingle }] = useGeneratePayrollMutation();
+    const [generateBulkPayroll, { isLoading: isGeneratingBulk }] = useGenerateBulkPayrollMutation();
+    const [updatePayroll, { isLoading: isUpdatingPayroll }] = useUpdatePayrollMutation();
+    const [updateStatus, { isLoading: isUpdatingStatus }] = useUpdatePayrollStatusMutation();
+    const [deletePayroll] = useDeletePayrollMutation();
+
+    const salaries = useMemo(() => salaryData?.data?.salaries || [], [salaryData]);
+    const payrolls = useMemo(() => payrollData?.data?.payrolls || [], [payrollData]);
+    const employees = useMemo(() => employeeData?.data?.employees || [], [employeeData]);
+
+    const metrics = useMemo(() => ({
+        employeesWithSalary: salaries.length,
+        payrollGenerated: payrolls.length,
+        totalNetSalary: payrolls.reduce((sum, item) => sum + item.netSalary, 0),
+        totalGrossSalary: payrolls.reduce((sum, item) => sum + item.grossSalary, 0),
+    }), [payrolls, salaries.length]);
+
+    // Filter employees who do not have a salary structure yet (for the creation step)
+    const employeesWithoutSalary = useMemo(() => {
+        return employees.filter(emp => !salaries.some((sal) => {
+            const salEmpId = typeof sal.employeeId === 'object' ? sal.employeeId._id : sal.employeeId;
+            return salEmpId === emp._id;
+        }));
+    }, [employees, salaries]);
+
+    const openCreateSalaryModal = () => {
+        setEditingSalary(null);
+        setSelectedEmployeeIdForNewSalary('');
+        setSelectedEmployeeForSalary(null);
+        setShowEmployeeSelectModal(true);
+    };
+
+    const handleEmployeeSelectNext = () => {
+        if (!selectedEmployeeIdForNewSalary) return;
+        const emp = employees.find(e => e._id === selectedEmployeeIdForNewSalary);
+        if (emp) {
+            setSelectedEmployeeForSalary(emp);
+            setShowEmployeeSelectModal(false);
+            setShowSalaryModal(true);
         }
     };
 
-    /* ── bulk generate ───────────────────────────────────────── */
-    const handleBulkGenerate = async () => {
+    const openEditSalaryModal = (salary: SalaryStructure) => {
+        setEditingSalary(salary);
+        setSelectedEmployeeForSalary(salary.employeeId as Employee);
+        setShowSalaryModal(true);
+    };
+
+    const handleSaveSalary = async (data: Partial<CreateSalaryRequest> & { isDraft: boolean }, isDraft: boolean) => {
+        const payload = {
+            ...data,
+            isDraft,
+            currency: 'INR',
+        };
+
+        if (editingSalary) {
+            await updateSalary({ id: editingSalary._id, data: payload as UpdateSalaryRequest }).unwrap();
+        } else if (selectedEmployeeForSalary) {
+            await createSalary({ employeeId: selectedEmployeeForSalary._id, ...payload } as CreateSalaryRequest).unwrap();
+        }
+
+        setShowSalaryModal(false);
+        setEditingSalary(null);
+        setSelectedEmployeeForSalary(null);
+    };
+
+    const handleGenerateSingle = async (form: { employeeId: string; month: number; year: number; payDate?: string }) => {
+        await generatePayroll(form).unwrap();
+        setShowGenerateModal(false);
+    };
+
+    const handleGenerateAll = async (form: { month: number; year: number; payDate?: string }) => {
+        const response = await generateBulkPayroll(form).unwrap();
+        setMonth(form.month);
+        setYear(form.year);
+        setShowGenerateAllModal(false);
+        return response.data;
+    };
+
+    const handleDeletePayroll = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this payroll? This will reverse any expenses or bank transactions.')) return;
         try {
-            const response = await generateBulkPayroll({ month: bulkMonth, year: bulkYear }).unwrap();
-            // RTK unwrap() gives us the full ApiResponse: { status, data: { generated, skipped, failed, errors } }
-            const payload = (response as any)?.data ?? response;
-            setBulkResult({
-                generated: payload?.generated ?? 0,
-                skipped: payload?.skipped ?? 0,
-                failed: payload?.failed ?? 0,
-                errors: payload?.errors ?? [],
-            });
-        } catch (err: any) {
-            // Show errors inside the result screen rather than a browser alert
-            setBulkResult({
-                generated: 0,
-                skipped: 0,
-                failed: 1,
-                errors: [err?.data?.message || err?.message || 'Bulk generation failed. Check server logs.'],
-            });
+            await deletePayroll(id).unwrap();
+        } catch (err: unknown) {
+            const apiErr = err as { data?: { message?: string } };
+            alert(apiErr?.data?.message || 'Failed to delete payroll');
         }
     };
 
-    const selectStyle: React.CSSProperties = {
-        borderColor: 'var(--color-border-default)',
-        backgroundColor: 'var(--color-bg-surface)',
-        color: 'var(--color-text-primary)',
-        borderRadius: '10px',
-        border: '1.5px solid var(--color-border-default)',
-        padding: '0 12px',
-        height: '38px',
-        fontSize: '13.5px',
-        cursor: 'pointer',
-        outline: 'none',
+    const openPayrollEditModal = (payroll: Payroll) => {
+        setEditingPayroll(payroll);
+        setPayrollEditForm({
+            incentiveAmount: payroll.incentiveAmount || 0,
+            payoutAccountKey: payroll.payoutAccountKey || 'hdfc_gst',
+            tax: payroll.deductions?.tax || 0,
+            other: payroll.deductions?.other || 0,
+        });
+        setShowPayrollEditModal(true);
     };
+
+    const handleSavePayrollEdit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!editingPayroll) return;
+
+        await updatePayroll({
+            id: editingPayroll._id,
+            data: {
+                incentiveAmount: Number(payrollEditForm.incentiveAmount),
+                payoutAccountKey: payrollEditForm.payoutAccountKey,
+                deductions: {
+                    tax: Number(payrollEditForm.tax),
+                    other: Number(payrollEditForm.other),
+                },
+            },
+        }).unwrap();
+
+        setShowPayrollEditModal(false);
+        setEditingPayroll(null);
+    };
+
+    const metricCards = [
+        { label: 'Salary Structures', value: metrics.employeesWithSalary, icon: Users, bg: '#EFF6FF', color: '#2563EB' },
+        { label: 'Payroll Entries', value: metrics.payrollGenerated, icon: Briefcase, bg: '#ECFDF5', color: '#059669' },
+        { label: 'Gross Payroll', value: formatCurrency(metrics.totalGrossSalary), icon: IndianRupee, bg: '#FFFBEB', color: '#D97706' },
+        { label: 'Net Payout', value: formatCurrency(metrics.totalNetSalary), icon: Briefcase, bg: '#F5F3FF', color: '#7C3AED' },
+    ];
 
     return (
-        <div className="mx-auto page-enter" style={{ maxWidth: '1200px' }}>
+        <div className="space-y-6 pb-24">
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                <Link to="/hrms" className="transition-colors hover:underline" style={{ color: 'var(--color-text-muted)' }}>
+                    HRMS Dashboard
+                </Link>
+                <span>{'>'}</span>
+                <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>Payroll</span>
+            </div>
 
-            {/* ── Header ─────────────────────────────────────────────── */}
-            <div className="flex items-start justify-between mb-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1
-                        className="text-2xl font-bold mb-0.5"
-                        style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}
-                    >
-                        Payroll
-                    </h1>
-                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                        Generate, approve, and track salary payouts. Payroll month is the salary month being paid.
+                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Payroll</h1>
+                    <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                        Manage employee salary structures and generate payroll payouts.
                     </p>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-2">
-                    {/* Bulk generate */}
+                <div className="flex flex-wrap gap-2">
                     <button
-                        onClick={() => { setBulkResult(null); setShowBulkModal(true); }}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer transition-all"
-                        style={{
-                            background: 'linear-gradient(135deg,#059669,#0EA5E9)',
-                            color: 'white',
-                            boxShadow: 'var(--shadow-brand)',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                        onClick={() => setShowGenerateModal(true)}
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer"
+                        style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
+                    >
+                        <Plus size={15} />
+                        Generate Single
+                    </button>
+                    <button
+                        onClick={() => setShowGenerateAllModal(true)}
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border cursor-pointer"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
                     >
                         <Users size={15} />
                         Generate All
                     </button>
-                    {/* Single generate */}
                     <button
-                        onClick={() => setShowSingleModal(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer btn btn-ghost"
+                        onClick={openCreateSalaryModal}
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border cursor-pointer"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
                     >
-                        <Plus size={15} />
-                        Single Employee
+                        <Briefcase size={15} />
+                        Add Salary
                     </button>
                 </div>
             </div>
 
-            {/* ── Filter bar ─────────────────────────────────────────── */}
-            <div className="flex gap-3 mb-6">
-                <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} style={selectStyle}>
-                    {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-                </select>
-                <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} style={selectStyle}>
-                    {Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 2 + i).map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                    ))}
-                </select>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+                {metricCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div key={card.label} className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>{card.label}</div>
+                                    <div className="mt-2 text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{card.value}</div>
+                                </div>
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ backgroundColor: card.bg, color: card.color }}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* ── Payroll Table ───────────────────────────────────────── */}
-            <div
-                className="rounded-2xl border overflow-hidden"
-                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', boxShadow: 'var(--shadow-xs)' }}
-            >
-                {isLoading ? (
-                    <div className="p-12 flex items-center justify-center gap-2" style={{ color: 'var(--color-text-muted)' }}>
-                        <Loader2 size={18} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
-                        Loading payrolls…
-                    </div>
-                ) : payrolls.length === 0 ? (
-                    <div className="p-16 flex flex-col items-center justify-center">
-                        <div
-                            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-                            style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}
-                        >
-                            <DollarSign size={28} />
+            <div className="space-y-6">
+                <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
+                    <div className="border-b px-5 py-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Payroll Ledger</h2>
+                                <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                    Salary period is tracked by payroll month. Example: payment on 1 April 2026 should be generated as March 2026 payroll.
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <select
+                                    value={month}
+                                    onChange={(event) => setMonth(Number(event.target.value))}
+                                    className="rounded-xl border px-3 py-2 text-sm"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                >
+                                    {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+                                </select>
+                                <select
+                                    value={year}
+                                    onChange={(event) => setYear(Number(event.target.value))}
+                                    className="rounded-xl border px-3 py-2 text-sm"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                >
+                                    {Array.from({ length: 5 }, (_, index) => currentDate.getFullYear() - 2 + index).map((optionYear) => (
+                                        <option key={optionYear} value={optionYear}>{optionYear}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                        <p className="text-base font-bold mb-1" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                            No payroll records
-                        </p>
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            No records for {MONTHS[month - 1]} {year}. Click "Generate All" to run bulk payroll.
-                        </p>
                     </div>
-                ) : (
-                    <table className="w-full">
-                        <thead>
-                            <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                {['Employee', 'Payable Days', 'Hours', 'Gross', 'Deductions', 'Net Salary', 'Paid From', 'Status', 'Actions'].map((h) => (
-                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {payrolls.map((p) => {
-                                const ss = STATUS_STYLE[p.status] || STATUS_STYLE.draft;
-                                const totalDed = p.deductions.pf + p.deductions.esi + p.deductions.tax + p.deductions.leaves + p.deductions.penalties;
-                                return (
-                                    <tr key={p._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                                        <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                            {typeof p.employeeId === 'object' ? ((p.employeeId as any)?.userId?.name || '—') : '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {p.payableDays}/30
-                                            <span className="ml-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                ({p.presentDays}/{p.workingDays} attendance)
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {p.totalHoursWorked}h
-                                            {p.overtime > 0 && <span className="ml-1 text-xs" style={{ color: 'var(--color-primary)' }}>(+{p.overtime}h OT)</span>}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                            ₹{p.grossSalary.toLocaleString()}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-medium" style={{ color: '#EF4444' }}>
-                                            -₹{totalDed.toLocaleString()}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-bold" style={{ color: 'var(--color-success)' }}>
-                                            ₹{p.netSalary.toLocaleString()}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {PAYOUT_ACCOUNT_LABELS[p.payoutAccountKey] || 'HDFC (GST)'}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: ss.bg, color: ss.color }}>
-                                                {ss.label}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex gap-1.5">
-                                                {p.status === 'draft' && (
-                                                    <button
-                                                        onClick={() => updateStatus({ id: p._id, data: { status: 'approved' } })}
-                                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white rounded-lg cursor-pointer"
-                                                        style={{ backgroundColor: '#3B82F6' }}
-                                                    >
-                                                        <Check size={11} /> Approve
-                                                    </button>
-                                                )}
-                                                {p.status === 'approved' && (
-                                                    <button
-                                                        onClick={() => updateStatus({ id: p._id, data: { status: 'paid' } })}
-                                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white rounded-lg cursor-pointer"
-                                                        style={{ backgroundColor: 'var(--color-success)' }}
-                                                    >
-                                                        <CreditCard size={11} /> Mark Paid
-                                                    </button>
-                                                )}
-                                            </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
+                                    {['Employee', 'Payable', 'Gross', 'Bonus', 'Net', 'Paid From', 'Pay Date', 'Status', ''].map((header) => (
+                                        <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isLoadingPayrolls ? (
+                                    <tr>
+                                        <td colSpan={9} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                            <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
+                                            Loading payroll...
                                         </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                )}
+                                ) : payrolls.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                            No payroll entries for {MONTHS[month - 1]} {year}.
+                                        </td>
+                                    </tr>
+                                ) : payrolls.map((payroll) => {
+                                    const emp = typeof payroll.employeeId === 'object' ? (payroll.employeeId as Employee) : null;
+                                    return (
+                                        <tr key={payroll._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                            <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                {emp?.userId?.name || 'Employee'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {payroll.payableDays}/{new Date(payroll.year, payroll.month, 0).getDate()}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm">{formatCurrency(payroll.grossSalary)}</td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: payroll.incentiveAmount > 0 ? '#059669' : 'var(--color-text-secondary)' }}>
+                                                {formatCurrency(payroll.incentiveAmount || 0)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(payroll.netSalary)}</td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {PAYOUT_ACCOUNT_LABELS[payroll.payoutAccountKey] || 'HDFC (GST)'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {payroll.payDate ? new Date(payroll.payDate).toLocaleDateString('en-IN') : '—'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <StatusBadge status={payroll.status} />
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="flex justify-end gap-1.5">
+                                                    <button
+                                                        onClick={() => setSelectedPayroll(payroll)}
+                                                        className="rounded-lg border p-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
+                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                        title="View Details"
+                                                    >
+                                                        <Eye size={13} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openPayrollEditModal(payroll)}
+                                                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
+                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    {payroll.status === 'draft' && (
+                                                        <button
+                                                            onClick={() => updateStatus({ id: payroll._id, data: { status: 'approved' } })}
+                                                            disabled={isUpdatingStatus}
+                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
+                                                            style={{ backgroundColor: '#2563EB' }}
+                                                        >
+                                                            <Check size={12} />
+                                                            Approve
+                                                        </button>
+                                                    )}
+                                                    {payroll.status === 'approved' && (
+                                                        <button
+                                                            onClick={() => updateStatus({ id: payroll._id, data: { status: 'paid' } })}
+                                                            disabled={isUpdatingStatus}
+                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
+                                                            style={{ backgroundColor: '#059669' }}
+                                                        >
+                                                            <CreditCard size={12} />
+                                                            Mark Paid
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleDeletePayroll(payroll._id)}
+                                                        className="flex items-center gap-1 p-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors"
+                                                        style={{ backgroundColor: '#FEF2F2', color: '#EF4444' }}
+                                                        title="Delete Payroll"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
+                    <button
+                        type="button"
+                        onClick={() => setShowSalaryStructures((current) => !current)}
+                        className="flex w-full items-center justify-between gap-4 border-b px-5 py-4 text-left"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structures</h2>
+                                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: '#EFF6FF', color: '#2563EB' }}>
+                                    {salaries.length}
+                                </span>
+                            </div>
+                            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Folded by default so the payroll ledger stays in focus.
+                            </p>
+                        </div>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border cursor-pointer" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                            <ChevronDown size={16} className={`transition-transform ${showSalaryStructures ? 'rotate-180' : ''}`} />
+                        </span>
+                    </button>
+                    {showSalaryStructures ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
+                                        {['Employee', 'Basic', 'Special', 'Gross', 'Paid From', 'Effective', ''].map((header) => (
+                                            <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                                                {header}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {isLoadingSalaries ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
+                                                Loading salary structures...
+                                            </td>
+                                        </tr>
+                                    ) : salaries.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                No salary structures found.
+                                            </td>
+                                        </tr>
+                                    ) : salaries.map((salary) => {
+                                        const emp = typeof salary.employeeId === 'object' ? (salary.employeeId as Employee) : null;
+                                        return (
+                                            <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {emp?.userId?.name || 'Employee'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
+                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
+                                                <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {PAYOUT_ACCOUNT_LABELS[salary.payoutAccountKey] || 'HDFC (GST)'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <button
+                                                        onClick={() => openEditSalaryModal(salary)}
+                                                        className="rounded-lg px-3 py-1.5 text-xs font-semibold border cursor-pointer hover:bg-gray-50"
+                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="px-5 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                            Salary structures are hidden. Expand this section when you need to review or edit them.
+                        </div>
+                    )}
+                </section>
             </div>
 
-            {/* ════════════════════════════════════════════════════════
-                BULK GENERATE MODAL
-                ══════════════════════════════════════════════════════ */}
-            {showBulkModal && (
+            {/* select employee for salary modal */}
+            {showEmployeeSelectModal && (
                 <ModalPortal>
-
-                    <div
-                        className="animate-scale-in w-full rounded-2xl border p-6"
-                        style={{ maxWidth: '460px', backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)', boxShadow: 'var(--shadow-xl)' }}
-                    >
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-5">
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                                    style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
-                                >
-                                    <Sparkles size={18} className="text-white" />
-                                </div>
-                                <div>
-                                    <h2 className="text-base font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                                        Generate Payroll for All
-                                    </h2>
-                                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                        Runs payroll for every active employee
-                                    </p>
-                                </div>
-                            </div>
-                            <button onClick={() => { setShowBulkModal(false); setBulkResult(null); }} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                    <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                        <div className="mb-5 flex items-center justify-between">
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Select Employee for Salary Structure</h2>
+                            <button onClick={() => setShowEmployeeSelectModal(false)} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                                 <X size={18} />
                             </button>
                         </div>
-
-                        {/* Result display */}
-                        {bulkResult ? (
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { label: 'Generated', value: bulkResult.generated, color: '#10B981', bg: '#D1FAE5' },
-                                        { label: 'Skipped', value: bulkResult.skipped, color: '#F59E0B', bg: '#FEF3C7' },
-                                        { label: 'Failed', value: bulkResult.failed, color: '#EF4444', bg: '#FEE2E2' },
-                                    ].map(({ label, value, color, bg }) => (
-                                        <div key={label} className="rounded-xl p-4 text-center" style={{ backgroundColor: bg }}>
-                                            <div className="text-2xl font-bold" style={{ color, fontFamily: 'Outfit, sans-serif' }}>{value}</div>
-                                            <div className="text-xs font-semibold mt-0.5" style={{ color }}>{label}</div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {bulkResult.errors.length > 0 && (
-                                    <div className="rounded-xl p-3" style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
-                                        <div className="flex items-center gap-1.5 mb-2">
-                                            <AlertTriangle size={13} style={{ color: '#EF4444' }} />
-                                            <span className="text-xs font-semibold" style={{ color: '#EF4444' }}>Errors</span>
-                                        </div>
-                                        <div className="space-y-1 max-h-28 overflow-y-auto">
-                                            {bulkResult.errors.map((e, i) => (
-                                                <p key={i} className="text-xs" style={{ color: '#991B1B' }}>{e}</p>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex items-center gap-2 text-sm font-medium" style={{ color: '#059669' }}>
-                                    <CheckCircle2 size={16} />
-                                    Payroll generation complete!
-                                </div>
-
-                                <button
-                                    onClick={() => { setShowBulkModal(false); setBulkResult(null); }}
-                                    className="w-full py-2.5 text-sm font-semibold text-white rounded-xl cursor-pointer"
-                                    style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
-                                >
-                                    Done
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {/* Month + Year pickers */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Month</label>
-                                        <div className="relative">
-                                            <select
-                                                value={bulkMonth}
-                                                onChange={(e) => setBulkMonth(parseInt(e.target.value))}
-                                                className="w-full appearance-none"
-                                                style={{ ...selectStyle, width: '100%', paddingRight: '32px' }}
-                                            >
-                                                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-                                            </select>
-                                            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Year</label>
-                                        <div className="relative">
-                                            <select
-                                                value={bulkYear}
-                                                onChange={(e) => setBulkYear(parseInt(e.target.value))}
-                                                className="w-full appearance-none"
-                                                style={{ ...selectStyle, width: '100%', paddingRight: '32px' }}
-                                            >
-                                                {Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 2 + i).map((y) => (
-                                                    <option key={y} value={y}>{y}</option>
-                                                ))}
-                                            </select>
-                                            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Info note */}
-                                <div
-                                    className="rounded-xl p-3 text-xs"
-                                    style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary-darker)' }}
-                                >
-                                    Payroll will be generated for all <strong>active</strong> employees who have a salary structure set up. Leaves do not reduce salary, and mid-month joins/effective dates are prorated on a 30-day payroll basis.
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={handleBulkGenerate}
-                                        disabled={genBulk}
-                                        className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white rounded-xl cursor-pointer disabled:opacity-60 transition-all"
-                                        style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
-                                    >
-                                        {genBulk ? (
-                                            <><Loader2 size={15} className="animate-spin" /> Generating…</>
-                                        ) : (
-                                            <><Sparkles size={15} /> Generate for All Employees</>
-                                        )}
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowBulkModal(false); setBulkResult(null); }}
-                                        className="px-4 py-2.5 text-sm rounded-xl border cursor-pointer btn btn-ghost"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </ModalPortal>
-            )}
-
-            {/* ════════════════════════════════════════════════════════
-                SINGLE EMPLOYEE MODAL
-                ══════════════════════════════════════════════════════ */}
-            {showSingleModal && (
-                <ModalPortal>
-
-                    <div
-                        className="animate-scale-in w-full rounded-2xl border p-6"
-                        style={{ maxWidth: '420px', backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)', boxShadow: 'var(--shadow-xl)' }}
-                    >
-                        <div className="flex items-center justify-between mb-5">
-                            <h2 className="text-base font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                                Generate — Single Employee
-                            </h2>
-                            <button onClick={() => setShowSingleModal(false)} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <form onSubmit={handleSingleGenerate} className="space-y-4">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Select Employee</label>
+                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Employee</label>
                                 <select
                                     required
-                                    value={genForm.employeeId}
-                                    onChange={(e) => setGenForm({ ...genForm, employeeId: e.target.value })}
-                                    className="w-full"
-                                    style={{ ...selectStyle, width: '100%' }}
+                                    value={selectedEmployeeIdForNewSalary}
+                                    onChange={(event) => setSelectedEmployeeIdForNewSalary(event.target.value)}
+                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                 >
-                                    <option value="">— Select employee —</option>
-                                    {employees.map((emp) => (
-                                        <option key={emp._id} value={emp._id}>
-                                            {(emp.userId as any)?.name || emp.employeeId} — {emp.designation}
+                                    <option value="">Select employee</option>
+                                    {employeesWithoutSalary.map((employee) => (
+                                        <option key={employee._id} value={employee._id}>
+                                            {employee.userId?.name || employee.employeeId} - {employee.designation}
                                         </option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={handleEmployeeSelectNext}
+                                disabled={!selectedEmployeeIdForNewSalary}
+                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer disabled:opacity-60"
+                                style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </ModalPortal>
+            )}
+
+            {/* salary structure modal */}
+            {showSalaryModal && selectedEmployeeForSalary && (
+                <AddSalaryStructureModal
+                    isOpen={showSalaryModal}
+                    onClose={() => {
+                        setShowSalaryModal(false);
+                        setEditingSalary(null);
+                        setSelectedEmployeeForSalary(null);
+                    }}
+                    employee={selectedEmployeeForSalary}
+                    existingSalary={editingSalary}
+                    onSave={handleSaveSalary}
+                    isSaving={isCreatingSalary || isUpdatingSalary}
+                />
+            )}
+
+            {/* generate payroll modals */}
+            <GeneratePayrollModal
+                key={showGenerateModal ? 'single-open' : 'single-closed'}
+                isOpen={showGenerateModal}
+                onClose={() => setShowGenerateModal(false)}
+                employees={employees}
+                onGenerate={handleGenerateSingle}
+                isGenerating={isGeneratingSingle}
+                showPayDate={true}
+                defaultMonth={month}
+                defaultYear={year}
+            />
+
+            <GenerateBulkPayrollModal
+                key={showGenerateAllModal ? 'bulk-open' : 'bulk-closed'}
+                isOpen={showGenerateAllModal}
+                onClose={() => setShowGenerateAllModal(false)}
+                onGenerate={handleGenerateAll}
+                isGenerating={isGeneratingBulk}
+                showPayDate={true}
+                defaultMonth={month}
+                defaultYear={year}
+            />
+
+            {/* edit payroll modal */}
+            {showPayrollEditModal && editingPayroll && (
+                <ModalPortal>
+                    <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                        <div className="mb-5 flex items-center justify-between">
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Payroll</h2>
+                            <button onClick={() => setShowPayrollEditModal(false)} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSavePayrollEdit} className="space-y-4">
+                            <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: '#F8FAFC', color: 'var(--color-text-secondary)' }}>
+                                Editing this payroll updates the same record used in HRMS and the employee payslip. If already marked paid, the bank transaction is updated too.
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Bonus</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={payrollEditForm.incentiveAmount}
+                                    onChange={(event) => setPayrollEditForm((current) => ({ ...current, incentiveAmount: Number(event.target.value) }))}
+                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Paid From</label>
+                                <select
+                                    value={payrollEditForm.payoutAccountKey}
+                                    onChange={(event) => setPayrollEditForm((current) => ({ ...current, payoutAccountKey: event.target.value as PayoutAccountKey }))}
+                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                >
+                                    {PAYOUT_ACCOUNT_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Month</label>
-                                    <select value={genForm.month} onChange={(e) => setGenForm({ ...genForm, month: parseInt(e.target.value) })} className="w-full" style={{ ...selectStyle, width: '100%' }}>
-                                        {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-                                    </select>
+                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tax Deduction</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={payrollEditForm.tax}
+                                        onChange={(event) => setPayrollEditForm((current) => ({ ...current, tax: Number(event.target.value) }))}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Year</label>
-                                    <select value={genForm.year} onChange={(e) => setGenForm({ ...genForm, year: parseInt(e.target.value) })} className="w-full" style={{ ...selectStyle, width: '100%' }}>
-                                        {Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 2 + i).map((y) => (
-                                            <option key={y} value={y}>{y}</option>
-                                        ))}
-                                    </select>
+                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Other Deduction</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={payrollEditForm.other}
+                                        onChange={(event) => setPayrollEditForm((current) => ({ ...current, other: Number(event.target.value) }))}
+                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
+                                    />
                                 </div>
                             </div>
-                            <div className="flex gap-3 pt-1">
-                                <button
-                                    type="submit"
-                                    disabled={genSingle}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white rounded-xl cursor-pointer disabled:opacity-60"
-                                    style={{ backgroundColor: 'var(--color-primary)', boxShadow: 'var(--shadow-brand)' }}
-                                >
-                                    {genSingle ? <><Loader2 size={15} className="animate-spin" /> Generating…</> : 'Generate'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSingleModal(false)}
-                                    className="px-4 py-2.5 text-sm rounded-xl border cursor-pointer btn btn-ghost"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
+                            <button
+                                type="submit"
+                                disabled={isUpdatingPayroll}
+                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
+                            >
+                                {isUpdatingPayroll ? <Loader2 size={15} className="animate-spin" /> : <Briefcase size={15} />}
+                                Save Payroll Changes
+                            </button>
                         </form>
                     </div>
                 </ModalPortal>
+            )}
+
+            {/* view payslip details modal */}
+            {selectedPayroll && (
+                <PayslipModal payroll={selectedPayroll} onClose={() => setSelectedPayroll(null)} />
             )}
         </div>
     );

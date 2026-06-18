@@ -2,20 +2,23 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Briefcase,
-    Building2,
-    Check,
-    CreditCard,
     ChevronDown,
     IndianRupee,
-    Landmark,
     Loader2,
     Plus,
-    Receipt,
     Users,
-    Wallet,
+    Check,
+    CreditCard,
+    Trash2,
+    Eye,
     X,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
+import AddSalaryStructureModal from '@/components/organisms/hrms/AddSalaryStructureModal';
+import GeneratePayrollModal from '@/components/organisms/hrms/GeneratePayrollModal';
+import GenerateBulkPayrollModal from '@/components/organisms/hrms/GenerateBulkPayrollModal';
+import PayslipModal from '@/components/organisms/hrms/PayslipModal';
 import {
     useCreateSalaryMutation,
     useGenerateBulkPayrollMutation,
@@ -26,26 +29,17 @@ import {
     useUpdatePayrollMutation,
     useUpdatePayrollStatusMutation,
     useUpdateSalaryMutation,
+    useDeletePayrollMutation,
 } from '@/features/hrms/hrmsApi';
-import { formatCurrency } from '@/features/finance/utils/currency';
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const PAYOUT_ACCOUNT_OPTIONS = [
-    { value: 'hdfc_gst', label: 'HDFC (GST)', icon: Landmark },
-    { value: 'sbi_non_gst', label: 'SBI (non GST)', icon: Building2 },
-    { value: 'cash', label: 'Cash in Company', icon: Wallet },
-] as const;
+import { formatCurrency } from '@/features/finance';
+import {
+    MONTHS,
+    PAYOUT_ACCOUNT_OPTIONS,
+    PAYOUT_ACCOUNT_LABELS,
+} from '@/features/hrms';
+import type { Employee, Payroll, SalaryStructure, CreateSalaryRequest, UpdateSalaryRequest } from '@/features/hrms';
 
 type PayoutAccountKey = (typeof PAYOUT_ACCOUNT_OPTIONS)[number]['value'];
-
-const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-    draft: { bg: '#FEF9C3', color: '#92400E', label: 'Draft' },
-    approved: { bg: '#DBEAFE', color: '#1D4ED8', label: 'Approved' },
-    paid: { bg: '#D1FAE5', color: '#059669', label: 'Paid' },
-};
-
-// Currency Formatters imported from @/features/finance/utils/currency
-
-const buildPayDate = (month: number, year: number) => new Date(Date.UTC(year, month, 1)).toISOString().split('T')[0];
 
 export default function FinanceSalariesPayrollPage() {
     const currentDate = new Date();
@@ -56,31 +50,22 @@ export default function FinanceSalariesPayrollPage() {
 
     const [month, setMonth] = useState(defaultPayrollMonth);
     const [year, setYear] = useState(defaultPayrollYear);
+
+    // Modals visibility
     const [showSalaryModal, setShowSalaryModal] = useState(false);
+    const [showEmployeeSelectModal, setShowEmployeeSelectModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [showGenerateAllModal, setShowGenerateAllModal] = useState(false);
     const [showPayrollEditModal, setShowPayrollEditModal] = useState(false);
     const [showSalaryStructures, setShowSalaryStructures] = useState(false);
-    const [editingSalary, setEditingSalary] = useState<any | null>(null);
-    const [editingPayroll, setEditingPayroll] = useState<any | null>(null);
-    const [salaryForm, setSalaryForm] = useState({
-        employeeId: '',
-        basic: 0,
-        specialAllowance: 0,
-        payoutAccountKey: 'hdfc_gst' as PayoutAccountKey,
-        effectiveFrom: new Date().toISOString().split('T')[0],
-    });
-    const [genForm, setGenForm] = useState({
-        employeeId: '',
-        month: defaultPayrollMonth,
-        year: defaultPayrollYear,
-        payDate: buildPayDate(defaultPayrollMonth, defaultPayrollYear),
-    });
-    const [bulkForm, setBulkForm] = useState({
-        month: defaultPayrollMonth,
-        year: defaultPayrollYear,
-        payDate: buildPayDate(defaultPayrollMonth, defaultPayrollYear),
-    });
+    const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
+
+    // Selected items
+    const [editingSalary, setEditingSalary] = useState<SalaryStructure | null>(null);
+    const [selectedEmployeeForSalary, setSelectedEmployeeForSalary] = useState<Employee | null>(null);
+    const [selectedEmployeeIdForNewSalary, setSelectedEmployeeIdForNewSalary] = useState<string>('');
+    const [editingPayroll, setEditingPayroll] = useState<Payroll | null>(null);
+
     const [payrollEditForm, setPayrollEditForm] = useState({
         incentiveAmount: 0,
         payoutAccountKey: 'hdfc_gst' as PayoutAccountKey,
@@ -97,10 +82,11 @@ export default function FinanceSalariesPayrollPage() {
     const [generateBulkPayroll, { isLoading: isGeneratingBulk }] = useGenerateBulkPayrollMutation();
     const [updatePayroll, { isLoading: isUpdatingPayroll }] = useUpdatePayrollMutation();
     const [updateStatus, { isLoading: isUpdatingStatus }] = useUpdatePayrollStatusMutation();
+    const [deletePayroll] = useDeletePayrollMutation();
 
-    const salaries = salaryData?.data?.salaries || [];
-    const payrolls = payrollData?.data?.payrolls || [];
-    const employees = employeeData?.data?.employees || [];
+    const salaries = useMemo(() => salaryData?.data?.salaries || [], [salaryData]);
+    const payrolls = useMemo(() => payrollData?.data?.payrolls || [], [payrollData]);
+    const employees = useMemo(() => employeeData?.data?.employees || [], [employeeData]);
 
     const metrics = useMemo(() => ({
         employeesWithSalary: salaries.length,
@@ -109,66 +95,79 @@ export default function FinanceSalariesPayrollPage() {
         totalGrossSalary: payrolls.reduce((sum, item) => sum + item.grossSalary, 0),
     }), [payrolls, salaries.length]);
 
+    // Filter employees who do not have a salary structure yet (for the creation step)
+    const employeesWithoutSalary = useMemo(() => {
+        return employees.filter(emp => !salaries.some((sal) => {
+            const salEmpId = typeof sal.employeeId === 'object' ? sal.employeeId._id : sal.employeeId;
+            return salEmpId === emp._id;
+        }));
+    }, [employees, salaries]);
+
     const openCreateSalaryModal = () => {
         setEditingSalary(null);
-        setSalaryForm({
-            employeeId: '',
-            basic: 0,
-            specialAllowance: 0,
-            payoutAccountKey: 'hdfc_gst',
-            effectiveFrom: new Date().toISOString().split('T')[0],
-        });
-        setShowSalaryModal(true);
+        setSelectedEmployeeIdForNewSalary('');
+        setSelectedEmployeeForSalary(null);
+        setShowEmployeeSelectModal(true);
     };
 
-    const openEditSalaryModal = (salary: any) => {
+    const handleEmployeeSelectNext = () => {
+        if (!selectedEmployeeIdForNewSalary) return;
+        const emp = employees.find(e => e._id === selectedEmployeeIdForNewSalary);
+        if (emp) {
+            setSelectedEmployeeForSalary(emp);
+            setShowEmployeeSelectModal(false);
+            setShowSalaryModal(true);
+        }
+    };
+
+    const openEditSalaryModal = (salary: SalaryStructure) => {
         setEditingSalary(salary);
-        setSalaryForm({
-            employeeId: typeof salary.employeeId === 'object' ? salary.employeeId._id : salary.employeeId,
-            basic: salary.basic || 0,
-            specialAllowance: salary.specialAllowance || 0,
-            payoutAccountKey: salary.payoutAccountKey || 'hdfc_gst',
-            effectiveFrom: salary.effectiveFrom?.split('T')[0] || new Date().toISOString().split('T')[0],
-        });
+        setSelectedEmployeeForSalary(salary.employeeId as Employee);
         setShowSalaryModal(true);
     };
 
-    const handleSaveSalary = async (event: React.FormEvent) => {
-        event.preventDefault();
-
+    const handleSaveSalary = async (data: Partial<CreateSalaryRequest> & { isDraft: boolean }, isDraft: boolean) => {
         const payload = {
-            employeeId: salaryForm.employeeId,
-            basic: Number(salaryForm.basic),
-            specialAllowance: Number(salaryForm.specialAllowance),
-            payoutAccountKey: salaryForm.payoutAccountKey,
-            effectiveFrom: salaryForm.effectiveFrom,
+            ...data,
+            isDraft,
             currency: 'INR',
         };
 
         if (editingSalary) {
-            await updateSalary({ id: editingSalary._id, data: payload }).unwrap();
-        } else {
-            await createSalary(payload).unwrap();
+            await updateSalary({ id: editingSalary._id, data: payload as UpdateSalaryRequest }).unwrap();
+        } else if (selectedEmployeeForSalary) {
+            await createSalary({ employeeId: selectedEmployeeForSalary._id, ...payload } as CreateSalaryRequest).unwrap();
         }
 
         setShowSalaryModal(false);
+        setEditingSalary(null);
+        setSelectedEmployeeForSalary(null);
     };
 
-    const handleGenerateSingle = async (event: React.FormEvent) => {
-        event.preventDefault();
-        await generatePayroll(genForm).unwrap();
+    const handleGenerateSingle = async (form: { employeeId: string; month: number; year: number; payDate?: string }) => {
+        await generatePayroll(form).unwrap();
         setShowGenerateModal(false);
     };
 
-    const handleGenerateAll = async (event: React.FormEvent) => {
-        event.preventDefault();
-        await generateBulkPayroll(bulkForm).unwrap();
-        setMonth(bulkForm.month);
-        setYear(bulkForm.year);
+    const handleGenerateAll = async (form: { month: number; year: number; payDate?: string }) => {
+        const response = await generateBulkPayroll(form).unwrap();
+        setMonth(form.month);
+        setYear(form.year);
         setShowGenerateAllModal(false);
+        return response.data;
     };
 
-    const openPayrollEditModal = (payroll: any) => {
+    const handleDeletePayroll = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this payroll? This will reverse any expenses or bank transactions.')) return;
+        try {
+            await deletePayroll(id).unwrap();
+        } catch (err: unknown) {
+            const apiErr = err as { data?: { message?: string } };
+            alert(apiErr?.data?.message || 'Failed to delete payroll');
+        }
+    };
+
+    const openPayrollEditModal = (payroll: Payroll) => {
         setEditingPayroll(payroll);
         setPayrollEditForm({
             incentiveAmount: payroll.incentiveAmount || 0,
@@ -201,7 +200,7 @@ export default function FinanceSalariesPayrollPage() {
 
     const metricCards = [
         { label: 'Salary Structures', value: metrics.employeesWithSalary, icon: Users, bg: '#EFF6FF', color: '#2563EB' },
-        { label: 'Payroll Entries', value: metrics.payrollGenerated, icon: Receipt, bg: '#ECFDF5', color: '#059669' },
+        { label: 'Payroll Entries', value: metrics.payrollGenerated, icon: Briefcase, bg: '#ECFDF5', color: '#059669' },
         { label: 'Gross Payroll', value: formatCurrency(metrics.totalGrossSalary), icon: IndianRupee, bg: '#FFFBEB', color: '#D97706' },
         { label: 'Net Payout', value: formatCurrency(metrics.totalNetSalary), icon: Briefcase, bg: '#F5F3FF', color: '#7C3AED' },
     ];
@@ -226,38 +225,24 @@ export default function FinanceSalariesPayrollPage() {
 
                 <div className="flex flex-wrap gap-2">
                     <button
-                        onClick={() => {
-                            const nextGenMonth = defaultPayrollMonth;
-                            const nextGenYear = defaultPayrollYear;
-                            setGenForm({
-                                employeeId: '',
-                                month: nextGenMonth,
-                                year: nextGenYear,
-                                payDate: buildPayDate(nextGenMonth, nextGenYear),
-                            });
-                            setShowGenerateModal(true);
-                        }}
-                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+                        onClick={() => setShowGenerateModal(true)}
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer"
                         style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
                     >
                         <Plus size={15} />
                         Generate Single
                     </button>
                     <button
-                        onClick={() => {
-                            setBulkForm({ month, year, payDate: buildPayDate(month, year) });
-                            setShowGenerateAllModal(true);
-                        }}
-                        disabled={isGeneratingBulk}
-                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border"
+                        onClick={() => setShowGenerateAllModal(true)}
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border cursor-pointer"
                         style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
                     >
-                        {isGeneratingBulk ? <Loader2 size={15} className="animate-spin" /> : <Users size={15} />}
+                        <Users size={15} />
                         Generate All
                     </button>
                     <button
                         onClick={openCreateSalaryModal}
-                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border"
+                        className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border cursor-pointer"
                         style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)', backgroundColor: 'white' }}
                     >
                         <Briefcase size={15} />
@@ -343,34 +328,42 @@ export default function FinanceSalariesPayrollPage() {
                                         </td>
                                     </tr>
                                 ) : payrolls.map((payroll) => {
-                                    const statusMeta = STATUS_STYLE[payroll.status] || STATUS_STYLE.draft;
+                                    const emp = typeof payroll.employeeId === 'object' ? (payroll.employeeId as Employee) : null;
                                     return (
                                         <tr key={payroll._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
                                             <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                                {typeof payroll.employeeId === 'object' ? (payroll.employeeId as any)?.userId?.name || 'Employee' : 'Employee'}
+                                                {emp?.userId?.name || 'Employee'}
                                             </td>
-                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{payroll.payableDays}/30 days</td>
+                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {payroll.payableDays}/{new Date(payroll.year, payroll.month, 0).getDate()}
+                                            </td>
                                             <td className="px-4 py-3 text-sm">{formatCurrency(payroll.grossSalary)}</td>
                                             <td className="px-4 py-3 text-sm" style={{ color: payroll.incentiveAmount > 0 ? '#059669' : 'var(--color-text-secondary)' }}>
                                                 {formatCurrency(payroll.incentiveAmount || 0)}
                                             </td>
                                             <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(payroll.netSalary)}</td>
                                             <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                                {PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === payroll.payoutAccountKey)?.label || 'HDFC (GST)'}
+                                                {PAYOUT_ACCOUNT_LABELS[payroll.payoutAccountKey] || 'HDFC (GST)'}
                                             </td>
                                             <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                                 {payroll.payDate ? new Date(payroll.payDate).toLocaleDateString('en-IN') : '—'}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: statusMeta.bg, color: statusMeta.color }}>
-                                                    {statusMeta.label}
-                                                </span>
+                                                <StatusBadge status={payroll.status} />
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex justify-end gap-1.5">
+                                                    <button
+                                                        onClick={() => setSelectedPayroll(payroll)}
+                                                        className="rounded-lg border p-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
+                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                        title="View Details"
+                                                    >
+                                                        <Eye size={13} />
+                                                    </button>
                                                     <button
                                                         onClick={() => openPayrollEditModal(payroll)}
-                                                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
+                                                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
                                                         style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
                                                     >
                                                         Edit
@@ -379,7 +372,7 @@ export default function FinanceSalariesPayrollPage() {
                                                         <button
                                                             onClick={() => updateStatus({ id: payroll._id, data: { status: 'approved' } })}
                                                             disabled={isUpdatingStatus}
-                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
                                                             style={{ backgroundColor: '#2563EB' }}
                                                         >
                                                             <Check size={12} />
@@ -390,13 +383,21 @@ export default function FinanceSalariesPayrollPage() {
                                                         <button
                                                             onClick={() => updateStatus({ id: payroll._id, data: { status: 'paid' } })}
                                                             disabled={isUpdatingStatus}
-                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+                                                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
                                                             style={{ backgroundColor: '#059669' }}
                                                         >
                                                             <CreditCard size={12} />
                                                             Mark Paid
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => handleDeletePayroll(payroll._id)}
+                                                        className="flex items-center gap-1 p-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors"
+                                                        style={{ backgroundColor: '#FEF2F2', color: '#EF4444' }}
+                                                        title="Delete Payroll"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -425,7 +426,7 @@ export default function FinanceSalariesPayrollPage() {
                                 Folded by default so the payroll ledger stays in focus.
                             </p>
                         </div>
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border cursor-pointer" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
                             <ChevronDown size={16} className={`transition-transform ${showSalaryStructures ? 'rotate-180' : ''}`} />
                         </span>
                     </button>
@@ -455,33 +456,36 @@ export default function FinanceSalariesPayrollPage() {
                                                 No salary structures found.
                                             </td>
                                         </tr>
-                                    ) : salaries.map((salary) => (
-                                        <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                                            <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                                {typeof salary.employeeId === 'object' ? (salary.employeeId as any)?.userId?.name || 'Employee' : 'Employee'}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
-                                            <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
-                                            <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                                {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                                {PAYOUT_ACCOUNT_OPTIONS.find((option) => option.value === salary.payoutAccountKey)?.label || 'HDFC (GST)'}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                                {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <button
-                                                    onClick={() => openEditSalaryModal(salary)}
-                                                    className="rounded-lg px-3 py-1.5 text-xs font-semibold border"
-                                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
-                                                >
-                                                    Edit
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    ) : salaries.map((salary) => {
+                                        const emp = typeof salary.employeeId === 'object' ? (salary.employeeId as Employee) : null;
+                                        return (
+                                            <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                                                <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {emp?.userId?.name || 'Employee'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
+                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
+                                                <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {PAYOUT_ACCOUNT_LABELS[salary.payoutAccountKey] || 'HDFC (GST)'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <button
+                                                        onClick={() => openEditSalaryModal(salary)}
+                                                        className="rounded-lg px-3 py-1.5 text-xs font-semibold border cursor-pointer hover:bg-gray-50"
+                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -493,267 +497,94 @@ export default function FinanceSalariesPayrollPage() {
                 </section>
             </div>
 
-            {showSalaryModal && (
+            {/* select employee for salary modal */}
+            {showEmployeeSelectModal && (
                 <ModalPortal>
-                    <div className="w-full max-w-lg rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
+                    <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
                         <div className="mb-5 flex items-center justify-between">
-                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {editingSalary ? 'Edit Salary Structure' : 'Add Salary Structure'}
-                            </h2>
-                            <button onClick={() => setShowSalaryModal(false)} style={{ color: 'var(--color-text-muted)' }}>
+                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Select Employee for Salary Structure</h2>
+                            <button onClick={() => setShowEmployeeSelectModal(false)} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                                 <X size={18} />
                             </button>
                         </div>
-                        <form onSubmit={handleSaveSalary} className="space-y-4">
+                        <div className="space-y-4">
                             <div>
                                 <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Employee</label>
                                 <select
                                     required
-                                    disabled={!!editingSalary}
-                                    value={salaryForm.employeeId}
-                                    onChange={(event) => setSalaryForm((current) => ({ ...current, employeeId: event.target.value }))}
+                                    value={selectedEmployeeIdForNewSalary}
+                                    onChange={(event) => setSelectedEmployeeIdForNewSalary(event.target.value)}
                                     className="w-full rounded-lg border px-3 py-2.5 text-sm"
                                     style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
                                 >
                                     <option value="">Select employee</option>
-                                    {employees.map((employee) => (
+                                    {employeesWithoutSalary.map((employee) => (
                                         <option key={employee._id} value={employee._id}>
-                                            {(employee.userId as any)?.name || employee.employeeId} - {employee.designation}
+                                            {employee.userId?.name || employee.employeeId} - {employee.designation}
                                         </option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Basic Salary</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        required
-                                        value={salaryForm.basic}
-                                        onChange={(event) => setSalaryForm((current) => ({ ...current, basic: Number(event.target.value) }))}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Special Allowance</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={salaryForm.specialAllowance}
-                                        onChange={(event) => setSalaryForm((current) => ({ ...current, specialAllowance: Number(event.target.value) }))}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Salary Paid From</label>
-                                <select
-                                    required
-                                    value={salaryForm.payoutAccountKey}
-                                    onChange={(event) => setSalaryForm((current) => ({ ...current, payoutAccountKey: event.target.value as PayoutAccountKey }))}
-                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                >
-                                    {PAYOUT_ACCOUNT_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Effective From</label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={salaryForm.effectiveFrom}
-                                    onChange={(event) => setSalaryForm((current) => ({ ...current, effectiveFrom: event.target.value }))}
-                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                />
-                            </div>
-                            <div className="rounded-xl px-4 py-3" style={{ backgroundColor: '#F0FDF4' }}>
-                                <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#166534' }}>Gross preview</div>
-                                <div className="mt-1 text-lg font-bold" style={{ color: '#15803D' }}>
-                                    {formatCurrency(Number(salaryForm.basic) + Number(salaryForm.specialAllowance))}
-                                </div>
-                            </div>
                             <button
-                                type="submit"
-                                disabled={isCreatingSalary || isUpdatingSalary}
-                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+                                onClick={handleEmployeeSelectNext}
+                                disabled={!selectedEmployeeIdForNewSalary}
+                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer disabled:opacity-60"
                                 style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
                             >
-                                {(isCreatingSalary || isUpdatingSalary) ? <Loader2 size={15} className="animate-spin" /> : <Briefcase size={15} />}
-                                Save Salary
-                            </button>
-                        </form>
-                    </div>
-                </ModalPortal>
-            )}
-
-            {showGenerateModal && (
-                <ModalPortal>
-                    <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
-                        <div className="mb-5 flex items-center justify-between">
-                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Generate Single Payroll</h2>
-                            <button onClick={() => setShowGenerateModal(false)} style={{ color: 'var(--color-text-muted)' }}>
-                                <X size={18} />
+                                Next
                             </button>
                         </div>
-                        <form onSubmit={handleGenerateSingle} className="space-y-4">
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Employee</label>
-                                <select
-                                    required
-                                    value={genForm.employeeId}
-                                    onChange={(event) => setGenForm((current) => ({ ...current, employeeId: event.target.value }))}
-                                    className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                >
-                                    <option value="">Select employee</option>
-                                    {employees.map((employee) => (
-                                        <option key={employee._id} value={employee._id}>
-                                            {(employee.userId as any)?.name || employee.employeeId} - {employee.designation}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Month</label>
-                                    <select
-                                        value={genForm.month}
-                                        onChange={(event) => setGenForm((current) => {
-                                            const nextMonth = Number(event.target.value);
-                                            return { ...current, month: nextMonth, payDate: buildPayDate(nextMonth, current.year) };
-                                        })}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    >
-                                        {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Year</label>
-                                    <select
-                                        value={genForm.year}
-                                        onChange={(event) => setGenForm((current) => {
-                                            const nextYear = Number(event.target.value);
-                                            return { ...current, year: nextYear, payDate: buildPayDate(current.month, nextYear) };
-                                        })}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    >
-                                        {Array.from({ length: 5 }, (_, index) => currentDate.getFullYear() - 2 + index).map((optionYear) => (
-                                            <option key={optionYear} value={optionYear}>{optionYear}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pay Date</label>
-                                    <input
-                                        type="date"
-                                        value={genForm.payDate}
-                                        onChange={(event) => setGenForm((current) => ({ ...current, payDate: event.target.value }))}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    />
-                                </div>
-                            </div>
-                            <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                This creates payroll for the selected salary month and schedules a pay date for the payout.
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={isGeneratingSingle}
-                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-                                style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
-                            >
-                                {isGeneratingSingle ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-                                Generate Payroll
-                            </button>
-                        </form>
                     </div>
                 </ModalPortal>
             )}
 
-            {showGenerateAllModal && (
-                <ModalPortal>
-                    <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
-                        <div className="mb-5 flex items-center justify-between">
-                            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Generate Payroll For All</h2>
-                            <button onClick={() => setShowGenerateAllModal(false)} style={{ color: 'var(--color-text-muted)' }}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <form onSubmit={handleGenerateAll} className="space-y-4">
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Month</label>
-                                    <select
-                                        value={bulkForm.month}
-                                        onChange={(event) => setBulkForm((current) => {
-                                            const nextMonth = Number(event.target.value);
-                                            return { ...current, month: nextMonth, payDate: buildPayDate(nextMonth, current.year) };
-                                        })}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    >
-                                        {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Payroll Year</label>
-                                    <select
-                                        value={bulkForm.year}
-                                        onChange={(event) => setBulkForm((current) => {
-                                            const nextYear = Number(event.target.value);
-                                            return { ...current, year: nextYear, payDate: buildPayDate(current.month, nextYear) };
-                                        })}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    >
-                                        {Array.from({ length: 5 }, (_, index) => currentDate.getFullYear() - 2 + index).map((optionYear) => (
-                                            <option key={optionYear} value={optionYear}>{optionYear}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pay Date</label>
-                                    <input
-                                        type="date"
-                                        value={bulkForm.payDate}
-                                        onChange={(event) => setBulkForm((current) => ({ ...current, payDate: event.target.value }))}
-                                        className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}
-                                    />
-                                </div>
-                            </div>
-                            <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                Approve first, then mark paid. Once paid, the selected employee payout account is debited automatically.
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={isGeneratingBulk}
-                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-                                style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
-                            >
-                                {isGeneratingBulk ? <Loader2 size={15} className="animate-spin" /> : <Users size={15} />}
-                                Generate All Payrolls
-                            </button>
-                        </form>
-                    </div>
-                </ModalPortal>
+            {/* salary structure modal */}
+            {showSalaryModal && selectedEmployeeForSalary && (
+                <AddSalaryStructureModal
+                    isOpen={showSalaryModal}
+                    onClose={() => {
+                        setShowSalaryModal(false);
+                        setEditingSalary(null);
+                        setSelectedEmployeeForSalary(null);
+                    }}
+                    employee={selectedEmployeeForSalary}
+                    existingSalary={editingSalary}
+                    onSave={handleSaveSalary}
+                    isSaving={isCreatingSalary || isUpdatingSalary}
+                />
             )}
 
+            {/* generate payroll modals */}
+            <GeneratePayrollModal
+                key={showGenerateModal ? 'single-open' : 'single-closed'}
+                isOpen={showGenerateModal}
+                onClose={() => setShowGenerateModal(false)}
+                employees={employees}
+                onGenerate={handleGenerateSingle}
+                isGenerating={isGeneratingSingle}
+                showPayDate={true}
+                defaultMonth={month}
+                defaultYear={year}
+            />
+
+            <GenerateBulkPayrollModal
+                key={showGenerateAllModal ? 'bulk-open' : 'bulk-closed'}
+                isOpen={showGenerateAllModal}
+                onClose={() => setShowGenerateAllModal(false)}
+                onGenerate={handleGenerateAll}
+                isGenerating={isGeneratingBulk}
+                showPayDate={true}
+                defaultMonth={month}
+                defaultYear={year}
+            />
+
+            {/* edit payroll modal */}
             {showPayrollEditModal && editingPayroll && (
                 <ModalPortal>
                     <div className="w-full max-w-md rounded-2xl border p-6" style={{ backgroundColor: 'white', borderColor: 'var(--color-border-default)' }}>
                         <div className="mb-5 flex items-center justify-between">
                             <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Edit Payroll</h2>
-                            <button onClick={() => setShowPayrollEditModal(false)} style={{ color: 'var(--color-text-muted)' }}>
+                            <button onClick={() => setShowPayrollEditModal(false)} style={{ color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                                 <X size={18} />
                             </button>
                         </div>
@@ -812,7 +643,7 @@ export default function FinanceSalariesPayrollPage() {
                             <button
                                 type="submit"
                                 disabled={isUpdatingPayroll}
-                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+                                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white cursor-pointer"
                                 style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
                             >
                                 {isUpdatingPayroll ? <Loader2 size={15} className="animate-spin" /> : <Briefcase size={15} />}
@@ -821,6 +652,11 @@ export default function FinanceSalariesPayrollPage() {
                         </form>
                     </div>
                 </ModalPortal>
+            )}
+
+            {/* view payslip details modal */}
+            {selectedPayroll && (
+                <PayslipModal payroll={selectedPayroll} onClose={() => setSelectedPayroll(null)} />
             )}
         </div>
     );
