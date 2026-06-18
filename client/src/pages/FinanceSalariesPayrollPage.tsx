@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Briefcase,
-    ChevronDown,
     IndianRupee,
     Loader2,
     Plus,
@@ -73,7 +72,7 @@ export default function FinanceSalariesPayrollPage() {
         other: 0,
     });
 
-    const { data: salaryData, isLoading: isLoadingSalaries } = useGetSalariesQuery({ page: 1, limit: 200 });
+    const { data: salaryData } = useGetSalariesQuery({ page: 1, limit: 200 });
     const { data: payrollData, isLoading: isLoadingPayrolls } = useGetPayrollsQuery({ month, year, page: 1 });
     const { data: employeeData } = useGetEmployeesQuery({ limit: 200 });
     const [createSalary, { isLoading: isCreatingSalary }] = useCreateSalaryMutation();
@@ -120,11 +119,7 @@ export default function FinanceSalariesPayrollPage() {
         }
     };
 
-    const openEditSalaryModal = (salary: SalaryStructure) => {
-        setEditingSalary(salary);
-        setSelectedEmployeeForSalary(salary.employeeId as Employee);
-        setShowSalaryModal(true);
-    };
+
 
     const handleSaveSalary = async (data: Partial<CreateSalaryRequest> & { isDraft: boolean }, isDraft: boolean) => {
         const payload = {
