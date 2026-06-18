@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { 
     useGetRevenuesQuery, 
     useRevenueMetrics,
+    useDeleteRevenueMutation,
     type Revenue
 } from '@/features/finance';
 import { 
@@ -14,13 +15,14 @@ import {
     DateRangeFilter,
     type DateRange
 } from '@/components/organisms/finance';
-import type { RevenueStatusFilter, RevenueSourceFilter } from '@/components/organisms/finance/RevenueFilters';
+import type { RevenueSourceFilter } from '@/components/organisms/finance/RevenueFilters';
 import { getCurrentFiscalYearRange, toDateInputValue } from '@/lib/utils/date';
+import { Loader2, Trash2 } from 'lucide-react';
+import { logger } from '@/utils/logger';
 
 const FinanceRevenuePage: React.FC = () => {
     // State for filters
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterStatus, setFilterStatus] = useState<RevenueStatusFilter>('all');
     const [filterSource, setFilterSource] = useState<RevenueSourceFilter>('all');
     
     // Default to current fiscal year
@@ -41,13 +43,49 @@ const FinanceRevenuePage: React.FC = () => {
     // Queries
     const { data: revenuesData, isLoading } = useGetRevenuesQuery({ 
         search: searchQuery || undefined, 
-        status: filterStatus === 'all' ? undefined : filterStatus,
         source: filterSource === 'all' ? undefined : filterSource,
         startDate: dateRange.startDate || undefined,
         endDate: dateRange.endDate || undefined
     });
 
     const revenues = revenuesData?.data?.revenues || [];
+    
+    // Checkbox and Delete state
+    const [selectedRevenueIds, setSelectedRevenueIds] = useState<string[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+    const [deleteRevenueMutation] = useDeleteRevenueMutation();
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedRevenueIds(revenues.map(r => r._id));
+        } else {
+            setSelectedRevenueIds([]);
+        }
+    };
+
+    const handleSelect = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedRevenueIds(prev => [...prev, id]);
+        } else {
+            setSelectedRevenueIds(prev => prev.filter(rId => rId !== id));
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedRevenueIds.length === 0) return;
+        if (!window.confirm(`Are you sure you want to delete ${selectedRevenueIds.length} revenue entries?`)) return;
+
+        setIsBulkDeleting(true);
+        try {
+            await Promise.all(selectedRevenueIds.map(id => deleteRevenueMutation(id).unwrap()));
+            setSelectedRevenueIds([]);
+        } catch (error) {
+            logger.error('Failed to delete revenues:', error);
+            alert('Failed to delete some entries. Please try again.');
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
     
     // Metrics hook
     const metricCards = useRevenueMetrics(revenues);
@@ -105,17 +143,32 @@ const FinanceRevenuePage: React.FC = () => {
                 <RevenueFilters
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
-                    filterStatus={filterStatus}
-                    onFilterStatusChange={setFilterStatus}
                     filterSource={filterSource}
                     onFilterSourceChange={setFilterSource}
                 />
+
+                {selectedRevenueIds.length > 0 && (
+                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center">
+                        <button
+                            type="button"
+                            onClick={handleBulkDelete}
+                            disabled={isBulkDeleting}
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-60"
+                        >
+                            {isBulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            Delete Selected ({selectedRevenueIds.length})
+                        </button>
+                    </div>
+                )}
 
                 <RevenueList
                     revenues={revenues}
                     isLoading={isLoading}
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
+                    selectedIds={selectedRevenueIds}
+                    onSelectAll={handleSelectAll}
+                    onSelect={handleSelect}
                 />
             </div>
 

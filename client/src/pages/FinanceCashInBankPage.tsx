@@ -48,7 +48,6 @@ interface TransactionFormData {
     amount: number;
     date: string;
     description: string;
-    referenceNumber: string;
     notes: string;
 }
 
@@ -136,9 +135,12 @@ export default function FinanceCashInBankPage() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [limit, setLimit] = useState(15);
+    const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
     useEffect(() => {
         setLimit(15);
+        setSelectedTransactionIds([]);
     }, [activeTab, searchQuery, transactionTypeFilter, startDate, endDate]);
 
     const [formData, setFormData] = useState<TransactionFormData>({
@@ -147,7 +149,6 @@ export default function FinanceCashInBankPage() {
         amount: 0,
         date: today,
         description: '',
-        referenceNumber: '',
         notes: '',
     });
     const [accountFormData, setAccountFormData] = useState<AccountFormData>({
@@ -385,7 +386,6 @@ export default function FinanceCashInBankPage() {
             amount: 0,
             date: today,
             description: '',
-            referenceNumber: '',
             notes: '',
         });
         setShowAddModal(true);
@@ -394,12 +394,11 @@ export default function FinanceCashInBankPage() {
     const openEditModal = (transaction: BankTransaction) => {
         setEditingTransaction(transaction);
         setFormData({
-            accountKey: transaction.accountKey,
+            accountKey: transaction.accountKey || activeTab,
             transactionType: transaction.transactionType,
             amount: transaction.amount,
-            date: transaction.date.split('T')[0],
+            date: new Date(transaction.date).toISOString().split('T')[0],
             description: transaction.description,
-            referenceNumber: transaction.referenceNumber || '',
             notes: transaction.notes || '',
         });
         setShowAddModal(true);
@@ -451,15 +450,45 @@ export default function FinanceCashInBankPage() {
         }
     };
 
-    const handleDelete = async (transactionId: string) => {
-        if (!window.confirm('Are you sure you want to delete this transaction?')) {
-            return;
-        }
-
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this transaction?')) return;
         try {
-            await deleteBankTransaction(transactionId).unwrap();
+            await deleteBankTransaction(id).unwrap();
         } catch (error) {
-            logger.error('Failed to delete bank transaction:', error);
+            logger.error('Failed to delete transaction:', error);
+            alert('Failed to delete transaction. Please try again.');
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedTransactionIds.length === 0) return;
+        if (!window.confirm(`Are you sure you want to delete ${selectedTransactionIds.length} transactions?`)) return;
+        
+        setIsBulkDeleting(true);
+        try {
+            await Promise.all(selectedTransactionIds.map(id => deleteBankTransaction(id).unwrap()));
+            setSelectedTransactionIds([]);
+        } catch (error) {
+            logger.error('Failed to delete transactions:', error);
+            alert('Failed to delete some transactions. Please try again.');
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
+    const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            setSelectedTransactionIds(transactions.map(t => t._id));
+        } else {
+            setSelectedTransactionIds([]);
+        }
+    };
+
+    const handleSelectTransaction = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedTransactionIds(prev => [...prev, id]);
+        } else {
+            setSelectedTransactionIds(prev => prev.filter(tId => tId !== id));
         }
     };
 
@@ -719,6 +748,17 @@ export default function FinanceCashInBankPage() {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                        {selectedTransactionIds.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleBulkDelete}
+                                disabled={isBulkDeleting}
+                                className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-60"
+                            >
+                                {isBulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                Delete Selected ({selectedTransactionIds.length})
+                            </button>
+                        )}
                         <div className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium" style={{ backgroundColor: '#F8FAFC', color: '#475569' }}>
                             <CreditCard size={14} />
                             {transactionsQuery.data?.data?.total || 0} transactions
@@ -744,10 +784,17 @@ export default function FinanceCashInBankPage() {
                         <table className="min-w-full divide-y" style={{ divideColor: 'var(--color-border-default)' } as CSSProperties}>
                             <thead style={{ backgroundColor: '#F9FAFB' }}>
                                 <tr>
+                                    <th className="px-5 py-3 text-left w-12">
+                                        <input 
+                                            type="checkbox" 
+                                            className="rounded border-gray-300"
+                                            checked={transactions.length > 0 && selectedTransactionIds.length === transactions.length}
+                                            onChange={handleSelectAll}
+                                        />
+                                    </th>
                                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Date</th>
                                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Description</th>
                                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Type</th>
-                                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Reference</th>
                                     <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Amount</th>
                                     <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#64748B' }}>Actions</th>
                                 </tr>
@@ -755,8 +802,17 @@ export default function FinanceCashInBankPage() {
                             <tbody>
                                 {transactions.map((transaction) => {
                                     const isCredit = transaction.transactionType === 'credit';
+                                    const isSelected = selectedTransactionIds.includes(transaction._id);
                                     return (
-                                        <tr key={transaction._id} className="border-t transition-colors hover:bg-slate-50/70" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <tr key={transaction._id} className="border-t transition-colors hover:bg-slate-50/70" style={{ borderColor: 'var(--color-border-default)', backgroundColor: isSelected ? 'var(--color-bg-subtle)' : 'transparent' }}>
+                                            <td className="px-5 py-4">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="rounded border-gray-300"
+                                                    checked={isSelected}
+                                                    onChange={(e) => handleSelectTransaction(transaction._id, e.target.checked)}
+                                                />
+                                            </td>
                                             <td className="px-5 py-4 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
                                                 {new Date(transaction.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                             </td>
@@ -778,7 +834,6 @@ export default function FinanceCashInBankPage() {
                                                     {isCredit ? 'Credit' : 'Debit'}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-4 text-sm" style={{ color: '#64748B' }}>{transaction.referenceNumber || '—'}</td>
                                             <td className="px-5 py-4 text-right text-sm font-semibold" style={{ color: isCredit ? '#166534' : '#B91C1C' }}>
                                                 {isCredit ? '+' : '-'}{formatCurrency(transaction.amount)}
                                             </td>
@@ -914,17 +969,6 @@ export default function FinanceCashInBankPage() {
                                         className="w-full rounded-xl border px-3 py-2.5 text-sm"
                                         style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white', color: '#111827' }}
                                         placeholder="Enter transaction description"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium" style={{ color: '#374151' }}>Reference Number</label>
-                                    <input
-                                        type="text"
-                                        value={formData.referenceNumber}
-                                        onChange={(event) => setFormData((prev) => ({ ...prev, referenceNumber: event.target.value }))}
-                                        className="w-full rounded-xl border px-3 py-2.5 text-sm"
-                                        style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white', color: '#111827' }}
-                                        placeholder="Optional"
                                     />
                                 </div>
                                 <div>

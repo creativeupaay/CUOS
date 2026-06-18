@@ -476,8 +476,14 @@ export default function ProjectFormPage({
                 delete nextPhase.paymentFxFallbackUsed;
             }
 
-            if (field === 'hasPayment' && value && !currentPhase.paymentDueDate && currentPhase.endDate) {
-                nextPhase.paymentDueDate = currentPhase.endDate;
+            if (field === 'hasPayment' && value) {
+                if (!currentPhase.paymentDueDate && currentPhase.endDate) {
+                    nextPhase.paymentDueDate = currentPhase.endDate;
+                }
+                if (prev.isGstInclusive) {
+                    nextPhase.isGstInclusive = true;
+                    nextPhase.gstApplicable = false;
+                }
             }
 
             if (field === 'endDate' && currentPhase.hasPayment && (!currentPhase.paymentDueDate || currentPhase.paymentDueDate === currentPhase.endDate)) {

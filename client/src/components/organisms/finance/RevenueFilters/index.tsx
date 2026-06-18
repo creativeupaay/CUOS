@@ -1,14 +1,11 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 
-export type RevenueStatusFilter = 'all' | 'received' | 'pending' | 'partial' | 'overdue';
 export type RevenueSourceFilter = 'all' | 'manual' | 'invoice' | 'project';
 
 export interface RevenueFiltersProps {
     searchQuery: string;
     onSearchChange: (value: string) => void;
-    filterStatus: RevenueStatusFilter;
-    onFilterStatusChange: (value: RevenueStatusFilter) => void;
     filterSource: RevenueSourceFilter;
     onFilterSourceChange: (value: RevenueSourceFilter) => void;
 }
@@ -16,8 +13,6 @@ export interface RevenueFiltersProps {
 export const RevenueFilters: React.FC<RevenueFiltersProps> = ({
     searchQuery,
     onSearchChange,
-    filterStatus,
-    onFilterStatusChange,
     filterSource,
     onFilterSourceChange,
 }) => {
@@ -35,18 +30,6 @@ export const RevenueFilters: React.FC<RevenueFiltersProps> = ({
                         style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
                     />
                 </div>
-                <select
-                    value={filterStatus}
-                    onChange={(e) => onFilterStatusChange(e.target.value as RevenueStatusFilter)}
-                    className="px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: '#E5E7EB', backgroundColor: 'white', color: '#374151' }}
-                >
-                    <option value="all">All Status</option>
-                    <option value="received">Received</option>
-                    <option value="pending">Pending</option>
-                    <option value="partial">Partial</option>
-                    <option value="overdue">Overdue</option>
-                </select>
                 <select
                     value={filterSource}
                     onChange={(e) => onFilterSourceChange(e.target.value as RevenueSourceFilter)}

@@ -3,13 +3,18 @@ import { createPortal } from 'react-dom';
 import type { Project, ProjectPhase } from '@/features/project';
 import { useUpdateProjectMutation, useMarkPhasePaymentReceivedMutation } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
-import { Target, Pencil, CheckCircle2, Circle, Clock, DollarSign, AlertTriangle, ChevronDown, ChevronUp, Copy, Plus, Trash2, Loader2, X } from 'lucide-react';
+import { Target, Pencil, CheckCircle2, Circle, Clock, DollarSign, AlertTriangle, ChevronDown, ChevronUp, Copy, Plus, Trash2, Loader2, X, GripVertical } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import PhasePaymentDialog from '@/components/PhasePaymentDialog';
 import ManualFxRateModal, { type ManualFxRateRequirement } from '@/components/ManualFxRateModal';
 import { logger } from '@/utils/logger';
 
 export type ExtendedProjectPhase = ProjectPhase & {
     __v?: number;
+    id?: string;
 };
 
 export interface ProjectStatsGridProps {
@@ -28,12 +33,11 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
     const [showPhasePanel, setShowPhasePanel] = useState(false);
     const [localPhases, setLocalPhases] = useState<ExtendedProjectPhase[]>([]);
     const [manualFxRequirements, setManualFxRequirements] = useState<ManualFxRateRequirement[]>([]);
-    const [expandedPaymentSections, setExpandedPaymentSections] = useState<Record<number, boolean>>({});
+    const [expandedPaymentSections, setExpandedPaymentSections] = useState<Record<string, boolean>>({});
     const [paymentDialogPhase, setPaymentDialogPhase] = useState<(ProjectPhase & { _id: string }) | null>(null);
     const [updateProject, { isLoading: isSavingPhases }] = useUpdateProjectMutation();
     const [markPhasePaymentReceived] = useMarkPhasePaymentReceivedMutation();
-    const localPhaseRowRefs = useRef<Array<HTMLDivElement | null>>([]);
-    const newlyAddedLocalPhaseIndexRef = useRef<number | null>(null);
+    const newlyAddedLocalPhaseIdRef = useRef<string | null>(null);
 
     const totalPaymentAllocation = useMemo(
         () => localPhases.reduce((sum, phase) => sum + (phase.hasPayment ? Number(phase.paymentPercentage || 0) : 0), 0),
@@ -57,15 +61,20 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
     useEffect(() => {
         if (showPhasePanel) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
-            setLocalPhases((project.phases || []).map((p: ProjectPhase) => ({ ...p } as ExtendedProjectPhase)));
+            setLocalPhases((project.phases || []).map((p: ProjectPhase) => ({ 
+                ...p, 
+                id: p._id || crypto.randomUUID() 
+            } as ExtendedProjectPhase)));
         }
     }, [showPhasePanel, project.phases]);
 
     const addPhase = () =>
         setLocalPhases(prev => {
-            const nextIndex = prev.length;
-            newlyAddedLocalPhaseIndexRef.current = nextIndex;
+            
+            const newId = crypto.randomUUID();
+            newlyAddedLocalPhaseIdRef.current = newId;
             return [...prev, {
+                id: newId,
                 name: '',
                 status: 'pending' as const,
                 endDate: '',
@@ -82,11 +91,11 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
         });
 
     useEffect(() => {
-        const index = newlyAddedLocalPhaseIndexRef.current;
-        if (index === null || !showPhasePanel) return;
+        const addedId = newlyAddedLocalPhaseIdRef.current;
+        if (addedId === null || !showPhasePanel) return;
 
         const id = window.setTimeout(() => {
-            const row = localPhaseRowRefs.current[index];
+            const row = document.getElementById('phase-row-' + addedId);
             if (!row) return;
             row.scrollIntoView({ behavior: 'smooth', block: 'center' });
             const firstInput = row.querySelector('input');
@@ -95,7 +104,7 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
             }
         }, 90);
 
-        newlyAddedLocalPhaseIndexRef.current = null;
+        newlyAddedLocalPhaseIdRef.current = null;
         return () => window.clearTimeout(id);
     }, [localPhases.length, showPhasePanel]);
 
@@ -111,8 +120,14 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                 delete next.paymentFxRequestedDate;
                 delete next.paymentFxFallbackUsed;
             }
-            if (field === 'hasPayment' && value && !p.paymentDueDate && p.endDate) {
-                next.paymentDueDate = p.endDate;
+            if (field === 'hasPayment' && value) {
+                if (!p.paymentDueDate && p.endDate) {
+                    next.paymentDueDate = p.endDate;
+                }
+                if (project.isGstInclusive) {
+                    next.isGstInclusive = true;
+                    next.gstApplicable = false;
+                }
             }
             if (field === 'endDate' && p.hasPayment && (!p.paymentDueDate || p.paymentDueDate === p.endDate)) {
                 next.paymentDueDate = value ? String(value) : undefined;
@@ -124,6 +139,7 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
         setLocalPhases(prev => prev.filter((_, i) => i !== idx));
 
     const createDuplicatePhase = (phase: ExtendedProjectPhase): ExtendedProjectPhase => ({
+        id: crypto.randomUUID(),
         name: `${phase.name || 'Phase'} Copy`,
         status: 'pending',
         startDate: phase.startDate,
@@ -141,25 +157,21 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
     });
 
     const duplicatePhase = (idx: number) => {
+        const sourcePhase = localPhases[idx];
+        if (!sourcePhase) return;
+        const newPhase = createDuplicatePhase(sourcePhase);
+        newlyAddedLocalPhaseIdRef.current = newPhase.id!;
         setLocalPhases(prev => {
-            const sourcePhase = prev[idx];
-            if (!sourcePhase) return prev;
-            const insertIndex = idx + 1;
-            newlyAddedLocalPhaseIndexRef.current = insertIndex;
             const next = [...prev];
-            next.splice(insertIndex, 0, createDuplicatePhase(sourcePhase));
+            next.splice(idx + 1, 0, newPhase);
             return next;
         });
-        setExpandedPaymentSections(prev => {
-            const next: Record<number, boolean> = {};
-            Object.entries(prev).forEach(([key, value]) => {
-                const numericKey = Number(key);
-                if (Number.isNaN(numericKey) || !value) return;
-                next[numericKey >= idx + 1 ? numericKey + 1 : numericKey] = true;
-            });
-            if (localPhases[idx]?.hasPayment) next[idx + 1] = true;
-            return next;
-        });
+        if (sourcePhase.hasPayment) {
+            setExpandedPaymentSections(prev => ({
+                ...prev,
+                [newPhase.id!]: true
+            }));
+        }
     };
 
     const cleanLocalPhasesForSave = (phaseList: ExtendedProjectPhase[]) => phaseList
@@ -203,6 +215,21 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
             return phase;
         });
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setLocalPhases((items) => {
+                const oldIndex = items.findIndex((item) => item.id === active.id);
+                const newIndex = items.findIndex((item) => item.id === over.id);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
     const savePhases = async () => {
         try {
             if (totalPaymentAllocation > 100) {
@@ -534,15 +561,145 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                     No phases yet — click “Add Phase” below.
                                 </p>
                             )}
-                            {localPhases.map((phase, idx) => (
-                                <div
-                                    key={idx}
-                                    ref={(el) => {
-                                        localPhaseRowRefs.current[idx] = el;
-                                    }}
-                                    className="p-4 rounded-xl border space-y-3"
-                                    style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}
+
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                <SortableContext items={localPhases.map(p => p.id!)} strategy={verticalListSortingStrategy}>
+                                    {localPhases.map((phase, idx) => (
+                                        <SortablePhaseRow
+                                            key={phase.id}
+                                            phase={phase}
+                                            idx={idx}
+                                            project={project}
+                                            expandedPaymentSections={expandedPaymentSections}
+                                            setExpandedPaymentSections={setExpandedPaymentSections}
+                                            updatePhaseField={updatePhaseField}
+                                            duplicatePhase={duplicatePhase}
+                                            removePhase={removePhase}
+                                            getMaxAllowedPaymentPercentage={getMaxAllowedPaymentPercentage}
+                                            setPaymentDialogPhase={setPaymentDialogPhase}
+                                        />
+                                    ))}
+                                </SortableContext>
+                            </DndContext>
+        
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3.5 border-t shrink-0 flex items-center justify-between gap-3" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
+                            <button
+                                onClick={addPhase}
+                                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
+                            >
+                                <Plus size={13} /> Add Phase
+                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowPhasePanel(false)}
+                                    disabled={isSavingPhases}
+                                    className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
                                 >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={savePhases}
+                                    disabled={isSavingPhases || totalPaymentAllocation > 100}
+                                    className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}
+                                >
+                                    {isSavingPhases ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                                    {isSavingPhases ? 'Saving…' : 'Save Phases'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>,
+                document.body
+            )}
+
+            {/* Phase Payment Dialog */}
+            {showPaymentDetails && paymentDialogPhase && (
+                <PhasePaymentDialog
+                    phase={paymentDialogPhase}
+                    projectCurrency={project.currency}
+                    projectBudget={project.budget}
+                    defaultBankAccount={project.defaultBankAccount}
+                    onClose={() => setPaymentDialogPhase(null)}
+                    onConfirm={handleMarkPaymentReceived}
+                />
+            )}
+            {manualFxRequirements.length > 0 && (
+                <ManualFxRateModal
+                    requirements={manualFxRequirements}
+                    isSaving={isSavingPhases}
+                    onClose={() => setManualFxRequirements([])}
+                    onSubmit={handleManualFxSubmit}
+                />
+            )}
+        </div>
+    );
+}
+
+
+
+interface SortablePhaseRowProps {
+    phase: ExtendedProjectPhase;
+    idx: number;
+    project: Project;
+    expandedPaymentSections: Record<string, boolean>;
+    setExpandedPaymentSections: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+    updatePhaseField: (idx: number, field: keyof ExtendedProjectPhase, value: unknown) => void;
+    duplicatePhase: (idx: number) => void;
+    removePhase: (idx: number) => void;
+    getMaxAllowedPaymentPercentage: (idx: number) => number;
+    setPaymentDialogPhase: React.Dispatch<React.SetStateAction<(ProjectPhase & { _id: string }) | null>>;
+}
+
+function SortablePhaseRow({
+    phase,
+    idx,
+    project,
+    expandedPaymentSections,
+    setExpandedPaymentSections,
+    updatePhaseField,
+    duplicatePhase,
+    removePhase,
+    getMaxAllowedPaymentPercentage,
+    setPaymentDialogPhase
+}: SortablePhaseRowProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+    } = useSortable({ id: phase.id! });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        borderColor: 'var(--color-border-default)', 
+        backgroundColor: 'var(--color-bg-subtle)'
+    };
+
+    return (
+        <div
+            id={`phase-row-${phase.id}`}
+            ref={setNodeRef}
+            style={style}
+            className="p-4 rounded-xl border space-y-3 bg-white"
+        >
+            <div className="flex items-start gap-2">
+                <button
+                    {...attributes}
+                    {...listeners}
+                    className="p-1 mt-1 rounded cursor-grab active:cursor-grabbing hover:bg-black/5"
+                    style={{color: 'var(--color-text-secondary)'}}
+                >
+                    <GripVertical size={16} />
+                </button>
+                <div className="flex-1 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-muted)' }}>Phase {idx + 1}</span>
                                         <div className="flex items-center gap-1">
@@ -613,16 +770,16 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                             </label>
                                             <button
                                                 type="button"
-                                                onClick={() => setExpandedPaymentSections(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                                onClick={() => setExpandedPaymentSections(prev => ({ ...prev, [phase.id!]: !prev[phase.id!] }))}
                                                 className="p-1 rounded transition-colors hover:bg-black/5"
                                                 style={{ color: 'var(--color-text-secondary)' }}
-                                                title={expandedPaymentSections[idx] ? 'Hide payment details' : 'Show payment details'}
+                                                title={expandedPaymentSections[phase.id!] ? 'Hide payment details' : 'Show payment details'}
                                             >
-                                                {expandedPaymentSections[idx] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                {expandedPaymentSections[phase.id!] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                             </button>
                                         </div>
 
-                                        {expandedPaymentSections[idx] && (
+                                        {expandedPaymentSections[phase.id!] && (
                                             <div className="space-y-3 mt-2 pt-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
                                                 {phase.hasPayment && (
                                                     <>
@@ -881,63 +1038,8 @@ export function ProjectStatsGrid({ project, isSuperAdmin, canViewPaymentDetails 
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-5 py-3.5 border-t shrink-0 flex items-center justify-between gap-3" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-subtle)' }}>
-                            <button
-                                onClick={addPhase}
-                                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
-                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
-                            >
-                                <Plus size={13} /> Add Phase
-                            </button>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setShowPhasePanel(false)}
-                                    disabled={isSavingPhases}
-                                    className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
-                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-surface)' }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={savePhases}
-                                    disabled={isSavingPhases || totalPaymentAllocation > 100}
-                                    className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors"
-                                    style={{ backgroundColor: 'var(--color-primary)' }}
-                                >
-                                    {isSavingPhases ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                                    {isSavingPhases ? 'Saving…' : 'Save Phases'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </>,
-                document.body
-            )}
-
-            {/* Phase Payment Dialog */}
-            {showPaymentDetails && paymentDialogPhase && (
-                <PhasePaymentDialog
-                    phase={paymentDialogPhase}
-                    projectCurrency={project.currency}
-                    projectBudget={project.budget}
-                    defaultBankAccount={project.defaultBankAccount}
-                    onClose={() => setPaymentDialogPhase(null)}
-                    onConfirm={handleMarkPaymentReceived}
-                />
-            )}
-            {manualFxRequirements.length > 0 && (
-                <ManualFxRateModal
-                    requirements={manualFxRequirements}
-                    isSaving={isSavingPhases}
-                    onClose={() => setManualFxRequirements([])}
-                    onSubmit={handleManualFxSubmit}
-                />
-            )}
+                </div>
+            </div>
         </div>
     );
 }

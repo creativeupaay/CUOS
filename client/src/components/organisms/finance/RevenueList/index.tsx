@@ -1,13 +1,15 @@
 import React from 'react';
 import { Calendar, Building2, Edit2, Trash2, Loader2, Receipt } from 'lucide-react';
 import { type Revenue, formatCurrency } from '@/features/finance';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
 
 export interface RevenueListProps {
     revenues: Revenue[];
     isLoading: boolean;
     onEdit: (revenue: Revenue) => void;
     onDelete: (revenue: Revenue) => void;
+    selectedIds: string[];
+    onSelectAll: (checked: boolean) => void;
+    onSelect: (id: string, checked: boolean) => void;
 }
 
 const EmptyState = () => (
@@ -18,7 +20,7 @@ const EmptyState = () => (
     </div>
 );
 
-export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, onEdit, onDelete }) => {
+export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, onEdit, onDelete, selectedIds, onSelectAll, onSelect }) => {
     if (isLoading) {
         return (
             <div className="rounded-xl border bg-white border-[var(--color-border-default)]">
@@ -43,6 +45,14 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                 <table className="w-full">
                     <thead>
                         <tr className="bg-gray-50">
+                            <th className="text-left w-12 px-5 py-3">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300"
+                                    checked={revenues.length > 0 && selectedIds.length === revenues.length}
+                                    onChange={(e) => onSelectAll(e.target.checked)}
+                                />
+                            </th>
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Date</th>
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Client</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Total Amount (INR)</th>
@@ -50,7 +60,7 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">TDS</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">GST</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
-                            <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
                             <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                         </tr>
                     </thead>
@@ -60,6 +70,14 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                 key={entry._id}
                                 className={`transition-colors hover:bg-gray-50 ${index > 0 ? 'border-t border-gray-200' : ''}`}
                             >
+                                <td className="px-5 py-3">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={selectedIds.includes(entry._id)}
+                                        onChange={(e) => onSelect(entry._id, e.target.checked)}
+                                    />
+                                </td>
                                 <td className="px-5 py-3">
                                     <div className="flex items-center gap-2">
                                         <Calendar size={14} className="text-gray-400" />
@@ -92,8 +110,8 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                 <td className="px-5 py-3 text-sm text-right text-gray-900">
                                     {formatCurrency(entry.amountINR || entry.amount || 0)}
                                 </td>
-                                <td className="px-5 py-3 text-center">
-                                    <StatusBadge status={entry.status} />
+                                <td className="px-5 py-3 text-sm text-right text-gray-900">
+                                    {formatCurrency(entry.amountINR || entry.amount || 0)}
                                 </td>
                                 <td className="px-5 py-3">
                                     <div className="flex items-center justify-center gap-1">
