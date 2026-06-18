@@ -403,7 +403,8 @@ export class RevenueService {
         
         // 1. Get Revenues created on or before endDate
         const revenueRecords = await Revenue.find({
-            date: { $lte: endDate }
+            date: { $lte: endDate },
+            source: { $ne: 'project' }
         }).lean();
 
         // 2. Get Payments made on or before endDate for these revenues

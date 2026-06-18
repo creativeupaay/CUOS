@@ -243,14 +243,21 @@ const normalizePhasePaymentFinancials = async (
             cleaned.paymentFxRateSource = conversion.source;
             cleaned.paymentFxRequestedDate = conversion.requestedDate;
             cleaned.paymentFxFallbackUsed = conversion.fallbackUsed;
-            cleaned.paymentReceivedAmount = roundMoney(Number(
-                cleaned.paymentReceivedAmountINR
-                ?? cleaned.paymentReceivedAmount
-                ?? existingPhase?.paymentReceivedAmountINR
-                ?? existingPhase?.paymentReceivedAmount
-                ?? 0
-            ));
-            cleaned.paymentReceivedAmountINR = cleaned.paymentReceivedAmount;
+            let receivedAmount = Number(cleaned.paymentReceivedAmount ?? existingPhase?.paymentReceivedAmount ?? 0);
+            let receivedAmountINR = Number(cleaned.paymentReceivedAmountINR ?? existingPhase?.paymentReceivedAmountINR ?? 0);
+
+            // Self-correction for legacy corrupted original currency received amount
+            if (currency !== 'INR' && receivedAmount > amount) {
+                const storedRate = Number(cleaned.paymentExchangeRate || existingPhase?.paymentExchangeRate || 0);
+                if (storedRate > 0) {
+                    receivedAmount = receivedAmount / storedRate;
+                } else {
+                    receivedAmount = 0;
+                }
+            }
+
+            cleaned.paymentReceivedAmount = roundMoney(receivedAmount);
+            cleaned.paymentReceivedAmountINR = roundMoney(receivedAmountINR);
             cleaned.paymentStatus = cleaned.paymentStatus || 'pending';
             return cleaned;
         } catch (error: any) {
@@ -494,21 +501,7 @@ const syncLinkedProjectFinancials = async (
             revenue.project = project.name;
             revenue.phaseId = phaseObjectId;
             revenue.description = description;
-            revenue.amount = expectedAmount || revenue.amount;
-            revenue.currency = currency as any;
-            revenue.exchangeRate = hasStoredExchangeRate ? storedExchangeRate : revenue.exchangeRate;
-            revenue.exchangeRateDate = exchangeRateDate ? new Date(exchangeRateDate) : revenue.exchangeRateDate;
-            revenue.exchangeRateProvider = revenue.exchangeRateProvider || 'frankfurter';
-            revenue.amountINR = baseAmountINR;
-            revenue.gstApplicable = gstApplicable;
-            revenue.isGstInclusive = isGstInclusive;
-            revenue.gstRate = gstRate;
-            revenue.gst = gst;
-            revenue.tdsDeducted = tdsDeducted;
-            revenue.totalAmount = totalAmount;
-            revenue.receivedAmount = receivedAmount;
-            revenue.pendingAmount = Math.max(0, roundMoney(totalAmount - receivedAmount));
-            revenue.status = getRevenueStatus(totalAmount, receivedAmount, dueDate ? new Date(dueDate) : undefined);
+            // Sync project metadata only; do not modify historical financial amounts or status
             revenue.updatedBy = updatedBy;
             await revenue.save();
         }

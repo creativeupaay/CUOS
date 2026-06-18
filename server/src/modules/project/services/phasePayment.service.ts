@@ -236,6 +236,9 @@ export class PhasePaymentService {
         const finalAmountOriginal = exchangeRate > 0
             ? this.roundMoney(finalBaseINR / exchangeRate)
             : finalBaseINR;
+        const actualReceivedOriginal = exchangeRate > 0
+            ? this.roundMoney(actualReceivedINR / exchangeRate)
+            : actualReceivedINR;
 
         // fxFees / tip tracking (delta between contracted value and actual receipt)
         const amountINR = conversion.amountINR; // contracted conversion value
@@ -257,8 +260,12 @@ export class PhasePaymentService {
         const cumulativeReceivedINR = this.roundMoney(
             (phase.paymentReceivedAmountINR || 0) + actualReceivedINR
         );
+        const cumulativeReceivedOriginal = this.roundMoney(
+            (phase.paymentReceivedAmount || 0) + actualReceivedOriginal
+        );
         const isFullyPaid = data.markAsFullyPaid || data.adjustPhaseValue ||
-            cumulativeReceivedINR >= finalTotalAmountINR;
+            cumulativeReceivedINR >= (finalTotalAmountINR - 1) ||
+            (currency !== 'INR' && cumulativeReceivedOriginal >= (expectedAmount - 0.02));
         const revenueStatus: 'received' | 'partial' = isFullyPaid ? 'received' : 'partial';
 
         // Create Revenue entry
@@ -281,7 +288,7 @@ export class PhasePaymentService {
             gstRate,
             gst: finalGst,                    // GST component extracted from received amount
             tdsDeducted: finalTds,
-            totalAmount: finalTotalAmountINR, // = actualReceivedINR (gross inclusive of GST)
+            totalAmount: this.roundMoney(baseAmountINR + gst - tdsDeducted),
             receivedAmount: actualReceivedINR,
             pendingAmount: 0,                 // always 0 — we record what was actually received
             fxFeesINR,
@@ -310,7 +317,7 @@ export class PhasePaymentService {
         });
 
         // Update phase with payment info
-        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + finalAmountOriginal);
+        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedOriginal);
         const newPaymentStatus = isFullyPaid ? 'received' : 'partial';
 
         // $set fields that are safe to overwrite on each payment
@@ -318,7 +325,6 @@ export class PhasePaymentService {
         // the contracted value set when the phase was created. Only the first
         // payment sets it if it was missing.
         const setFields: Record<string, unknown> = {
-            'phases.$.paymentAmount': finalAmountOriginal,
             'phases.$.paymentReceivedAmount': updatedReceivedAmount,
             'phases.$.paymentExchangeRate': exchangeRate,
             'phases.$.paymentExchangeRateDate': conversion.date,
@@ -336,6 +342,10 @@ export class PhasePaymentService {
             'phases.$.fxFeesINR': fxFeesINR,
             'phases.$.adjustmentAmountINR': tipINR,
         };
+
+        if (data.adjustPhaseValue) {
+            setFields['phases.$.paymentAmount'] = updatedReceivedAmount;
+        }
 
         // Only seed paymentExpectedAmountINR if it has never been set
         // (i.e., this is the very first payment for this phase)
