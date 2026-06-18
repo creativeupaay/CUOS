@@ -23,7 +23,7 @@ interface GenerateBulkPayrollModalProps {
 }
 
 const buildPayDate = (month: number, year: number) => {
-    return new Date(Date.UTC(year, month, 1)).toISOString().split('T')[0];
+    return new Date(Date.UTC(year, month - 1, 1)).toISOString().split('T')[0];
 };
 
 export default function GenerateBulkPayrollModal({
@@ -318,8 +318,8 @@ export default function GenerateBulkPayrollModal({
                             }}
                         >
                             Payroll will be generated for all <strong>active</strong> employees who have a salary
-                            structure set up. Leaves do not reduce salary, and mid-month joins/effective dates are
-                            prorated on a 30-day payroll basis.
+                            structure set up. Unpaid leaves (LWP) are deducted from gross salary through the leavesDeduction mechanism, and mid-month joins/effective dates are
+                            prorated on the actual number of days in the month (daysInMonth).
                         </div>
 
                         <div className="flex gap-3">

@@ -167,7 +167,6 @@ export default function FinanceReceivablesPage() {
                         </div>
                         <p className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
                         <p className="mt-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(card.value)}</p>
-                        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>{formatCurrency(card.value)}</p>
                     </div>
                 ))}
             </div>

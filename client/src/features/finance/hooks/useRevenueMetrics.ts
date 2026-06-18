@@ -6,7 +6,7 @@ import type { MetricCard } from '@/components/organisms/finance/MetricCardSet';
 export const useRevenueMetrics = (revenues: Revenue[]): MetricCard[] => {
     return useMemo(() => {
         // Total Revenue = Gross Billed (Base + GST)
-        const totalRevenue = revenues.reduce((acc, e) => acc + (e.totalAmount || (e.amountINR || e.amount || 0) + (e.gst || 0)), 0);
+        const totalRevenue = revenues.reduce((acc, e) => acc + (e.totalAmount ?? (e.amountINR || e.amount || 0) + (e.gst || 0)), 0);
         
         // Received = Actual money received
         const received = revenues.reduce((acc, e) => acc + (e.receivedAmount || 0), 0);

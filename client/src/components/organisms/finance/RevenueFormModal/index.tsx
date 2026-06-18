@@ -75,7 +75,7 @@ export const RevenueFormModal: React.FC<RevenueFormModalProps> = ({ isOpen, onCl
             let initialAmount = editingRevenue.amount;
             if (editingRevenue.gstApplicable !== false && isGstInclusive) {
                 // If it was inclusive, show the gross amount in the input
-                initialAmount = editingRevenue.amount * (1 + editingRevenue.gstRate / 100);
+                initialAmount = (editingRevenue.amountINR ?? editingRevenue.amount) * (1 + editingRevenue.gstRate / 100);
             }
             return {
                 ...initialFormState,

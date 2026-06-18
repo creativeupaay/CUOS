@@ -103,15 +103,14 @@ class PayrollService {
 
         let lwpDays = 0;
         for (const leave of lwpLeaves) {
-            const leaveStart = Math.max(leave.startDate.getTime(), startDate.getTime());
-            const leaveEnd = Math.min(leave.endDate.getTime(), endDate.getTime());
-            if (leaveStart <= leaveEnd) {
-                if (leave.startDate.getTime() >= startDate.getTime() && leave.endDate.getTime() <= endDate.getTime()) {
-                    lwpDays += leave.days; // strictly within month
-                } else {
-                    const diffTime = leaveEnd - leaveStart;
-                    lwpDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // crossing month
-                }
+            const leaveStart = new Date(Math.max(leave.startDate.getTime(), startDate.getTime()));
+            leaveStart.setHours(0, 0, 0, 0);
+            const leaveEnd = new Date(Math.min(leave.endDate.getTime(), endDate.getTime()));
+            leaveEnd.setHours(0, 0, 0, 0);
+            
+            if (leaveStart.getTime() <= leaveEnd.getTime()) {
+                const diffTime = leaveEnd.getTime() - leaveStart.getTime();
+                lwpDays += Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
             }
         }
 
@@ -127,10 +126,17 @@ class PayrollService {
             // lwp doesn't apply to hourly wages logically, as they are paid per hour worked
         } else {
             let monthlySalary = 0;
-            if (salary.salaryType === 'monthly' && salary.monthlySchedule && salary.monthlySchedule.length > 0) {
+            
+            // First check if there's a specific amount for this month in the schedule
+            if (salary.monthlySchedule && salary.monthlySchedule.length > 0) {
                 const scheduled = salary.monthlySchedule.find(m => m.month === month && m.year === year);
-                monthlySalary = scheduled ? scheduled.amount : 0;
-            } else {
+                if (scheduled && scheduled.amount > 0) {
+                    monthlySalary = scheduled.amount;
+                }
+            }
+            
+            // Fallback if no specific monthly amount was found or it was 0
+            if (monthlySalary === 0) {
                 monthlySalary = salary.basic + salary.specialAllowance;
                 if (monthlySalary === 0 && salary.annualAmount > 0) {
                     monthlySalary = salary.annualAmount / 12;
@@ -204,7 +210,7 @@ class PayrollService {
         payDate?: string | Date
     ): Promise<{ generated: number; skipped: number; failed: number; errors: string[] }> {
         // Fetch all active employees
-        const employees = await Employee.find({ status: { $in: ['active', 'probation'] } });
+        const employees = await Employee.find({ status: { $in: ['active', 'probation'] } }).populate('userId', 'name');
 
         let generated = 0;
         let skipped = 0;
@@ -219,7 +225,12 @@ class PayrollService {
 
                 // Skip if no salary structure
                 const salary = await SalaryStructure.findOne({ employeeId: emp._id });
-                if (!salary) { skipped++; continue; }
+                if (!salary) { 
+                    skipped++; 
+                    const empName = (emp.userId as any)?.name || emp.employeeId || emp._id.toString();
+                    errors.push(`${empName}: No salary structure configured`);
+                    continue; 
+                }
 
                 await this.generatePayroll(emp._id.toString(), month, year, generatedBy, payDate);
                 generated++;

@@ -21,7 +21,7 @@ interface GeneratePayrollModalProps {
 }
 
 const buildPayDate = (month: number, year: number) => {
-    return new Date(Date.UTC(year, month, 1)).toISOString().split('T')[0];
+    return new Date(Date.UTC(year, month - 1, 1)).toISOString().split('T')[0];
 };
 
 export default function GeneratePayrollModal({

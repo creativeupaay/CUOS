@@ -57,7 +57,7 @@ export default function HrmsPayrollPage() {
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [showGenerateAllModal, setShowGenerateAllModal] = useState(false);
     const [showPayrollEditModal, setShowPayrollEditModal] = useState(false);
-    const [showSalaryStructures, setShowSalaryStructures] = useState(false);
+
     const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
 
     // Selected items
@@ -408,93 +408,7 @@ export default function HrmsPayrollPage() {
                     </div>
                 </section>
 
-                <section className="rounded-2xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'white' }}>
-                    <button
-                        type="button"
-                        onClick={() => setShowSalaryStructures((current) => !current)}
-                        className="flex w-full items-center justify-between gap-4 border-b px-5 py-4 text-left"
-                        style={{ borderColor: 'var(--color-border-default)' }}
-                    >
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Salary Structures</h2>
-                                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: '#EFF6FF', color: '#2563EB' }}>
-                                    {salaries.length}
-                                </span>
-                            </div>
-                            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                Folded by default so the payroll ledger stays in focus.
-                            </p>
-                        </div>
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border cursor-pointer" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}>
-                            <ChevronDown size={16} className={`transition-transform ${showSalaryStructures ? 'rotate-180' : ''}`} />
-                        </span>
-                    </button>
-                    {showSalaryStructures ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                        {['Employee', 'Basic', 'Special', 'Gross', 'Paid From', 'Effective', ''].map((header) => (
-                                            <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-                                                {header}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {isLoadingSalaries ? (
-                                        <tr>
-                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                                <Loader2 size={16} className="mx-auto mb-2 animate-spin" />
-                                                Loading salary structures...
-                                            </td>
-                                        </tr>
-                                    ) : salaries.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={7} className="px-4 py-10 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                                No salary structures found.
-                                            </td>
-                                        </tr>
-                                    ) : salaries.map((salary) => {
-                                        const emp = typeof salary.employeeId === 'object' ? (salary.employeeId as Employee) : null;
-                                        return (
-                                            <tr key={salary._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                                                <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                                    {emp?.userId?.name || 'Employee'}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.basic)}</td>
-                                                <td className="px-4 py-3 text-sm">{formatCurrency(salary.specialAllowance || 0)}</td>
-                                                <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                                    {formatCurrency((salary.basic || 0) + (salary.specialAllowance || 0))}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {PAYOUT_ACCOUNT_LABELS[salary.payoutAccountKey] || 'HDFC (GST)'}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {new Date(salary.effectiveFrom).toLocaleDateString('en-IN')}
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <button
-                                                        onClick={() => openEditSalaryModal(salary)}
-                                                        className="rounded-lg px-3 py-1.5 text-xs font-semibold border cursor-pointer hover:bg-gray-50"
-                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="px-5 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            Salary structures are hidden. Expand this section when you need to review or edit them.
-                        </div>
-                    )}
-                </section>
+
             </div>
 
             {/* select employee for salary modal */}

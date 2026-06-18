@@ -16,7 +16,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const Payroll_model_1 = require("./src/modules/hrms/models/Payroll.model");
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
-        yield mongoose_1.default.connect('mongodb+srv://sourabh_cu:cGvT0Y7Ehg5NMTPr@cluster0.mwqjtnf.mongodb.net/?appName=Cluster0');
+        yield mongoose_1.default.connect(process.env.MONGODB_URI);
         // Delete the draft payroll that was just generated with gross=0 so user can regenerate it.
         const result = yield Payroll_model_1.Payroll.deleteMany({ status: 'draft', grossSalary: 0 });
         console.log("Deleted old faulty draft payrolls:", result.deletedCount);
