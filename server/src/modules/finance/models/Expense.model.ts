@@ -21,6 +21,7 @@ export interface IExpense extends Document {
     employeeId?: Types.ObjectId;
     employeeName?: string;
     payrollId?: Types.ObjectId;
+    reimbursementId?: Types.ObjectId;
 
     // Allocation details (for shared employee costs across projects)
     isAllocated?: boolean;
@@ -78,6 +79,7 @@ const ExpenseSchema = new Schema<IExpense>(
                 'Legal & Compliance',
                 'GST Payment',
                 'TDS Payment',
+                'Reimbursements',
                 'Other',
             ],
         },
@@ -105,6 +107,7 @@ const ExpenseSchema = new Schema<IExpense>(
         employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
         employeeName: { type: String, trim: true },
         payrollId: { type: Schema.Types.ObjectId, ref: 'Payroll' },
+        reimbursementId: { type: Schema.Types.ObjectId, ref: 'Reimbursement' },
 
         // Allocation details
         isAllocated: { type: Boolean, default: false },

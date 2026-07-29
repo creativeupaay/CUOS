@@ -53,6 +53,7 @@ const EmployeeAttendancePage = lazy(() => import('./pages/EmployeeAttendancePage
 const EmployeeLeavesPage = lazy(() => import('./pages/EmployeeLeavesPage'));
 const EmployeeHolidaysPage = lazy(() => import('./pages/EmployeeHolidaysPage'));
 const EmployeePayrollPage = lazy(() => import('./pages/EmployeePayrollPage'));
+const HrmsReimbursementsPage = lazy(() => import('./pages/HrmsReimbursementsPage'));
 const MyProfilePage = lazy(() => import('./pages/MyProfilePage'));
 const MyProfileChangePasswordPage = lazy(() => import('./pages/MyProfileChangePasswordPage'));
 const EmployeeOnboardingFormPage = lazy(() => import('./pages/EmployeeOnboardingFormPage'));
@@ -204,6 +205,7 @@ function getHrmsSelfHome(user: any): string {
     ['holidays', '/my-hrms/holidays'],
     ['payroll', '/my-hrms/payroll'],
     ['announcements', '/my-hrms/announcements'],
+    ['reimbursements', '/my-hrms/reimbursements'],
   ];
   return submodulePaths.find(([submodule]) => hasHrmsSelfSubmoduleAccess(user, submodule))?.[1] || '/my-hrms/profile';
 }
@@ -363,6 +365,7 @@ function AppRoutes() {
           <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
           <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
           <Route path="/hrms/announcements" element={<HrmsRedirect>{loadable(<HrmsAnnouncementsPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/reimbursements" element={<HrmsRedirect>{loadable(<HrmsReimbursementsPage />)}</HrmsRedirect>} />
 
           {/* Employee HRMS Module - All employees can access their own data */}
           <Route path="/my-hrms/profile" element={<ModuleAccessRoute moduleKey="hrms">{loadable(<MyProfilePage />)}</ModuleAccessRoute>} />
@@ -372,6 +375,7 @@ function AppRoutes() {
           <Route path="/my-hrms/holidays" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="holidays">{loadable(<EmployeeHolidaysPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
           <Route path="/my-hrms/payroll" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="payroll">{loadable(<EmployeePayrollPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
           <Route path="/my-hrms/announcements" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="announcements">{loadable(<HrmsAnnouncementsPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
+          <Route path="/my-hrms/reimbursements" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="reimbursements">{loadable(<HrmsReimbursementsPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
           <Route path="/announcements" element={<AnnouncementRedirect />} />
 
           {/* Admin Module */}

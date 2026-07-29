@@ -103,6 +103,7 @@ const EXPENSE_CATEGORIES = [
     'Legal & Compliance',
     'GST Payment',
     'Tax Payment',
+    'Reimbursements',
     'Other',
 ];
 
@@ -670,7 +671,9 @@ export default function FinanceExpensesPage() {
                                         </td>
                                         <td className="px-5 py-3">
                                             <div>
-                                                <p className="text-sm font-medium" style={{ color: '#111827' }}>{expense.description}</p>
+                                                <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#111827' }}>
+                                                    {expense.description}
+                                                </p>
                                                 {expense.projectName && (
                                                     <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#9CA3AF' }}>
                                                         <FolderKanban size={11} />

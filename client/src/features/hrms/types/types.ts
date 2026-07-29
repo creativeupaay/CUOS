@@ -288,3 +288,46 @@ export interface Attendance {
     createdAt: string;
     updatedAt: string;
 }
+
+// ── Reimbursement Types ──────────────────────────────────────────────
+
+export type ReimbursementCategory = 'travel' | 'meals' | 'hotel' | 'fuel' | 'medical' | 'office' | 'software' | 'other';
+export type ReimbursementStatus = 'draft' | 'pending' | 'approved' | 'changes_requested' | 'paid' | 'rejected';
+
+export interface ReimbursementReceipt { cloudinaryId: string; url: string; format: string; size: number; originalName?: string }
+
+export interface ReimbursementApprovalStep { _id?: string; stage: string; status: 'pending' | 'approved' | 'rejected' | 'changes_requested'; actorId?: string; actorName?: string; comment?: string; timestamp?: string }
+
+export interface ReimbursementActivityEntry { _id?: string; action: string; actorId: string; actorName: string; comment?: string; timestamp: string }
+
+export interface ReimbursementPaymentInfo { method: 'bank_transfer' | 'upi' | 'cash' | 'cheque'; reference?: string; paidAt: string }
+
+export interface ReimbursementPolicyFlag { rule: string; status: 'pass' | 'warn' | 'fail'; message: string }
+
+export interface Reimbursement {
+    _id: string;
+    claimId: string;
+    employeeId: string | { _id: string; employeeId: string; department: string; designation: string; userId: { _id: string; name: string; email: string } };
+    title: string;
+    category: ReimbursementCategory;
+    expenseDate: string;
+    amount: number;
+    merchant?: string;
+    businessPurpose?: string;
+    receipt?: ReimbursementReceipt;
+    status: ReimbursementStatus;
+    approvalTimeline: ReimbursementApprovalStep[];
+    activityLog: ReimbursementActivityEntry[];
+    paymentInfo?: ReimbursementPaymentInfo;
+    policyFlags: ReimbursementPolicyFlag[];
+    submittedAt?: string;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+    employee?: { _id: string; employeeId: string; department: string; designation: string };
+    user?: { _id: string; name: string; email: string };
+}
+
+export interface ReimbursementAmountCount { amount: number; count: number }
+export interface ReimbursementSummary { pending: ReimbursementAmountCount; approved: ReimbursementAmountCount; paidThisMonth: ReimbursementAmountCount; drafts?: { count: number }; changesRequested?: { count: number } }
+export interface ReimbursementPagination { page: number; limit: number; total: number; pages: number }

@@ -10,8 +10,8 @@ import { createAnnouncementSchema, deleteAnnouncementSchema } from '../validator
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema, deleteLeaveSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollSchema, updatePayrollStatusSchema, deletePayrollSchema } from '../validators/payroll.validator';
-
 import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
+import { createReimbursementSchema, updateReimbursementSchema, submitReimbursementSchema, updateReimbursementStatusSchema } from '../validators/reimbursement.validator';
 
 // Controllers
 import * as employeeController from '../controllers/employee.controller';
@@ -21,6 +21,7 @@ import * as leaveController from '../controllers/leave.controller';
 import * as payrollController from '../controllers/payroll.controller';
 import * as attendanceController from '../controllers/attendance.controller';
 import * as holidayController from '../controllers/holiday.controller';
+import * as reimbursementController from '../controllers/reimbursement.controller';
 
 
 const router = Router();
@@ -34,6 +35,20 @@ const upload = multer({
             return;
         }
         cb(new Error('Only JPG, PNG, and WEBP images are allowed'));
+    },
+});
+
+// Multer for receipt uploads — allows images + PDFs up to 10 MB
+const receiptUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+            return;
+        }
+        cb(new Error('Only JPG, PNG, WEBP and PDF files are allowed for receipts'));
     },
 });
 
@@ -216,5 +231,56 @@ router.get('/analytics/events', hrAdminOnly, payrollController.getUpcomingEvents
 router.get('/analytics/working-hours', payrollController.getWorkingHoursAnalytics);
 router.get('/analytics/team/:managerId', payrollController.getTeamAnalytics);
 router.get('/analytics/incentives/:employeeId', payrollController.getIncentiveSummary);
+
+// ══════════════════════════════════════════════════════════════════════
+// REIMBURSEMENT ROUTES
+// ══════════════════════════════════════════════════════════════════════
+
+// Employee self-service (own claims)
+router.post(
+    '/reimbursements',
+    hrmsSelfSubmoduleOnly('reimbursements' as any),
+    validateRequest(createReimbursementSchema),
+    reimbursementController.createReimbursement
+);
+router.get('/reimbursements/me', hrmsSelfSubmoduleOnly('reimbursements' as any), reimbursementController.getMyReimbursements);
+router.get('/reimbursements/me/summary', hrmsSelfSubmoduleOnly('reimbursements' as any), reimbursementController.getMyReimbursementSummary);
+router.post('/reimbursements/:id/submit', hrmsSelfSubmoduleOnly('reimbursements' as any), validateRequest(submitReimbursementSchema), reimbursementController.submitReimbursement);
+router.post('/reimbursements/:id/receipt', hrmsSelfSubmoduleOnly('reimbursements' as any), receiptUpload.single('receipt'), reimbursementController.uploadReceipt);
+router.patch(
+    '/reimbursements/:id',
+    hrmsSelfSubmoduleOnly('reimbursements' as any),
+    validateRequest(updateReimbursementSchema),
+    reimbursementController.updateReimbursement
+);
+router.delete('/reimbursements/:id', hrmsSelfSubmoduleOnly('reimbursements' as any), reimbursementController.deleteReimbursement);
+
+// Admin routes (HR/Admin)
+// IMPORTANT: /summary and /me/* must come BEFORE /:id to avoid Express matching them as the id param
+router.get('/reimbursements/summary', hrAdminOnly, reimbursementController.getReimbursementSummary);
+router.get(
+    '/reimbursements',
+    hrAdminOnly,
+    (req, _res, next) => { req.isHrmsAdmin = true; next(); },
+    reimbursementController.getReimbursements
+);
+// Single claim — accessible by the owning employee OR any HRMS admin
+router.get(
+    '/reimbursements/:id',
+    (req, _res, next) => {
+        if (req.user) {
+            const { hasModuleAdminAccess } = require('../../../utils/moduleAccess.util');
+            req.isHrmsAdmin = hasModuleAdminAccess(req.user, 'hrms');
+        }
+        next();
+    },
+    reimbursementController.getReimbursementById
+);
+router.patch(
+    '/reimbursements/:id/status',
+    hrAdminOnly,
+    validateRequest(updateReimbursementStatusSchema),
+    reimbursementController.updateReimbursementStatus
+);
 
 export default router;

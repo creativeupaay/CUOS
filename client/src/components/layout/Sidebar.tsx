@@ -175,6 +175,7 @@ function getModuleConfig(
             { key: 'leaves', label: 'Leaves', path: '/hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/hrms/leaves' },
             { key: 'holidays', label: 'Holidays', path: '/hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/hrms/holidays' },
             { key: 'payroll', label: 'Payroll', path: '/hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/hrms/payroll' },
+            { key: 'reimbursements', label: 'Reimbursements', path: '/hrms/reimbursements', icon: <Receipt size={18} />, matchPrefix: '/hrms/reimbursements' },
             { key: 'announcements', label: 'Company Announcements', path: '/hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/hrms/announcements' },
         ];
         return {
@@ -195,7 +196,8 @@ function getModuleConfig(
             pathname.startsWith('/my-hrms/leaves') ||
             pathname.startsWith('/my-hrms/holidays') ||
             pathname.startsWith('/my-hrms/payroll') ||
-            pathname.startsWith('/my-hrms/announcements');
+            pathname.startsWith('/my-hrms/announcements') ||
+            pathname.startsWith('/my-hrms/reimbursements');
 
         const settingsItems = [
             { key: 'profile', label: 'Personal Details', path: '/my-hrms/profile', icon: <Users2 size={18} />, matchPrefix: '/my-hrms/profile' },
@@ -206,6 +208,7 @@ function getModuleConfig(
             { key: 'leaves', label: 'Leaves', path: '/my-hrms/leaves', icon: <ListTodo size={18} />, matchPrefix: '/my-hrms/leaves' },
             { key: 'holidays', label: 'Holidays', path: '/my-hrms/holidays', icon: <CalendarDays size={18} />, matchPrefix: '/my-hrms/holidays' },
             { key: 'payroll', label: 'Payroll', path: '/my-hrms/payroll', icon: <FileText size={18} />, matchPrefix: '/my-hrms/payroll' },
+            { key: 'reimbursements', label: 'Expenses & Reimbursements', path: '/my-hrms/reimbursements', icon: <Receipt size={18} />, matchPrefix: '/my-hrms/reimbursements' },
             { key: 'announcements', label: 'Announcements', path: '/my-hrms/announcements', icon: <Megaphone size={18} />, matchPrefix: '/my-hrms/announcements' },
         ];
         const visibleEmployeeHrmsItems = isHrmsAdmin

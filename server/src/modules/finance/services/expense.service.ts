@@ -19,6 +19,8 @@ interface CreateExpenseData {
     projectName?: string;
     employeeId?: Types.ObjectId;
     employeeName?: string;
+    payrollId?: Types.ObjectId;
+    reimbursementId?: Types.ObjectId;
     vendor?: string;
     paidBy?: string;
     sourceAccountKey?: BankAccountKey;

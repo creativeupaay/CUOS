@@ -91,7 +91,7 @@ export function hasModuleViewAccess(
     return false;
 }
 
-export type HrmsSelfSubmodule = 'attendance' | 'leaves' | 'holidays' | 'payroll' | 'announcements';
+export type HrmsSelfSubmodule = 'attendance' | 'leaves' | 'holidays' | 'payroll' | 'announcements' | 'reimbursements';
 
 export function hasHrmsSelfSubmoduleAccess(user: any, submodule: HrmsSelfSubmodule): boolean {
     if (hasModuleAdminAccess(user, 'hrms')) return true;
@@ -104,5 +104,5 @@ export function hasHrmsSelfSubmoduleAccess(user: any, submodule: HrmsSelfSubmodu
         return subModules[submodule] === true;
     }
 
-    return submodule === 'holidays' || submodule === 'announcements';
+    return submodule === 'holidays' || submodule === 'announcements' || submodule === 'reimbursements';
 }

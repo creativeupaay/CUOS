@@ -668,3 +668,118 @@ export const {
     useUpdateHolidayMutation,
     useDeleteHolidayMutation,
 } = holidayApiExtension;
+
+// ── Reimbursement API Extension ────────────────────────────────────────────────────────────────────
+
+import type { Reimbursement, ReimbursementSummary, ReimbursementPagination } from './types/types';
+
+export const reimbursementApi = api.injectEndpoints({
+    endpoints: (builder) => ({
+        // Employee: create draft
+        createReimbursement: builder.mutation<
+            { status: string; data: { reimbursement: Reimbursement } },
+            { title: string; category: string; expenseDate: string; amount: number; businessPurpose?: string; merchant?: string; level?: 'company' | 'project'; projectId?: string; }
+        >({
+            query: (data) => ({ url: '/hrms/reimbursements', method: 'POST', body: data }),
+            invalidatesTags: ['Reimbursements'],
+        }),
+
+        // Employee: upload receipt
+        uploadReimbursementReceipt: builder.mutation<
+            { status: string; data: { reimbursement: Reimbursement } },
+            { id: string; formData: FormData }
+        >({
+            query: ({ id, formData }) => ({ url: `/hrms/reimbursements/${id}/receipt`, method: 'POST', body: formData }),
+            invalidatesTags: ['Reimbursements'],
+        }),
+
+        // Employee: submit draft
+        submitReimbursement: builder.mutation<{ status: string; data: { reimbursement: Reimbursement } }, string>({
+            query: (id) => ({ url: `/hrms/reimbursements/${id}/submit`, method: 'POST' }),
+            invalidatesTags: ['Reimbursements'],
+        }),
+
+        // Employee: edit draft / changes_requested
+        updateReimbursement: builder.mutation<
+            { status: string; data: { reimbursement: Reimbursement } },
+            { id: string; data: Record<string, unknown> }
+        >({
+            query: ({ id, data }) => ({ url: `/hrms/reimbursements/${id}`, method: 'PATCH', body: data }),
+            invalidatesTags: ['Reimbursements'],
+        }),
+
+        // Employee: delete draft
+        deleteReimbursement: builder.mutation<{ status: string }, string>({
+            query: (id) => ({ url: `/hrms/reimbursements/${id}`, method: 'DELETE' }),
+            invalidatesTags: ['Reimbursements'],
+        }),
+
+        // Employee: get own claims
+        getMyReimbursements: builder.query<
+            { status: string; data: { reimbursements: Reimbursement[]; pagination: ReimbursementPagination } },
+            { status?: string; category?: string; startDate?: string; endDate?: string; policy?: string; sort?: string; page?: number; limit?: number }
+        >({
+            query: (params) => ({ url: '/hrms/reimbursements/me', params }),
+            providesTags: ['Reimbursements'],
+        }),
+
+        // Employee: get own summary
+        getMyReimbursementSummary: builder.query<
+            { status: string; data: { summary: ReimbursementSummary } },
+            void
+        >({
+            query: () => '/hrms/reimbursements/me/summary',
+            providesTags: ['Reimbursements'],
+        }),
+
+        // Admin: get all reimbursements
+        getReimbursements: builder.query<
+            { status: string; data: { reimbursements: Reimbursement[]; pagination: ReimbursementPagination } },
+            { status?: string; category?: string; department?: string; search?: string; startDate?: string; endDate?: string; policy?: string; sort?: string; page?: number; limit?: number }
+        >({
+            query: (params) => ({ url: '/hrms/reimbursements', params }),
+            providesTags: ['Reimbursements'],
+        }),
+
+        // Admin: get org-wide summary
+        getReimbursementSummary: builder.query<
+            { status: string; data: { summary: ReimbursementSummary } },
+            void
+        >({
+            query: () => '/hrms/reimbursements/summary',
+            providesTags: ['Reimbursements'],
+        }),
+
+        // Both: get single claim
+        getReimbursementById: builder.query<
+            { status: string; data: { reimbursement: Reimbursement } },
+            string
+        >({
+            query: (id) => `/hrms/reimbursements/${id}`,
+            providesTags: (_r, _e, id) => [{ type: 'Reimbursements', id }],
+        }),
+
+        updateReimbursementStatus: builder.mutation<
+            { status: string; data: { reimbursement: Reimbursement } },
+            { id: string; data: { status: string; comment?: string; paymentMethod?: string; paymentReference?: string; syncToFinance?: boolean } }
+        >({
+            query: ({ id, data }) => ({ url: `/hrms/reimbursements/${id}/status`, method: 'PATCH', body: data }),
+            invalidatesTags: ['Reimbursements', 'Expenses', 'FinanceDashboard'],
+        }),
+    }),
+    overrideExisting: false,
+});
+
+export const {
+    useCreateReimbursementMutation,
+    useUploadReimbursementReceiptMutation,
+    useSubmitReimbursementMutation,
+    useUpdateReimbursementMutation,
+    useDeleteReimbursementMutation,
+    useGetMyReimbursementsQuery,
+    useGetMyReimbursementSummaryQuery,
+    useGetReimbursementsQuery,
+    useGetReimbursementSummaryQuery,
+    useGetReimbursementByIdQuery,
+    useUpdateReimbursementStatusMutation,
+} = reimbursementApi;
