@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { EXPENSE_CATEGORIES } from '../constants/expenseCategories';
 
 export interface IExpense extends Document {
     _id: Types.ObjectId;
@@ -62,26 +63,7 @@ const ExpenseSchema = new Schema<IExpense>(
             type: String,
             required: true,
             trim: true,
-            enum: [
-                'Salaries',
-                'Rent',
-                'Utilities',
-                'Cloud Services',
-                'Software Licenses',
-                'Marketing',
-                'HR & Culture',
-                'Infrastructure',
-                'Travel',
-                'Office Supplies',
-                'Professional Services',
-                'Internet & Communication',
-                'Insurance',
-                'Legal & Compliance',
-                'GST Payment',
-                'TDS Payment',
-                'Reimbursements',
-                'Other',
-            ],
+            enum: EXPENSE_CATEGORIES,
         },
 
         // Classification

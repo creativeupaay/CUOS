@@ -48,7 +48,7 @@ export default function ProjectDetailPage() {
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const roleName = currentUser?.role
         ? typeof currentUser.role === 'object'
-            ? (currentUser.role as any).name?.toLowerCase()
+            ? (currentUser.role as { name?: string }).name?.toLowerCase()
             : String(currentUser.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
@@ -116,15 +116,15 @@ export default function ProjectDetailPage() {
 
     const sColors = statusColors[project.status] || statusColors.planning;
     const pColors = priorityColors[project.priority] || priorityColors.low;
-    const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as any)?._id : project.partnerId;
-    const projectPartner = typeof project.partnerId === 'object' ? (project.partnerId as any) : undefined;
+    const projectPartnerId = typeof project.partnerId === 'object' ? (project.partnerId as { _id?: string })?._id : project.partnerId;
+    const projectPartner = typeof project.partnerId === 'object' ? (project.partnerId as { userId?: { name?: string }; contactPerson?: string; companyName?: string }) : undefined;
     const projectPartnerName = projectPartner?.userId?.name || projectPartner?.contactPerson || projectPartner?.companyName;
 
     const pmPerms = currentUser?.modulePermissions?.projectManagement;
     // Find THIS project's specific permission entry
     const projectEntry = pmPerms?.projectPermissions?.find(p => p.projectId === id);
     const currentUserId = currentUser?._id;
-    const currentAssignee = project.assignees?.find((assignee: any) => {
+    const currentAssignee = project.assignees?.find((assignee: { userId?: string | { _id?: string }; employeeId?: string | { userId?: string | { _id?: string } }; subModules?: Record<string, boolean> }) => {
         const assigneeUserId = typeof assignee.userId === 'object' ? assignee.userId?._id : assignee.userId;
         const employeeUserId = typeof assignee.employeeId === 'object'
             ? (typeof assignee.employeeId?.userId === 'object' ? assignee.employeeId?.userId?._id : assignee.employeeId?.userId)

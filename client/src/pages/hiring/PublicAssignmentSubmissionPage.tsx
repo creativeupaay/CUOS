@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, ChangeEvent, FormEvent } from 'react';
+import type { CSSProperties, ChangeEvent, FormEvent, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,8 +34,8 @@ function normalizeOptionalUrl(value: string): string | undefined {
 }
 
 const INLINE_MARKDOWN_COMPONENTS = {
-    p: ({ children }: any) => <>{children}</>,
-    a: ({ href, children }: any) => (
+    p: ({ children }: { children?: ReactNode }) => <>{children}</>,
+    a: ({ href, children }: { href?: string; children?: ReactNode }) => (
         <a
             href={href}
             target="_blank"
@@ -46,16 +46,16 @@ const INLINE_MARKDOWN_COMPONENTS = {
             {children}
         </a>
     ),
-    strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    code: ({ children }: any) => (
+    strong: ({ children }: { children?: ReactNode }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }: { children?: ReactNode }) => <em className="italic">{children}</em>,
+    code: ({ children }: { children?: ReactNode }) => (
         <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.9em]">{children}</code>
     ),
 };
 
 const ASSIGNMENT_MARKDOWN_COMPONENTS = {
-    p: ({ children }: any) => <p className="mb-3 last:mb-0 whitespace-pre-wrap leading-7">{children}</p>,
-    a: ({ href, children }: any) => (
+    p: ({ children }: { children?: ReactNode }) => <p className="mb-3 last:mb-0 whitespace-pre-wrap leading-7">{children}</p>,
+    a: ({ href, children }: { href?: string; children?: ReactNode }) => (
         <a
             href={href}
             target="_blank"
@@ -66,45 +66,45 @@ const ASSIGNMENT_MARKDOWN_COMPONENTS = {
             {children}
         </a>
     ),
-    strong: ({ children }: any) => <strong className="font-bold">{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    h1: ({ children }: any) => <h1 className="mb-4 mt-6 text-2xl font-bold leading-tight">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="mb-3 mt-5 text-xl font-bold leading-tight">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="mb-2 mt-4 text-lg font-semibold leading-tight">{children}</h3>,
-    h4: ({ children }: any) => <h4 className="mb-2 mt-3 text-base font-semibold leading-tight">{children}</h4>,
-    ul: ({ children }: any) => <ul className="mb-3 list-disc space-y-1 pl-5">{children}</ul>,
-    ol: ({ children }: any) => <ol className="mb-3 list-decimal space-y-1 pl-5">{children}</ol>,
-    li: ({ children }: any) => <li className="whitespace-pre-wrap pl-1">{children}</li>,
-    blockquote: ({ children }: any) => (
+    strong: ({ children }: { children?: ReactNode }) => <strong className="font-bold">{children}</strong>,
+    em: ({ children }: { children?: ReactNode }) => <em className="italic">{children}</em>,
+    h1: ({ children }: { children?: ReactNode }) => <h1 className="mb-4 mt-6 text-2xl font-bold leading-tight">{children}</h1>,
+    h2: ({ children }: { children?: ReactNode }) => <h2 className="mb-3 mt-5 text-xl font-bold leading-tight">{children}</h2>,
+    h3: ({ children }: { children?: ReactNode }) => <h3 className="mb-2 mt-4 text-lg font-semibold leading-tight">{children}</h3>,
+    h4: ({ children }: { children?: ReactNode }) => <h4 className="mb-2 mt-3 text-base font-semibold leading-tight">{children}</h4>,
+    ul: ({ children }: { children?: ReactNode }) => <ul className="mb-3 list-disc space-y-1 pl-5">{children}</ul>,
+    ol: ({ children }: { children?: ReactNode }) => <ol className="mb-3 list-decimal space-y-1 pl-5">{children}</ol>,
+    li: ({ children }: { children?: ReactNode }) => <li className="whitespace-pre-wrap pl-1">{children}</li>,
+    blockquote: ({ children }: { children?: ReactNode }) => (
         <blockquote className="my-4 whitespace-pre-wrap border-l-4 border-sky-200 bg-sky-50/80 px-4 py-3 italic text-slate-700">
             {children}
         </blockquote>
     ),
     hr: () => <hr className="my-5 border-slate-200" />,
-    pre: ({ children }: any) => (
+    pre: ({ children }: { children?: ReactNode }) => (
         <pre className="my-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-950 p-4 text-sm text-slate-50 shadow-inner">
             {children}
         </pre>
     ),
-    code: ({ inline, children }: any) =>
+    code: ({ inline, children }: { inline?: boolean; children?: ReactNode }) =>
         inline ? (
             <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-900">{children}</code>
         ) : (
             <code className="font-mono text-slate-50">{children}</code>
         ),
-    table: ({ children }: any) => (
+    table: ({ children }: { children?: ReactNode }) => (
         <div className="my-4 overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full border-collapse text-left text-sm">{children}</table>
         </div>
     ),
-    thead: ({ children }: any) => <thead className="bg-slate-50">{children}</thead>,
-    tbody: ({ children }: any) => <tbody className="divide-y divide-slate-200">{children}</tbody>,
-    tr: ({ children }: any) => <tr>{children}</tr>,
-    th: ({ children }: any) => (
+    thead: ({ children }: { children?: ReactNode }) => <thead className="bg-slate-50">{children}</thead>,
+    tbody: ({ children }: { children?: ReactNode }) => <tbody className="divide-y divide-slate-200">{children}</tbody>,
+    tr: ({ children }: { children?: ReactNode }) => <tr>{children}</tr>,
+    th: ({ children }: { children?: ReactNode }) => (
         <th className="border-b border-slate-200 px-3 py-2 font-semibold text-slate-700">{children}</th>
     ),
-    td: ({ children }: any) => <td className="whitespace-pre-wrap px-3 py-2 align-top text-slate-700">{children}</td>,
-    img: ({ alt, src }: any) => (
+    td: ({ children }: { children?: ReactNode }) => <td className="whitespace-pre-wrap px-3 py-2 align-top text-slate-700">{children}</td>,
+    img: ({ alt, src }: { alt?: string; src?: string }) => (
         <img alt={alt || ''} src={src} className="my-4 max-w-full rounded-xl border border-slate-200" />
     ),
 };
@@ -146,35 +146,16 @@ export default function PublicAssignmentSubmissionPage() {
     const [customFieldFiles, setCustomFieldFiles] = useState<Record<string, File | null>>({});
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState('');
-    const [expiresAtIso, setExpiresAtIso] = useState<string | null>(null);
-    const [now, setNow] = useState(Date.now());
+    const expiresAtIso = data?.data.expiresAt || null;
+    const [now, setNow] = useState(() => Date.now());
     const [showSubmissionStep, setShowSubmissionStep] = useState(false);
+    const [prevAssignmentId, setPrevAssignmentId] = useState<string | undefined>(undefined);
 
     const assignment = data?.data.assignment;
     const hasSubmitted = data?.data.hasSubmitted || submitted;
 
-    useEffect(() => {
-        if (!assignment?.submissionFields?.customFields) {
-            setCustomFieldValues({});
-            setCustomFieldFiles({});
-            return;
-        }
-
-        const initialValues: Record<string, string> = {};
-        const initialFiles: Record<string, File | null> = {};
-        assignment.submissionFields.customFields.forEach((field) => {
-            initialValues[field.key] = '';
-            initialFiles[field.key] = null;
-        });
-        setCustomFieldValues(initialValues);
-        setCustomFieldFiles(initialFiles);
-    }, [assignment?._id, assignment?.submissionFields?.customFields]);
-
-    useEffect(() => {
-        setExpiresAtIso(data?.data.expiresAt || null);
-    }, [data?.data.expiresAt]);
-
-    useEffect(() => {
+    if (assignment?._id !== prevAssignmentId) {
+        setPrevAssignmentId(assignment?._id);
         setGithubLink('');
         setDemoLink('');
         setVideoLink('');
@@ -185,7 +166,21 @@ export default function PublicAssignmentSubmissionPage() {
         setSubmitted(false);
         setSubmitError('');
         setShowSubmissionStep(false);
-    }, [assignment?._id]);
+
+        if (!assignment?.submissionFields?.customFields) {
+            setCustomFieldValues({});
+            setCustomFieldFiles({});
+        } else {
+            const initialValues: Record<string, string> = {};
+            const initialFiles: Record<string, File | null> = {};
+            assignment.submissionFields.customFields.forEach((field) => {
+                initialValues[field.key] = '';
+                initialFiles[field.key] = null;
+            });
+            setCustomFieldValues(initialValues);
+            setCustomFieldFiles(initialFiles);
+        }
+    }
 
     const deadlineTime = useMemo(() => {
         if (!expiresAtIso) {
@@ -255,8 +250,8 @@ export default function PublicAssignmentSubmissionPage() {
 
             setSubmitted(true);
             await refetch();
-        } catch (error: any) {
-            setSubmitError(error?.data?.message || 'Failed to submit assignment. Please try again.');
+        } catch (error) {
+            setSubmitError((error as { data?: { message?: string } })?.data?.message || 'Failed to submit assignment. Please try again.');
         }
     }
 

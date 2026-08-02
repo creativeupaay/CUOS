@@ -1,12 +1,13 @@
-export { default as LoginPage } from './LoginPage';
-export { default as SuperAdminDashboard } from './SuperAdminDashboard';
-export { default as ComingSoonPage } from './ComingSoonPage';
-export { default as ProjectsPage } from './ProjectsPage';
-export { default as ProjectDetailPage } from './ProjectDetailPage';
-export { default as ProjectOverviewTab } from './ProjectOverviewTab';
-export { default as ProjectTasksTab } from './ProjectTasksTab';
-export { default as ProjectTimeLogsTab } from './ProjectTimeLogsTab';
-export { default as ProjectMeetingsTab } from './ProjectMeetingsTab';
-export { default as ProjectCredentialsTab } from './ProjectCredentialsTab';
-export { default as ProjectDocumentsTab } from './ProjectDocumentsTab';
-export { default as ProjectNotesTab } from './ProjectNotesTab';
+export { default as LoginPage } from './auth/LoginPage';
+export { default as SuperAdminDashboard } from './admin/SuperAdminDashboard';
+export { default as ComingSoonPage } from './auth/ComingSoonPage';
+export { default as ProjectsPage } from './projects/ProjectsPage';
+export { default as ProjectDetailPage } from './projects/ProjectDetailPage';
+export { default as ProjectOverviewTab } from './projects/ProjectOverviewTab';
+export { default as ProjectTasksTab } from './projects/ProjectTasksTab';
+export { default as ProjectTimeLogsTab } from './projects/ProjectTimeLogsTab';
+export { default as ProjectMeetingsTab } from './projects/ProjectMeetingsTab';
+export { default as ProjectCredentialsTab } from './projects/ProjectCredentialsTab';
+export { default as ProjectDocumentsTab } from './projects/ProjectDocumentsTab';
+export { default as ProjectNotesTab } from './projects/ProjectNotesTab';
+

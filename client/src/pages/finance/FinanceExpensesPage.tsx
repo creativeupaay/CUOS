@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Receipt, Building2, FolderKanban, TrendingDown, Plus, X,
     Search, Calendar, Edit2, Trash2, Loader2,
-    Wallet, Calculator, ChevronRight, ShieldCheck, Clock3, CheckCircle2, CircleX, ChevronDown, ChevronUp, ArrowRightLeft,
+    Wallet, Calculator, ChevronRight, ShieldCheck, Clock3, CheckCircle2, CircleX, ChevronDown, ChevronUp, ArrowRightLeft, Percent,
 } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import {
@@ -89,17 +89,15 @@ const EXPENSE_SOURCE_OPTIONS: Array<{ value: ExpenseSourceAccount; label: string
 const EXPENSE_CATEGORIES = [
     'Salaries',
     'Rent',
-    'Utilities',
+    'Utilities & Bills',
     'Cloud Services',
     'Software Licenses',
     'Marketing',
     'HR & Culture',
-    'Infrastructure',
+    'Food & Party',
     'Travel',
-    'Office Supplies',
+    'Office Expense & Supplies',
     'Professional Services',
-    'Internet & Communication',
-    'Insurance',
     'Legal & Compliance',
     'GST Payment',
     'Tax Payment',
@@ -250,7 +248,10 @@ export default function FinanceExpensesPage() {
 
     const expenses = expensesData?.data?.expenses || [];
     const fixedExpenses = fixedExpensesData?.data || [];
-    const approvalItems = approvalsData?.data?.approvals || [];
+    const approvalItems = useMemo(() => {
+        const raw = approvalsData?.data?.approvals || [];
+        return raw.filter((item: any) => item.status !== 'approved');
+    }, [approvalsData]);
     const fixedTransactions = fixedTransactionsData?.data || [];
     const pendingApprovalCount = approvalsData?.data?.pendingCount || 0;
 
@@ -286,11 +287,19 @@ export default function FinanceExpensesPage() {
 
     const metrics = useMemo(() => {
         const nonAllocated = expenses.filter((e: any) => !e.isAllocated);
+        const totalExpenses = nonAllocated.reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const projectExpenses = nonAllocated.filter((e: any) => e.level === 'project').reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const rawFixedCosts = nonAllocated.filter((e: any) => e.type === 'fixed').reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const variableCosts = nonAllocated.filter((e: any) => e.type === 'variable').reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const gstPaid = nonAllocated.filter((e: any) => (e.category || '').toLowerCase() === 'gst payment').reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const fixedCosts = rawFixedCosts - gstPaid;
+
         return {
-            totalExpenses: nonAllocated.reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            projectExpenses: nonAllocated.filter((e: any) => e.level === 'project').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            fixedCosts: nonAllocated.filter((e: any) => e.type === 'fixed').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
-            variableCosts: nonAllocated.filter((e: any) => e.type === 'variable').reduce((acc: number, e: any) => acc + (e.amount || 0), 0),
+            totalExpenses,
+            projectExpenses,
+            fixedCosts,
+            variableCosts,
+            gstPaid,
         };
     }, [expenses]);
 
@@ -299,6 +308,7 @@ export default function FinanceExpensesPage() {
         { label: 'Project Level', value: formatCurrency(metrics.projectExpenses), fullValue: formatCurrency(metrics.projectExpenses), icon: FolderKanban, color: '#10B981', bg: '#ECFDF5' },
         { label: 'Fixed Costs', value: formatCurrency(metrics.fixedCosts), fullValue: formatCurrency(metrics.fixedCosts), icon: Wallet, color: '#6366F1', bg: '#EEF2FF' },
         { label: 'Variable Costs', value: formatCurrency(metrics.variableCosts), fullValue: formatCurrency(metrics.variableCosts), icon: Calculator, color: '#F59E0B', bg: '#FFFBEB' },
+        { label: 'GST Paid', value: formatCurrency(metrics.gstPaid), fullValue: formatCurrency(metrics.gstPaid), icon: Percent, color: '#8B5CF6', bg: '#F3E8FF' },
     ];
 
     const handleSubmit = async () => {
@@ -506,7 +516,7 @@ export default function FinanceExpensesPage() {
                 <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Track company and project level expenses</p>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 {metricCards.map((card) => (
                     <div
                         key={card.label}
@@ -597,7 +607,7 @@ export default function FinanceExpensesPage() {
                                     <Wallet size={16} style={{ color: '#6366F1' }} />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold" style={{ color: '#111827' }}>Fixed Expenses</h3>
+                                    <h3 className="font-semibold" style={{ color: '#111827' }}>Recurring Expenses</h3>
                                     <p className="text-xs mt-0.5" style={{ color: '#6B7280' }}>Manage recurring company costs</p>
                                 </div>
                             </div>
@@ -613,7 +623,7 @@ export default function FinanceExpensesPage() {
                         </div>
                         <p className="text-2xl font-bold mb-2" style={{ color: '#6366F1' }}>{formatCurrency(metrics.fixedCosts)}</p>
                         <p className="text-xs" style={{ color: '#6B7280' }}>
-                            Clicking here opens a right-side panel to manage recurring fixed expenses and approve due payments.
+                            Clicking here opens a right-side panel to manage recurring expenses and approve due payments.
                         </p>
                         {isSuperAdmin && pendingApprovalCount > 0 && (
                             <p className="text-xs mt-3" style={{ color: '#92400E' }}>
@@ -937,7 +947,7 @@ export default function FinanceExpensesPage() {
                         <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: '#6366F1' }}>Fixed Expenses</p>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: '#6366F1' }}>Recurring Expenses</p>
                                     <h2 className="text-lg font-semibold mt-1" style={{ color: '#111827' }}>Manage recurring expenses and approvals</h2>
                                 </div>
                                 <button onClick={closeFixedDrawer} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: '#6B7280' }}>
@@ -982,7 +992,7 @@ export default function FinanceExpensesPage() {
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Existing fixed expenses</h3>
+                                                <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Existing recurring expenses</h3>
                                                 <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
                                                     These schedules create approval requests on their due date.
                                                 </p>
@@ -1097,7 +1107,7 @@ export default function FinanceExpensesPage() {
                                             <div className="flex items-center justify-between gap-3 mb-4">
                                                 <div>
                                                     <h3 className="text-base font-semibold" style={{ color: '#111827' }}>
-                                                        {fixedEditingId ? 'Edit fixed expense' : 'Add fixed expense'}
+                                                        {fixedEditingId ? 'Edit recurring expense' : 'Add recurring expense'}
                                                     </h3>
                                                     <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
                                                         Set the recurring schedule once. On each due date, the payment moves to approval instead of auto-recording.
@@ -1269,7 +1279,7 @@ export default function FinanceExpensesPage() {
                                                             onChange={(e) => setFixedFormData({ ...fixedFormData, isActive: e.target.checked })}
                                                             className="rounded"
                                                         />
-                                                        Keep this fixed expense active
+                                                        Keep this recurring expense active
                                                     </label>
                                                 </div>
                                             </div>
@@ -1289,7 +1299,7 @@ export default function FinanceExpensesPage() {
                                                     style={{ background: '#4F46E5' }}
                                                 >
                                                     {(isCreatingFixedExpense || isUpdatingFixedExpense) && <Loader2 size={16} className="animate-spin" />}
-                                                    {fixedEditingId ? 'Update fixed expense' : 'Save fixed expense'}
+                                                    {fixedEditingId ? 'Update recurring expense' : 'Save recurring expense'}
                                                 </button>
                                             </div>
                                         </div>
@@ -1300,10 +1310,10 @@ export default function FinanceExpensesPage() {
                                     <div className="rounded-2xl border p-4" style={{ borderColor: '#E5E7EB', background: 'linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%)' }}>
                                         <div className="flex items-center gap-2">
                                             <ArrowRightLeft size={18} style={{ color: '#4338CA' }} />
-                                            <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Fixed expense transactions</h3>
+                                            <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Recurring expense transactions</h3>
                                         </div>
                                         <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
-                                            This shows only recorded transactions created from approved fixed expenses.
+                                            This shows only recorded transactions created from approved recurring expenses.
                                         </p>
                                     </div>
 
@@ -1314,8 +1324,8 @@ export default function FinanceExpensesPage() {
                                     ) : fixedTransactions.length === 0 ? (
                                         <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
                                             <ArrowRightLeft size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
-                                            <p className="text-sm font-medium" style={{ color: '#374151' }}>No fixed expense transactions yet</p>
-                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Approved fixed expenses will appear here automatically.</p>
+                                            <p className="text-sm font-medium" style={{ color: '#374151' }}>No recurring expense transactions yet</p>
+                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Approved recurring expenses will appear here automatically.</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
@@ -1359,7 +1369,7 @@ export default function FinanceExpensesPage() {
                                             <h3 className="text-base font-semibold" style={{ color: '#111827' }}>Approval queue</h3>
                                         </div>
                                         <p className="text-xs mt-2" style={{ color: '#6B7280' }}>
-                                            Due fixed expenses appear here on their scheduled date. Approving creates the expense entry, and rejecting keeps a clear decision trail.
+                                            Due recurring expenses appear here on their scheduled date. Approving creates the expense entry, and rejecting keeps a clear decision trail.
                                         </p>
                                     </div>
 
@@ -1371,7 +1381,7 @@ export default function FinanceExpensesPage() {
                                         <div className="rounded-2xl border p-8 text-center" style={{ borderColor: '#E5E7EB' }}>
                                             <ShieldCheck size={28} className="mx-auto mb-3" style={{ color: '#A5B4FC' }} />
                                             <p className="text-sm font-medium" style={{ color: '#374151' }}>No approval requests yet</p>
-                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Once a fixed expense reaches its due date, the request will show up here.</p>
+                                            <p className="text-xs mt-1" style={{ color: '#6B7280' }}>Once a recurring expense reaches its due date, the request will show up here.</p>
                                         </div>
                                     ) : (
                                         approvalItems.map((approval: any) => {
@@ -1559,7 +1569,7 @@ export default function FinanceExpensesPage() {
                                         style={{ backgroundColor: '#4F46E5', color: '#FFFFFF' }}
                                     >
                                         <Plus size={16} />
-                                        Add fixed expense
+                                        Add recurring expense
                                     </button>
                                 </div>
                             </div>

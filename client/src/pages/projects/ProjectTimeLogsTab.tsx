@@ -6,10 +6,10 @@ import {
     useGetMyTimeLogsQuery,
     useGetTasksQuery,
     useUpdateTimeLogMutation,
+    type TimeLog,
 } from '@/features/project';
 import { Loader2, Clock, ShieldOff, CheckCircle2, TrendingUp, TrendingDown, User, Play, Pause, SquareCheckBig, ChevronDown, ChevronUp, Pencil, X, Save } from 'lucide-react';
 import { useState } from 'react';
-import type { TimeLog } from '@/features/project/types/types';
 import type { FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
@@ -140,7 +140,7 @@ export default function ProjectTimeLogsTab() {
     // Resolve role name (role can be a Role object or a string)
     const roleName = currentUser?.role
         ? typeof currentUser.role === 'object'
-            ? (currentUser.role as any).name?.toLowerCase()
+            ? (currentUser.role as { name: string }).name?.toLowerCase()
             : String(currentUser.role).toLowerCase()
         : '';
 
@@ -149,7 +149,7 @@ export default function ProjectTimeLogsTab() {
 
     // Project-specific permissions
     const pmPerms = currentUser?.modulePermissions?.projectManagement;
-    const projectEntry = pmPerms?.projectPermissions?.find((p: any) => p.projectId === projectId);
+    const projectEntry = pmPerms?.projectPermissions?.find((p: { projectId: string }) => p.projectId === projectId);
 
     // Super admin or user with explicit timeLogs sub-permission → sees ALL logs
     const canSeeAll = isSuperAdmin || (projectEntry?.subModules?.timeLogs === true);
@@ -217,8 +217,9 @@ export default function ProjectTimeLogsTab() {
                 },
             }).unwrap();
             closeEditTimeLog();
-        } catch (err: any) {
-            alert(err?.data?.message || 'Failed to update time log');
+        } catch (err: unknown) {
+            const error = err as { data?: { message?: string }; message?: string };
+            alert(error?.data?.message || error?.message || 'Failed to update time log');
         }
     };
 
@@ -323,8 +324,8 @@ export default function ProjectTimeLogsTab() {
     //   2. "paused" or "completed" at endTime
     const activityEvents: ActivityEvent[] = [];
     timeLogs.forEach(log => {
-        const user = typeof log.userId === 'object' ? (log.userId as any) : null;
-        const task = typeof log.taskId === 'object' ? (log.taskId as any) : null;
+        const user = typeof log.userId === 'object' ? (log.userId as { name?: string }) : null;
+        const task = typeof log.taskId === 'object' ? (log.taskId as { title?: string }) : null;
         const userName = user?.name || '—';
         const taskTitle = task?.title || '—';
         const isCompleted = (log.description || '').toLowerCase().includes('completed');
@@ -359,7 +360,7 @@ export default function ProjectTimeLogsTab() {
         : 'grid-cols-[120px_1fr_80px_1fr]';
 
     // ── Activity event config ─────────────────────────────────────────────────
-    const activityConfig: Record<ActivityEvent['type'], { icon: any; color: string; bg: string; label: string }> = {
+    const activityConfig: Record<ActivityEvent['type'], { icon: React.ElementType; color: string; bg: string; label: string }> = {
         started:   { icon: Play,           color: '#2563EB', bg: 'rgba(37,99,235,0.08)',  label: 'Started' },
         paused:    { icon: Pause,          color: '#D97706', bg: 'rgba(217,119,6,0.08)',  label: 'Paused'  },
         completed: { icon: SquareCheckBig, color: '#16A34A', bg: 'rgba(22,163,74,0.08)', label: 'Completed' },
@@ -548,8 +549,8 @@ export default function ProjectTimeLogsTab() {
                     </div>
                 ) : (
                     timeLogs.map(log => {
-                        const user = typeof log.userId === 'object' ? (log.userId as any) : null;
-                        const task = typeof log.taskId === 'object' ? (log.taskId as any) : null;
+                        const user = typeof log.userId === 'object' ? (log.userId as { name?: string }) : null;
+                        const task = typeof log.taskId === 'object' ? (log.taskId as { title?: string }) : null;
                         const isCompleted = (log.description || '').toLowerCase().includes('completed');
                         const descColor = isCompleted ? 'var(--color-success)' : 'var(--color-text-secondary)';
                         return (

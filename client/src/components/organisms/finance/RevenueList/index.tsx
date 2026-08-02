@@ -60,7 +60,6 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">TDS</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">GST</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
-                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
                             <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                         </tr>
                     </thead>
@@ -106,9 +105,6 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-400">
                                     {formatCurrency(entry.gst || 0)}
-                                </td>
-                                <td className="px-5 py-3 text-sm text-right text-gray-900">
-                                    {formatCurrency(entry.amountINR || entry.amount || 0)}
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-900">
                                     {formatCurrency(entry.amountINR || entry.amount || 0)}

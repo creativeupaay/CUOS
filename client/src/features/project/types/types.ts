@@ -1,4 +1,6 @@
 // Entity types (internal representation)
+import type { User } from '@/features/auth';
+
 export interface ProjectPhase {
     _id?: string;
     name: string;
@@ -164,6 +166,7 @@ export interface Task {
     accumulatedSeconds?: { userId: string | User; seconds: number }[];
     /** Number of subtasks — populated by backend getTasks query */
     subtaskCount?: number;
+    tags?: string[];
 }
 
 export interface TimeLog {
@@ -282,13 +285,6 @@ export interface Client {
     name: string;
     email: string;
     phone?: string;
-}
-
-export interface User {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
 }
 
 // ─── Document Types ───────────────────────────────────────────────────────────

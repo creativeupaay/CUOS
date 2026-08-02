@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import type { BankAccountKey } from './BankTransaction.model';
+import { EXPENSE_CATEGORIES } from '../constants/expenseCategories';
 
 export type FixedExpenseFrequency = 'monthly' | 'quarterly' | 'yearly';
 
@@ -35,25 +36,7 @@ const FixedExpenseSchema = new Schema<IFixedExpense>(
             type: String,
             required: true,
             trim: true,
-            enum: [
-                'Salaries',
-                'Rent',
-                'Utilities',
-                'Cloud Services',
-                'Software Licenses',
-                'Marketing',
-                'HR & Culture',
-                'Infrastructure',
-                'Travel',
-                'Office Supplies',
-                'Professional Services',
-                'Internet & Communication',
-                'Insurance',
-                'Legal & Compliance',
-                'GST Payment',
-                'TDS Payment',
-                'Other',
-            ],
+            enum: EXPENSE_CATEGORIES,
         },
         level: {
             type: String,

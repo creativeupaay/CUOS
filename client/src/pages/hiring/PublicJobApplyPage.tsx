@@ -16,12 +16,14 @@ import {
     Phone,
     User,
 } from 'lucide-react';
-import { useGetPublicJobsQuery, usePublicApplyMutation } from '@/features/hiring/hiringApi';
-import type {
-    ApplicationCustomFieldDefinition,
-    ApplicationStandardFieldSetting,
-    StandardApplicationFieldId,
-} from '@/features/hiring/types/types';
+import {
+    useGetPublicJobsQuery,
+    usePublicApplyMutation,
+    type Job,
+    type ApplicationCustomFieldDefinition,
+    type ApplicationStandardFieldSetting,
+    type StandardApplicationFieldId,
+} from '@/features/hiring';
 
 const MAX_RESUME_SIZE_MB = 5;
 const MAX_APPLICATION_ATTACHMENT_SIZE_MB = 25;
@@ -71,13 +73,13 @@ const STANDARD_FIELD_META: Record<
 };
 
 const JOB_CONTENT_MARKDOWN_COMPONENTS = {
-    p: ({ children }: any) => <p className="mb-3 last:mb-0">{children}</p>,
-    strong: ({ children }: any) => <strong className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    ul: ({ children }: any) => <ul className="mb-3 list-disc pl-5">{children}</ul>,
-    ol: ({ children }: any) => <ol className="mb-3 list-decimal pl-5">{children}</ol>,
-    li: ({ children }: any) => <li className="mb-1">{children}</li>,
-    a: ({ href, children }: any) => (
+    p: ({ children }: { children?: ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
+    strong: ({ children }: { children?: ReactNode }) => <strong className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{children}</strong>,
+    em: ({ children }: { children?: ReactNode }) => <em className="italic">{children}</em>,
+    ul: ({ children }: { children?: ReactNode }) => <ul className="mb-3 list-disc pl-5">{children}</ul>,
+    ol: ({ children }: { children?: ReactNode }) => <ol className="mb-3 list-decimal pl-5">{children}</ol>,
+    li: ({ children }: { children?: ReactNode }) => <li className="mb-1">{children}</li>,
+    a: ({ href, children }: { href?: string; children?: ReactNode }) => (
         <a
             href={href}
             target="_blank"
@@ -330,17 +332,17 @@ export default function PublicJobApplyPage() {
     const { data, isLoading: jobsLoading } = useGetPublicJobsQuery();
     const [publicApply, { isLoading }] = usePublicApplyMutation();
 
-    const jobs = data?.data.jobs || [];
-    const job = useMemo(() => jobs.find((jobItem: any) => jobItem._id === jobId), [jobs, jobId]);
+    const jobs = useMemo(() => data?.data.jobs || [], [data?.data.jobs]);
+    const job = useMemo(() => jobs.find((jobItem: Job) => jobItem._id === jobId), [jobs, jobId]);
     const jobLocationLabel = useMemo(() => getJobLocationLabel(job), [job]);
     const employmentTypeLabel = useMemo(
         () => getEmploymentTypeLabel(job?.employmentType),
         [job?.employmentType]
     );
 
-    const selectedStandardFields = (job?.applicationForm?.selectedStandardFields || []) as StandardApplicationFieldId[];
-    const standardFieldSettings = (job?.applicationForm?.standardFieldSettings || []) as ApplicationStandardFieldSetting[];
-    const customFields = (job?.applicationForm?.customFields || []) as ApplicationCustomFieldDefinition[];
+    const selectedStandardFields = useMemo(() => (job?.applicationForm?.selectedStandardFields || []) as StandardApplicationFieldId[], [job?.applicationForm?.selectedStandardFields]);
+    const standardFieldSettings = useMemo(() => (job?.applicationForm?.standardFieldSettings || []) as ApplicationStandardFieldSetting[], [job?.applicationForm?.standardFieldSettings]);
+    const customFields = useMemo(() => (job?.applicationForm?.customFields || []) as ApplicationCustomFieldDefinition[], [job?.applicationForm?.customFields]);
     const requiredStandardFields = useMemo(
         () =>
             new Set(
@@ -358,10 +360,10 @@ export default function PublicJobApplyPage() {
     // Split standard fields into regular fields and bottom fields (experience, coverLetter)
     const bottomFieldIds = ['experience', 'coverLetter'] as const;
     const regularStandardFields = selectedStandardFields.filter(
-        (fieldId) => !bottomFieldIds.includes(fieldId as any)
+        (fieldId) => !bottomFieldIds.includes(fieldId as typeof bottomFieldIds[number])
     );
     const bottomStandardFields = selectedStandardFields.filter(
-        (fieldId) => bottomFieldIds.includes(fieldId as any)
+        (fieldId) => bottomFieldIds.includes(fieldId as typeof bottomFieldIds[number])
     );
 
     const standardFieldMetaById = useMemo(
@@ -555,8 +557,8 @@ export default function PublicJobApplyPage() {
 
             setSuccess(true);
             setFieldErrors({});
-        } catch (err: any) {
-            setError(err?.data?.message || 'Failed to submit application');
+        } catch (err) {
+            setError((err as { data?: { message?: string } })?.data?.message || 'Failed to submit application');
         }
     };
 
