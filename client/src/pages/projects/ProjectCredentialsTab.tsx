@@ -9,10 +9,11 @@ import {
     useDeleteCredentialMutation,
     useGetCredentialAdminsQuery,
     useRevokeCredentialAccessMutation,
+    CredentialShareModal,
 } from '@/features/project';
-import type { Project } from '@/features/project';
+import type { Project, Credential, CreateCredentialRequest } from '@/features/project';
+import type { User as AuthUser } from '@/features/auth';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
-import CredentialShareModal from '@/features/project/components/CredentialShareModal';
 import { useState, useRef, useMemo } from 'react';
 import {
     Loader2, Trash2, Shield, Code, TerminalSquare, Lock, Users, FileText,
@@ -40,7 +41,7 @@ const newOtherRow = (): OtherRow => ({ id: uid(), name: '', description: '', not
 const newEnvGroup = (label = ''): EnvGroup => ({ id: uid(), label, rows: [newEnvRow()] });
 
 // ─── Tab Config ──────────────────────────────────────────────────────────────
-const TABS: { id: CredentialType; label: string; icon: any }[] = [
+const TABS: { id: CredentialType; label: string; icon: React.ElementType }[] = [
     { id: 'env', label: 'Env Variables', icon: Code },
     { id: 'ssh-key', label: 'SSH Keys', icon: TerminalSquare },
     { id: 'test-user', label: 'Testing', icon: Lock },
@@ -145,13 +146,13 @@ export default function ProjectCredentialsTab() {
     const [envGroupFilter, setEnvGroupFilter] = useState<string>('all');
 
     const { data, isLoading } = useGetCredentialsQuery({ projectId: projectId!, type: activeTab });
-    const credentials = data?.data || [];
+    const credentials = useMemo(() => data?.data || [], [data?.data]);
 
     // Derive distinct saved ENV group names for filter + form suggestions
     const savedEnvGroups = useMemo(() => {
         if (activeTab !== 'env') return [];
         const seen = new Set<string>();
-        credentials.forEach((c: any) => { const g = c.description || 'General'; seen.add(g); });
+        credentials.forEach((c: Credential) => { const g = c.description || 'General'; seen.add(g); });
         return Array.from(seen).sort();
     }, [credentials, activeTab]);
 
@@ -164,7 +165,7 @@ export default function ProjectCredentialsTab() {
     // Determine if current user is a credential admin
     // NOTE: role can be either a plain string OR a Role object {_id, name, ...}
     // We must handle both shapes.
-    const getRoleName = (role: any): string => {
+    const getRoleName = (role: string | { name?: string } | null | undefined): string => {
         if (!role) return '';
         if (typeof role === 'string') return role;
         return role.name ?? '';
@@ -172,7 +173,7 @@ export default function ProjectCredentialsTab() {
 
     const { data: adminsData } = useGetCredentialAdminsQuery({ projectId: projectId! });
     // Extract credential admin IDs with proper trimming for consistent comparison
-    const credentialAdminIds: string[] = (adminsData?.data ?? []).map((a: any) => {
+    const credentialAdminIds: string[] = (adminsData?.data ?? []).map((a: string | { _id?: string }) => {
         const id = typeof a === 'string' ? a : a._id;
         return typeof id === 'string' ? id.trim() : '';
     }).filter(Boolean);
@@ -257,7 +258,7 @@ export default function ProjectCredentialsTab() {
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        let toCreate: any[] = [];
+        let toCreate: CreateCredentialRequest[] = [];
 
         switch (activeTab) {
             case 'env':
@@ -292,9 +293,10 @@ export default function ProjectCredentialsTab() {
             setEnvGroups([newEnvGroup('')]); setSshRows([newSshRow()]); setTestRows([newTestRow()]);
             setAccountRows([newAccountRow()]); setOtherRows([newOtherRow()]);
             alert('Credentials saved successfully!');
-        } catch (err: any) {
+        } catch (err: unknown) {
             logger.error('Failed to save credentials:', err);
-            const errorMessage = err?.data?.message || err?.message || 'Unknown error';
+            const error = err as { data?: { message?: string }; message?: string };
+            const errorMessage = error?.data?.message || error?.message || 'Unknown error';
             alert(`Failed to save: ${errorMessage}`);
         }
     };
@@ -633,18 +635,18 @@ export default function ProjectCredentialsTab() {
                                             className="flex-1 px-3 rounded text-sm outline-none border transition-colors"
                                             style={{ ...inputStyle, height: '36px' }}
                                             placeholder="Email" />
-                                    <div className="relative flex-1">
-                                        <input type={showAccPw[row.id] ? 'text' : 'password'} value={row.password}
-                                            onChange={e => updateRow(setAccountRows, row.id, { password: e.target.value })}
-                                            className={`w-full px-3 pr-9 rounded text-sm outline-none border transition-colors font-mono`}
-                                            style={{ ...inputStyle, height: '36px' }} placeholder="Password" />
-                                        <button type="button"
-                                            onClick={() => setShowAccPw(p => ({ ...p, [row.id]: !p[row.id] }))}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5"
-                                            style={{ color: 'var(--color-text-muted)' }}>
-                                            {showAccPw[row.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                                        </button>
-                                    </div>
+                                        <div className="relative flex-1">
+                                            <input type={showAccPw[row.id] ? 'text' : 'password'} value={row.password}
+                                                onChange={e => updateRow(setAccountRows, row.id, { password: e.target.value })}
+                                                className={`w-full px-3 pr-9 rounded text-sm outline-none border transition-colors font-mono`}
+                                                style={{ ...inputStyle, height: '36px' }} placeholder="Password" />
+                                            <button type="button"
+                                                onClick={() => setShowAccPw(p => ({ ...p, [row.id]: !p[row.id] }))}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5"
+                                                style={{ color: 'var(--color-text-muted)' }}>
+                                                {showAccPw[row.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -727,7 +729,7 @@ export default function ProjectCredentialsTab() {
                                         All ({credentials.length})
                                     </button>
                                     {savedEnvGroups.map(sg => {
-                                        const count = credentials.filter((c: any) => (c.description || 'General') === sg).length;
+                                        const count = credentials.filter((c: { description?: string }) => (c.description || 'General') === sg).length;
                                         const isActive = envGroupFilter === sg;
                                         return (
                                             <button key={sg}
@@ -754,8 +756,8 @@ export default function ProjectCredentialsTab() {
                         <div className="space-y-2">
                             {activeTab === 'env' ? (
                                 (() => {
-                                    const groups: Record<string, any[]> = {};
-                                    credentials.forEach((c: any) => {
+                                    const groups: Record<string, Credential[]> = {};
+                                    credentials.forEach((c: Credential) => {
                                         const g = c.description || 'General';
                                         (groups[g] = groups[g] || []).push(c);
                                     });
@@ -814,7 +816,7 @@ export default function ProjectCredentialsTab() {
 }
 
 // ─── Credential List Item (type-aware) ───────────────────────────────────────
-function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { credential: any; onDelete: () => void; projectId: string; isCredAdmin?: boolean }) {
+function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { credential: Credential; onDelete: () => void; projectId: string; isCredAdmin?: boolean }) {
     const [expanded, setExpanded] = useState(false);
     const { data, isLoading } = useGetCredentialByIdQuery(
         { projectId, id: credential._id },
@@ -828,8 +830,8 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
 
     useBodyScrollLock(viewersOpen);
 
-    const type: CredentialType = credential.type;
-    const viewers: any[] = credential.viewAccess ?? [];
+    const type: CredentialType = credential.type as CredentialType;
+    const viewers: (string | AuthUser)[] = credential.viewAccess ?? [];
 
     const handleRevokeViewer = async (userId: string) => {
         try {
@@ -932,7 +934,7 @@ function CredentialListItem({ credential, onDelete, projectId, isCredAdmin }: { 
                                     <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-muted)' }}>
                                         {viewers.length} {viewers.length === 1 ? 'person has' : 'people have'} view access
                                     </p>
-                                    {viewers.map((v: any) => {
+                                    {viewers.map((v: string | AuthUser) => {
                                         const userId = typeof v === 'string' ? v : v._id;
                                         const name = typeof v === 'object' ? (v.name ?? 'User') : 'User';
                                         const email = typeof v === 'object' ? (v.email ?? '') : '';
@@ -1117,7 +1119,7 @@ function FieldChip({ icon, label, value, mono, copyId, copied, onCopy, isUrl }: 
     );
 }
 
-function CopyAllEnvButton({ credentials, projectId }: { credentials: any[]; projectId: string }) {
+function CopyAllEnvButton({ credentials, projectId }: { credentials: Credential[]; projectId: string }) {
     const [copied, setCopied] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
     const [fetchCredentialById] = useLazyGetCredentialByIdQuery();

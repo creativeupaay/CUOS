@@ -143,7 +143,15 @@ class PayrollService {
                 }
             }
 
+            if (monthlySalary === 0) {
+                throw new AppError(`Salary amount is not defined or is 0 for ${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} ${year}. Please update the employee's salary structure for this specific month.`, 400);
+            }
+
             payableDays = this.calculatePayableDays(employee.joiningDate, salary.effectiveFrom, month, year);
+
+            if (payableDays === 0) {
+                throw new AppError(`Employee is not eligible for payroll in ${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} ${year} as their joining date or salary effective date is after this period.`, 400);
+            }
             
             // If the employee is mapped to 0 salary, avoid division issues
             if (monthlySalary > 0) {

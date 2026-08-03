@@ -79,7 +79,9 @@ function CommentsPanel({
         try {
             await addComment({ projectId, entityType, entityId, content: text.trim() }).unwrap();
             setText('');
-        } catch { }
+        } catch {
+            // Ignore error
+        }
     };
 
     return (
@@ -165,7 +167,7 @@ function OverviewTab({ projectId }: { projectId: string }) {
     if (isLoading) return <TabLoader />;
     if (!project) return <TabEmpty text="Could not load project details." />;
 
-    const phases: any[] = (project as any).phases ?? [];
+    const phases: { status?: string; name?: string }[] = (project as { phases?: { status?: string; name?: string }[] }).phases ?? [];
     const completedPhases = phases.filter((p) => p.status === 'completed').length;
     const progressPct = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : null;
 
@@ -189,7 +191,7 @@ function OverviewTab({ projectId }: { projectId: string }) {
 
                     {/* Phase list */}
                     <div className="mt-4 space-y-2">
-                        {phases.map((phase: any, i: number) => {
+                        {phases.map((phase: { status?: string; name?: string }, i: number) => {
                             const isDone = phase.status === 'completed';
                             const isActive = phase.status === 'in-progress';
                             return (
@@ -220,15 +222,15 @@ function OverviewTab({ projectId }: { projectId: string }) {
 
             {/* Key dates */}
             {[
-                { label: 'Start Date', value: formatDate((project as any).startDate) },
-                { label: 'End Date', value: formatDate((project as any).endDate) },
-                { label: 'Deadline', value: formatDate((project as any).deadline) },
+                { label: 'Start Date', value: formatDate((project as { startDate?: string }).startDate) },
+                { label: 'End Date', value: formatDate((project as { endDate?: string }).endDate) },
+                { label: 'Deadline', value: formatDate((project as { deadline?: string }).deadline) },
             ].filter((d) => d.value).length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {[
-                            { label: 'Start Date', value: formatDate((project as any).startDate) },
-                            { label: 'End Date', value: formatDate((project as any).endDate) },
-                            { label: 'Deadline', value: formatDate((project as any).deadline) },
+                            { label: 'Start Date', value: formatDate((project as { startDate?: string }).startDate) },
+                            { label: 'End Date', value: formatDate((project as { endDate?: string }).endDate) },
+                            { label: 'Deadline', value: formatDate((project as { deadline?: string }).deadline) },
                         ].filter((d) => d.value).map((d) => (
                             <div key={d.label} className="rounded-2xl border p-4" style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
                                 <p className="text-xs mb-1" style={{ color: '#94A3B8' }}>{d.label}</p>
@@ -241,10 +243,10 @@ function OverviewTab({ projectId }: { projectId: string }) {
                 )}
 
             {/* Description */}
-            {(project as any).description && (
+            {(project as { description?: string }).description && (
                 <div className="rounded-2xl border p-5" style={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}>
                     <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#94A3B8' }}>About</p>
-                    <p className="text-sm leading-relaxed" style={{ color: '#475569' }}>{(project as any).description}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: '#475569' }}>{(project as { description?: string }).description}</p>
                 </div>
             )}
         </div>
@@ -414,12 +416,12 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                                 <div className="px-4 pb-4 border-t" style={{ borderColor: '#F1F5F9' }}>
 
                                     {/* Join Meeting CTA for URL-based locations */}
-                                    {(meeting.location?.startsWith('http') || (meeting as any).meetingLink) && (
+                                    {(meeting.location?.startsWith('http') || (meeting as { meetingLink?: string }).meetingLink) && (
                                         <a
                                             href={
                                                 meeting.location?.startsWith('http')
                                                     ? meeting.location
-                                                    : (meeting as any).meetingLink
+                                                    : (meeting as { meetingLink?: string }).meetingLink
                                             }
                                             target="_blank"
                                             rel="noopener noreferrer"
@@ -730,8 +732,9 @@ function DocumentsTab({ projectId }: { projectId: string }) {
             const formData = new FormData();
             formData.append('file', file);
             await uploadDoc({ projectId, formData }).unwrap();
-        } catch (err: any) {
-            setUploadError(err?.data?.message ?? 'Upload failed. Please try again.');
+        } catch (err: unknown) {
+            const error = err as { data?: { message?: string } };
+            setUploadError(error?.data?.message ?? 'Upload failed. Please try again.');
         } finally {
             setUploading(false);
             if (fileRef.current) fileRef.current.value = '';
@@ -765,7 +768,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
                         const dt = new DataTransfer();
                         dt.items.add(file);
                         if (fileRef.current) fileRef.current.files = dt.files;
-                        handleUpload({ target: fileRef.current } as any);
+                        handleUpload({ target: fileRef.current } as unknown as React.ChangeEvent<HTMLInputElement>);
                     }
                 }}
             >
@@ -899,9 +902,9 @@ export default function ClientPortalProjectDetailPage() {
                         <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>
                             {project.name}
                         </h1>
-                        {(project as any).description && (
+                        {(project as { description?: string }).description && (
                             <p className="text-sm mt-1 line-clamp-2" style={{ color: '#64748B' }}>
-                                {(project as any).description}
+                                {(project as { description?: string }).description}
                             </p>
                         )}
                     </div>

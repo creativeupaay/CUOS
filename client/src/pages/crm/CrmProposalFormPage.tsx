@@ -26,14 +26,14 @@ import {
 import type { Proposal } from '@/features/crm/types/types';
 
 // Tab Components
-import OverviewTab from '../features/crm/components/Proposal/OverviewTab';
-import ScopeTab from '../features/crm/components/Proposal/ScopeTab';
-import TechTab from '../features/crm/components/Proposal/TechTab';
-import ExecutionTab from '../features/crm/components/Proposal/ExecutionTab';
-import BudgetTab from '../features/crm/components/Proposal/BudgetTab';
+import OverviewTab from '@/features/crm/components/Proposal/OverviewTab';
+import ScopeTab from '@/features/crm/components/Proposal/ScopeTab';
+import TechTab from '@/features/crm/components/Proposal/TechTab';
+import ExecutionTab from '@/features/crm/components/Proposal/ExecutionTab';
+import BudgetTab from '@/features/crm/components/Proposal/BudgetTab';
 import { logger } from '@/utils/logger';
 
-const ProposalPdfDownloadButton = lazy(() => import('../features/crm/components/Proposal/ProposalPdfDownloadButton'));
+const ProposalPdfDownloadButton = lazy(() => import('@/features/crm/components/Proposal/ProposalPdfDownloadButton'));
 
 // Schema - We can use a looser schema for portions or the full one. 
 // For now, let's keep the base required fields tight and others optional/flexible as defined in validator.

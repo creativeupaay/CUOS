@@ -9,6 +9,7 @@ import {
 } from '../models/FixedExpenseApproval.model';
 import { notificationService } from '../../notification/services/notification.service';
 import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
+import { EXPENSE_CATEGORIES } from '../constants/expenseCategories';
 
 interface CreateFixedExpenseData {
     title: string;
@@ -291,10 +292,14 @@ export class FixedExpenseService {
         if (!approval) return null;
         if (approval.status !== 'pending') return approval.toObject() as IFixedExpenseApproval;
 
+        const category = EXPENSE_CATEGORIES.includes(approval.category as any)
+            ? approval.category
+            : 'Other';
+
         const expense = await ExpenseService.create({
             date: data.paidDate || approval.dueDate,
             description: data.description || approval.description,
-            category: approval.category,
+            category,
             level: approval.level,
             type: 'fixed',
             amount: data.amount ?? approval.amount,

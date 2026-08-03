@@ -44,7 +44,7 @@ export default function ProjectsPage() {
     const partnerParam = searchParams.get('partnerId') || '';
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
-    const [partnerFilter, setPartnerFilter] = useState(partnerParam);
+    const partnerFilter = scopeParam === 'internal' ? '' : partnerParam;
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
     const [deleteVerificationText, setDeleteVerificationText] = useState('');
     const [statusModal, setStatusModal] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
@@ -126,30 +126,22 @@ export default function ProjectsPage() {
         setShowCreateProjectPanel(false);
     };
 
-    const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : user.role) : '';
+    const roleName = user?.role ? (typeof user.role === 'object' ? (user.role as { name: string }).name : user.role) : '';
     const isPartner = (roleName as string).toLowerCase() === 'partner';
     const canManageProjects = hasModuleAdminAccess(user, 'projectManagement') || isPartner;
     const canViewProjects = hasModuleViewAccess(user, 'projectManagement') || isPartner;
     const { data: partnersData } = useGetPartnersQuery({ limit: 200 }, { skip: !canManageProjects || isPartner });
     const partners = partnersData?.data?.partners || [];
 
-    useEffect(() => {
-        setPartnerFilter(scopeParam === 'internal' ? '' : partnerParam);
-    }, [partnerParam, scopeParam]);
-
-    useEffect(() => {
-        if (!deleteConfirm) setDeleteVerificationText('');
-    }, [deleteConfirm]);
-
-    const getProjectPartnerId = (project: any) => typeof project.partnerId === 'object' ? project.partnerId?._id : project.partnerId;
-    const getProjectPartnerName = (project: any) => {
+    const getProjectPartnerId = (project: { partnerId?: string | { _id: string } | null }) => typeof project.partnerId === 'object' ? project.partnerId?._id : project.partnerId;
+    const getProjectPartnerName = (project: { partnerId?: string | { _id: string; userId?: { name?: string }; contactPerson?: string; companyName?: string } | null }) => {
         const partner = typeof project.partnerId === 'object' ? project.partnerId : undefined;
         if (partner) return partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner';
-        return getPartnerName(project.partnerId);
+        return getPartnerName(project.partnerId as string | undefined);
     };
     const getPartnerName = (partnerId?: string) => {
         if (!partnerId) return '';
-        const partner = partners.find((p: any) => p._id === partnerId);
+        const partner = partners.find((p: { _id: string; userId?: { name?: string }; contactPerson?: string; companyName?: string }) => p._id === partnerId);
         return partner?.userId?.name || partner?.contactPerson || partner?.companyName || 'Partner';
     };
     const dashboardTitle = scopeParam === 'internal'
@@ -159,7 +151,6 @@ export default function ProjectsPage() {
             : 'Projects';
 
     const updatePartnerFilter = (value: string) => {
-        setPartnerFilter(value);
         const next = new URLSearchParams(searchParams);
         next.delete('scope');
         if (value) next.set('partnerId', value);
@@ -173,6 +164,7 @@ export default function ProjectsPage() {
         try {
             await deleteProject(deleteConfirm.id).unwrap();
             setDeleteConfirm(null);
+            setDeleteVerificationText('');
         } catch (err) {
             logger.error('Failed to delete project:', err);
         }
@@ -181,7 +173,7 @@ export default function ProjectsPage() {
     const handleStatusUpdate = async () => {
         if (!statusModal || !selectedStatus) return;
         try {
-            await updateProject({ id: statusModal.id, data: { status: selectedStatus as any } }).unwrap();
+            await updateProject({ id: statusModal.id, data: { status: selectedStatus as "planning" | "active" | "on-hold" | "completed" | "cancelled" } }).unwrap();
             setStatusModal(null);
         } catch (err) {
             logger.error('Failed to update project status:', err);
@@ -266,7 +258,7 @@ export default function ProjectsPage() {
                             style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
                         >
                             <option value="">All Partners</option>
-                            {partners.map((partner: any) => (
+                            {partners.map((partner: { _id: string; userId?: { name?: string }; contactPerson?: string; companyName?: string }) => (
                                 <option key={partner._id} value={partner._id}>
                                     {partner.userId?.name || partner.contactPerson || partner.companyName || 'Partner'}
                                 </option>
@@ -422,6 +414,7 @@ export default function ProjectsPage() {
                                                         e.stopPropagation();
                                                         setOpenMenuId(null);
                                                         setDeleteConfirm({ id: project._id, name: project.name });
+                                                        setDeleteVerificationText('');
                                                     }}
                                                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm hover:bg-red-50 transition-colors text-left text-red-600"
                                                 >
@@ -539,7 +532,10 @@ export default function ProjectsPage() {
                     />
                     <div className="flex gap-3 justify-end">
                         <button
-                            onClick={() => setDeleteConfirm(null)}
+                            onClick={() => {
+                                setDeleteConfirm(null);
+                                setDeleteVerificationText('');
+                            }}
                             className="px-4 py-2 text-sm rounded-lg border transition-colors hover:bg-gray-50"
                             style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}
                         >
