@@ -258,6 +258,8 @@ router.delete('/reimbursements/:id', hrmsSelfSubmoduleOnly('reimbursements' as a
 // Admin routes (HR/Admin)
 // IMPORTANT: /summary and /me/* must come BEFORE /:id to avoid Express matching them as the id param
 router.get('/reimbursements/summary', hrAdminOnly, reimbursementController.getReimbursementSummary);
+router.get('/reimbursements/employees/overview', hrAdminOnly, reimbursementController.getEmployeesReimbursementOverview);
+router.get('/reimbursements/employee/:employeeId', hrAdminOnly, reimbursementController.getReimbursementsByEmployee);
 router.get(
     '/reimbursements',
     hrAdminOnly,

@@ -98,6 +98,11 @@ function resolveTitle(pathname: string): string {
     if (pathname === '/hiring/interviews') return 'Interviews';
     if (pathname === '/hiring/reports') return 'Reports';
 
+    // Reimbursement detail pages
+    if (pathname.startsWith('/hrms/reimbursements/employees/')) {
+        return 'Employee Reimbursement History';
+    }
+
     // Fallback: capitalise last segment
     const last = pathname.split('/').filter(Boolean).pop() || '';
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');

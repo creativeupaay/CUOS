@@ -54,6 +54,8 @@ const EmployeeLeavesPage = lazy(() => import('./pages/EmployeeLeavesPage'));
 const EmployeeHolidaysPage = lazy(() => import('./pages/EmployeeHolidaysPage'));
 const EmployeePayrollPage = lazy(() => import('./pages/EmployeePayrollPage'));
 const HrmsReimbursementsPage = lazy(() => import('./pages/HrmsReimbursementsPage'));
+const HrmsEmployeeReimbursementsPage = lazy(() => import('./pages/HrmsEmployeeReimbursementsPage'));
+const HrmsEmployeeReimbursementHistoryPage = lazy(() => import('./pages/HrmsEmployeeReimbursementHistoryPage'));
 const MyProfilePage = lazy(() => import('./pages/MyProfilePage'));
 const MyProfileChangePasswordPage = lazy(() => import('./pages/MyProfileChangePasswordPage'));
 const EmployeeOnboardingFormPage = lazy(() => import('./pages/EmployeeOnboardingFormPage'));
@@ -365,6 +367,8 @@ function AppRoutes() {
           <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
           <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
           <Route path="/hrms/announcements" element={<HrmsRedirect>{loadable(<HrmsAnnouncementsPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/reimbursements/employees/:id" element={<HrmsRedirect>{loadable(<HrmsEmployeeReimbursementHistoryPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/reimbursements/employees" element={<HrmsRedirect>{loadable(<HrmsEmployeeReimbursementsPage />)}</HrmsRedirect>} />
           <Route path="/hrms/reimbursements" element={<HrmsRedirect>{loadable(<HrmsReimbursementsPage />)}</HrmsRedirect>} />
 
           {/* Employee HRMS Module - All employees can access their own data */}

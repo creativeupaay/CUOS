@@ -301,7 +301,7 @@ export async function updateReimbursementStatus(
                 const expensePaymentMethod = data.paymentMethod === 'cash' ? 'cash' : 'bank_transfer';
 
                 await ExpenseService.create({
-                    date: now,
+                    date: reimbursement.expenseDate,
                     description: `Reimbursement: ${reimbursement.title}`,
                     category: 'Reimbursements',
                     level: reimbursement.level || 'company',
@@ -630,6 +630,65 @@ export async function getReimbursementById(userId: string, reimbursementId: stri
     return shaped;
 }
 
+// ── Get reimbursements for a specific employee (admin) ────────────────
+export async function getReimbursementsByEmployee(employeeId: string) {
+    const empObjectId = new Types.ObjectId(employeeId);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [reimbursements, summaryAgg] = await Promise.all([
+        Reimbursement.find({ employeeId: empObjectId })
+            .sort({ createdAt: -1 })
+            .lean(),
+        Reimbursement.aggregate([
+            { $match: { employeeId: empObjectId } },
+            {
+                $group: {
+                    _id: '$status',
+                    amount: { $sum: '$amount' },
+                    count: { $sum: 1 },
+                },
+            },
+        ]),
+    ]);
+
+    // Also calculate paid this month
+    const paidThisMonthAgg = await Reimbursement.aggregate([
+        {
+            $match: {
+                employeeId: empObjectId,
+                status: 'paid',
+                'paymentInfo.paidAt': { $gte: monthStart },
+            },
+        },
+        { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]);
+
+    const byStatus: Record<string, { amount: number; count: number }> = {};
+    for (const row of summaryAgg) {
+        byStatus[row._id] = { amount: row.amount, count: row.count };
+    }
+
+    const summary = {
+        pending: byStatus['pending'] || { amount: 0, count: 0 },
+        approved: byStatus['approved'] || { amount: 0, count: 0 },
+        paid: byStatus['paid'] || { amount: 0, count: 0 },
+        paidThisMonth: paidThisMonthAgg[0]
+            ? { amount: paidThisMonthAgg[0].amount, count: paidThisMonthAgg[0].count }
+            : { amount: 0, count: 0 },
+        rejected: byStatus['rejected'] || { amount: 0, count: 0 },
+        drafts: { count: byStatus['draft']?.count || 0 },
+        changesRequested: { count: byStatus['changes_requested']?.count || 0 },
+        totalClaimed: {
+            amount: Object.values(byStatus).reduce((s, v) => s + v.amount, 0),
+            count: Object.values(byStatus).reduce((s, v) => s + v.count, 0),
+        },
+    };
+
+    return { reimbursements, summary };
+}
+
 // ── Delete draft ──────────────────────────────────────────────────────
 export async function deleteReimbursement(userId: string, reimbursementId: string, isAdmin = false) {
     const reimbursement = await Reimbursement.findById(reimbursementId);
@@ -651,4 +710,99 @@ export async function deleteReimbursement(userId: string, reimbursementId: strin
     }
 
     await Reimbursement.deleteOne({ _id: reimbursementId });
+}
+
+// ── Get all employees' reimbursement overview (admin) ─────────────────
+export async function getEmployeesReimbursementOverview() {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const rows = await Reimbursement.aggregate([
+        // Compute per-employee stats in one pass
+        {
+            $group: {
+                _id: '$employeeId',
+                pendingAmount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amount', 0] } },
+                pendingCount:  { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+                approvedAmount: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, '$amount', 0] } },
+                approvedCount:  { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
+                paidAmount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] } },
+                paidCount:  { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+                rejectedCount: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
+                totalAmount: { $sum: '$amount' },
+                totalCount:  { $sum: 1 },
+                // Paid this month — flag and sum in same pass
+                paidThisMonthAmount: {
+                    $sum: {
+                        $cond: [
+                            { $and: [
+                                { $eq: ['$status', 'paid'] },
+                                { $gte: ['$paymentInfo.paidAt', monthStart] },
+                            ]},
+                            '$amount',
+                            0,
+                        ],
+                    },
+                },
+                paidThisMonthCount: {
+                    $sum: {
+                        $cond: [
+                            { $and: [
+                                { $eq: ['$status', 'paid'] },
+                                { $gte: ['$paymentInfo.paidAt', monthStart] },
+                            ]},
+                            1,
+                            0,
+                        ],
+                    },
+                },
+            },
+        },
+        // Join with employees
+        {
+            $lookup: {
+                from: 'employees',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'employee',
+            },
+        },
+        { $unwind: { path: '$employee', preserveNullAndEmptyArrays: false } },
+        // Join with users
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'employee.userId',
+                foreignField: '_id',
+                as: 'user',
+            },
+        },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: false } },
+        // Sort by most pending first
+        { $sort: { pendingAmount: -1, totalAmount: -1 } },
+        {
+            $project: {
+                'employee._id': 1,
+                'employee.employeeId': 1,
+                'employee.department': 1,
+                'employee.designation': 1,
+                'user._id': 1,
+                'user.name': 1,
+                'user.email': 1,
+                pendingAmount: 1,
+                pendingCount: 1,
+                approvedAmount: 1,
+                approvedCount: 1,
+                paidAmount: 1,
+                paidCount: 1,
+                paidThisMonthAmount: 1,
+                paidThisMonthCount: 1,
+                rejectedCount: 1,
+                totalAmount: 1,
+                totalCount: 1,
+            },
+        },
+    ]);
+
+    return rows;
 }

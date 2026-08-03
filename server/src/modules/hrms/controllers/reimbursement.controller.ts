@@ -176,3 +176,24 @@ export const deleteReimbursement = asyncHandler(async (req: Request, res: Respon
         data: null,
     });
 });
+
+// ── Admin: get all reimbursements for a specific employee ──────────────
+export const getReimbursementsByEmployee = asyncHandler(async (req: Request, res: Response) => {
+    const { employeeId } = req.params;
+    const result = await reimbursementService.getReimbursementsByEmployee(employeeId);
+
+    res.status(200).json({
+        status: 'success',
+        data: result,
+    });
+});
+
+// ── Admin: get overview of all employees' reimbursement totals ─────────
+export const getEmployeesReimbursementOverview = asyncHandler(async (_req: Request, res: Response) => {
+    const rows = await reimbursementService.getEmployeesReimbursementOverview();
+
+    res.status(200).json({
+        status: 'success',
+        data: { employees: rows },
+    });
+});

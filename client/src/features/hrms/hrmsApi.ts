@@ -766,6 +766,59 @@ export const reimbursementApi = api.injectEndpoints({
             query: ({ id, data }) => ({ url: `/hrms/reimbursements/${id}/status`, method: 'PATCH', body: data }),
             invalidatesTags: ['Reimbursements', 'Expenses', 'FinanceDashboard'],
         }),
+
+        // Admin: get all reimbursements for a specific employee
+        getEmployeeReimbursements: builder.query<
+            {
+                status: string;
+                data: {
+                    reimbursements: Reimbursement[];
+                    summary: {
+                        pending: { amount: number; count: number };
+                        approved: { amount: number; count: number };
+                        paid: { amount: number; count: number };
+                        paidThisMonth: { amount: number; count: number };
+                        rejected: { amount: number; count: number };
+                        drafts: { count: number };
+                        changesRequested: { count: number };
+                        totalClaimed: { amount: number; count: number };
+                    };
+                };
+            },
+            string
+        >({
+            query: (employeeId) => `/hrms/reimbursements/employee/${employeeId}`,
+            providesTags: (_r, _e, employeeId) => [{ type: 'Reimbursements', id: `employee-${employeeId}` }],
+        }),
+
+        // Admin: get overview of all employees' reimbursement totals
+        getEmployeesReimbursementOverview: builder.query<
+            {
+                status: string;
+                data: {
+                    employees: Array<{
+                        _id: string;
+                        employee: { _id: string; employeeId: string; department: string; designation: string };
+                        user: { _id: string; name: string; email: string };
+                        pendingAmount: number;
+                        pendingCount: number;
+                        approvedAmount: number;
+                        approvedCount: number;
+                        paidAmount: number;
+                        paidCount: number;
+                        paidThisMonthAmount: number;
+                        paidThisMonthCount: number;
+                        rejectedCount: number;
+                        totalAmount: number;
+                        totalCount: number;
+                    }>;
+                };
+            },
+            void
+        >({
+            query: () => '/hrms/reimbursements/employees/overview',
+            providesTags: ['Reimbursements'],
+        }),
     }),
     overrideExisting: false,
 });
@@ -782,4 +835,6 @@ export const {
     useGetReimbursementSummaryQuery,
     useGetReimbursementByIdQuery,
     useUpdateReimbursementStatusMutation,
+    useGetEmployeeReimbursementsQuery,
+    useGetEmployeesReimbursementOverviewQuery,
 } = reimbursementApi;

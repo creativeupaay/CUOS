@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-    Search, Filter, Clock, CheckCircle, Download,
-    RotateCcw, AlertTriangle, User, RefreshCcw, FileText, Plus, Receipt, Edit2, Trash2
+    Search, Clock, CheckCircle, Download,
+    RotateCcw, AlertTriangle, User, Plus, Receipt, Edit2, Trash2, Users, RefreshCcw
 } from 'lucide-react';
 import { useGetReimbursementsQuery, useGetReimbursementSummaryQuery, useGetMyReimbursementsQuery, useGetMyReimbursementSummaryQuery, useDeleteReimbursementMutation } from '@/features/hrms/hrmsApi';
 import ReimbursementDetailDrawer from '@/components/organisms/hrms/ReimbursementDetailDrawer';
 import NewReimbursementDrawer from '@/components/organisms/hrms/NewReimbursementDrawer';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
 import { hasModuleAdminAccess, getRoleName } from '@/utils/modulePermissions';
 
@@ -89,6 +89,7 @@ export default function HrmsReimbursementsPage() {
     const roleName = getRoleName(user?.role);
     const isSuperAdmin = ['super-admin', 'super_admin'].includes(roleName);
     const location = useLocation();
+    const navigate = useNavigate();
 
     // Derive view from URL: /hrms/... → org view, /my-hrms/... → my claims view
     const isOrgView = !location.pathname.startsWith('/my-hrms');
@@ -118,7 +119,7 @@ export default function HrmsReimbursementsPage() {
     const { data: orgSummaryData, refetch: refetchOrgSummary } = useGetReimbursementSummaryQuery(undefined, {
         skip: !isOrgView,
     });
-    const { data: orgClaimsData, isLoading: isLoadingOrg, isFetching: isFetchingOrg, refetch: refetchOrgClaims } = useGetReimbursementsQuery({
+    const { data: orgClaimsData, isLoading: isLoadingOrg, refetch: refetchOrgClaims } = useGetReimbursementsQuery({
         status: statusFilter !== 'all' ? statusFilter : undefined,
         search: debouncedSearch || undefined,
         policy: policyFilter !== 'all' ? policyFilter : undefined,
@@ -129,15 +130,10 @@ export default function HrmsReimbursementsPage() {
     const { data: mySummaryData, refetch: refetchMySummary } = useGetMyReimbursementSummaryQuery(undefined, {
         skip: isOrgView,
     });
-    const { data: myClaimsData, isLoading: isLoadingMy, isFetching: isFetchingMy, refetch: refetchMyClaims } = useGetMyReimbursementsQuery({
+    const { data: myClaimsData, isLoading: isLoadingMy, refetch: refetchMyClaims } = useGetMyReimbursementsQuery({
         status: statusFilter !== 'all' ? statusFilter : undefined,
         sort: sortOrder,
     }, { skip: isOrgView });
-
-    const handleRefresh = () => {
-        if (isOrgView) { refetchOrgSummary(); refetchOrgClaims(); }
-        else { refetchMySummary(); refetchMyClaims(); }
-    };
 
     const handleCreatedOrUpdated = () => {
         if (isOrgView) {
@@ -165,7 +161,6 @@ export default function HrmsReimbursementsPage() {
 
     // Derived
     const isLoading = isOrgView ? isLoadingOrg : isLoadingMy;
-    const isFetching = isOrgView ? isFetchingOrg : isFetchingMy;
     const summary = isOrgView ? orgSummaryData?.data?.summary : mySummaryData?.data?.summary;
     const reimbursements: any[] = isOrgView
         ? (orgClaimsData?.data?.reimbursements || [])
@@ -196,28 +191,26 @@ export default function HrmsReimbursementsPage() {
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>{pageSubtitle}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleRefresh}
-                        className="p-2 rounded-xl border flex items-center justify-center cursor-pointer transition-colors"
-                        style={{
-                            borderColor: 'var(--color-border-default)',
-                            color: 'var(--color-text-muted)',
-                            backgroundColor: 'var(--color-bg-surface)',
-                        }}
-                        title="Refresh"
-                    >
-                        <RefreshCcw size={17} className={isFetching ? 'animate-spin' : ''} />
-                    </button>
+                    {/* Employee View button — Org admin only */}
                     {isOrgView && isAdmin && (
                         <button
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-colors cursor-pointer"
+                            onClick={() => navigate('/hrms/reimbursements/employees')}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all cursor-pointer"
                             style={{
-                                borderColor: 'var(--color-border-default)',
-                                color: 'var(--color-text-primary)',
-                                backgroundColor: 'var(--color-bg-surface)',
+                                borderColor: 'var(--color-primary)',
+                                color: 'var(--color-primary)',
+                                backgroundColor: 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--color-primary)';
+                                e.currentTarget.style.color = '#fff';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = 'var(--color-primary)';
                             }}
                         >
-                            <FileText size={15} /> Export CSV
+                            <Users size={15} /> Employee View
                         </button>
                     )}
                     {/* Hide "New Reimbursement" for Super Admins on Org view (they don't create claims) */}
@@ -374,16 +367,6 @@ export default function HrmsReimbursementsPage() {
                                 <option value="amount_desc">Amount: High to Low</option>
                                 <option value="amount_asc">Amount: Low to High</option>
                             </select>
-                            <button
-                                className="p-2 border rounded-lg flex items-center justify-center cursor-pointer"
-                                style={{
-                                    borderColor: 'var(--color-border-default)',
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'var(--color-bg-surface)',
-                                }}
-                            >
-                                <Filter size={15} />
-                            </button>
                         </div>
                     )}
                 </div>
