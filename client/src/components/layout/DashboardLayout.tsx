@@ -38,6 +38,7 @@ const ROUTE_TITLES: Record<string, string> = {
     '/hrms/holidays': 'Holidays',
     '/hrms/payroll': 'Payroll',
     '/hrms/announcements': 'Company Announcements',
+    '/hrms/reimbursements': 'Reimbursements',
     '/my-hrms/profile': 'Personal Details',
     '/my-hrms/change-password': 'Change Password',
     '/my-hrms/attendance': 'My Attendance',
@@ -45,6 +46,7 @@ const ROUTE_TITLES: Record<string, string> = {
     '/my-hrms/holidays': 'Holidays',
     '/my-hrms/payroll': 'My Payroll',
     '/my-hrms/announcements': 'Announcements',
+    '/my-hrms/reimbursements': 'Expenses & Reimbursements',
     '/admin': 'Admin Panel',
     '/admin/users': 'Users',
     '/admin/permissions': 'Permissions',
@@ -95,6 +97,11 @@ function resolveTitle(pathname: string): string {
     if (pathname === '/hiring/jobs') return 'Job Postings';
     if (pathname === '/hiring/interviews') return 'Interviews';
     if (pathname === '/hiring/reports') return 'Reports';
+
+    // Reimbursement detail pages
+    if (pathname.startsWith('/hrms/reimbursements/employees/')) {
+        return 'Employee Reimbursement History';
+    }
 
     // Fallback: capitalise last segment
     const last = pathname.split('/').filter(Boolean).pop() || '';

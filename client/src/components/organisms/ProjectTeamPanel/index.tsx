@@ -94,6 +94,10 @@ export function ProjectTeamPanel({
     };
 
     const handleRemoveMember = async (employeeId: string) => {
+        if (!employeeId) {
+            logger.error('Cannot remove assignee: memberId is empty or undefined');
+            return;
+        }
         if (window.confirm('Are you sure you want to remove this member from the project?')) {
             try {
                 await removeAssignee({ projectId: project._id, memberId: employeeId }).unwrap();
@@ -338,7 +342,7 @@ export function ProjectTeamPanel({
                                         </button>
                                     </>
                                 )}
-                                {canRemoveMember && (
+                                {canRemoveMember && !!meta.memberId && (
                                     <>
                                         <button
                                             onClick={() => handleRemoveMember(meta.memberId)}

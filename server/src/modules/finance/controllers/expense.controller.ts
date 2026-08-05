@@ -72,8 +72,8 @@ export class ExpenseController {
                 type: req.query.type as string,
                 category: req.query.category as string,
                 search: req.query.search as string,
-                startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
-                endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+                startDate: req.query.startDate ? new Date(`${req.query.startDate}T00:00:00.000+05:30`) : undefined,
+                endDate: req.query.endDate ? new Date(`${req.query.endDate}T23:59:59.999+05:30`) : undefined,
                 projectId: req.query.projectId ? new Types.ObjectId(req.query.projectId as string) : undefined,
                 employeeId: req.query.employeeId ? new Types.ObjectId(req.query.employeeId as string) : undefined,
                 isRecurring: req.query.isRecurring !== undefined
@@ -280,10 +280,10 @@ export class ExpenseController {
     static async getProjectExpenseSummary(req: Request, res: Response): Promise<void> {
         try {
             const startDate = req.query.startDate
-                ? new Date(req.query.startDate as string)
+                ? new Date(`${req.query.startDate}T00:00:00.000+05:30`)
                 : new Date(new Date().getFullYear(), 0, 1);
             const endDate = req.query.endDate
-                ? new Date(req.query.endDate as string)
+                ? new Date(`${req.query.endDate}T23:59:59.999+05:30`)
                 : new Date();
 
             const summary = await ExpenseService.getProjectExpenseSummary(startDate, endDate);

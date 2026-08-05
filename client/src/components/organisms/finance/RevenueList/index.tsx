@@ -1,14 +1,15 @@
 import React from 'react';
-import { Calendar, Globe, Building2, Edit2, Trash2, Loader2, Receipt } from 'lucide-react';
+import { Calendar, Building2, Edit2, Trash2, Loader2, Receipt } from 'lucide-react';
 import { type Revenue, formatCurrency } from '@/features/finance';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
-import { Badge, type BadgeVariant } from '@/components/atoms/Badge';
 
 export interface RevenueListProps {
     revenues: Revenue[];
     isLoading: boolean;
     onEdit: (revenue: Revenue) => void;
     onDelete: (revenue: Revenue) => void;
+    selectedIds: string[];
+    onSelectAll: (checked: boolean) => void;
+    onSelect: (id: string, checked: boolean) => void;
 }
 
 const EmptyState = () => (
@@ -19,22 +20,7 @@ const EmptyState = () => (
     </div>
 );
 
-const SourceBadge = ({ source }: { source: Revenue['source'] }) => {
-    const config: Record<Revenue['source'], { label: string; variant: BadgeVariant }> = {
-        manual: { label: 'Manual', variant: 'purple' },
-        invoice: { label: 'Invoice', variant: 'info' },
-        project: { label: 'Project', variant: 'success' },
-    };
-    const { label, variant } = config[source] || { label: source, variant: 'neutral' };
-
-    return (
-        <Badge variant={variant}>
-            {label}
-        </Badge>
-    );
-};
-
-export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, onEdit, onDelete }) => {
+export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, onEdit, onDelete, selectedIds, onSelectAll, onSelect }) => {
     if (isLoading) {
         return (
             <div className="rounded-xl border bg-white border-[var(--color-border-default)]">
@@ -59,14 +45,21 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                 <table className="w-full">
                     <thead>
                         <tr className="bg-gray-50">
+                            <th className="text-left w-12 px-5 py-3">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300"
+                                    checked={revenues.length > 0 && selectedIds.length === revenues.length}
+                                    onChange={(e) => onSelectAll(e.target.checked)}
+                                />
+                            </th>
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Date</th>
-                            <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Description</th>
                             <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Client</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Total Amount (INR)</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Received</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">TDS</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">GST</th>
                             <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Amount (without GST)</th>
-                            <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Source</th>
-                            <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
                             <th className="text-center px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                         </tr>
                     </thead>
@@ -77,25 +70,19 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                 className={`transition-colors hover:bg-gray-50 ${index > 0 ? 'border-t border-gray-200' : ''}`}
                             >
                                 <td className="px-5 py-3">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={selectedIds.includes(entry._id)}
+                                        onChange={(e) => onSelect(entry._id, e.target.checked)}
+                                    />
+                                </td>
+                                <td className="px-5 py-3">
                                     <div className="flex items-center gap-2">
                                         <Calendar size={14} className="text-gray-400" />
                                         <span className="text-sm text-gray-500">
                                             {new Date(entry.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                         </span>
-                                    </div>
-                                </td>
-                                <td className="px-5 py-3">
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900">{entry.description}</p>
-                                        {entry.invoiceNumber && <p className="text-xs mt-0.5 text-gray-400">{entry.invoiceNumber}</p>}
-                                        {entry.currency !== 'INR' && (
-                                            <p className="text-xs mt-0.5 flex items-center gap-1 text-indigo-500">
-                                                <Globe size={10} />
-                                                {formatCurrency(entry.amount, entry.currency)} @ {entry.exchangeRate}
-                                                {entry.exchangeRateDate ? ` on ${new Date(entry.exchangeRateDate).toLocaleDateString('en-IN')}` : ''}
-                                                {entry.exchangeRateProvider ? ` via ${entry.exchangeRateProvider}` : ''}
-                                            </p>
-                                        )}
                                     </div>
                                 </td>
                                 <td className="px-5 py-3">
@@ -107,20 +94,20 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, isLoading, o
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-5 py-3 text-sm text-right font-semibold text-green-500">
+                                <td className="px-5 py-3 text-sm text-right font-semibold text-gray-900">
                                     {formatCurrency(entry.totalAmount || entry.amountINR || entry.amount)}
+                                </td>
+                                <td className="px-5 py-3 text-sm text-right font-semibold text-green-500">
+                                    {formatCurrency(entry.receivedAmount || 0)}
+                                </td>
+                                <td className="px-5 py-3 text-sm text-right text-gray-400">
+                                    {formatCurrency(entry.tdsDeducted || 0)}
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-400">
                                     {formatCurrency(entry.gst || 0)}
                                 </td>
                                 <td className="px-5 py-3 text-sm text-right text-gray-900">
                                     {formatCurrency(entry.amountINR || entry.amount || 0)}
-                                </td>
-                                <td className="px-5 py-3 text-center">
-                                    <SourceBadge source={entry.source} />
-                                </td>
-                                <td className="px-5 py-3 text-center">
-                                    <StatusBadge status={entry.status} />
                                 </td>
                                 <td className="px-5 py-3">
                                     <div className="flex items-center justify-center gap-1">

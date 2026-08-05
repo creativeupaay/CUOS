@@ -2,7 +2,6 @@ import { Expense, IExpense } from '../models/Expense.model';
 import { BankTransactionService } from './bankTransaction.service';
 import type { BankAccountKey } from '../models/BankTransaction.model';
 import { Payroll } from '../../hrms/models/Payroll.model';
-import { Employee } from '../../hrms/models/Employee.model';
 import { TimeLog } from '../../project/models/TimeLog.model';
 import { Project } from '../../project/models/Project.model';
 import { Types, FilterQuery } from 'mongoose';
@@ -20,11 +19,14 @@ interface CreateExpenseData {
     projectName?: string;
     employeeId?: Types.ObjectId;
     employeeName?: string;
+    payrollId?: Types.ObjectId;
+    reimbursementId?: Types.ObjectId;
     vendor?: string;
     paidBy?: string;
     sourceAccountKey?: BankAccountKey;
     isRecurring?: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    gstClaimable?: boolean;
     notes?: string;
     createdBy: Types.ObjectId;
 }
@@ -239,7 +241,7 @@ export class ExpenseService {
 
             if (previousTransactionId) {
                 await BankTransactionService.update(previousTransactionId, transactionPayload);
-                existing.bankTransactionId = previousTransactionId as any;
+                existing.bankTransactionId = previousTransactionId;
                 await existing.save();
             } else {
                 const bankTransaction = await BankTransactionService.create(transactionPayload);
@@ -336,7 +338,10 @@ export class ExpenseService {
             month,
             year,
             status: 'paid',
-        }).populate('employeeId');
+        }).populate({
+            path: 'employeeId',
+            populate: { path: 'userId', select: 'name' }
+        });
 
         // Get date range for the month
         const startDate = new Date(year, month - 1, 1);
@@ -344,51 +349,51 @@ export class ExpenseService {
 
         for (const payroll of payrolls) {
             try {
-                const employee = payroll.employeeId as any;
-                if (!employee) continue;
+                const employee = payroll.employeeId as unknown as {
+                    _id: Types.ObjectId;
+                    userId: { _id: Types.ObjectId; name: string };
+                    employeeId: string;
+                } | null;
+                if (!employee || !employee.userId) continue;
 
-                // Check if already synced
-                const existingExpense = await Expense.findOne({
-                    payrollId: payroll._id,
-                    isSynced: true,
-                });
+                const employeeName = employee.userId.name || employee.employeeId || 'Employee';
 
-                if (existingExpense) {
-                    continue; // Already synced
-                }
-
-                // Get time logs for this employee in this month
+                // Step 1: Fetch time logs FIRST — we need them to know if project allocation is needed
                 const timeLogs = await TimeLog.find({
-                    userId: employee.userId,
+                    userId: employee.userId._id,
                     date: { $gte: startDate, $lte: endDate },
                 });
 
-                // Calculate total hours worked
                 const totalMinutes = timeLogs.reduce((sum, log) => sum + log.duration, 0);
                 const totalHours = totalMinutes / 60;
 
                 // Group time by project
                 const projectHoursMap = new Map<string, { hours: number; projectId: Types.ObjectId }>();
                 for (const log of timeLogs) {
-                    const key = log.projectId.toString();
-                    const existing = projectHoursMap.get(key) || { hours: 0, projectId: log.projectId };
-                    existing.hours += log.duration / 60;
-                    projectHoursMap.set(key, existing);
+                    if (!log.projectId) continue;
+                    const projIdStr = log.projectId.toString();
+                    const current = projectHoursMap.get(projIdStr) || { hours: 0, projectId: log.projectId };
+                    current.hours += log.duration / 60;
+                    projectHoursMap.set(projIdStr, current);
                 }
 
-                const netSalary = payroll.netSalary;
+                // If payroll already synced, skip to avoid duplicates
+                const existingExpense = await Expense.findOne({ payrollId: payroll._id });
+                if (existingExpense) continue;
 
-                if (projectHoursMap.size === 0) {
-                    // No project time logged - create company level expense
+                const grossSalary = payroll.netSalary; // Sync net salary paid to employee
+
+                if (projectHoursMap.size === 0 || totalHours === 0) {
+                    // No project time logged, allocate to company level
                     await Expense.create({
                         date: new Date(year, month - 1, 28), // End of month
-                        description: `Salary - ${employee.firstName} ${employee.lastName} (${month}/${year}) - No project allocation`,
+                        description: `Salary - ${employeeName} (${month}/${year}) - No project allocation`,
                         category: 'Salaries',
                         level: 'company',
                         type: 'fixed',
-                        amount: netSalary,
+                        amount: grossSalary,
                         employeeId: employee._id,
-                        employeeName: `${employee.firstName} ${employee.lastName}`,
+                        employeeName,
                         payrollId: payroll._id,
                         isSynced: true,
                         totalMonthlyHours: totalHours,
@@ -397,16 +402,16 @@ export class ExpenseService {
                     synced++;
                 } else {
                     // Distribute salary across projects based on hours
-                    for (const [projectIdStr, { hours, projectId }] of projectHoursMap) {
+                    for (const [, { hours, projectId }] of projectHoursMap) {
                         const percentage = (hours / totalHours) * 100;
-                        const allocatedAmount = Math.round((netSalary * hours) / totalHours);
+                        const allocatedAmount = Math.round((grossSalary * hours) / totalHours);
 
                         // Get project name
                         const project = await Project.findById(projectId).select('name').lean();
 
                         await Expense.create({
                             date: new Date(year, month - 1, 28),
-                            description: `Salary Allocation - ${employee.firstName} ${employee.lastName} (${month}/${year})`,
+                            description: `Salary Allocation - ${employeeName} (${month}/${year})`,
                             category: 'Salaries',
                             level: 'project',
                             type: 'fixed',
@@ -414,7 +419,7 @@ export class ExpenseService {
                             projectId,
                             projectName: project?.name || 'Unknown Project',
                             employeeId: employee._id,
-                            employeeName: `${employee.firstName} ${employee.lastName}`,
+                            employeeName,
                             payrollId: payroll._id,
                             isSynced: true,
                             isAllocated: true,
@@ -426,8 +431,9 @@ export class ExpenseService {
                         synced++;
                     }
                 }
-            } catch (error: any) {
-                errors.push(`Failed to sync payroll ${payroll._id}: ${error.message}`);
+            } catch (error) {
+                const err = error as Error;
+                errors.push(`Failed to sync payroll ${payroll._id}: ${err.message}`);
             }
         }
 
@@ -447,6 +453,7 @@ export class ExpenseService {
     }> {
         const expenses = await Expense.find({
             date: { $gte: startDate, $lte: endDate },
+            isAllocated: { $ne: true },
         }).lean();
 
         const summary = {
@@ -489,6 +496,7 @@ export class ExpenseService {
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
+                    isAllocated: { $ne: true }, // exclude allocated salaries from company totals
                 },
             },
             {
@@ -500,7 +508,12 @@ export class ExpenseService {
                     expense: { $sum: '$amount' },
                     fixed: {
                         $sum: {
-                            $cond: [{ $eq: ['$type', 'fixed'] }, '$amount', 0],
+                            $cond: [
+                                // Fixed costs: type=fixed AND not a Salary category
+                                { $and: [{ $eq: ['$type', 'fixed'] }, { $ne: ['$category', 'Salaries'] }] },
+                                '$amount',
+                                0,
+                            ],
                         },
                     },
                     variable: {
@@ -510,7 +523,12 @@ export class ExpenseService {
                     },
                     salaries: {
                         $sum: {
-                            $cond: [{ $eq: ['$category', 'Salaries'] }, '$amount', 0],
+                            $cond: [
+                                // Salaries: category=Salaries AND company-level (isAllocated already filtered out above)
+                                { $eq: ['$category', 'Salaries'] },
+                                '$amount',
+                                0,
+                            ],
                         },
                     },
                 },

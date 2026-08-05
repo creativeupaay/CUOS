@@ -7,7 +7,9 @@ import {
 } from '@/features/finance';
 import ModalPortal from '@/components/ui/ModalPortal';
 import { logger } from '@/utils/logger';
-import { formatCurrency, type Currency } from '@/features/finance/utils/currency';
+import { formatCurrency } from '@/features/finance';
+
+export type Currency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED';
 
 export interface RevenueFormModalProps {
     isOpen: boolean;
@@ -27,6 +29,7 @@ interface RevenueFormData {
     currency: Currency;
     exchangeRate: number;
     gstApplicable: boolean;
+    isGstInclusive: boolean;
     gstRate: number;
     tdsDeducted: number;
     receivedAmount: number;
@@ -54,6 +57,7 @@ const initialFormState: RevenueFormData = {
     currency: 'INR',
     exchangeRate: 1,
     gstApplicable: true,
+    isGstInclusive: true,
     gstRate: 18,
     tdsDeducted: 0,
     receivedAmount: 0,
@@ -67,9 +71,17 @@ const initialFormState: RevenueFormData = {
 export const RevenueFormModal: React.FC<RevenueFormModalProps> = ({ isOpen, onClose, editingRevenue }) => {
     const [formData, setFormData] = useState<RevenueFormData>(() => {
         if (editingRevenue) {
+            const isGstInclusive = editingRevenue.isGstInclusive ?? true;
+            let initialAmount = editingRevenue.amount;
+            if (editingRevenue.gstApplicable !== false && isGstInclusive) {
+                // If it was inclusive, show the gross amount in the input
+                initialAmount = (editingRevenue.amountINR ?? editingRevenue.amount) * (1 + editingRevenue.gstRate / 100);
+            }
             return {
                 ...initialFormState,
                 ...editingRevenue,
+                amount: initialAmount,
+                isGstInclusive,
                 date: editingRevenue.date?.split('T')[0] || new Date().toISOString().split('T')[0],
                 dueDate: editingRevenue.dueDate?.split('T')[0] || '',
             };
@@ -81,13 +93,27 @@ export const RevenueFormModal: React.FC<RevenueFormModalProps> = ({ isOpen, onCl
     const [updateRevenue, { isLoading: isUpdating }] = useUpdateRevenueMutation();
 
     const formAmountINR = formData.currency === 'INR' ? formData.amount : formData.amount * formData.exchangeRate;
-    const formGst = formData.gstApplicable ? (formAmountINR * formData.gstRate) / 100 : 0;
-    const formTotalAmount = formAmountINR + formGst - formData.tdsDeducted;
+    let formGst = 0;
+    let formBaseAmount = formAmountINR;
+    if (formData.gstApplicable) {
+        if (formData.isGstInclusive) {
+            formBaseAmount = formAmountINR / (1 + formData.gstRate / 100);
+            formGst = formAmountINR - formBaseAmount;
+        } else {
+            formGst = (formAmountINR * formData.gstRate) / 100;
+        }
+    }
+    const formTotalAmount = formData.isGstInclusive 
+        ? formAmountINR - formData.tdsDeducted
+        : formAmountINR + formGst - formData.tdsDeducted;
 
     const handleSubmit = async () => {
         try {
             const payload = {
                 ...formData,
+                amount: formData.gstApplicable && formData.isGstInclusive 
+                    ? formData.amount / (1 + formData.gstRate / 100) 
+                    : formData.amount,
                 project: formData.project || undefined,
                 invoiceNumber: formData.invoiceNumber || undefined,
                 dueDate: formData.dueDate || undefined,
@@ -231,16 +257,38 @@ export const RevenueFormModal: React.FC<RevenueFormModalProps> = ({ isOpen, onCl
                                     GST Applicable
                                 </label>
                                 {formData.gstApplicable && (
-                                    <select
-                                        value={formData.gstRate}
-                                        onChange={(e) => setFormData({ ...formData, gstRate: parseFloat(e.target.value) })}
-                                        className="w-full px-3 py-2 rounded-lg border text-sm mt-1 border-gray-200 bg-white text-gray-700"
-                                    >
-                                        <option value={5}>5%</option>
-                                        <option value={12}>12%</option>
-                                        <option value={18}>18%</option>
-                                        <option value={28}>28%</option>
-                                    </select>
+                                    <>
+                                        <div className="flex flex-col gap-2 mt-2 mb-3">
+                                            <label className="flex items-center gap-1.5 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    checked={formData.isGstInclusive !== false}
+                                                    onChange={() => setFormData({ ...formData, isGstInclusive: true })}
+                                                    className="w-3.5 h-3.5"
+                                                />
+                                                <span className="text-xs text-gray-600">Inclusive (inside amount)</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    checked={formData.isGstInclusive === false}
+                                                    onChange={() => setFormData({ ...formData, isGstInclusive: false })}
+                                                    className="w-3.5 h-3.5"
+                                                />
+                                                <span className="text-xs text-gray-600">Exclusive (added on top)</span>
+                                            </label>
+                                        </div>
+                                        <select
+                                            value={formData.gstRate}
+                                            onChange={(e) => setFormData({ ...formData, gstRate: parseFloat(e.target.value) })}
+                                            className="w-full px-3 py-2 rounded-lg border text-sm border-gray-200 bg-white text-gray-700"
+                                        >
+                                            <option value={5}>5%</option>
+                                            <option value={12}>12%</option>
+                                            <option value={18}>18%</option>
+                                            <option value={28}>28%</option>
+                                        </select>
+                                    </>
                                 )}
                             </div>
                             <div>

@@ -20,6 +20,7 @@ export interface IRevenue extends Document {
 
     // Tax details
     gstApplicable: boolean;
+    isGstInclusive?: boolean;
     gstRate: number; // 5, 12, 18, or 28
     gst: number;
     tdsDeducted: number;
@@ -74,6 +75,7 @@ const RevenueSchema = new Schema<IRevenue>(
 
         // Tax details
         gstApplicable: { type: Boolean, default: true },
+        isGstInclusive: { type: Boolean },
         gstRate: { type: Number, default: 18, enum: [0, 5, 12, 18, 28] },
         gst: { type: Number, default: 0, min: 0 },
         tdsDeducted: { type: Number, default: 0, min: 0 },
@@ -115,10 +117,10 @@ const RevenueSchema = new Schema<IRevenue>(
 
 // Calculate pending amount before save
 RevenueSchema.pre('save', function (next) {
-    this.pendingAmount = this.totalAmount - this.receivedAmount;
+    const effectiveReceived = this.receivedAmount + (this.fxFeesINR || 0);
+    this.pendingAmount = Math.max(0, this.totalAmount - effectiveReceived);
 
     // Auto-update status based on received amount
-    const effectiveReceived = this.receivedAmount + (this.fxFeesINR || 0);
     if (effectiveReceived >= this.totalAmount) {
         this.status = 'received';
     } else if (this.receivedAmount > 0) {

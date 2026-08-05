@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { EXPENSE_CATEGORIES } from '../constants/expenseCategories';
 
 export interface IExpense extends Document {
     _id: Types.ObjectId;
@@ -21,6 +22,7 @@ export interface IExpense extends Document {
     employeeId?: Types.ObjectId;
     employeeName?: string;
     payrollId?: Types.ObjectId;
+    reimbursementId?: Types.ObjectId;
 
     // Allocation details (for shared employee costs across projects)
     isAllocated?: boolean;
@@ -35,6 +37,8 @@ export interface IExpense extends Document {
     paymentMethod?: 'cash' | 'bank_transfer' | 'credit_card' | 'upi' | 'cheque';
     transactionRef?: string;
     bankTransactionId?: Types.ObjectId;
+    gstClaimable?: boolean;
+    gstRate?: number;
 
     // Recurring
     isRecurring: boolean;
@@ -59,25 +63,7 @@ const ExpenseSchema = new Schema<IExpense>(
             type: String,
             required: true,
             trim: true,
-            enum: [
-                'Salaries',
-                'Rent',
-                'Utilities',
-                'Cloud Services',
-                'Software Licenses',
-                'Marketing',
-                'HR & Culture',
-                'Infrastructure',
-                'Travel',
-                'Office Supplies',
-                'Professional Services',
-                'Internet & Communication',
-                'Insurance',
-                'Legal & Compliance',
-                'GST Payment',
-                'TDS Payment',
-                'Other',
-            ],
+            enum: EXPENSE_CATEGORIES,
         },
 
         // Classification
@@ -103,6 +89,7 @@ const ExpenseSchema = new Schema<IExpense>(
         employeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
         employeeName: { type: String, trim: true },
         payrollId: { type: Schema.Types.ObjectId, ref: 'Payroll' },
+        reimbursementId: { type: Schema.Types.ObjectId, ref: 'Reimbursement' },
 
         // Allocation details
         isAllocated: { type: Boolean, default: false },
@@ -131,6 +118,8 @@ const ExpenseSchema = new Schema<IExpense>(
             enum: ['monthly', 'quarterly', 'yearly'],
         },
         isSynced: { type: Boolean, default: false },
+        gstClaimable: { type: Boolean, default: false },
+        gstRate: { type: Number, min: 0 },
 
         // Additional
         notes: { type: String, trim: true },

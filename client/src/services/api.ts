@@ -1,4 +1,4 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+﻿import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { Mutex } from 'async-mutex';
 
 /**
@@ -48,11 +48,11 @@ const baseQueryWithReauth = async (
         );
 
         if (refreshResult.data) {
-          // Refresh succeeded — retry the original request
+          // Refresh succeeded â€” retry the original request
           result = await baseQuery(args, api, extraOptions);
         } else {
           // Only hard-logout when the refresh token itself is rejected (401/403)
-          // Don't logout on transient network errors or server 5xx — session may still be valid
+          // Don't logout on transient network errors or server 5xx â€” session may still be valid
           const refreshErrStatus = (refreshResult.error as any)?.status;
           if ((refreshErrStatus === 401 || refreshErrStatus === 403) && wasAuthenticatedAtStart) {
             api.dispatch({ type: 'auth/logout' });
@@ -75,14 +75,14 @@ const baseQueryWithReauth = async (
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Documents', 'Notes', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Salary', 'Leaves', 'Payroll', 'Holidays', 'Announcements', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Jobs', 'Applications', 'Assignments', 'AssignmentSubmissions', 'Interviews', 'Partners', 'PartnerEmployees', 'Notifications', 'Revenues', 'Expenses', 'FixedExpenses', 'FinanceDashboard', 'BankTransactions'],
+  tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Documents', 'Notes', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Salary', 'Leaves', 'Payroll', 'Holidays', 'Announcements', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Jobs', 'Applications', 'Assignments', 'AssignmentSubmissions', 'Interviews', 'Partners', 'PartnerEmployees', 'Notifications', 'Revenues', 'Expenses', 'FixedExpenses', 'FinanceDashboard', 'BankTransactions', 'Reimbursements'],
   endpoints: () => ({}),
   // Keep cached data for 5 minutes after the last component unmounts.
   // This means navigating back to a page within 5 min uses cached data instantly.
   keepUnusedDataFor: 300,
-  // Do NOT refetch when the user alt-tabs back to the window — reduces unnecessary traffic.
+  // Do NOT refetch when the user alt-tabs back to the window â€” reduces unnecessary traffic.
   refetchOnFocus: false,
-  // DO refetch when the network reconnects — ensures fresh data after connectivity loss.
+  // DO refetch when the network reconnects â€” ensures fresh data after connectivity loss.
   refetchOnReconnect: true,
 });
 

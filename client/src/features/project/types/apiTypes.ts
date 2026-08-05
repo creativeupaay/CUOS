@@ -30,6 +30,10 @@ export interface CreateProjectRequest {
     currency?: string;
     billingType?: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
+    defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    gstApplicable?: boolean;
+    isGstInclusive?: boolean;
+    gstRate?: number;
     invoiceDetails?: InvoiceDetails;
     assignees?: Array<{
         userId: string;
@@ -51,6 +55,10 @@ export interface UpdateProjectRequest {
     currency?: string;
     billingType?: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
+    defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    gstApplicable?: boolean;
+    isGstInclusive?: boolean;
+    gstRate?: number;
     invoiceDetails?: InvoiceDetails;
     phases?: ProjectPhase[];
 }
@@ -231,13 +239,13 @@ export interface UpdateNoteRequest {
 // API RESPONSE TYPES
 // ============================================
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
     success: boolean;
     message: string;
     data?: T;
     error?: {
         code?: string;
-        details?: any;
+        details?: unknown;
     };
 }
 

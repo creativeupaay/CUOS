@@ -76,16 +76,18 @@ class SalaryService {
         }
 
         // Push current values to revision history before updating
-        salary.revisionHistory.push({
-            basic: salary.basic,
-            payoutAccountKey: salary.payoutAccountKey,
-            hra: salary.hra,
-            da: salary.da,
-            hourlyRate: salary.hourlyRate,
-            specialAllowance: salary.specialAllowance,
-            effectiveFrom: salary.effectiveFrom,
-            revisedBy: revisedBy as any,
-        });
+        if (!salary.isDraft) {
+            salary.revisionHistory.push({
+                basic: salary.basic,
+                payoutAccountKey: salary.payoutAccountKey,
+                hra: salary.hra,
+                da: salary.da,
+                hourlyRate: salary.hourlyRate,
+                specialAllowance: salary.specialAllowance,
+                effectiveFrom: salary.effectiveFrom,
+                revisedBy: revisedBy as any,
+            });
+        }
 
         // Apply updates
         if (data.basic !== undefined) salary.basic = data.basic;

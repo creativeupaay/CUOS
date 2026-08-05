@@ -12,7 +12,7 @@ export type { StatusBadgeProps, PriorityBadgeProps } from './StatusBadge';
 
 export { CurrencyDisplay } from './CurrencyDisplay';
 export type { CurrencyDisplayProps } from './CurrencyDisplay';
-export { formatCurrencyINR, formatCurrencyCompact } from './CurrencyDisplay/utils';
+export { formatCurrencyINR } from './CurrencyDisplay/utils';
 
 export { InfoItem } from './InfoItem';
 export type { InfoItemProps } from './InfoItem';

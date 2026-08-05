@@ -1,4 +1,6 @@
 // Entity types (internal representation)
+import type { User } from '@/features/auth';
+
 export interface ProjectPhase {
     _id?: string;
     name: string;
@@ -61,6 +63,12 @@ export interface Project {
     billingType: 'fixed' | 'hourly' | 'milestone';
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+
+    // Project-level GST configuration
+    gstApplicable?: boolean;  // Whether GST (18%) is applicable on top of the base budget
+    isGstInclusive?: boolean; // Whether the budget provided includes GST
+    gstRate?: number;         // GST rate — fixed at 18 for now
+    budgetWithGst?: number;   // Pre-computed: budget × 1.18 when gstApplicable = true, or just budget when isGstInclusive = true
 
     invoiceDetails?: InvoiceDetails;
 
@@ -158,6 +166,7 @@ export interface Task {
     accumulatedSeconds?: { userId: string | User; seconds: number }[];
     /** Number of subtasks — populated by backend getTasks query */
     subtaskCount?: number;
+    tags?: string[];
 }
 
 export interface TimeLog {
@@ -276,13 +285,6 @@ export interface Client {
     name: string;
     email: string;
     phone?: string;
-}
-
-export interface User {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
 }
 
 // ─── Document Types ───────────────────────────────────────────────────────────

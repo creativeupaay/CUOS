@@ -32,6 +32,10 @@ export interface CreateProjectData {
     hourlyRate?: number;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
     invoiceDetails?: any;
+    // Project-level GST configuration
+    gstApplicable?: boolean;
+    isGstInclusive?: boolean;
+    gstRate?: number;
     phases?: any[];
     assignees?: Array<{
         employeeId?: string;
@@ -68,6 +72,10 @@ export interface UpdateProjectData {
     hourlyRate?: number;
     invoiceDetails?: any;
     defaultBankAccount?: 'hdfc_gst' | 'sbi_non_gst' | 'cash';
+    // Project-level GST configuration
+    gstApplicable?: boolean;
+    isGstInclusive?: boolean;
+    gstRate?: number;
     phases?: any[];
 }
 
@@ -78,6 +86,22 @@ export interface DeleteProjectOptions {
 }
 
 const roundMoney = (value: number) => Math.round(Number(value || 0) * 100) / 100;
+
+/**
+ * Compute the total budget including GST (exclusive model: GST added on top).
+ * Returns undefined if budget is not provided or GST is not applicable.
+ */
+const computeBudgetWithGst = (
+    budget?: number,
+    gstApplicable?: boolean,
+    isGstInclusive?: boolean,
+    gstRate: number = 18
+): number | undefined => {
+    if (!budget) return undefined;
+    if (gstApplicable) return roundMoney(budget * (1 + gstRate / 100));
+    if (isGstInclusive) return budget;
+    return budget;
+};
 
 const getIdString = (value: any): string | undefined => {
     if (!value) return undefined;
@@ -180,6 +204,14 @@ const normalizePhasePaymentFinancials = async (
             return cleaned;
         }
 
+        // Inherit project-level gstApplicable as the default when phase doesn't specify it
+        if (cleaned.gstApplicable === undefined || cleaned.gstApplicable === null) {
+            cleaned.gstApplicable = projectDraft.gstApplicable ?? true;
+        }
+        if (cleaned.gstRate === undefined || cleaned.gstRate === null) {
+            cleaned.gstRate = projectDraft.gstRate ?? 18;
+        }
+
         const { amount, currency } = getPhaseExpectedAmount(cleaned, projectDraft);
         cleaned.paymentCurrency = currency as any;
 
@@ -211,14 +243,21 @@ const normalizePhasePaymentFinancials = async (
             cleaned.paymentFxRateSource = conversion.source;
             cleaned.paymentFxRequestedDate = conversion.requestedDate;
             cleaned.paymentFxFallbackUsed = conversion.fallbackUsed;
-            cleaned.paymentReceivedAmount = roundMoney(Number(
-                cleaned.paymentReceivedAmountINR
-                ?? cleaned.paymentReceivedAmount
-                ?? existingPhase?.paymentReceivedAmountINR
-                ?? existingPhase?.paymentReceivedAmount
-                ?? 0
-            ));
-            cleaned.paymentReceivedAmountINR = cleaned.paymentReceivedAmount;
+            let receivedAmount = Number(cleaned.paymentReceivedAmount ?? existingPhase?.paymentReceivedAmount ?? 0);
+            let receivedAmountINR = Number(cleaned.paymentReceivedAmountINR ?? existingPhase?.paymentReceivedAmountINR ?? 0);
+
+            // Self-correction for legacy corrupted original currency received amount
+            if (currency !== 'INR' && receivedAmount > amount) {
+                const storedRate = Number(cleaned.paymentExchangeRate || existingPhase?.paymentExchangeRate || 0);
+                if (storedRate > 0) {
+                    receivedAmount = receivedAmount / storedRate;
+                } else {
+                    receivedAmount = 0;
+                }
+            }
+
+            cleaned.paymentReceivedAmount = roundMoney(receivedAmount);
+            cleaned.paymentReceivedAmountINR = roundMoney(receivedAmountINR);
             cleaned.paymentStatus = cleaned.paymentStatus || 'pending';
             return cleaned;
         } catch (error: any) {
@@ -438,11 +477,23 @@ const syncLinkedProjectFinancials = async (
             ? roundMoney(expectedAmount * storedExchangeRate)
             : roundMoney(Number(revenue?.amountINR ?? phase.paymentExpectedAmountINR ?? 0));
         const receivedAmount = roundMoney(Number(phase.paymentReceivedAmountINR ?? phase.paymentReceivedAmount ?? revenue?.receivedAmount ?? 0));
-        const gstApplicable = phase.gstApplicable ?? revenue?.gstApplicable ?? true;
-        const gstRate = phase.gstRate ?? revenue?.gstRate ?? 18;
-        const gst = gstApplicable ? roundMoney((amountINR * gstRate) / 100) : 0;
+        const gstApplicable = phase.gstApplicable ?? revenue?.gstApplicable ?? project.gstApplicable ?? true;
+        const isGstInclusive = phase.isGstInclusive ?? revenue?.isGstInclusive ?? project.isGstInclusive ?? false;
+        const gstRate = phase.gstRate ?? revenue?.gstRate ?? project.gstRate ?? 18;
+        
+        let gst = 0;
+        let baseAmountINR = amountINR;
+        if (gstApplicable) {
+            if (isGstInclusive) {
+                baseAmountINR = roundMoney(amountINR / (1 + gstRate / 100));
+                gst = roundMoney(amountINR - baseAmountINR);
+            } else {
+                gst = roundMoney((amountINR * gstRate) / 100);
+            }
+        }
+        
         const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? revenue?.tdsDeducted ?? 0));
-        const totalAmount = roundMoney(amountINR + gst - tdsDeducted);
+        const totalAmount = roundMoney(baseAmountINR + gst - tdsDeducted);
         const dueDate = phase.paymentDueDate || phase.endDate;
         const description = `Payment for ${project.name} - ${phase.name}`;
 
@@ -450,20 +501,7 @@ const syncLinkedProjectFinancials = async (
             revenue.project = project.name;
             revenue.phaseId = phaseObjectId;
             revenue.description = description;
-            revenue.amount = expectedAmount || revenue.amount;
-            revenue.currency = currency as any;
-            revenue.exchangeRate = hasStoredExchangeRate ? storedExchangeRate : revenue.exchangeRate;
-            revenue.exchangeRateDate = exchangeRateDate ? new Date(exchangeRateDate) : revenue.exchangeRateDate;
-            revenue.exchangeRateProvider = revenue.exchangeRateProvider || 'frankfurter';
-            revenue.amountINR = amountINR;
-            revenue.gstApplicable = gstApplicable;
-            revenue.gstRate = gstRate;
-            revenue.gst = gst;
-            revenue.tdsDeducted = tdsDeducted;
-            revenue.totalAmount = totalAmount;
-            revenue.receivedAmount = receivedAmount;
-            revenue.pendingAmount = Math.max(0, roundMoney(totalAmount - receivedAmount));
-            revenue.status = getRevenueStatus(totalAmount, receivedAmount, dueDate ? new Date(dueDate) : undefined);
+            // Sync project metadata only; do not modify historical financial amounts or status
             revenue.updatedBy = updatedBy;
             await revenue.save();
         }
@@ -522,7 +560,12 @@ async function ensureProjectInPermissions(userId: string, projectId: string, sub
     );
 }
 
-function serializeAssignee(assignee: any) {
+function serializeAssignee(assignee: any, rawAssignee?: any) {
+    const rawEmployeeId = (rawAssignee?.employeeId || assignee?.employeeId)?.toString?.() ?? '';
+    const rawPartnerEmployeeId = (rawAssignee?.partnerEmployeeId || assignee?.partnerEmployeeId)?.toString?.() ?? '';
+    const rawPartnerId = (rawAssignee?.partnerId || assignee?.partnerId)?.toString?.() ?? '';
+    const rawUserId = (rawAssignee?.userId || assignee?.userId)?.toString?.() ?? '';
+
     const employee = assignee?.employeeId && typeof assignee.employeeId === 'object' ? assignee.employeeId : null;
     const partnerEmployee = assignee?.partnerEmployeeId && typeof assignee.partnerEmployeeId === 'object'
         ? assignee.partnerEmployeeId
@@ -536,9 +579,17 @@ function serializeAssignee(assignee: any) {
     if (assignee?.memberType === 'partner' || partner) {
         const partnerUser = partner?.userId && typeof partner.userId === 'object' ? partner.userId : null;
 
+        const resolvedMemberId = partner?._id?.toString()
+            || rawPartnerId
+            || plainUser?._id?.toString()
+            || rawUserId
+            || assignee?.partnerId?.toString?.()
+            || assignee?.userId?.toString?.()
+            || '';
+
         return {
             ...assignee,
-            memberId: partner?._id?.toString() || assignee?.partnerId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+            memberId: resolvedMemberId,
             displayName: partnerUser?.name || partner?.contactPerson || partner?.companyName || 'Partner',
             displayEmail: partnerUser?.email || partner?.email || '',
             displayDesignation: 'Partner Admin',
@@ -550,9 +601,14 @@ function serializeAssignee(assignee: any) {
     }
 
     if (assignee?.memberType === 'partner-employee' || partnerEmployee) {
+        const resolvedMemberId = partnerEmployee?._id?.toString()
+            || rawPartnerEmployeeId
+            || assignee?.partnerEmployeeId?.toString?.()
+            || '';
+
         return {
             ...assignee,
-            memberId: partnerEmployee?._id?.toString() || assignee?.partnerEmployeeId?.toString?.() || '',
+            memberId: resolvedMemberId,
             displayName: partnerEmployee?.name || 'Partner Team Member',
             displayEmail: partnerEmployee?.email || '',
             displayDesignation: partnerEmployee?.designation || '',
@@ -563,9 +619,17 @@ function serializeAssignee(assignee: any) {
         };
     }
 
+    const resolvedMemberId = employee?._id?.toString()
+        || rawEmployeeId
+        || plainUser?._id?.toString()
+        || rawUserId
+        || assignee?.employeeId?.toString?.()
+        || assignee?.userId?.toString?.()
+        || '';
+
     return {
         ...assignee,
-        memberId: employee?._id?.toString() || assignee?.employeeId?.toString?.() || plainUser?._id?.toString?.() || assignee?.userId?.toString?.() || '',
+        memberId: resolvedMemberId,
         displayName: employeeUser?.name || plainUser?.name || 'Creative Upaay Member',
         displayEmail: employeeUser?.email || plainUser?.email || '',
         displayDesignation: employee?.designation || '',
@@ -576,12 +640,18 @@ function serializeAssignee(assignee: any) {
     };
 }
 
-function serializeProjectAssignees(project: any) {
+async function serializeProjectAssignees(project: any) {
     if (!project?.assignees) return project;
+
+    // Fetch the raw project assignee list from the database to retain original unpopulated ObjectIds
+    const rawProject = await Project.findById(project._id).select('assignees').lean();
+    const rawAssignees = rawProject?.assignees || [];
 
     return {
         ...project,
-        assignees: project.assignees.map((assignee: any) => serializeAssignee(assignee)),
+        assignees: project.assignees.map((assignee: any, idx: number) =>
+            serializeAssignee(assignee, rawAssignees[idx])
+        ),
     };
 }
 
@@ -756,6 +826,14 @@ export const createProject = async (
         projectData.phases = await normalizePhasePaymentFinancials(projectData, projectData.phases);
     }
 
+    // Compute and persist budgetWithGst
+    projectData.budgetWithGst = computeBudgetWithGst(
+        projectData.budget,
+        projectData.gstApplicable,
+        projectData.isGstInclusive,
+        projectData.gstRate ?? 18
+    );
+
     const project = await Project.create(projectData);
 
     // Auto-create the client-shared "Shared Files" folder for every new project
@@ -879,7 +957,9 @@ export const getProjects = async (
         .sort({ createdAt: -1 })
         .lean();
 
-    const serializedProjects = projects.map((project: any) => serializeProjectAssignees(project));
+    const serializedProjects = await Promise.all(
+        projects.map((project: any) => serializeProjectAssignees(project))
+    );
     return attachComputedOverdueDate(serializedProjects) as any;
 };
 
@@ -914,7 +994,7 @@ export const getProjectById = async (
 
     if (!project) return null;
 
-    const serializedProject = serializeProjectAssignees(project);
+    const serializedProject = await serializeProjectAssignees(project);
     return attachComputedOverdueDate(serializedProject) as any;
 };
 
@@ -950,6 +1030,17 @@ export const updateProject = async (
     );
 
     if (!project) return null;
+
+    // Recompute budgetWithGst whenever budget or GST settings change
+    const budgetForCompute = (dataToSave as any).budget ?? existingProject.budget;
+    const gstApplicableForCompute = (dataToSave as any).gstApplicable ?? existingProject.gstApplicable;
+    const isGstInclusiveForCompute = (dataToSave as any).isGstInclusive ?? existingProject.isGstInclusive;
+    const gstRateForCompute = (dataToSave as any).gstRate ?? existingProject.gstRate ?? 18;
+    const newBudgetWithGst = computeBudgetWithGst(budgetForCompute, gstApplicableForCompute, isGstInclusiveForCompute, gstRateForCompute);
+    if (newBudgetWithGst !== undefined) {
+        await Project.findByIdAndUpdate(projectId, { $set: { budgetWithGst: newBudgetWithGst } });
+        project.budgetWithGst = newBudgetWithGst;
+    }
 
     for (const transactionId of new Set(removedOrDisabledFinancials.transactionIds)) {
         await deleteBankTransactionAndAdjustBalance(transactionId);
@@ -1133,22 +1224,31 @@ export const removeAssignee = async (
 
     // Pull the project completely from the user's personal modulePermissions
     // This ensures it is hidden from the user's dashboard
-    if (assigneeToRemove?.memberType === 'employee' && assigneeToRemove.employeeId) {
-        const employee = await Employee.findById(assigneeToRemove.employeeId);
-        if (!employee) {
-            return getProjectById(projectId) as any;
+    if (assigneeToRemove?.memberType === 'employee') {
+        // Resolve the userId to clean from modulePermissions.
+        // The employee record might not exist if they were hard-deleted from the platform.
+        let userIdToClean: string | null = null;
+
+        if (assigneeToRemove.employeeId) {
+            const employee = await Employee.findById(assigneeToRemove.employeeId)
+                .select('userId').lean();
+            userIdToClean = employee
+                ? (employee.userId as any)?.toString?.() ?? null
+                : assigneeToRemove.userId?.toString?.() ?? null;
+        } else {
+            userIdToClean = assigneeToRemove.userId?.toString?.() ?? null;
         }
 
-        await User.updateOne(
-            { _id: employee.userId },
-            {
-                $pull: {
-                    'modulePermissions.projectManagement.projectPermissions': { projectId }
+        if (userIdToClean) {
+            await User.updateOne(
+                { _id: userIdToClean },
+                {
+                    $pull: {
+                        'modulePermissions.projectManagement.projectPermissions': { projectId }
+                    }
                 }
-            }
-        );
-
-        return getProjectById(projectId) as any;
+            );
+        }
     }
     return getProjectById(projectId) as any;
 };

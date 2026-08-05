@@ -8,3 +8,4 @@ export * from './projectApi';
 // export { ProjectCard } from './components/ProjectCard';
 // export { ProjectForm } from './components/ProjectForm';
 // etc.
+export { default as CredentialShareModal } from './components/CredentialShareModal';

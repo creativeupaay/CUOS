@@ -79,7 +79,7 @@ const SalaryRevisionSchema = new Schema<ISalaryRevision>(
         da: { type: Number, default: 0, min: 0 },
         specialAllowance: { type: Number, default: 0, min: 0 },
         hourlyRate: { type: Number, default: 0, min: 0 },
-        effectiveFrom: { type: Date, required: true },
+        effectiveFrom: { type: Date, required: false },
         revisedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     },
     { _id: true, timestamps: true }

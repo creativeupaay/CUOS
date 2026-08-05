@@ -230,7 +230,7 @@ export class FixedExpenseController {
                 data: approval,
             });
         } catch (error: any) {
-            logger.error({ context: error }, 'Error approving fixed expense:');
+            logger.error({ context: error, stack: error?.stack, message: error?.message, errors: error?.errors }, 'Error approving fixed expense:');
             res.status(500).json({
                 success: false,
                 message: 'Failed to approve fixed expense',

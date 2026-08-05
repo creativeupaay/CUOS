@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import type { FixedExpenseFrequency } from './FixedExpense.model';
 import type { BankAccountKey } from './BankTransaction.model';
+import { EXPENSE_CATEGORIES } from '../constants/expenseCategories';
 
 export type FixedExpenseApprovalStatus = 'pending' | 'approved' | 'rejected';
 
@@ -45,7 +46,12 @@ const FixedExpenseApprovalSchema = new Schema<IFixedExpenseApproval>(
         },
         title: { type: String, required: true, trim: true },
         description: { type: String, required: true, trim: true },
-        category: { type: String, required: true, trim: true },
+        category: {
+            type: String,
+            required: true,
+            trim: true,
+            enum: EXPENSE_CATEGORIES,
+        },
         level: {
             type: String,
             enum: ['company', 'project'],

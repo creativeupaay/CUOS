@@ -15,11 +15,14 @@ export interface Revenue {
     exchangeRateProvider?: string;
     amountINR: number;
     gstApplicable: boolean;
+    isGstInclusive?: boolean;
     gstRate: number;
     gst: number;
     tdsDeducted: number;
     totalAmount: number;
     receivedAmount: number;
+    pendingAmount: number;
+    fxFeesINR?: number;
     source: 'manual' | 'invoice' | 'project';
     status: 'received' | 'pending' | 'partial' | 'overdue';
     invoiceNumber?: string;
@@ -85,6 +88,9 @@ export interface Expense {
     notes?: string;
     isRecurring: boolean;
     recurringFrequency?: 'monthly' | 'quarterly' | 'yearly';
+    gstClaimable?: boolean;
+    gstRate?: number;
+    isAllocated?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -148,6 +154,8 @@ export interface DashboardMetrics {
     runwayLeft: number;
     cashInBank: number;
     receivables: number;
+    moneyInBank: number;
+    gstPayable: number;
 }
 
 export interface MonthlyData {
@@ -171,6 +179,7 @@ export interface DashboardResponse {
     metrics: DashboardMetrics;
     monthlyData: MonthlyData[];
     breakdownData: BreakdownData[];
+    receivables: FinanceReceivablesResponse | null;
 }
 
 export type BankAccountKey = 'hdfc_gst' | 'sbi_non_gst' | 'cash';
@@ -608,8 +617,12 @@ export const financeApi = api.injectEndpoints({
             },
             invalidatesTags: ['BankTransactions', 'FinanceDashboard'],
         }),
-        getExchangeRate: builder.query<{ data: { currency: string; rate: number; provider: string; date: string; isFallback: boolean } }, string>({
-            query: (currency) => `/finance/exchange-rate?currency=${currency}`,
+        getExchangeRate: builder.query<{ data: { currency: string; rate: number; provider: string; date: string; isFallback: boolean } }, { currency: string; date?: string }>({
+            query: ({ currency, date }) => {
+                let url = `/finance/exchange-rate?currency=${currency}`;
+                if (date) url += `&date=${date}`;
+                return url;
+            },
         }),
 
         resolveReceivableFxRates: builder.mutation<

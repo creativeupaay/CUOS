@@ -51,21 +51,31 @@ export default function PhasePaymentDialog({
         };
     }, []);
 
-    // Calculate expected amount
-    const expectedAmount = useMemo(() => {
-        if (phase.paymentAmount && phase.paymentAmount > 0) {
-            return phase.paymentAmount;
-        }
-        if (phase.paymentPercentage && phase.paymentPercentage > 0 && projectBudget && projectBudget > 0) {
-            return (projectBudget * phase.paymentPercentage) / 100;
-        }
-        return 0;
-    }, [phase.paymentAmount, phase.paymentPercentage, projectBudget]);
-
     const currency = phase.paymentCurrency || projectCurrency || 'INR';
 
+    // Calculate expected amount
+    const expectedAmount = useMemo(() => {
+        const totalAmount = (() => {
+            if (phase.paymentAmount && phase.paymentAmount > 0) {
+                return phase.paymentAmount;
+            }
+            if (phase.paymentPercentage && phase.paymentPercentage > 0 && projectBudget && projectBudget > 0) {
+                return (projectBudget * phase.paymentPercentage) / 100;
+            }
+            return 0;
+        })();
+        
+        let received = phase.paymentReceivedAmount || 0;
+        // Self-correction for legacy corrupted original currency received amounts
+        if (currency !== 'INR' && received > totalAmount && phase.paymentExchangeRate && phase.paymentExchangeRate > 0) {
+            received = received / phase.paymentExchangeRate;
+        }
+        
+        return Math.max(0, totalAmount - received);
+    }, [phase.paymentAmount, phase.paymentPercentage, projectBudget, phase.paymentReceivedAmount, currency, phase.paymentExchangeRate]);
+
     // Fetch exchange rate if currency is not INR
-    const { data: exchangeRateData, isLoading: isFxLoading, error: fxError } = useGetExchangeRateQuery(currency, {
+    const { data: exchangeRateData, isLoading: isFxLoading, error: fxError } = useGetExchangeRateQuery({ currency, date: receivedDate }, {
         skip: currency === 'INR',
     });
 

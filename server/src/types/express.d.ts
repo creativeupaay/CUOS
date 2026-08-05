@@ -57,6 +57,7 @@ declare global {
       partner?: PartnerContext;
       isJobManager?: boolean;
       isHiringAdmin?: boolean;
+      isHrmsAdmin?: boolean;
     }
   }
 }

@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { Project, IProject, IProjectPhase } from '../models/Project.model';
 import { Revenue, IRevenue } from '../../finance/models/Revenue.model';
-import { IBankTransaction } from '../../finance/models/BankTransaction.model';
+import { BankTransaction, IBankTransaction } from '../../finance/models/BankTransaction.model';
 import { BankTransactionService } from '../../finance/services/bankTransaction.service';
 import { ExchangeRateService } from '../../finance/services/exchangeRate.service';
 import { IClient } from '../../client/models/Client.model';
@@ -105,25 +105,30 @@ export class PhasePaymentService {
 
         const phaseObjectId = phase._id || new Types.ObjectId(phaseId);
 
-        const alreadyRecorded =
+        // Only block if phase is FULLY paid (not on partial payments)
+        const alreadyFullyPaid =
             phase.paymentStatus === 'received' ||
-            Boolean(phase.revenueId) ||
-            Boolean(phase.bankTransactionId) ||
-            (phase.paymentReceivedAmount || 0) >= expectedAmount;
+            (phase.paymentReceivedAmountINR !== undefined &&
+                phase.paymentExpectedAmountINR !== undefined &&
+                phase.paymentReceivedAmountINR >= phase.paymentExpectedAmountINR &&
+                phase.paymentExpectedAmountINR > 0);
 
-        if (alreadyRecorded) {
-            throw new AppError('Payment for this phase is already marked as received', 400);
+        if (alreadyFullyPaid) {
+            throw new AppError('Payment for this phase is already fully received', 400);
         }
 
-        const existingRevenue = await Revenue.findOne({
+        // Block duplicate submissions: same phase + same amount + recorded within last 60 seconds
+        const sixtySecondsAgo = new Date(Date.now() - 60 * 1000);
+        const duplicateRevenue = await Revenue.findOne({
             projectId: project._id,
             phaseId: phaseObjectId,
             source: 'project',
-            status: 'received',
+            receivedAmount: this.roundMoney(receivedAmount),
+            createdAt: { $gte: sixtySecondsAgo },
         }).select('_id');
 
-        if (existingRevenue) {
-            throw new AppError('Payment for this phase has already been recorded', 400);
+        if (duplicateRevenue) {
+            throw new AppError('This payment appears to be a duplicate. Please wait a moment before retrying.', 400);
         }
 
         // Convert the contract/expected phase value into INR using the payment received date.
@@ -181,24 +186,30 @@ export class PhasePaymentService {
         const tdsPercentage = phase.tdsPercentage || 0;
 
         /**
-         * GST Calculation — GST-inclusive model:
-         * The amount received from the client (actualReceivedINR) is the GROSS total.
-         * It already includes GST. We reverse-calculate to split it.
+         * isGstInclusive flag controls how GST is applied:
+         *   - true (or undefined for legacy): the received amount INCLUDES GST.
+         *     We back-calculate base = total / (1 + rate)
+         *   - false (exclusive): the received amount is the base. GST is added ON TOP.
+         *     base = total; gst = total × rate
          *
-         * totalAmount  = actualReceivedINR  (what was credited to bank)
-         * baseAmountINR = totalAmount / (1 + gstRate/100)  [revenue without GST]
-         * gst           = totalAmount - baseAmountINR
-         *
-         * Example: ₹12,840 received, 18% GST
-         *   base = 12840 / 1.18 = ₹10,881
-         *   gst  = 12840 - 10881 = ₹1,959
+         * IMPORTANT: undefined defaults to true for backward compatibility with
+         * legacy records created before this field existed.
          */
+        // Default undefined → true to protect historical inclusive contracts
+        const isGstInclusive: boolean = phase.isGstInclusive !== false;
         let baseAmountINR: number;
         let gst: number;
 
         if (gstApplicable) {
-            baseAmountINR = this.roundMoney(actualReceivedINR / (1 + gstRate / 100));
-            gst = this.roundMoney(actualReceivedINR - baseAmountINR);
+            if (isGstInclusive) {
+                // Amount received already INCLUDES GST → back-calculate
+                baseAmountINR = this.roundMoney(actualReceivedINR / (1 + gstRate / 100));
+                gst = this.roundMoney(actualReceivedINR - baseAmountINR);
+            } else {
+                // Amount is the base; GST is collected on top
+                baseAmountINR = actualReceivedINR;
+                gst = this.roundMoney(actualReceivedINR * (gstRate / 100));
+            }
         } else {
             baseAmountINR = actualReceivedINR;
             gst = 0;
@@ -210,9 +221,13 @@ export class PhasePaymentService {
             ? this.roundMoney((baseAmountINR * tdsPercentage) / 100)
             : this.roundMoney(phase.tdsDeducted || 0);
 
-        // The total amount for this revenue entry IS what was received.
-        // When markAsFullyPaid / adjustPhaseValue is set, we honour the actual received amount.
-        const finalTotalAmountINR = actualReceivedINR;
+        // The contracted full value of this phase (set when the phase was saved/created).
+        // This is the baseline for determining whether a payment is partial or full.
+        // Fall back to actualReceivedINR ONLY for legacy phases with no stored expected amount.
+        const contractedTotalINR = (phase.paymentExpectedAmountINR && phase.paymentExpectedAmountINR > 0)
+            ? this.roundMoney(phase.paymentExpectedAmountINR)
+            : actualReceivedINR;
+        const finalTotalAmountINR = contractedTotalINR;
         const finalBaseINR = baseAmountINR;
         const finalGst = gst;
         const finalTds = tdsDeducted;
@@ -221,6 +236,9 @@ export class PhasePaymentService {
         const finalAmountOriginal = exchangeRate > 0
             ? this.roundMoney(finalBaseINR / exchangeRate)
             : finalBaseINR;
+        const actualReceivedOriginal = exchangeRate > 0
+            ? this.roundMoney(actualReceivedINR / exchangeRate)
+            : actualReceivedINR;
 
         // fxFees / tip tracking (delta between contracted value and actual receipt)
         const amountINR = conversion.amountINR; // contracted conversion value
@@ -238,8 +256,16 @@ export class PhasePaymentService {
 
         // Revenue status: fully paid when received == total (which it always is here),
         // or when the override flags are set.
+        // Cumulative = what has already been received + what's being received now
+        const cumulativeReceivedINR = this.roundMoney(
+            (phase.paymentReceivedAmountINR || 0) + actualReceivedINR
+        );
+        const cumulativeReceivedOriginal = this.roundMoney(
+            (phase.paymentReceivedAmount || 0) + actualReceivedOriginal
+        );
         const isFullyPaid = data.markAsFullyPaid || data.adjustPhaseValue ||
-            this.roundMoney(actualReceivedINR + fxFeesINR) >= finalTotalAmountINR;
+            cumulativeReceivedINR >= (finalTotalAmountINR - 1) ||
+            (currency !== 'INR' && cumulativeReceivedOriginal >= (expectedAmount - 0.02));
         const revenueStatus: 'received' | 'partial' = isFullyPaid ? 'received' : 'partial';
 
         // Create Revenue entry
@@ -258,10 +284,11 @@ export class PhasePaymentService {
             exchangeRateProvider: conversion.provider,
             amountINR: finalBaseINR,          // base amount (without GST)
             gstApplicable,
+            isGstInclusive,
             gstRate,
             gst: finalGst,                    // GST component extracted from received amount
             tdsDeducted: finalTds,
-            totalAmount: finalTotalAmountINR, // = actualReceivedINR (gross inclusive of GST)
+            totalAmount: this.roundMoney(baseAmountINR + gst - tdsDeducted),
             receivedAmount: actualReceivedINR,
             pendingAmount: 0,                 // always 0 — we record what was actually received
             fxFeesINR,
@@ -290,35 +317,70 @@ export class PhasePaymentService {
         });
 
         // Update phase with payment info
-        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedINR);
+        const updatedReceivedAmount = this.roundMoney((phase.paymentReceivedAmount || 0) + actualReceivedOriginal);
         const newPaymentStatus = isFullyPaid ? 'received' : 'partial';
 
-        await Project.updateOne(
-            { _id: project._id, 'phases._id': phaseObjectId },
+        // $set fields that are safe to overwrite on each payment
+        // NOTE: paymentExpectedAmountINR is NEVER overwritten here — it stays as
+        // the contracted value set when the phase was created. Only the first
+        // payment sets it if it was missing.
+        const setFields: Record<string, unknown> = {
+            'phases.$.paymentReceivedAmount': updatedReceivedAmount,
+            'phases.$.paymentExchangeRate': exchangeRate,
+            'phases.$.paymentExchangeRateDate': conversion.date,
+            'phases.$.paymentSettlementCurrency': 'INR',
+            'phases.$.paymentFxRateSource': conversion.source,
+            'phases.$.paymentFxRequestedDate': conversion.requestedDate,
+            'phases.$.paymentFxFallbackUsed': conversion.fallbackUsed,
+            'phases.$.paymentStatus': newPaymentStatus,
+            'phases.$.paymentBankAccount': bankAccountKey,
+            'phases.$.revenueId': revenue._id,
+            'phases.$.bankTransactionId': bankTransaction._id,
+            'phases.$.status': isFullyPaid ? 'completed' : phase.status,
+            'phases.$.completedAt': isFullyPaid ? new Date() : phase.completedAt,
+            'phases.$.tdsDeducted': finalTds,
+            'phases.$.fxFeesINR': fxFeesINR,
+            'phases.$.adjustmentAmountINR': tipINR,
+        };
+
+        if (data.adjustPhaseValue) {
+            setFields['phases.$.paymentAmount'] = updatedReceivedAmount;
+        }
+
+        // Only seed paymentExpectedAmountINR if it has never been set
+        // (i.e., this is the very first payment for this phase)
+        if (!phase.paymentExpectedAmountINR || phase.paymentExpectedAmountINR === 0) {
+            setFields['phases.$.paymentExpectedAmountINR'] = finalTotalAmountINR;
+        }
+
+        const updateResult = await Project.findOneAndUpdate(
+            { 
+                _id: project._id, 
+                'phases._id': phaseObjectId,
+                'phases': {
+                    $elemMatch: {
+                        _id: phaseObjectId,
+                        $or: [
+                            { paymentStatus: { $ne: 'received' } },
+                            { paymentReceivedAmountINR: { $lt: finalTotalAmountINR } }
+                        ]
+                    }
+                }
+            },
             {
-                $set: {
-                    'phases.$.paymentAmount': finalAmountOriginal,
-                    'phases.$.paymentReceivedAmount': updatedReceivedAmount,
-                    'phases.$.paymentExpectedAmountINR': finalTotalAmountINR,
-                    'phases.$.paymentReceivedAmountINR': updatedReceivedAmount,
-                    'phases.$.paymentExchangeRate': exchangeRate,
-                    'phases.$.paymentExchangeRateDate': conversion.date,
-                    'phases.$.paymentSettlementCurrency': 'INR',
-                    'phases.$.paymentFxRateSource': conversion.source,
-                    'phases.$.paymentFxRequestedDate': conversion.requestedDate,
-                    'phases.$.paymentFxFallbackUsed': conversion.fallbackUsed,
-                    'phases.$.paymentStatus': newPaymentStatus,
-                    'phases.$.paymentBankAccount': bankAccountKey,
-                    'phases.$.revenueId': revenue._id,
-                    'phases.$.bankTransactionId': bankTransaction._id,
-                    'phases.$.status': isFullyPaid ? 'completed' : phase.status,
-                    'phases.$.completedAt': isFullyPaid ? new Date() : phase.completedAt,
-                    'phases.$.tdsDeducted': finalTds,
-                    'phases.$.fxFeesINR': fxFeesINR,
-                    'phases.$.adjustmentAmountINR': tipINR,
-                },
-            }
+                $set: setFields,
+                // Accumulate received INR — never overwrite the total
+                $inc: { 'phases.$.paymentReceivedAmountINR': actualReceivedINR },
+            },
+            { new: true }
         );
+
+        if (!updateResult) {
+            // Delete revenue and bank tx
+            await Revenue.findByIdAndDelete(revenue._id);
+            await BankTransactionService.delete(bankTransaction._id);
+            throw new AppError('Concurrent payment prevented because phase is already fully paid', 400);
+        }
 
         const updatedProject = (await Project.findById(project._id).lean()) as unknown as IProject;
 

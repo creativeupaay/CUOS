@@ -1,6 +1,7 @@
-import { RevenueService } from './revenue.service';
+import { RevenueService, ReceivablesResult } from './revenue.service';
 import { ExpenseService } from './expense.service';
 import { BankAccount } from '../models/BankAccount.model';
+import { BankTransaction } from '../models/BankTransaction.model';
 import { Revenue } from '../models/Revenue.model';
 import { Expense } from '../models/Expense.model';
 
@@ -11,6 +12,8 @@ interface DashboardMetrics {
     runwayLeft: number;
     cashInBank: number;
     receivables: number;
+    moneyInBank: number;
+    gstPayable: number;
 }
 
 interface MonthlyChartData {
@@ -38,32 +41,134 @@ export class DashboardService {
         metrics: DashboardMetrics;
         monthlyData: MonthlyChartData[];
         breakdownData: BreakdownData[];
+        receivables: ReceivablesResult | null;
     }> {
-        // Get revenue and expense summaries
-        const [revenueSummary, expenseSummary, revenueMonthly, expenseMonthly] = await Promise.all([
+        // Get revenue summary (unchanged — all revenue is valid)
+        const [revenueSummary, revenueMonthly, expenseMonthly] = await Promise.all([
             RevenueService.getSummary(startDate, endDate),
-            ExpenseService.getSummary(startDate, endDate),
             RevenueService.getMonthlyData(startDate, endDate),
             ExpenseService.getMonthlyData(startDate, endDate),
         ]);
 
+        // Company-level expense total: exclude salary expenses that are
+        // already counted as project allocations (isAllocated: true).
+        // This prevents double-counting: company salary + project salary allocation.
+        const companyExpenseResult = await Expense.aggregate([
+            {
+                $match: {
+                    date: { $gte: startDate, $lte: endDate },
+                    isAllocated: { $ne: true },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: '$amount' },
+                },
+            },
+        ]);
+        const companyTotalExpense: number = companyExpenseResult[0]?.total ?? 0;
+
         let receivablesTotal = revenueSummary.totalPending;
+        let receivablesData: ReceivablesResult | null = null;
         try {
-            const receivables = await RevenueService.getReceivables();
-            receivablesTotal = receivables.summary.totalOpen;
+            receivablesData = await RevenueService.getReceivables(endDate);
+            receivablesTotal = receivablesData.summary.totalOpen;
         } catch {
             receivablesTotal = revenueSummary.totalPending;
         }
 
-        // Calculate cash in bank (sum of all active bank accounts)
+        // Calculate cash in bank using append-only ledger (BankTransaction) for active accounts
         const bankAccounts = await BankAccount.find({ isActive: true });
-        const cashInBank = bankAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0);
+        const activeAccountKeys = bankAccounts.map(acc => acc.accountKey).filter(Boolean);
 
-        // Calculate EBIDTA (Earnings Before Interest, Depreciation, Tax, and Amortization)
-        const ebidta = revenueSummary.totalRevenue - expenseSummary.totalExpense;
+        const ledgerResult = await BankTransaction.aggregate([
+            { $match: { accountKey: { $in: activeAccountKeys }, date: { $lte: endDate } } },
+            {
+                $group: {
+                    _id: null,
+                    totalCredit: {
+                        $sum: {
+                            $cond: [{ $eq: ['$transactionType', 'credit'] }, '$amount', 0]
+                        }
+                    },
+                    totalDebit: {
+                        $sum: {
+                            $cond: [{ $eq: ['$transactionType', 'debit'] }, '$amount', 0]
+                        }
+                    }
+                }
+            }
+        ]);
+
+        const cashInBank = ledgerResult.length > 0 
+            ? (ledgerResult[0].totalCredit - ledgerResult[0].totalDebit) 
+            : 0;
+
+        // GST Calculations (All-time cumulative to align with all-time cashInBank)
+        const allTimeRevenueGstResult = await Revenue.aggregate([
+            { $match: { date: { $lte: endDate } } },
+            {
+                $group: {
+                    _id: null,
+                    totalGST: { $sum: '$gst' },
+                },
+            },
+        ]);
+        const allTimeTotalGST = allTimeRevenueGstResult[0]?.totalGST ?? 0;
+
+        const allTimeGstClaimableResult = await Expense.aggregate([
+            {
+                $match: {
+                    gstClaimable: true,
+                    date: { $lte: endDate }
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: {
+                        $sum: {
+                            $multiply: [
+                                '$amount',
+                                {
+                                    $divide: [
+                                        { $ifNull: ['$gstRate', 18] },
+                                        { $add: [100, { $ifNull: ['$gstRate', 18] }] }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                },
+            },
+        ]);
+        const allTimeGstClaimable = allTimeGstClaimableResult[0]?.total ?? 0;
+
+        const allTimeGstPaymentsResult = await Expense.aggregate([
+            {
+                $match: {
+                    category: { $in: ['GST Payment', 'Tax Payment'] },
+                    date: { $lte: endDate }
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: '$amount' },
+                },
+            },
+        ]);
+        const allTimeGstPayments = allTimeGstPaymentsResult[0]?.total ?? 0;
+
+        const gstPayable = Math.max(0, allTimeTotalGST - allTimeGstClaimable - allTimeGstPayments);
+        const moneyInBank = cashInBank - gstPayable;
+
+        // Calculate EBIDTA using de-duplicated company expense total
+        const ebidta = revenueSummary.totalRevenue - companyTotalExpense;
 
         // Calculate runway (months of operation possible with current cash)
-        const avgMonthlyExpense = expenseSummary.totalExpense / Math.max(1, expenseMonthly.length);
+        const avgMonthlyExpense = companyTotalExpense / Math.max(1, expenseMonthly.length);
         const runwayLeft = avgMonthlyExpense > 0 ? Math.floor(cashInBank / avgMonthlyExpense) : 0;
 
         // Build monthly chart data
@@ -138,14 +243,17 @@ export class DashboardService {
         return {
             metrics: {
                 totalRevenue: revenueSummary.totalRevenue,
-                totalExpense: expenseSummary.totalExpense,
+                totalExpense: companyTotalExpense,
                 ebidta,
                 runwayLeft,
                 cashInBank,
                 receivables: receivablesTotal,
+                moneyInBank,
+                gstPayable,
             },
             monthlyData,
             breakdownData,
+            receivables: receivablesData,
         };
     }
 
@@ -179,14 +287,24 @@ export class DashboardService {
         const fyEnd = new Date(fyStartYear + 1, 2, 31, 23, 59, 59); // March 31st
 
         const getStats = async (start: Date, end: Date) => {
-            const [revSum, expSum] = await Promise.all([
+            // Use isAllocated-excluded total for EBIDTA/company metrics
+            const [revSum, companyExpResult] = await Promise.all([
                 RevenueService.getSummary(start, end),
-                ExpenseService.getSummary(start, end),
+                Expense.aggregate([
+                    {
+                        $match: {
+                            date: { $gte: start, $lte: end },
+                            isAllocated: { $ne: true },
+                        },
+                    },
+                    { $group: { _id: null, total: { $sum: '$amount' } } },
+                ]),
             ]);
+            const expTotal: number = companyExpResult[0]?.total ?? 0;
             return {
                 revenue: revSum.totalRevenue,
-                expense: expSum.totalExpense,
-                profit: revSum.totalRevenue - expSum.totalExpense,
+                expense: expTotal,
+                profit: revSum.totalRevenue - expTotal,
             };
         };
 
@@ -248,6 +366,7 @@ export class DashboardService {
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
+                    isAllocated: { $ne: true },
                 },
             },
             {

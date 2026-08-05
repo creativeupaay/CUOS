@@ -24,6 +24,7 @@ interface CreateRevenueData {
     totalAmount?: number;
     pendingAmount?: number;
     gstApplicable?: boolean;
+    isGstInclusive?: boolean;
     gstRate?: number;
     tdsDeducted?: number;
     receivedAmount?: number;
@@ -35,7 +36,7 @@ interface CreateRevenueData {
     createdBy: Types.ObjectId;
 }
 
-interface ReceivableItem {
+export interface ReceivableItem {
     id: string;
     source: 'finance-revenue' | 'phase-payment';
     sourceLabel: string;
@@ -56,7 +57,7 @@ interface ReceivableItem {
     fxFallbackUsed?: boolean;
 }
 
-interface ReceivableWarning {
+export interface ReceivableWarning {
     code: 'FX_RATE_REQUIRED' | 'FX_FALLBACK_USED';
     message: string;
     source: 'phase-payment' | 'finance-revenue';
@@ -66,7 +67,7 @@ interface ReceivableWarning {
     date?: string;
 }
 
-interface ReceivablesResult {
+export interface ReceivablesResult {
     items: ReceivableItem[];
     summary: {
         totalOpen: number;
@@ -230,6 +231,7 @@ export class RevenueService {
         const amountINR = conversion.amountINR;
 
         const gstApplicable = data.gstApplicable ?? existing.gstApplicable;
+        const isGstInclusive = data.isGstInclusive ?? existing.isGstInclusive ?? true;  
         const gstRate = data.gstRate ?? existing.gstRate;
         const gst = gstApplicable ? roundMoney((amountINR * gstRate) / 100) : 0;
         const tdsDeducted = data.tdsDeducted ?? existing.tdsDeducted;
@@ -246,6 +248,7 @@ export class RevenueService {
                 exchangeRateProvider: conversion.provider,
                 amountINR,
                 gstApplicable,
+                isGstInclusive,
                 gstRate,
                 gst,
                 totalAmount,
@@ -394,24 +397,39 @@ export class RevenueService {
         }));
     }
 
-    static async getReceivables(): Promise<ReceivablesResult> {
-        const today = getStartOfDay(new Date());
+    static async getReceivables(endDate: Date = new Date()): Promise<ReceivablesResult> {
+        const today = getStartOfDay(endDate);
         const warnings: ReceivableWarning[] = [];
-        const openRevenueRecords = await Revenue.find({
-            status: { $in: ['pending', 'partial', 'overdue'] },
+        
+        // 1. Get Revenues created on or before endDate
+        const revenueRecords = await Revenue.find({
+            date: { $lte: endDate },
+            source: { $ne: 'project' }
         }).lean();
 
-        const financeItems: ReceivableItem[] = openRevenueRecords
+        // 2. Get Payments made on or before endDate for these revenues
+        const revPayments = await BankTransaction.aggregate([
+            { $match: { revenueId: { $in: revenueRecords.map(r => r._id) }, date: { $lte: endDate }, transactionType: 'credit' } },
+            { $group: { _id: '$revenueId', totalPaid: { $sum: '$amount' } } }
+        ]);
+        const revPaymentMap = new Map(revPayments.map(p => [p._id.toString(), p.totalPaid]));
+
+        const financeItems: ReceivableItem[] = revenueRecords
             .map((item: any): ReceivableItem | null => {
                 const expected = Number(item.totalAmount || item.amountINR || item.amount || 0);
-                const received = Number(item.receivedAmount || 0);
-                const outstanding = Math.max(0, roundMoney(expected - received));
+                // Use historical received amount instead of current receivedAmount
+                const received = revPaymentMap.get(item._id.toString()) || 0;
+                const fxFeesINR = Number(item.fxFeesINR || 0);
+                // For finance items, tip is just part of received technically, or we could add it.
+                // Assuming effectiveReceived uses fxFeesINR so the FX difference isn't outstanding.
+                const effectiveReceived = received + fxFeesINR;
+                const outstanding = Math.max(0, roundMoney(expected - effectiveReceived));
                 if (outstanding <= 0) return null;
 
                 const dueDate = item.dueDate ? getStartOfDay(new Date(item.dueDate)) : null;
                 const status: ReceivableItem['status'] = dueDate && dueDate < today
                     ? 'overdue'
-                    : (String(item.status || 'pending').toLowerCase() === 'partial' ? 'partial' : 'pending');
+                    : (effectiveReceived > 0 ? 'partial' : 'pending');
 
                 return {
                     id: String(item._id || ''),
@@ -434,9 +452,23 @@ export class RevenueService {
             })
             .filter((item): item is ReceivableItem => item !== null);
 
-        const projects = await Project.find({ isArchived: false })
-            .select('name budget currency phases')
+        // For phases, we consider projects created on or before endDate to avoid future projects cluttering past reports
+        const projects = await Project.find({ isArchived: false, createdAt: { $lte: endDate } })
+            .select('name budget currency phases createdAt')
             .lean();
+
+        const allPhaseIds = projects.flatMap((p: any) => p.phases?.map((ph: any) => ph._id)).filter(Boolean);
+        const phasePayments = await BankTransaction.aggregate([
+            { $match: { phaseId: { $in: allPhaseIds }, date: { $lte: endDate }, transactionType: 'credit' } },
+            { $group: { _id: '$phaseId', totalPaid: { $sum: '$amount' } } }
+        ]);
+        const phasePaymentMap = new Map(phasePayments.map(p => [p._id.toString(), p.totalPaid]));
+
+        const phaseRevenues = await Revenue.aggregate([
+            { $match: { phaseId: { $in: allPhaseIds }, date: { $lte: endDate } } },
+            { $group: { _id: '$phaseId', totalFxFees: { $sum: '$fxFeesINR' }, totalTip: { $sum: '$tipINR' } } }
+        ]);
+        const phaseRevenueMap = new Map(phaseRevenues.map(r => [r._id.toString(), { fxFees: r.totalFxFees || 0, tip: r.totalTip || 0 }]));
 
         const phaseItemLists = await Promise.all(projects.flatMap((project: any) => {
             const phases = project.phases || [];
@@ -488,16 +520,27 @@ export class RevenueService {
                         });
                     }
 
-                    const received = roundMoney(Number(phase.paymentReceivedAmountINR ?? phase.paymentReceivedAmount ?? 0));
-                    const outstanding = Math.max(0, roundMoney(expected - received));
-                    const statusRaw = String(phase.paymentStatus || 'pending').toLowerCase();
+                    const gstApplicable = phase.gstApplicable ?? project.gstApplicable ?? true;
+                    const gstRate = phase.gstRate ?? project.gstRate ?? 18;
+                    // Match phasePayment.service.ts convention: isGstInclusive defaults to true
+                    // (backward-compat: legacy phases without this field are treated as inclusive)
+                    const isGstInclusive: boolean = phase.isGstInclusive !== false;
+                    // Only add GST on top when it is NOT inclusive (exclusive contract: GST charged separately)
+                    const gst = (gstApplicable && !isGstInclusive) ? roundMoney((expected * gstRate) / 100) : 0;
+                    const tdsDeducted = roundMoney(Number(phase.tdsDeducted ?? 0));
+                    const totalExpected = roundMoney(expected + gst - tdsDeducted);
 
-                    if (outstanding <= 0 || !['pending', 'partial'].includes(statusRaw)) return null;
+                    const received = phasePaymentMap.get(String(phase._id)) || 0;
+                    const revenueAdjustments = phaseRevenueMap.get(String(phase._id)) || { fxFees: 0, tip: 0 };
+                    const effectiveReceived = received + revenueAdjustments.fxFees;
+                    const outstanding = Math.max(0, roundMoney(totalExpected - effectiveReceived));
+
+                    if (outstanding <= 0) return null;
 
                     const dueDate = dueDateRaw ? getStartOfDay(new Date(dueDateRaw)) : null;
                     const status = dueDate && dueDate < today
                         ? 'overdue'
-                        : (statusRaw === 'partial' ? 'partial' : 'pending');
+                        : (effectiveReceived > 0 ? 'partial' : 'pending');
 
                     return {
                         id: `${String(project?._id || 'project')}-${String(phase?._id || index)}`,
@@ -508,7 +551,7 @@ export class RevenueService {
                         status,
                         dueDate,
                         outstanding,
-                        expected,
+                        expected: totalExpected,
                         received,
                         currency: 'INR',
                         originalCurrency: currency,
