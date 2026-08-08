@@ -7,7 +7,7 @@ import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake
+    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake, Gamepad2
 } from 'lucide-react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
@@ -37,6 +37,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     hiring: { from: '#0F766E', to: '#0EA5E9' },
     partners: { from: '#0E7490', to: '#06B6D4' },
     teamManagement: { from: '#6366F1', to: '#8B5CF6' },
+    gameZone: { from: '#F59E0B', to: '#F43F5E' },
 };
 
 /* ── Department Card ─────────────────────────────────────── */
@@ -248,6 +249,13 @@ export default function SuperAdminDashboard() {
             icon: <Briefcase size={22} />,
             path: '/hiring',
         },
+        {
+            key: 'gameZone',
+            title: 'Game Zone',
+            description: 'Play team building games and track leaderboards',
+            icon: <Gamepad2 size={22} />,
+            path: '/games',
+        },
     ];
 
     const partnerDepartments = [
@@ -281,7 +289,8 @@ export default function SuperAdminDashboard() {
 
     const nonAdminDepartments = allDepartments
         .filter(d => {
-            if (!['projectManagement', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring'].includes(d.key)) return false;
+            if (!['projectManagement', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring', 'gameZone'].includes(d.key)) return false;
+            if (d.key === 'gameZone') return true; // Game zone is visible to all non-partner users
             if (!hasModuleViewAccess(user, d.key as any, { isJobManager })) return false;
             return true;
         })
