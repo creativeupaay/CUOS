@@ -3,9 +3,11 @@ import { Server, ServerOptions } from 'socket.io';
 import { socketAuthMiddleware } from '../modules/collaboration/middleware/socketAuth.middleware';
 import { setupNoteHandlers } from '../modules/collaboration/handlers/noteHandler';
 import { setupNotificationHandlers } from '../modules/notification/handlers/notificationHandler';
+import { setupGameHandlers } from '../modules/game-zone/realtime/gameSocketHandlers';
+import { resumePendingTimers } from '../modules/game-zone/services/gameStateMachine.service';
 import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 import { env } from './env.config';
 
 /**
@@ -69,6 +71,9 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     // Setup notification handlers
     setupNotificationHandlers(socket, io);
 
+    // Setup game zone handlers
+    setupGameHandlers(socket, io);
+
     // Handle connection errors
     socket.on('error', (error) => {
       logger.error({ context: error }, `[Socket.io] Error for socket ${socket.id}:`);
@@ -87,6 +92,11 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   });
 
   logger.info('[Socket.io] Server initialized successfully');
+
+  // Resume any pending timers from sessions that were active before restart
+  resumePendingTimers(io).catch((err) => {
+    logger.error({ err }, '[Socket.io] Failed to resume pending game timers');
+  });
 
   return io;
 };

@@ -90,6 +90,15 @@ const FinanceExpensesPage = lazy(() => import('./pages/finance/FinanceExpensesPa
 const FinanceCashInBankPage = lazy(() => import('./pages/finance/FinanceCashInBankPage'));
 const FinanceSalariesPayrollPage = lazy(() => import('./pages/finance/FinanceSalariesPayrollPage'));
 
+// ─── Game Zone Pages (lazy-loaded, isolated module) ───────────────────────────
+const GamesPage = lazy(() => import('@/pages/game-zone/GamesPage'));
+const LeaderboardPage = lazy(() => import('@/pages/game-zone/LeaderboardPage'));
+const ImposterDetailPage = lazy(() => import('@/pages/game-zone/imposter/ImposterDetailPage'));
+const CreateImposterPage = lazy(() => import('@/pages/game-zone/imposter/CreateImposterPage'));
+const ImposterLobbyPage = lazy(() => import('@/pages/game-zone/imposter/ImposterLobbyPage'));
+const ImposterPlayPage = lazy(() => import('@/pages/game-zone/imposter/ImposterPlayPage'));
+const ImposterResultPage = lazy(() => import('@/pages/game-zone/imposter/ImposterResultPage'));
+
 function RouteFallback() {
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 space-y-5 animate-pulse">
@@ -412,6 +421,15 @@ function AppRoutes() {
           <Route path="/hiring/assignments/review" element={<ModuleAccessRoute moduleKey="hiring"><PartnerRestrictedRoute><Navigate to="/hiring/assignments" replace /></PartnerRestrictedRoute></ModuleAccessRoute>} />
           <Route path="/hiring/interviews" element={<ModuleAccessRoute moduleKey="hiring"><PartnerRestrictedRoute>{loadable(<HiringInterviewsPage />)}</PartnerRestrictedRoute></ModuleAccessRoute>} />
           <Route path="/hiring/interviews/schedule" element={<ModuleAccessRoute moduleKey="hiring" requireAdmin><PartnerRestrictedRoute>{loadable(<HiringInterviewSchedulePage />)}</PartnerRestrictedRoute></ModuleAccessRoute>} />
+
+          {/* Game Zone — available to all authenticated users */}
+          <Route path="/games" element={loadable(<GamesPage />)} />
+          <Route path="/leaderboard" element={loadable(<LeaderboardPage />)} />
+          <Route path="/games/imposter" element={loadable(<ImposterDetailPage />)} />
+          <Route path="/games/imposter/create" element={loadable(<CreateImposterPage />)} />
+          <Route path="/games/imposter/:gameId/lobby" element={loadable(<ImposterLobbyPage />)} />
+          <Route path="/games/imposter/:gameId/play" element={loadable(<ImposterPlayPage />)} />
+          <Route path="/games/imposter/:gameId/result" element={loadable(<ImposterResultPage />)} />
         </Route>
 
         {/* Default redirect */}
@@ -464,4 +482,6 @@ function App() {
 }
 
 export default App;
+
+
 

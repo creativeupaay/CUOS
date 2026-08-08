@@ -14,7 +14,7 @@ import {
     FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
-    Folder, FolderOpen, Grid2X2, Building2,
+    Folder, FolderOpen, Grid2X2, Building2, Gamepad2, Trophy,
 } from 'lucide-react';
 
 interface NavItem {
@@ -285,6 +285,16 @@ function getModuleConfig(
             title: 'Team Management',
             items: [
                 { label: 'Team Members', path: '/partner-admin/team', icon: <Users2 size={18} />, matchPrefix: '/partner-admin/team' },
+            ],
+        };
+    }
+    // Game Zone — available to all authenticated CUOS users
+    if (pathname.startsWith('/games') || pathname.startsWith('/leaderboard')) {
+        return {
+            title: 'Game Zone',
+            items: [
+                { label: 'Games', path: '/games', icon: <Gamepad2 size={18} />, matchPrefix: '/games' },
+                { label: 'Leaderboard', path: '/leaderboard', icon: <Trophy size={18} />, matchPrefix: '/leaderboard' },
             ],
         };
     }

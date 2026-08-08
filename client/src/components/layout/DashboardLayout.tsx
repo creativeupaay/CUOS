@@ -57,6 +57,10 @@ const ROUTE_TITLES: Record<string, string> = {
     '/partner-admin': 'Team Management',
     '/partner-admin/team': 'Team Members',
     '/hiring/assignments': 'Assignment',
+    '/games': 'Game Zone',
+    '/leaderboard': 'Leaderboard',
+    '/games/imposter': 'Imposter',
+    '/games/imposter/create': 'Create Game',
 };
 
 function resolveTitle(pathname: string): string {

@@ -5,6 +5,7 @@ import { clientPortalApi } from '@/features/client-portal/clientPortalApi';
 import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
 import collaborationReducer from '@/features/collaboration/collaborationSlice';
 import notificationReducer from '@/features/notification/slices/notificationSlice';
+import imposterReducer from '@/features/game-zone/games/imposter/store/imposterSlice';
 
 /**
  * Redux store configuration
@@ -15,6 +16,7 @@ import notificationReducer from '@/features/notification/slices/notificationSlic
  * - Client Portal API reducer and middleware (separate JWT-based auth)
  * - Client Portal slice for portal auth state
  * - Collaboration slice for real-time note editing
+ * - Imposter game slice for transient game state (Game Zone)
  */
 
 export const store = configureStore({
@@ -25,6 +27,7 @@ export const store = configureStore({
     clientPortal: clientPortalReducer,
     collaboration: collaborationReducer,
     notification: notificationReducer,
+    imposter: imposterReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

@@ -15,6 +15,7 @@ import partnerAuthRoutes from '../../modules/partners/routes/partnerAuth.routes'
 import partnerEmployeeRoutes from '../../modules/partners/routes/partnerEmployee.routes';
 import partnerPortalRoutes from '../../modules/partners/routes/partnerPortal.routes';
 import notificationRoutes from '../../modules/notification/routes/notification.routes';
+import gameZoneRoutes from '../../modules/game-zone/routes/game.routes';
 
 const router = Router();
 
@@ -51,5 +52,7 @@ router.use('/partner-employees', partnerEmployeeRoutes);
 router.use('/partner-portal', partnerPortalRoutes);
 // Notifications
 router.use('/notifications', notificationRoutes);
+// Game Zone
+router.use('/game-zone', gameZoneRoutes);
 
 export default router;
