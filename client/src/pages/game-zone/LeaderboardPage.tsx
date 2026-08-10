@@ -19,8 +19,8 @@ function RankIcon({ rank }: { rank: number }) {
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState('all');
 
-  const { data: lbData, isLoading } = useGetLeaderboardQuery({ gameType: 'imposter', period });
-  const { data: myStatsData } = useGetMyStatsQuery();
+  const { data: lbData, isLoading } = useGetLeaderboardQuery({ gameType: 'all', period });
+  const { data: myStatsData } = useGetMyStatsQuery({ gameType: 'all', period });
 
   const entries = lbData?.data?.entries || [];
   const myStats = myStatsData?.data;
@@ -154,7 +154,7 @@ export default function LeaderboardPage() {
                   <div className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
                     {entry.userName}
                   </div>
-                  {entry.roleStats && (
+                  {entry.roleStats && entry.roleStats.timesImposter > 0 && (
                     <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                       {entry.roleStats.timesImposter}× 🎭 imposter
                     </div>

@@ -140,8 +140,13 @@ export const gameZoneApi = api.injectEndpoints({
       providesTags: ['GameLeaderboard'],
     }),
 
-    getMyStats: builder.query<ApiResponse<any>, void>({
-      query: () => '/game-zone/leaderboard/me',
+    getMyStats: builder.query<ApiResponse<any>, { period?: string; gameType?: string }>({
+      query: (params) => {
+        const qs = new URLSearchParams();
+        if (params?.gameType) qs.set('gameType', params.gameType);
+        if (params?.period) qs.set('period', params.period);
+        return `/game-zone/leaderboard/me?${qs.toString()}`;
+      },
     }),
   }),
 });

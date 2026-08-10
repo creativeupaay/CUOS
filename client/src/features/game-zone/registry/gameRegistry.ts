@@ -27,6 +27,24 @@ export const GAME_REGISTRY: GameDefinition[] = [
     icon: '🎭',
     accentColor: '#7C3AED', // purple
   },
+  {
+    id: 'wordle',
+    name: 'Wordle Battle',
+    shortDescription: 'Competitive multiplayer word guessing — same word, everyone races.',
+    longDescription:
+      'A fast-paced multiplayer version of Wordle. Everyone gets the same 5-letter word to guess. Solve it faster and with fewer guesses to earn more points across multiple rounds.',
+    minPlayers: 2,
+    maxPlayers: 20,
+    durationMin: 5,
+    durationMax: 15,
+    difficulty: 'Medium',
+    tags: ['Multiplayer', 'Speed', 'Puzzle', 'Words'],
+    route: '/games/wordle',
+    createRoute: '/games/wordle',
+    available: true,
+    icon: '🔤',
+    accentColor: '#059669', // emerald green
+  },
   // Future games go here:
   // {
   //   id: 'quiz',

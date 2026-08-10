@@ -51,6 +51,7 @@ export const authenticate = async (
 
             const authUser: AuthenticatedUser = {
                 id: (user._id as unknown as { toString(): string }).toString(),
+                name: user.name,
                 email: user.email,
                 role: user.role.name,
                 modulePermissions: user.modulePermissions,
@@ -75,6 +76,7 @@ export const authenticate = async (
 
         req.user = {
             id: (partnerEmployee._id as unknown as { toString(): string }).toString(),
+            name: partnerEmployee.name,
             email: partnerEmployee.email,
             role: 'partner',
             isPartnerEmployee: true,

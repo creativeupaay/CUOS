@@ -92,6 +92,10 @@ const FinanceSalariesPayrollPage = lazy(() => import('./pages/finance/FinanceSal
 
 // ─── Game Zone Pages (lazy-loaded, isolated module) ───────────────────────────
 const GamesPage = lazy(() => import('@/pages/game-zone/GamesPage'));
+const WordleDetailPage = lazy(() => import('./pages/game-zone/wordle/WordleDetailPage'));
+const WordleLobbyPage = lazy(() => import('./pages/game-zone/wordle/WordleLobbyPage'));
+const WordlePlayPage = lazy(() => import('./pages/game-zone/wordle/WordlePlayPage'));
+const WordleResultPage = lazy(() => import('./pages/game-zone/wordle/WordleResultPage'));
 const LeaderboardPage = lazy(() => import('@/pages/game-zone/LeaderboardPage'));
 const ImposterDetailPage = lazy(() => import('@/pages/game-zone/imposter/ImposterDetailPage'));
 const CreateImposterPage = lazy(() => import('@/pages/game-zone/imposter/CreateImposterPage'));
@@ -424,6 +428,10 @@ function AppRoutes() {
 
           {/* Game Zone — available to all authenticated users */}
           <Route path="/games" element={loadable(<GamesPage />)} />
+          <Route path="/games/wordle" element={loadable(<WordleDetailPage />)} />
+          <Route path="/games/wordle/:gameId/lobby" element={loadable(<WordleLobbyPage />)} />
+          <Route path="/games/wordle/:gameId/play" element={loadable(<WordlePlayPage />)} />
+          <Route path="/games/wordle/:gameId/result" element={loadable(<WordleResultPage />)} />
           <Route path="/leaderboard" element={loadable(<LeaderboardPage />)} />
           <Route path="/games/imposter" element={loadable(<ImposterDetailPage />)} />
           <Route path="/games/imposter/create" element={loadable(<CreateImposterPage />)} />

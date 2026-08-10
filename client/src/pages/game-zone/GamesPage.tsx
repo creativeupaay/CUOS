@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Gamepad2, Users, Clock, Zap, Star, ChevronRight, Plus, Trophy } from 'lucide-react';
+import { Gamepad2, Users, Clock, Zap, Star, ChevronRight, Plus } from 'lucide-react';
 import { GAME_REGISTRY } from '../../features/game-zone/registry/gameRegistry';
 import { useListGameSessionsQuery } from '../../features/game-zone/api/gameZoneApi';
 import { useAppSelector } from '../../app/hooks';
@@ -133,7 +133,7 @@ function GameCard({ game }: { game: GameDefinition }) {
   );
 }
 
-function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; onJoin: (id: string) => void; currentUserId: string | undefined }) {
+function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; onJoin: (id: string, type: string) => void; currentUserId: string | undefined }) {
   const host = session.players?.find((p: any) => p.isHost);
   const isParticipant = session.players?.some((p: any) => p.userId === currentUserId);
   const canJoin = session.status === 'lobby' || (session.status === 'active' && isParticipant);
@@ -148,7 +148,7 @@ function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; on
       }}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="text-2xl shrink-0">🎭</span>
+        <span className="text-2xl shrink-0">{session.gameType === 'wordle' ? '🔤' : '🎭'}</span>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
@@ -159,7 +159,7 @@ function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; on
               className="text-xs px-1.5 py-0.5 rounded-md font-medium capitalize"
               style={{ background: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}
             >
-              {session.sessionType}
+              {session.gameType || session.sessionType}
             </span>
           </div>
           <div className="text-xs mt-0.5 flex items-center gap-3" style={{ color: 'var(--color-text-muted)' }}>
@@ -172,7 +172,7 @@ function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; on
       </div>
       {canJoin && (
         <button
-          onClick={() => onJoin(session._id)}
+          onClick={() => onJoin(session._id, session.gameType || session.sessionType)}
           className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
           style={{ background: '#7C3AED' }}
         >
@@ -189,39 +189,16 @@ export default function GamesPage() {
   const { data, isLoading } = useListGameSessionsQuery(undefined, { pollingInterval: 10000 });
   const sessions = data?.data || [];
 
-  const handleJoin = (sessionId: string) => {
-    navigate(`/games/imposter/${sessionId}/lobby`);
+  const handleJoin = (sessionId: string, gameType: string) => {
+    if (gameType === 'wordle') {
+      navigate(`/games/wordle/${sessionId}/lobby`);
+    } else {
+      navigate(`/games/imposter/${sessionId}/lobby`);
+    }
   };
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Gamepad2 size={22} style={{ color: '#7C3AED' }} />
-            <h2 className="text-2xl font-bold" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>
-              Game Zone
-            </h2>
-          </div>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            Play together with your teammates. Break the ice, sharpen your strategy.
-          </p>
-        </div>
-        <Link
-          to="/leaderboard"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
-          style={{
-            background: 'linear-gradient(135deg, #F59E0B15, #F59E0B05)',
-            color: '#B45309',
-            border: '1px solid #F59E0B30',
-          }}
-        >
-          <Trophy size={15} />
-          Leaderboard
-        </Link>
-      </div>
-
       {/* Games grid */}
       <section>
         <div className="flex items-center gap-2 mb-4">

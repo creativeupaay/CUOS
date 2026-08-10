@@ -10,7 +10,7 @@ export interface IGameScore extends Document {
   userId: string;
   userName: string;
   userEmail: string;
-  gameType: 'imposter';
+  gameType: 'imposter' | 'wordle';
   role: PlayerRole;
   won: boolean;
   winningSide: WinningSide | null;
@@ -33,7 +33,7 @@ const GameScoreSchema = new Schema<IGameScore>(
     userId: { type: String, required: true, index: true },
     userName: { type: String, required: true },
     userEmail: { type: String, required: true },
-    gameType: { type: String, required: true, enum: ['imposter'], default: 'imposter' },
+    gameType: { type: String, required: true, enum: ['imposter', 'wordle'], default: 'imposter' },
     role: { type: String, required: true, enum: ['normal', 'imposter'] },
     won: { type: Boolean, required: true, default: false },
     winningSide: { type: String, enum: ['team', 'imposters', null], default: null },

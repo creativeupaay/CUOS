@@ -33,7 +33,11 @@ export async function getLeaderboard(input: LeaderboardQueryInput): Promise<{
 }> {
   const { gameType, period, limit, page } = input;
 
-  const matchStage: Record<string, any> = { gameType };
+  const matchStage: Record<string, any> = {};
+  if (gameType && gameType !== 'all') {
+    matchStage.gameType = gameType;
+  }
+  
   const dateFilter = getDateFilter(period);
   if (dateFilter) {
     matchStage.createdAt = { $gte: dateFilter };
@@ -84,9 +88,19 @@ export async function getLeaderboard(input: LeaderboardQueryInput): Promise<{
   return { entries, total, page, limit };
 }
 
-export async function getPlayerStats(userId: string, gameType = 'imposter') {
+export async function getPlayerStats(userId: string, gameType = 'all', period = 'all') {
+  const matchStage: Record<string, any> = { userId };
+  if (gameType && gameType !== 'all') {
+    matchStage.gameType = gameType;
+  }
+  
+  const dateFilter = getDateFilter(period);
+  if (dateFilter) {
+    matchStage.createdAt = { $gte: dateFilter };
+  }
+
   const stats = await GameScore.aggregate([
-    { $match: { userId, gameType } },
+    { $match: matchStage },
     {
       $group: {
         _id: null,

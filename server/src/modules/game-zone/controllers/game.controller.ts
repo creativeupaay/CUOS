@@ -15,6 +15,7 @@ import {
   listGameSessions,
   updateSessionConfig,
 } from '../services/game.service';
+import { listWordleSessions } from '../services/wordle/wordleGame.service';
 import { getSocketIO } from '../../notification/services/notification.service';
 import {
   CreateSessionSchema,
@@ -30,8 +31,14 @@ function catchAsync(fn: (req: Request, res: Response, next: NextFunction) => Pro
 // ─── List active game sessions ─────────────────────────────────────────────
 
 export const listSessions = catchAsync(async (req, res) => {
-  const sessions = await listGameSessions('imposter');
-  res.json({ success: true, data: sessions });
+  const imposterSessions = await listGameSessions();
+  const wordleSessions = await listWordleSessions();
+  
+  const allSessions = [...imposterSessions, ...wordleSessions].sort((a, b) => {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  
+  res.json({ success: true, data: allSessions });
 });
 
 // ─── Create game session ───────────────────────────────────────────────────

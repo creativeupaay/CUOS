@@ -500,11 +500,11 @@ export async function endGame(sessionId: string, userId: string): Promise<IGameS
 
 // ─── List Active Sessions ─────────────────────────────────────────────────────
 
-export async function listGameSessions(gameType = 'imposter') {
-  return GameSession.find({
-    gameType,
-    status: { $in: ['lobby', 'active'] },
-  })
+export async function listGameSessions(gameType?: string) {
+  const filter: any = { status: { $in: ['lobby', 'active'] } };
+  if (gameType) filter.gameType = gameType;
+
+  return GameSession.find(filter)
     .select('_id gameType sessionType status phase config players hostUserId createdAt')
     .sort({ createdAt: -1 })
     .limit(20)

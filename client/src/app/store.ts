@@ -6,6 +6,7 @@ import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
 import collaborationReducer from '@/features/collaboration/collaborationSlice';
 import notificationReducer from '@/features/notification/slices/notificationSlice';
 import imposterReducer from '@/features/game-zone/games/imposter/store/imposterSlice';
+import wordleReducer from '@/features/game-zone/games/wordle/store/wordleSlice';
 
 /**
  * Redux store configuration
@@ -28,6 +29,7 @@ export const store = configureStore({
     collaboration: collaborationReducer,
     notification: notificationReducer,
     imposter: imposterReducer,
+    wordle: wordleReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

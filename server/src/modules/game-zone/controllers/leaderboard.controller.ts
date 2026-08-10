@@ -8,7 +8,7 @@ function catchAsync(fn: (req: Request, res: Response, next: NextFunction) => Pro
 
 export const getLeaderboardHandler = catchAsync(async (req, res) => {
   const input = LeaderboardQuerySchema.parse({
-    gameType: req.query.gameType || 'imposter',
+    gameType: req.query.gameType || 'all',
     period: req.query.period || 'all',
     view: req.query.view || 'overall',
     limit: req.query.limit ? Number(req.query.limit) : 20,
@@ -20,6 +20,8 @@ export const getLeaderboardHandler = catchAsync(async (req, res) => {
 });
 
 export const getMyStatsHandler = catchAsync(async (req, res) => {
-  const stats = await getPlayerStats(req.user!.id);
+  const gameType = (req.query.gameType as string) || 'all';
+  const period = (req.query.period as string) || 'all';
+  const stats = await getPlayerStats(req.user!.id, gameType, period);
   res.json({ success: true, data: stats });
 });
