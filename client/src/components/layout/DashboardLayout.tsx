@@ -2,7 +2,7 @@ import { Outlet, useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Settings, Menu, X } from 'lucide-react';
+import { Settings, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
@@ -131,6 +131,10 @@ export default function DashboardLayout() {
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
+    // DashboardLayout owns the notification socket setup and page title.
+    // Avatar/profile photo is handled by Sidebar which already has its own
+    // useGetMyProfileQuery subscription — no need to duplicate it here.
+    // We re-use the same cache via a second subscription only for the topbar avatar.
     const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
@@ -177,37 +181,30 @@ export default function DashboardLayout() {
                     },
                 }}
             />
+            {/* ── Desktop Sidebar ─────────────────────────────────── */}
             <div className="hidden lg:block">
                 <Sidebar />
             </div>
 
+            {/* ── Mobile Sidebar — always mounted, shown via CSS transform ────────
+                 Using CSS instead of conditional rendering prevents Sidebar from
+                 remounting (and re-firing its API queries) on every menu toggle. */}
             {mobileSidebarOpen && (
-                <>
-                    <div
-                        className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-                        onClick={() => setMobileSidebarOpen(false)}
-                    />
-                    <aside
-                        className="fixed inset-y-0 left-0 z-50 lg:hidden"
-                        style={{ width: 'min(88vw, var(--sidebar-width))' }}
-                    >
-                        <div className="relative h-full">
-                            <button
-                                onClick={() => setMobileSidebarOpen(false)}
-                                className="absolute top-4 right-4 z-10 p-2 rounded-lg"
-                                style={{
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'rgba(255,255,255,0.92)',
-                                    border: '1px solid var(--color-border-default)',
-                                }}
-                            >
-                                <X size={18} />
-                            </button>
-                            <Sidebar mobile onNavigate={() => setMobileSidebarOpen(false)} />
-                        </div>
-                    </aside>
-                </>
+                <div
+                    className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+                    onClick={() => setMobileSidebarOpen(false)}
+                />
             )}
+            <aside
+                className="fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-in-out"
+                style={{
+                    width: 'min(88vw, var(--sidebar-width))',
+                    transform: mobileSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                }}
+                aria-hidden={!mobileSidebarOpen}
+            >
+                <Sidebar mobile onNavigate={() => setMobileSidebarOpen(false)} />
+            </aside>
 
             {/* ── Content area ───────────────────────────────────────── */}
             <div className="lg:ml-[var(--sidebar-width)]">

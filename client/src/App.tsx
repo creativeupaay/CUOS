@@ -482,6 +482,17 @@ function App() {
     }
   }, [userData, isAuthLoading, dispatch]);
 
+  // Block all routes until the auth check completes on first load.
+  // This eliminates the ProtectedRoute spinner flash and the double-render
+  // cycle where isInitialized flips false → true causing visible loading states.
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen" style={{ background: 'var(--color-bg-app)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--color-primary)' }} />
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <AppRoutes />

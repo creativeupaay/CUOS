@@ -108,7 +108,9 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
+            // Only invalidate the specific project — not the whole 'Projects' list or 'User'.
+            // Invalidating 'Projects' (list) would trigger a sidebar refetch on every assignee change.
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         removeAssignee: builder.mutation<ApiResponse<Project>, { projectId: string; memberId: string }>({
@@ -116,7 +118,7 @@ export const projectApi = api.injectEndpoints({
                 url: `/projects/${projectId}/assignees/${memberId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         updateAssigneePermissions: builder.mutation<ApiResponse<void>, { projectId: string; memberId: string; data: UpdateAssigneePermissionsRequest }>({
@@ -125,7 +127,7 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }, 'Projects', 'User'],
+            invalidatesTags: (_result, _error, { projectId }) => [{ type: 'Projects', id: projectId }],
         }),
 
         getAssigneePermissions: builder.query<ApiResponse<ProjectAssignee['subModules']>, { projectId: string; memberId: string }>({

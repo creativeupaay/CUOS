@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { logout } from '@/features/auth/slices/authSlice';
@@ -310,7 +310,7 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 }
 
 /* ── Nav Item ──────────────────────────────────────────────── */
-const NavItemComponent = ({
+const NavItemComponent = memo(({
     item,
     active,
     pathname,
@@ -443,9 +443,9 @@ const NavItemComponent = ({
             )}
         </div>
     );
-};
+});
 
-const ProjectFoldersNav = ({
+const ProjectFoldersNav = memo(({
     projects,
     partnerNameById,
     pathname,
@@ -458,7 +458,7 @@ const ProjectFoldersNav = ({
     search: string;
     onNavigate?: () => void;
 }) => {
-    const groups = buildProjectFolderGroups(projects, partnerNameById);
+    const groups = useMemo(() => buildProjectFolderGroups(projects, partnerNameById), [projects, partnerNameById]);
     const currentProjectId = pathname.match(/^\/projects\/([^/]+)/)?.[1] || '';
     const currentGroup = currentProjectId
         ? groups.find((group) => group.projects.some((project) => project._id === currentProjectId))
@@ -488,7 +488,7 @@ const ProjectFoldersNav = ({
                 to="/projects"
                 end
                 onClick={() => onNavigate?.()}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 select-none relative"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 select-none relative"
                 style={
                     isAllDashboard
                         ? {
@@ -550,7 +550,7 @@ const ProjectFoldersNav = ({
                                 <button
                                     type="button"
                                     onClick={() => toggleFolder(group.id)}
-                                    className="w-7 h-9 flex items-center justify-center rounded-lg transition-all duration-200 shrink-0"
+                                    className="w-7 h-9 flex items-center justify-center rounded-lg transition-colors duration-200 shrink-0"
                                     style={{ color: isFolderActive ? 'var(--color-primary-dark)' : 'var(--color-text-muted)' }}
                                     aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.name}`}
                                     onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
@@ -566,7 +566,7 @@ const ProjectFoldersNav = ({
                                 <NavLink
                                     to={group.path}
                                     onClick={() => onNavigate?.()}
-                                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
+                                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors duration-200"
                                     style={
                                         isFolderActive
                                             ? {
@@ -640,7 +640,7 @@ const ProjectFoldersNav = ({
                                                         key={project._id}
                                                         to={`/projects/${project._id}`}
                                                         onClick={() => onNavigate?.()}
-                                                        className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
+                                                        className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors duration-200"
                                                         style={
                                                             isProjectActive
                                                                 ? {
@@ -693,7 +693,7 @@ const ProjectFoldersNav = ({
             </div>
         </div>
     );
-};
+});
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 export default function Sidebar({
@@ -711,17 +711,20 @@ export default function Sidebar({
     const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string } } | null)?.backgroundLocation;
     const effectivePathname = backgroundLocation?.pathname || location.pathname;
 
-    const handleLogout = async () => {
+    const handleLogout = useCallback(async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
 
         // Determine logout redirect based on user role and partner status
-        const isPartner = roleName === 'partner';
+        const currentRoleName = user?.role
+            ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
+            : '';
+        const isPartnerUser = currentRoleName === 'partner';
         const partnerSlug = (user as any)?.partnerSlug || (
             typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
         );
-        const logoutPath = isPartner && partnerSlug
+        const logoutPath = isPartnerUser && partnerSlug
             ? `/partner/${partnerSlug}/login`
-            : isPartner
+            : isPartnerUser
                 ? '/partner/login'
                 : '/login';
 
@@ -733,7 +736,7 @@ export default function Sidebar({
         dispatch(logout());
         dispatch(api.util.resetApiState());
         navigate(logoutPath);
-    };
+    }, [user, logoutApi, dispatch, navigate]);
 
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
@@ -755,12 +758,17 @@ export default function Sidebar({
     const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
 
     const isPMRoute = effectivePathname.startsWith('/projects');
+    const isHiringRoute = effectivePathname.startsWith('/hiring');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
     const { data: partnersResponse } = useGetPartnersQuery(
         { limit: 500 },
         { skip: !(isPMRoute && canManageProjects) }
     );
-    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
+    // Only fetch job manager status when on hiring routes — avoids an unnecessary
+    // API call on every non-hiring page (CRM, HRMS, Finance, etc.)
+    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery(undefined, {
+        skip: !isHiringRoute,
+    });
     const isJobManager = !!jobManagerStatus?.data?.isJobManager;
 
     const projects = (projectsResponse?.data || []) as SidebarProject[];

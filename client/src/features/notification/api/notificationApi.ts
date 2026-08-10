@@ -54,7 +54,8 @@ const notificationApi = api.injectEndpoints({
                 method: 'PATCH',
                 body,
             }),
-            invalidatesTags: ['Notifications'],
+            // State is managed optimistically via Redux dispatch in NotificationPanel.
+            // No need to refetch the full list after marking as read.
         }),
 
         // Mark all notifications as read
@@ -63,6 +64,7 @@ const notificationApi = api.injectEndpoints({
                 url: '/notifications/read-all',
                 method: 'PATCH',
             }),
+            // Keep tag invalidation for markAllAsRead since it's a bulk server-side reset.
             invalidatesTags: ['Notifications'],
         }),
 
@@ -72,7 +74,8 @@ const notificationApi = api.injectEndpoints({
                 url: `/notifications/${id}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: ['Notifications'],
+            // State is managed optimistically via dispatch(removeNotification(id)).
+            // No need to refetch the full list after deleting one item.
         }),
 
         // Clear all notifications
@@ -81,7 +84,8 @@ const notificationApi = api.injectEndpoints({
                 url: '/notifications/clear-all',
                 method: 'DELETE',
             }),
-            invalidatesTags: ['Notifications'],
+            // State is managed optimistically via dispatch(clearAllAction()).
+            // No need to refetch after clearing.
         }),
     }),
 });

@@ -143,8 +143,11 @@ function CancelLeaveModal({ leave, onClose, onConfirm, isLoading }: {
 export default function EmployeeLeavesPage() {
     const [showModal, setShowModal] = useState(false);
     const [cancelLeave, setCancelLeave] = useState<Leave | null>(null);
-    const { data: leavesData, isLoading } = useGetMyLeavesQuery({}, { refetchOnMountOrArgChange: true, pollingInterval: 30000 });
-    const { data: balanceData } = useGetLeaveBalanceQuery(undefined, { refetchOnMountOrArgChange: true, pollingInterval: 30000 });
+    // Leave data is not realtime — it only changes when an admin acts on a request.
+    // The 5-min RTK Query cache (keepUnusedDataFor: 300) is sufficient.
+    // Mutations in ApplyLeaveModal already invalidate 'Leaves' tags on submit.
+    const { data: leavesData, isLoading } = useGetMyLeavesQuery({});
+    const { data: balanceData } = useGetLeaveBalanceQuery(undefined);
     const [updateLeaveStatus, { isLoading: isCancelling }] = useUpdateLeaveStatusMutation();
 
     const leaves: Leave[] = (leavesData?.data as any)?.leaves || [];

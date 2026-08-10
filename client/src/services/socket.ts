@@ -35,8 +35,9 @@ export const socket: Socket = io(BASE_URL, {
     const token = getFallbackToken();
     cb({ token });
   },
-  // Start with polling so environments without WS upgrade support still connect.
-  transports: ['polling', 'websocket'],
+  // Prefer WebSocket directly — avoids 2-3 extra HTTP polling round-trips on connect.
+  // Falls back to polling for environments that block WebSocket (e.g., some corporate proxies).
+  transports: ['websocket', 'polling'],
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
