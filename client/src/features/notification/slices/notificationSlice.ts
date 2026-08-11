@@ -6,6 +6,7 @@ interface NotificationState {
     unreadCount: number;
     notifications: INotification[];
     browserPermission: NotificationPermission | 'default';
+    soundEnabled: boolean;
 }
 
 const initialState: NotificationState = {
@@ -13,6 +14,7 @@ const initialState: NotificationState = {
     unreadCount: 0,
     notifications: [],
     browserPermission: 'default',
+    soundEnabled: typeof window !== 'undefined' ? localStorage.getItem('notification_sound_enabled') !== 'false' : true,
 };
 
 const notificationSlice = createSlice({
@@ -74,6 +76,18 @@ const notificationSlice = createSlice({
         setBrowserPermission: (state, action: PayloadAction<NotificationPermission>) => {
             state.browserPermission = action.payload;
         },
+        toggleSound: (state) => {
+            state.soundEnabled = !state.soundEnabled;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('notification_sound_enabled', String(state.soundEnabled));
+            }
+        },
+        setSoundEnabled: (state, action: PayloadAction<boolean>) => {
+            state.soundEnabled = action.payload;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('notification_sound_enabled', String(action.payload));
+            }
+        },
     },
 });
 
@@ -90,6 +104,8 @@ export const {
     removeNotification,
     clearAllNotifications,
     setBrowserPermission,
+    toggleSound,
+    setSoundEnabled,
 } = notificationSlice.actions;
 
 export default notificationSlice.reducer;

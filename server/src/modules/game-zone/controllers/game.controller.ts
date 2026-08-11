@@ -16,6 +16,7 @@ import {
   updateSessionConfig,
 } from '../services/game.service';
 import { listWordleSessions } from '../services/wordle/wordleGame.service';
+import { listQuizSessions } from '../services/quiz/quizGame.service';
 import { getSocketIO } from '../../notification/services/notification.service';
 import {
   CreateSessionSchema,
@@ -33,8 +34,9 @@ function catchAsync(fn: (req: Request, res: Response, next: NextFunction) => Pro
 export const listSessions = catchAsync(async (req, res) => {
   const imposterSessions = await listGameSessions();
   const wordleSessions = await listWordleSessions();
+  const quizSessions = await listQuizSessions();
   
-  const allSessions = [...imposterSessions, ...wordleSessions].sort((a, b) => {
+  const allSessions = [...imposterSessions, ...wordleSessions, ...quizSessions].sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
   

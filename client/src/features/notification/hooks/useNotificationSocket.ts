@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { logger } from '@/utils/logger';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { socket, connectSocket } from '@/services/socket';
@@ -8,6 +8,7 @@ import {
     setBrowserPermission,
 } from '../slices/notificationSlice';
 import type { INotification } from '../types';
+import { playNotificationSound } from '../utils/sound';
 
 /**
  * Hook to handle notification socket events and browser notification permission
@@ -16,6 +17,12 @@ export const useNotificationSocket = () => {
     const dispatch = useAppDispatch();
     const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
     const browserPermission = useAppSelector((state) => state.notification.browserPermission);
+    const soundEnabled = useAppSelector((state) => state.notification.soundEnabled);
+
+    const soundEnabledRef = useRef(soundEnabled);
+    useEffect(() => {
+        soundEnabledRef.current = soundEnabled;
+    }, [soundEnabled]);
 
     // Request browser notification permission
     const requestBrowserPermission = useCallback(async () => {
@@ -84,6 +91,9 @@ export const useNotificationSocket = () => {
         const handleNewNotification = (data: { notification: INotification }) => {
             dispatch(addNotification(data.notification));
             showBrowserNotification(data.notification);
+            if (soundEnabledRef.current) {
+                playNotificationSound();
+            }
         };
 
         // Handle unread count updates

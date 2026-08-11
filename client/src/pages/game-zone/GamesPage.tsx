@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Gamepad2, Users, Clock, Zap, Star, ChevronRight, Plus } from 'lucide-react';
 import { GAME_REGISTRY } from '../../features/game-zone/registry/gameRegistry';
@@ -25,7 +26,7 @@ function DifficultyStars({ difficulty }: { difficulty: GameDefinition['difficult
   );
 }
 
-function GameCard({ game }: { game: GameDefinition }) {
+function GameCard({ game, onBrowse }: { game: GameDefinition; onBrowse?: () => void }) {
   return (
     <div
       className="group relative flex flex-col rounded-2xl overflow-hidden transition-all duration-300"
@@ -99,18 +100,33 @@ function GameCard({ game }: { game: GameDefinition }) {
         <div className="flex gap-2 mt-auto pt-2">
           {game.available ? (
             <>
-              <Link
-                to={game.route}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
-                style={{
-                  background: `${game.accentColor}18`,
-                  color: game.accentColor,
-                  border: `1px solid ${game.accentColor}30`,
-                }}
-              >
-                <Gamepad2 size={15} />
-                Browse Games
-              </Link>
+              {onBrowse ? (
+                <button
+                  onClick={onBrowse}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+                  style={{
+                    background: `${game.accentColor}18`,
+                    color: game.accentColor,
+                    border: `1px solid ${game.accentColor}30`,
+                  }}
+                >
+                  <Gamepad2 size={15} />
+                  Browse Games
+                </button>
+              ) : (
+                <Link
+                  to={game.route}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+                  style={{
+                    background: `${game.accentColor}18`,
+                    color: game.accentColor,
+                    border: `1px solid ${game.accentColor}30`,
+                  }}
+                >
+                  <Gamepad2 size={15} />
+                  Browse Games
+                </Link>
+              )}
               <Link
                 to={game.createRoute}
                 className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
@@ -148,7 +164,9 @@ function ActiveSessionRow({ session, onJoin, currentUserId }: { session: any; on
       }}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="text-2xl shrink-0">{session.gameType === 'wordle' ? '🔤' : '🎭'}</span>
+        <span className="text-2xl shrink-0">
+          {session.gameType === 'wordle' ? '🔤' : session.gameType === 'quiz' ? '🧠' : '🎭'}
+        </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
@@ -188,17 +206,24 @@ export default function GamesPage() {
   const user = useAppSelector((s) => s.auth.user);
   const { data, isLoading } = useListGameSessionsQuery(undefined, { pollingInterval: 10000 });
   const sessions = data?.data || [];
+  const liveSessionsRef = useRef<HTMLElement>(null);
+
+  const scrollToLiveSessions = () => {
+    liveSessionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const handleJoin = (sessionId: string, gameType: string) => {
     if (gameType === 'wordle') {
       navigate(`/games/wordle/${sessionId}/lobby`);
+    } else if (gameType === 'quiz') {
+      navigate(`/games/quiz/${sessionId}`);
     } else {
       navigate(`/games/imposter/${sessionId}/lobby`);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-4 sm:p-6 lg:p-8">
       {/* Games grid */}
       <section>
         <div className="flex items-center gap-2 mb-4">
@@ -209,13 +234,17 @@ export default function GamesPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {GAME_REGISTRY.map((game) => (
-            <GameCard key={game.id} game={game} />
+            <GameCard
+              key={game.id}
+              game={game}
+              onBrowse={game.id === 'quiz' ? scrollToLiveSessions : undefined}
+            />
           ))}
         </div>
       </section>
 
       {/* Active sessions */}
-      <section>
+      <section ref={liveSessionsRef}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -246,11 +275,11 @@ export default function GamesPage() {
               No active sessions. Be the first to start a game!
             </p>
             <Link
-              to="/games/imposter/create"
+              to="/games/quiz/create"
               className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
               style={{ background: '#7C3AED' }}
             >
-              Create Game
+              Create Quiz Game
             </Link>
           </div>
         ) : (

@@ -61,11 +61,17 @@ const ROUTE_TITLES: Record<string, string> = {
     '/leaderboard': 'Leaderboard',
     '/games/imposter': 'Imposter',
     '/games/imposter/create': 'Create Game',
+    '/games/quiz/create': 'Create Quiz Game',
 };
 
 function resolveTitle(pathname: string): string {
     // Exact match first
     if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname];
+    
+    // Quiz dynamic routes
+    if (pathname.startsWith('/games/quiz/') && pathname !== '/games/quiz/create') {
+        return 'Quiz Game';
+    }
     // Project detail pages
     if (pathname.startsWith('/projects/') && pathname !== '/projects/new') return 'Project';
     if (pathname === '/projects/new') return 'New Project';
@@ -290,14 +296,19 @@ export default function DashboardLayout() {
                 </header>
 
                 {/* ── Page content ───────────────────────────────────── */}
-                <main
-                    className="page-enter"
-                    style={{ minHeight: 'calc(100vh - var(--topbar-height))' }}
-                >
-                    <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
-                        <Outlet />
-                    </div>
-                </main>
+                {(() => {
+                    const isGameRoute = effectivePathname.startsWith('/games') || effectivePathname === '/leaderboard';
+                    return (
+                        <main
+                            className="page-enter"
+                            style={{ minHeight: 'calc(100vh - var(--topbar-height))' }}
+                        >
+                            <div className={isGameRoute ? 'p-0 h-[calc(100vh-var(--topbar-height))]' : 'px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7'}>
+                                <Outlet />
+                            </div>
+                        </main>
+                    );
+                })()}
             </div>
 
             {/* Notification Panel */}

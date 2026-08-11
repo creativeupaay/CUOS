@@ -102,6 +102,8 @@ const CreateImposterPage = lazy(() => import('@/pages/game-zone/imposter/CreateI
 const ImposterLobbyPage = lazy(() => import('@/pages/game-zone/imposter/ImposterLobbyPage'));
 const ImposterPlayPage = lazy(() => import('@/pages/game-zone/imposter/ImposterPlayPage'));
 const ImposterResultPage = lazy(() => import('@/pages/game-zone/imposter/ImposterResultPage'));
+const QuizDetailPage = lazy(() => import('@/features/game-zone/games/quiz/pages/QuizDetailPage'));
+const CreateQuizPage = lazy(() => import('@/features/game-zone/games/quiz/pages/CreateQuizPage'));
 
 function RouteFallback() {
   return (
@@ -438,6 +440,8 @@ function AppRoutes() {
           <Route path="/games/imposter/:gameId/lobby" element={loadable(<ImposterLobbyPage />)} />
           <Route path="/games/imposter/:gameId/play" element={loadable(<ImposterPlayPage />)} />
           <Route path="/games/imposter/:gameId/result" element={loadable(<ImposterResultPage />)} />
+          <Route path="/games/quiz/create" element={loadable(<CreateQuizPage />)} />
+          <Route path="/games/quiz/:sessionId" element={loadable(<QuizDetailPage />)} />
         </Route>
 
         {/* Default redirect */}

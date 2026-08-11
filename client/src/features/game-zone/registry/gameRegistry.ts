@@ -45,12 +45,23 @@ export const GAME_REGISTRY: GameDefinition[] = [
     icon: '🔤',
     accentColor: '#059669', // emerald green
   },
-  // Future games go here:
-  // {
-  //   id: 'quiz',
-  //   name: 'Quiz Battle',
-  //   ...
-  // }
+  {
+    id: 'quiz',
+    name: 'Quiz Battle',
+    shortDescription: 'Real-time AI-generated multiplayer trivia on any topic.',
+    longDescription: 'Test your knowledge on literally any topic against your colleagues! Our AI generates unique questions on the fly, and you earn points for speed and accuracy.',
+    minPlayers: 2,
+    maxPlayers: 50,
+    durationMin: 5,
+    durationMax: 15,
+    difficulty: 'Medium',
+    tags: ['Trivia', 'Fast-Paced', 'AI-Generated'],
+    route: '/games',
+    createRoute: '/games/quiz/create',
+    available: true,
+    icon: '🧠',
+    accentColor: '#8B5CF6',
+  },
 ];
 
 export function getGameById(id: string): GameDefinition | undefined {

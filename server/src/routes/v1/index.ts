@@ -17,6 +17,7 @@ import partnerPortalRoutes from '../../modules/partners/routes/partnerPortal.rou
 import notificationRoutes from '../../modules/notification/routes/notification.routes';
 import gameZoneRoutes from '../../modules/game-zone/routes/game.routes';
 import wordleRoutes from '../../modules/game-zone/routes/wordle.routes';
+import quizRoutes from '../../modules/game-zone/routes/quiz.routes';
 
 const router = Router();
 
@@ -57,5 +58,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/game-zone', gameZoneRoutes);
 // Wordle (isolated from Imposter)
 router.use('/wordle', wordleRoutes);
+// Quiz (isolated from Imposter and Wordle)
+router.use('/quiz', quizRoutes);
 
 export default router;

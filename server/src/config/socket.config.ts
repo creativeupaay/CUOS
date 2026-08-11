@@ -7,6 +7,8 @@ import { setupGameHandlers } from '../modules/game-zone/realtime/gameSocketHandl
 import { resumePendingTimers } from '../modules/game-zone/services/gameStateMachine.service';
 import { setupWordleHandlers } from '../modules/game-zone/realtime/wordleSocketHandlers';
 import { resumeWordleTimers } from '../modules/game-zone/services/wordle/wordleStateMachine.service';
+import { setupQuizHandlers } from '../modules/game-zone/realtime/quizSocketHandlers';
+import { resumeQuizTimers } from '../modules/game-zone/services/quiz/quizStateMachine.service';
 import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
 import { logger } from '../utils/logger';
@@ -84,6 +86,9 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     // Setup Wordle game handlers (isolated from Imposter)
     setupWordleHandlers(socket, io);
 
+    // Setup Quiz game handlers (isolated from Imposter and Wordle)
+    setupQuizHandlers(socket, io);
+
     // Handle connection errors
     socket.on('error', (error) => {
       logger.error({ context: error }, `[Socket.io] Error for socket ${socket.id}:`);
@@ -111,6 +116,11 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   // Resume pending Wordle round timers
   resumeWordleTimers(io).catch((err) => {
     logger.error({ err }, '[Socket.io] Failed to resume pending Wordle timers');
+  });
+
+  // Resume pending Quiz question timers
+  resumeQuizTimers(io).catch((err) => {
+    logger.error({ err }, '[Socket.io] Failed to resume pending Quiz timers');
   });
 
   return io;
