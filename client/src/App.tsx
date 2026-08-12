@@ -31,6 +31,7 @@ const PersonalizedPartnerLoginPage = lazy(() => import('./pages/partners/Persona
 const PublicJobApplyPage = lazy(() => import('./pages/hiring/PublicJobApplyPage'));
 const PublicAssignmentSubmissionPage = lazy(() => import('./pages/hiring/PublicAssignmentSubmissionPage'));
 
+
 function RouteFallback() {
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 space-y-5 animate-pulse">
@@ -219,6 +220,17 @@ function App() {
     }
   }, [userData, isAuthLoading, dispatch]);
 
+  // Block all routes until the auth check completes on first load.
+  // This eliminates the ProtectedRoute spinner flash and the double-render
+  // cycle where isInitialized flips false → true causing visible loading states.
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen" style={{ background: 'var(--color-bg-app)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--color-primary)' }} />
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <TimerProvider>
@@ -229,4 +241,6 @@ function App() {
 }
 
 export default App;
+
+
 

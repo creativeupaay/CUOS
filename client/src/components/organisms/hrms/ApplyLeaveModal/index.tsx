@@ -58,10 +58,11 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
         isPaid: true,
     });
 
-    // Fetch balance, holidays, and existing leaves from the API
-    const { data: balanceData } = useGetLeaveBalanceQuery(undefined, { refetchOnMountOrArgChange: true });
-    const { data: holidaysData } = useGetHolidaysQuery({}, { refetchOnMountOrArgChange: true });
-    const { data: leavesData } = useGetMyLeavesQuery({}, { refetchOnMountOrArgChange: true });
+    // These queries re-use cache from EmployeeLeavesPage (same cache key, 5-min TTL).
+    // createLeave mutation's invalidatesTags handles post-submit refresh.
+    const { data: balanceData } = useGetLeaveBalanceQuery(undefined);
+    const { data: holidaysData } = useGetHolidaysQuery({});
+    const { data: leavesData } = useGetMyLeavesQuery({});
 
     const balanceArr: any[] = (balanceData?.data as any)?.balance || [];
     const holidays: any[] = (holidaysData?.data as any)?.holidays || [];

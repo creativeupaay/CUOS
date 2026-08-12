@@ -3,9 +3,15 @@ import { Server, ServerOptions } from 'socket.io';
 import { socketAuthMiddleware } from '../modules/collaboration/middleware/socketAuth.middleware';
 import { setupNoteHandlers } from '../modules/collaboration/handlers/noteHandler';
 import { setupNotificationHandlers } from '../modules/notification/handlers/notificationHandler';
+import { setupGameHandlers } from '../modules/game-zone/realtime/gameSocketHandlers';
+import { resumePendingTimers } from '../modules/game-zone/services/gameStateMachine.service';
+import { setupWordleHandlers } from '../modules/game-zone/realtime/wordleSocketHandlers';
+import { resumeWordleTimers } from '../modules/game-zone/services/wordle/wordleStateMachine.service';
+import { setupQuizHandlers } from '../modules/game-zone/realtime/quizSocketHandlers';
+import { resumeQuizTimers } from '../modules/game-zone/services/quiz/quizStateMachine.service';
 import { setSocketIO } from '../modules/notification/services/notification.service';
 import { AuthenticatedSocket } from '../modules/collaboration/types/types';
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 import { env } from './env.config';
 
 /**
@@ -14,6 +20,11 @@ import { env } from './env.config';
 export const initializeSocket = (httpServer: HTTPServer): Server => {
   const allowedOrigins: string[] = Array.from(new Set([
     'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
     'http://localhost:3000',
     env.FRONTEND_URL,
     ...env.FRONTEND_URLS,
@@ -69,6 +80,15 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     // Setup notification handlers
     setupNotificationHandlers(socket, io);
 
+    // Setup game zone handlers (Imposter)
+    setupGameHandlers(socket, io);
+
+    // Setup Wordle game handlers (isolated from Imposter)
+    setupWordleHandlers(socket, io);
+
+    // Setup Quiz game handlers (isolated from Imposter and Wordle)
+    setupQuizHandlers(socket, io);
+
     // Handle connection errors
     socket.on('error', (error) => {
       logger.error({ context: error }, `[Socket.io] Error for socket ${socket.id}:`);
@@ -87,6 +107,21 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   });
 
   logger.info('[Socket.io] Server initialized successfully');
+
+  // Resume any pending timers from sessions that were active before restart
+  resumePendingTimers(io).catch((err) => {
+    logger.error({ err }, '[Socket.io] Failed to resume pending game timers');
+  });
+
+  // Resume pending Wordle round timers
+  resumeWordleTimers(io).catch((err) => {
+    logger.error({ err }, '[Socket.io] Failed to resume pending Wordle timers');
+  });
+
+  // Resume pending Quiz question timers
+  resumeQuizTimers(io).catch((err) => {
+    logger.error({ err }, '[Socket.io] Failed to resume pending Quiz timers');
+  });
 
   return io;
 };

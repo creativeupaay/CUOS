@@ -207,14 +207,14 @@ export default function FinanceDashboardPage() {
         currentData: currentDashboardData,
         isLoading,
         isFetching,
-    } = useGetFinanceDashboardQuery(filterParams, { refetchOnMountOrArgChange: true });
+    } = useGetFinanceDashboardQuery(filterParams);
 
     // Cash summary has FIXED args (no date filter) so `data` is always correct once loaded.
     // We never need to gate it behind filter changes.
     const {
         data: cashSummaryData,
         isLoading: isCashSummaryLoading,
-    } = useGetBankTransactionsQuery({ page: 1, limit: 1 }, { refetchOnMountOrArgChange: true });
+    } = useGetBankTransactionsQuery({ page: 1, limit: 1 });
 
     // Receivables are now included in the dashboard API response
 

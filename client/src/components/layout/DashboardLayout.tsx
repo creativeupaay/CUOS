@@ -2,7 +2,7 @@ import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Menu, X } from 'lucide-react';
+import { Settings, Menu, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
@@ -62,11 +62,21 @@ const ROUTE_TITLES: Record<string, string> = {
     '/partner-admin': 'Team Management',
     '/partner-admin/team': 'Team Members',
     '/hiring/assignments': 'Assignment',
+    '/games': 'Game Zone',
+    '/leaderboard': 'Leaderboard',
+    '/games/imposter': 'Imposter',
+    '/games/imposter/create': 'Create Game',
+    '/games/quiz/create': 'Create Quiz Game',
 };
 
 function resolveTitle(pathname: string): string {
     // Exact match first
     if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname];
+    
+    // Quiz dynamic routes
+    if (pathname.startsWith('/games/quiz/') && pathname !== '/games/quiz/create') {
+        return 'Quiz Game';
+    }
     // Project detail pages
     if (pathname.startsWith('/projects/') && pathname !== '/projects/new') return 'Project';
     if (pathname === '/projects/new') return 'New Project';
@@ -132,6 +142,10 @@ export default function DashboardLayout() {
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
+    // DashboardLayout owns the notification socket setup and page title.
+    // Avatar/profile photo is handled by Sidebar which already has its own
+    // useGetMyProfileQuery subscription — no need to duplicate it here.
+    // We re-use the same cache via a second subscription only for the topbar avatar.
     const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
     const profilePhotoUrl = (profileData?.data?.employee as any)?.profilePhoto?.url;
 
@@ -180,37 +194,30 @@ export default function DashboardLayout() {
                     },
                 }}
             />
+            {/* ── Desktop Sidebar ─────────────────────────────────── */}
             <div className="hidden lg:block print:hidden">
                 <Sidebar />
             </div>
 
+            {/* ── Mobile Sidebar — always mounted, shown via CSS transform ────────
+                 Using CSS instead of conditional rendering prevents Sidebar from
+                 remounting (and re-firing its API queries) on every menu toggle. */}
             {mobileSidebarOpen && (
-                <>
-                    <div
-                        className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-                        onClick={() => setMobileSidebarOpen(false)}
-                    />
-                    <aside
-                        className="fixed inset-y-0 left-0 z-50 lg:hidden"
-                        style={{ width: 'min(88vw, var(--sidebar-width))' }}
-                    >
-                        <div className="relative h-full">
-                            <button
-                                onClick={() => setMobileSidebarOpen(false)}
-                                className="absolute top-4 right-4 z-10 p-2 rounded-lg"
-                                style={{
-                                    color: 'var(--color-text-secondary)',
-                                    backgroundColor: 'rgba(255,255,255,0.92)',
-                                    border: '1px solid var(--color-border-default)',
-                                }}
-                            >
-                                <X size={18} />
-                            </button>
-                            <Sidebar mobile onNavigate={() => setMobileSidebarOpen(false)} />
-                        </div>
-                    </aside>
-                </>
+                <div
+                    className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+                    onClick={() => setMobileSidebarOpen(false)}
+                />
             )}
+            <aside
+                className="fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-in-out"
+                style={{
+                    width: 'min(88vw, var(--sidebar-width))',
+                    transform: mobileSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                }}
+                aria-hidden={!mobileSidebarOpen}
+            >
+                <Sidebar mobile onNavigate={() => setMobileSidebarOpen(false)} />
+            </aside>
 
             {/* ── Content area ───────────────────────────────────────── */}
             <div className="lg:ml-[var(--sidebar-width)] print:ml-0">
@@ -286,22 +293,27 @@ export default function DashboardLayout() {
                 </div>
 
                 {/* ── Page content ───────────────────────────────────── */}
-                <main
-                    className="page-enter relative"
-                    style={{ minHeight: 'calc(100vh - var(--topbar-height) - 40px)' }}
-                >
-                    <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
-                        {tabs.length === 0 || !activeTabId ? (
-                            <DashboardRoutes />
-                        ) : null}
-
-                        {tabs.map(tab => (
-                                <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
-                                    <DashboardRoutes location={tab.url + tab.search} />
-                                </div>
-                        ))}
-                    </div>
-                </main>
+                {(() => {
+                    const isGameRoute = effectivePathname.startsWith('/games') || effectivePathname === '/leaderboard';
+                    return (
+                        <main
+                            className="page-enter relative"
+                            style={{ minHeight: 'calc(100vh - var(--topbar-height) - 40px)' }}
+                        >
+                            <div className={isGameRoute ? 'p-0 h-[calc(100vh-var(--topbar-height)-40px)]' : 'px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7'}>
+                                {tabs.length === 0 || !activeTabId ? (
+                                    <DashboardRoutes />
+                                ) : null}
+        
+                                {tabs.map(tab => (
+                                        <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%' }}>
+                                            <DashboardRoutes location={tab.url + tab.search} />
+                                        </div>
+                                ))}
+                            </div>
+                        </main>
+                    );
+                })()}
             </div>
 
             {/* Notification Panel */}

@@ -110,8 +110,7 @@ export default function HiringApplicationsPage() {
     }
 
     const { data, isLoading, error } = useGetApplicationsQuery(
-        params as any,
-        { refetchOnMountOrArgChange: true }
+        params as any
     );
     const applications = data?.data.applications || [];
 

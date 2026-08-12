@@ -22,6 +22,7 @@ export interface ApiResponse<T = unknown> {
 export interface AuthenticatedUser {
   id: string;
   _id?: string;
+  name?: string;
   email: string;
   role: string;
   isPartnerEmployee?: boolean;

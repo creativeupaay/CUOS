@@ -85,6 +85,12 @@ const envSchema = z.object({
     z.string().optional()
   ),
 
+  // Gemini AI — used for Quiz question generation
+  GEMINI_API_KEY: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
+
 });
 
 /**

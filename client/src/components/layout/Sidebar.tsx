@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { useLogoutMutation } from '@/features/auth/authApi';
@@ -13,7 +13,7 @@ import {
     FileText, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
-    Folder, FolderOpen, Grid2X2, Building2, LogOut,
+    Folder, FolderOpen, Grid2X2, Building2, LogOut, Gamepad2, Trophy,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 
@@ -303,6 +303,16 @@ function getModuleConfig(
             ],
         };
     }
+    // Game Zone — available to all authenticated CUOS users
+    if (pathname.startsWith('/games') || pathname.startsWith('/leaderboard')) {
+        return {
+            title: 'Game Zone',
+            items: [
+                { label: 'Games', path: '/games', icon: <Gamepad2 size={18} />, matchPrefix: '/games' },
+                { label: 'Leaderboard', path: '/leaderboard', icon: <Trophy size={18} />, matchPrefix: '/leaderboard' },
+            ],
+        };
+    }
     return null;
 }
 
@@ -315,7 +325,7 @@ function isItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boo
 }
 
 /* ── Nav Item ──────────────────────────────────────────────── */
-const NavItemComponent = ({
+const NavItemComponent = memo(({
     item,
     active,
     pathname,
@@ -449,9 +459,9 @@ const NavItemComponent = ({
             )}
         </div>
     );
-};
+});
 
-const ProjectFoldersNav = ({
+const ProjectFoldersNav = memo(({
     projects,
     partnerNameById,
     pathname,
@@ -464,7 +474,7 @@ const ProjectFoldersNav = ({
     search: string;
     onNavigate?: () => void;
 }) => {
-    const groups = buildProjectFolderGroups(projects, partnerNameById);
+    const groups = useMemo(() => buildProjectFolderGroups(projects, partnerNameById), [projects, partnerNameById]);
     const currentProjectId = pathname.match(/^\/projects\/([^/]+)/)?.[1] || '';
     const currentGroup = currentProjectId
         ? groups.find((group) => group.projects.some((project) => project._id === currentProjectId))
@@ -495,7 +505,7 @@ const ProjectFoldersNav = ({
                 state={{ newTab: true }}
                 end
                 onClick={() => onNavigate?.()}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 select-none relative"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 select-none relative"
                 style={
                     isAllDashboard
                         ? {
@@ -559,7 +569,7 @@ const ProjectFoldersNav = ({
                                 <button
                                     type="button"
                                     onClick={() => toggleFolder(group.id)}
-                                    className="w-7 h-9 flex items-center justify-center rounded-lg transition-all duration-200 shrink-0"
+                                    className="w-7 h-9 flex items-center justify-center rounded-lg transition-colors duration-200 shrink-0"
                                     style={{ color: isFolderActive ? 'var(--color-primary-dark)' : 'var(--color-text-muted)' }}
                                     aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.name}`}
                                     onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)'; }}
@@ -576,7 +586,7 @@ const ProjectFoldersNav = ({
                                     to={group.path}
                                     state={{ newTab: true }}
                                     onClick={() => onNavigate?.()}
-                                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
+                                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors duration-200"
                                     style={
                                         isFolderActive
                                             ? {
@@ -651,7 +661,7 @@ const ProjectFoldersNav = ({
                                                         to={`/projects/${project._id}`}
                                                         state={{ newTab: true }}
                                                         onClick={() => onNavigate?.()}
-                                                        className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
+                                                        className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors duration-200"
                                                         style={
                                                             isProjectActive
                                                                 ? {
@@ -704,7 +714,7 @@ const ProjectFoldersNav = ({
             </div>
         </div>
     );
-};
+});
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 export default function Sidebar({
@@ -725,21 +735,27 @@ export default function Sidebar({
     const dispatch = useAppDispatch();
     const [logoutApi] = useLogoutMutation();
 
-    const handleLogout = async () => {
+    const handleLogout = useCallback(async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
+
+        // Determine logout redirect based on user role and partner status
+        const currentRoleName = user?.role
+            ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
+            : '';
+        const isPartnerUser = currentRoleName === 'partner';
         const partnerSlug = (user as any)?.partnerSlug || (
             typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
         );
-        const logoutPath = isPartner && partnerSlug
+        const logoutPath = isPartnerUser && partnerSlug
             ? `/partner/${partnerSlug}/login`
-            : isPartner
+            : isPartnerUser
                 ? '/partner/login'
                 : '/login';
 
         dispatch(logoutAction());
         dispatch(api.util.resetApiState());
         window.location.href = logoutPath;
-    };
+    }, [user, logoutApi, dispatch, navigate]);
 
     const roleName = user?.role
         ? typeof user.role === 'object' ? (user.role as any).name?.toLowerCase() : String(user.role).toLowerCase()
@@ -757,12 +773,17 @@ export default function Sidebar({
     //     : 'CU';
 
     const isPMRoute = effectivePathname.startsWith('/projects');
+    const isHiringRoute = effectivePathname.startsWith('/hiring');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
     const { data: partnersResponse } = useGetPartnersQuery(
         { limit: 500 },
         { skip: !(isPMRoute && canManageProjects) }
     );
-    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
+    // Only fetch job manager status when on hiring routes — avoids an unnecessary
+    // API call on every non-hiring page (CRM, HRMS, Finance, etc.)
+    const { data: jobManagerStatus } = useCheckJobManagerStatusQuery(undefined, {
+        skip: !isHiringRoute,
+    });
     const isJobManager = !!jobManagerStatus?.data?.isJobManager;
 
     const projects = (projectsResponse?.data || []) as SidebarProject[];

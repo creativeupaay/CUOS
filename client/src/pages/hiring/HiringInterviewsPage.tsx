@@ -133,8 +133,7 @@ export default function HiringInterviewsPage() {
             status: status || undefined,
             search: search || undefined,
             limit: 100,
-        },
-        { refetchOnMountOrArgChange: true }
+        }
     );
 
     const [updateInterviewStatus, { isLoading: updating }] = useUpdateInterviewStatusMutation();

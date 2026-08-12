@@ -6,6 +6,9 @@ import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
 import collaborationReducer from '@/features/collaboration/collaborationSlice';
 import notificationReducer from '@/features/notification/slices/notificationSlice';
 import workspaceReducer from '@/features/workspace/workspaceSlice';
+import imposterReducer from '@/features/game-zone/games/imposter/store/imposterSlice';
+import wordleReducer from '@/features/game-zone/games/wordle/store/wordleSlice';
+import quizReducer from '@/features/game-zone/games/quiz/store/quizSlice';
 
 /**
  * Redux store configuration
@@ -16,6 +19,7 @@ import workspaceReducer from '@/features/workspace/workspaceSlice';
  * - Client Portal API reducer and middleware (separate JWT-based auth)
  * - Client Portal slice for portal auth state
  * - Collaboration slice for real-time note editing
+ * - Game zone slices
  */
 
 export const store = configureStore({
@@ -27,6 +31,9 @@ export const store = configureStore({
     collaboration: collaborationReducer,
     notification: notificationReducer,
     workspace: workspaceReducer,
+    imposter: imposterReducer,
+    wordle: wordleReducer,
+    quiz: quizReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

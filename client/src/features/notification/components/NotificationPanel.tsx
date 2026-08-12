@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { X, Trash2, CheckCheck, Bell } from 'lucide-react';
+import { X, Trash2, CheckCheck, Bell, Volume2, VolumeX } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +11,9 @@ import {
     clearAllNotifications as clearAllAction,
     setNotifications,
     setUnreadCount,
+    toggleSound,
 } from '../slices/notificationSlice';
+import { playNotificationSound } from '../utils/sound';
 import {
     useGetNotificationsQuery,
     useMarkAsReadMutation,
@@ -29,6 +31,7 @@ export default function NotificationPanel() {
 
     const isOpen = useAppSelector((state) => state.notification.isOpen);
     const notifications = useAppSelector((state) => state.notification.notifications);
+    const soundEnabled = useAppSelector((state) => state.notification.soundEnabled);
 
     useBodyScrollLock(isOpen);
 
@@ -108,6 +111,14 @@ export default function NotificationPanel() {
         await clearAll();
     };
 
+    const handleToggleSound = () => {
+        const nextSound = !soundEnabled;
+        dispatch(toggleSound());
+        if (nextSound) {
+            playNotificationSound();
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -136,6 +147,14 @@ export default function NotificationPanel() {
                         </h2>
                     </div>
                     <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={handleToggleSound}
+                            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+                            style={{ color: soundEnabled ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                            title={soundEnabled ? 'Mute notification sound' : 'Unmute notification sound (Plays test sound)'}
+                        >
+                            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                        </button>
                         {notifications.length > 0 && (
                             <>
                                 <button

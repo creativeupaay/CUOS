@@ -508,8 +508,7 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
     const currentYear = new Date().getFullYear();
     const { data, isLoading } = useGetLeavesQuery({ employeeId: emp._id });
     const { data: balanceData } = useGetEmployeeLeaveBalanceQuery(
-        { employeeId: emp._id, year: currentYear },
-        { refetchOnMountOrArgChange: true }
+        { employeeId: emp._id, year: currentYear }
     );
 
     const leaves = (data?.data?.leaves || []) as any[];
