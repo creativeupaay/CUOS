@@ -2,7 +2,7 @@ import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Settings, Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
