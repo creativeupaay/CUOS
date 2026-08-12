@@ -4,7 +4,7 @@ import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake, ListTodo, Gamepad2
+    ArrowRight, Clock, Sparkles, Briefcase, Handshake, ListTodo, Gamepad2
 } from 'lucide-react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
