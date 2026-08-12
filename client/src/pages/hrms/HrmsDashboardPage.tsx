@@ -110,9 +110,7 @@ export default function HrmsDashboardPage() {
                         <TrendingUp size={20} style={{ color: 'var(--color-primary)' }} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                            HR Dashboard
-                        </h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>

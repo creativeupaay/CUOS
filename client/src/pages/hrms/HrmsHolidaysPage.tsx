@@ -324,7 +324,7 @@ export default function HrmsHolidaysPage() {
                 <div className="flex items-center gap-2.5">
                     <CalendarDays size={21} style={{ color: 'var(--color-primary)' }} />
                     <div>
-                        <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Holidays</h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                             Declare company holidays, WFH days, and half-days for all employees
                         </p>

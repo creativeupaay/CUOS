@@ -428,9 +428,7 @@ export default function HrmsAttendancePage() {
                 <div>
                     <div className="flex items-center gap-2.5 mb-1">
                         <Clock3 size={21} style={{ color: 'var(--color-primary)' }} />
-                        <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            Attendance
-                        </h1>
+                        
                     </div>
                     <p className="text-sm ml-8" style={{ color: 'var(--color-text-secondary)' }}>
                         Mark and review employee attendance

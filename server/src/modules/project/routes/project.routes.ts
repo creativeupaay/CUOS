@@ -9,6 +9,7 @@ import * as credentialController from '../controllers/credential.controller';
 import * as docController from '../controllers/doc.controller';
 import * as noteController from '../controllers/note.controller';
 import * as phasePaymentController from '../controllers/phasePayment.controller';
+import * as reportController from '../controllers/report.controller';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import {
     checkProjectAccess,
@@ -63,8 +64,86 @@ router.use(filterPartnerData);
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ============================================
-// GLOBAL TIME LOG ROUTES (must be before /:id to avoid param conflicts)
+// GLOBAL TASK & TIME LOG & REPORT ROUTES (must be before /:id to avoid param conflicts)
 // ============================================
+
+// Get reports dashboard data
+router.get(
+    '/reports/dashboard',
+    reportController.getReportsDashboard
+);
+
+// Get individual tasks
+router.get(
+    '/tasks/individual',
+    taskController.getIndividualTasks
+);
+
+// Create individual task
+router.post(
+    '/tasks/individual',
+    validateRequest(taskValidators.createIndividualTaskSchema),
+    taskController.createIndividualTask
+);
+
+// Update individual task (by taskId, no projectId required)
+router.patch(
+    '/tasks/individual/:taskId',
+    taskController.updateTask
+);
+
+// Delete individual task (by taskId, no projectId required)
+router.delete(
+    '/tasks/individual/:taskId',
+    taskController.deleteTask
+);
+
+// Create timelog for individual task (no projectId)
+router.post(
+    '/tasks/individual/:taskId/timelogs',
+    timeLogController.createIndividualTaskTimeLog
+);
+
+// ============================================
+// GLOBAL MEETING ROUTES (must be before /:id)
+// ============================================
+
+// Get individual meetings
+router.get(
+    '/meetings/individual',
+    validateRequest(meetingValidators.getIndividualMeetingsSchema),
+    meetingController.getIndividualMeetings
+);
+
+// Create individual meeting
+router.post(
+    '/meetings/individual',
+    validateRequest(meetingValidators.createIndividualMeetingSchema),
+    meetingController.createIndividualMeeting
+);
+
+// Update individual meeting (by meetingId, no projectId required)
+router.patch(
+    '/meetings/individual/:id',
+    validateRequest(meetingValidators.updateIndividualMeetingSchema),
+    meetingController.updateMeeting
+);
+
+// Delete individual meeting (by meetingId, no projectId required)
+router.delete(
+    '/meetings/individual/:id',
+    validateRequest(meetingValidators.deleteIndividualMeetingSchema),
+    meetingController.deleteMeeting
+);
+
+// Get meeting by ID
+router.get(
+    '/meetings/individual/:id',
+    validateRequest(meetingValidators.getIndividualMeetingByIdSchema),
+    meetingController.getMeetingById
+);
+
+
 
 // Get my time logs
 router.get(
@@ -273,7 +352,6 @@ router.get(
 router.patch(
     '/:projectId/tasks/:taskId',
     validateRequest(taskValidators.updateTaskSchema),
-    checkTaskAccess,
     taskController.updateTask
 );
 
@@ -281,7 +359,6 @@ router.patch(
 router.delete(
     '/:projectId/tasks/:taskId',
     validateRequest(taskValidators.deleteTaskSchema),
-    checkProjectManager,
     taskController.deleteTask
 );
 

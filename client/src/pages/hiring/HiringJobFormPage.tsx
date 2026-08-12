@@ -84,9 +84,7 @@ export default function HiringJobFormPage() {
             </button>
 
             <div className="mb-1 flex items-center justify-between gap-3">
-                <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                    {isEdit ? 'Edit Job Posting' : 'Create Job Posting'}
-                </h1>
+                
 
                 <TemplatePickerHeader
                     templates={templates}

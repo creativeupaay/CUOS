@@ -147,9 +147,7 @@ export default function HrmsEmployeeFormPage() {
                 <div className="flex items-center gap-2">
                     <UserPlus size={22} style={{ color: 'var(--color-primary)' }} />
                     <div>
-                        <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            {isEdit ? 'Edit Employee' : 'Add Employee'}
-                        </h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                             {isEdit
                                 ? 'Update employee information'

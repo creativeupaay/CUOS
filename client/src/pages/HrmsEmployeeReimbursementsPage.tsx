@@ -254,9 +254,7 @@ export default function HrmsEmployeeReimbursementsPage() {
                         <ArrowLeft size={17} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            Employee Reimbursement View
-                        </h1>
+                        
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             Combined totals and claim history per team member
                         </p>

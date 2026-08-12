@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
                         <Users size={22} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Users</h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{pagination?.total || 0} total users</p>
                     </div>
                 </div>

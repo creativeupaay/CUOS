@@ -75,7 +75,7 @@ export default function ClientsPage() {
             <div className="mb-8 rounded-2xl border border-neutral-200 bg-gradient-to-r from-slate-50 via-white to-blue-50 p-6">
                 <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-neutral-900">Clients</h1>
+                    
                     <p className="text-neutral-600 mt-1">Manage and nurture every client relationship in one place</p>
                 </div>
                 <Link

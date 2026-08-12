@@ -133,9 +133,7 @@ export default function CrmLeadsPage() {
             <div className="mb-8 rounded-2xl border bg-gradient-to-r from-cyan-50 via-white to-indigo-50 p-6" style={{ borderColor: 'var(--color-border-default)' }}>
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            CRM Leads
-                        </h1>
+                        
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             Track conversations, opportunities, and conversions with clarity
                         </p>

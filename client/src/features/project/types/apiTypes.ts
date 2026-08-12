@@ -100,6 +100,12 @@ export interface UploadDocumentRequest {
 // TASK API TYPES
 // ============================================
 
+export interface RecurrencePayload {
+    frequency: 'daily' | 'weekly';
+    endDate: string;
+    daysOfWeek?: number[]; // 0-6 for weekly
+}
+
 export interface CreateTaskRequest {
     title: string;
     description?: string;
@@ -111,10 +117,12 @@ export interface CreateTaskRequest {
     deadline?: string;
     estimatedHours?: number;
     assignees?: string[];
+    recurrence?: RecurrencePayload;
 }
 
 export interface UpdateTaskRequest {
     title?: string;
+    projectId?: string;
     description?: string;
     status?: 'todo' | 'in-progress' | 'paused' | 'completed';
     priority?: 'low' | 'medium' | 'high' | 'critical';
@@ -163,6 +171,7 @@ export interface CreateMeetingRequest {
     location?: string;
     agenda?: string;
     notes?: string;
+    recurrence?: RecurrencePayload;
     actionItems?: MeetingActionItem[];
     accessLevel?: 'project-team' | 'managers-only' | 'custom';
     customAccessUsers?: string[];

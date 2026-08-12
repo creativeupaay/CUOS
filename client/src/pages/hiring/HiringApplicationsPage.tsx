@@ -196,9 +196,7 @@ export default function HiringApplicationsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        Applications
-                    </h1>
+                    
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                         Review candidates and move them through the hiring pipeline
                     </p>

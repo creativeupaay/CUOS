@@ -899,9 +899,7 @@ export default function ClientPortalProjectDetailPage() {
             <div className="px-6 pt-6 pb-0 flex-shrink-0" style={{ backgroundColor: '#FFFFFF', borderBottom: '1px solid #F1F5F9' }}>
                 <div className="flex items-start gap-3 mb-4">
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>
-                            {project.name}
-                        </h1>
+                        
                         {(project as { description?: string }).description && (
                             <p className="text-sm mt-1 line-clamp-2" style={{ color: '#64748B' }}>
                                 {(project as { description?: string }).description}

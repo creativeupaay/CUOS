@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ITimeLog extends Document {
     _id: Types.ObjectId;
-    projectId: Types.ObjectId;
+    projectId?: Types.ObjectId;
     taskId: Types.ObjectId;
     userId: Types.ObjectId;
 
@@ -21,7 +21,7 @@ export interface ITimeLog extends Document {
 
 const TimeLogSchema = new Schema<ITimeLog>(
     {
-        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
         taskId: { type: Schema.Types.ObjectId, ref: 'Task', required: true },
         userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 

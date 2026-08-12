@@ -198,9 +198,7 @@ export default function PartnerEmployeesPage() {
                         <Users size={28} strokeWidth={2.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            Team Members
-                        </h1>
+                        
                         <p className="text-base mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             Manage your team's access to the portal
                         </p>

@@ -356,7 +356,7 @@ export default function CrmLeadDetailPage() {
                         </button>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h1 className="text-2xl font-bold text-gray-900">{lead.name}</h1>
+                                
                                 {lead.isLocked ? (
                                     <span className="flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
                                         <Lock size={12} />

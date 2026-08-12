@@ -121,7 +121,7 @@ const FinanceRevenuePage: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Revenue Management</h1>
+                    
                     <p className="text-sm text-gray-500 mt-1">Track and manage your project income and invoices</p>
                 </div>
                 <button

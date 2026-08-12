@@ -154,7 +154,7 @@ export default function AdminSettingsPage() {
                     <Settings size={22} />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Organization Settings</h1>
+                    
                     <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Configure your organization details and policies</p>
                 </div>
             </div>

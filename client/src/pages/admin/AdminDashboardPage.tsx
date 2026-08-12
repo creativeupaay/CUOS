@@ -139,9 +139,7 @@ export default function AdminDashboardPage() {
                         <Shield size={22} style={{ color: '#7C3AED' }} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}>
-                            Admin Panel
-                        </h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                             System administration &amp; access control
                         </p>

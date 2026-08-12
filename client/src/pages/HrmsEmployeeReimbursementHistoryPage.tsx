@@ -108,7 +108,6 @@ export default function HrmsEmployeeReimbursementHistoryPage() {
 
     // The previous page passes the `emp` object in state so we don't have to fetch user details again
     const empData = location.state?.emp;
-    const employeeName = empData?.user?.name || 'Employee';
     const employeeEmail = empData?.user?.email || '';
     const employeeDept = empData?.employee?.department || '';
     const employeeDesig = empData?.employee?.designation || '';
@@ -143,9 +142,7 @@ export default function HrmsEmployeeReimbursementHistoryPage() {
                         <ArrowLeft size={17} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            {employeeName}'s Reimbursements
-                        </h1>
+                        
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             {employeeDesig || employeeEmail}
                             {employeeDept ? ` · ${employeeDept}` : ''}

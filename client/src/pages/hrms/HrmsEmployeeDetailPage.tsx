@@ -318,9 +318,7 @@ export default function HrmsEmployeeDetailPage() {
                     </button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {(employee.userId as any)?.name}
-                            </h1>
+                            
                             {/* Form status badge */}
                             {(employee as any).formSubmitted ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"

@@ -71,9 +71,7 @@ export default function HiringReportsPage() {
         >
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        Hiring Analytics
-                    </h1>
+                    
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                         Pipeline conversion, stage aging, and recruiter performance overview
                     </p>

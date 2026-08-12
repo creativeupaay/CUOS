@@ -187,7 +187,7 @@ export default function CrmProposalFormPage() {
                         <ArrowLeft size={20} className="text-gray-500" />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{isEditMode ? 'Edit Proposal' : 'New Proposal'}</h1>
+                        
                         <p className="text-sm text-gray-500">Create a comprehensive business proposal</p>
                     </div>
                 </div>

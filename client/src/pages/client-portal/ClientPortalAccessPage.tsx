@@ -70,9 +70,7 @@ export default function ClientPortalAccessPage() {
                         >
                             <AlertTriangle size={22} style={{ color: '#DC2626' }} />
                         </div>
-                        <h1 className="text-base font-semibold mb-2" style={{ color: '#0F172A' }}>
-                            Access Denied
-                        </h1>
+                        
                         <p className="text-sm leading-relaxed" style={{ color: '#64748B' }}>
                             {error}
                         </p>

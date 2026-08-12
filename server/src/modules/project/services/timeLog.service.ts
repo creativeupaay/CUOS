@@ -24,10 +24,36 @@ export interface UpdateTimeLogData {
     billable?: boolean;
 }
 
+import { Task } from './../models/Task.model';
+
 export const createTimeLog = async (
     data: CreateTimeLogData
 ): Promise<ITimeLog> => {
     const timeLog = await TimeLog.create(data);
+
+    // Also update the task's accumulatedSeconds so the UI displays the manual time log
+    const task = await Task.findById(data.taskId);
+    if (task) {
+        task.accumulatedSeconds = task.accumulatedSeconds || [];
+        const accEntry = task.accumulatedSeconds.find(
+            (acc) => acc.userId.toString() === data.userId.toString()
+        );
+
+        const addedSeconds = (data.duration || 0) * 60; // duration is in minutes
+
+        if (accEntry) {
+            accEntry.seconds += addedSeconds;
+        } else {
+            task.accumulatedSeconds.push({
+                userId: data.userId as any,
+                seconds: addedSeconds,
+            });
+        }
+        
+        task.markModified('accumulatedSeconds');
+        await task.save();
+    }
+
     return timeLog;
 };
 

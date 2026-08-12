@@ -134,9 +134,7 @@ export default function PartnerDetailPage() {
 
                         <div className="space-y-3">
                             <div>
-                                <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                                    {partner.companyName || partner.contactPerson || 'Partner'}
-                                </h1>
+                                
                                 <p className="mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                     {partner.userId?.email || partner.email || 'No email added'}
                                 </p>

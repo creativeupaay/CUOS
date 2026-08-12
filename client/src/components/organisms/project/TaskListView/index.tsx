@@ -24,11 +24,12 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                 className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium border-b"
                 style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border-default)' }}
             >
-                <div className="col-span-5 flex items-center gap-2">Task name</div>
+                <div className="col-span-4 flex items-center gap-2">Task name</div>
                 <div className="col-span-2">Status</div>
                 <div className="col-span-2">Assignee</div>
                 <div className="col-span-1">Due</div>
                 <div className="col-span-1">Priority</div>
+                <div className="col-span-1">Time Logged</div>
                 <div className="col-span-1 text-right">Actions</div>
             </div>
         )}

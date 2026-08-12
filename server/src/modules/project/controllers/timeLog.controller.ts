@@ -22,6 +22,26 @@ export const createTimeLog = asyncHandler(
     }
 );
 
+// Create a time log for an individual task (no projectId)
+export const createIndividualTaskTimeLog = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const userId = req.user?.id!;
+
+        const timeLog = await timeLogService.createTimeLog({
+            ...req.body,
+            taskId: req.params.taskId,
+            userId,
+            // projectId intentionally omitted for personal tasks
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Time log created successfully',
+            data: timeLog,
+        });
+    }
+);
+
 export const getProjectTimeLogs = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const timeLogs = await timeLogService.getProjectTimeLogs(

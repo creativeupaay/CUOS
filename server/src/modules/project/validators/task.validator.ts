@@ -21,6 +21,20 @@ export const createTaskSchema = z.object({
     }),
 });
 
+export const createIndividualTaskSchema = z.object({
+    body: z.object({
+        title: z.string().min(1, 'Task title is required').trim(),
+        description: z.string().optional(),
+        status: z.enum(['todo', 'in-progress', 'paused', 'completed']).optional(),
+        priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+
+        startDate: z.string().or(z.date()).optional(),
+        endDate: z.string().or(z.date()).optional(),
+        deadline: z.string().or(z.date()).optional(),
+        estimatedHours: z.number().positive().optional(),
+    }),
+});
+
 export const updateTaskSchema = z.object({
     params: z.object({
         projectId: z.string().min(1, 'Project ID is required'),

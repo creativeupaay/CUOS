@@ -164,6 +164,110 @@ export const projectApi = api.injectEndpoints({
         // ============================================
         // TASK ENDPOINTS
         // ============================================
+        getReportsDashboard: builder.query<ApiResponse<any>, { viewBy?: string; startDate?: string; endDate?: string } | void>({
+            query: (params) => ({
+                url: '/projects/reports/dashboard',
+                params: params || {},
+            }),
+            providesTags: ['Tasks', 'TimeLogs'],
+        }),
+        
+        getIndividualTasks: builder.query<ApiResponse<Task[]>, { date?: string } | void>({
+            query: (params) => ({
+                url: '/projects/tasks/individual',
+                params: params || {},
+            }),
+            providesTags: [{ type: 'Tasks', id: 'INDIVIDUAL' }],
+        }),
+
+        createIndividualTask: builder.mutation<ApiResponse<Task>, CreateTaskRequest>({
+            query: (data) => ({
+                url: '/projects/tasks/individual',
+                method: 'POST',
+                body: data,
+            }),
+            async onQueryStarted(_, { dispatch, queryFulfilled }) {
+                try {
+                    const { data: result } = await queryFulfilled;
+                    // Immediately patch the INDIVIDUAL task list cache with the new task
+                    dispatch(
+                        projectApi.util.updateQueryData('getIndividualTasks', undefined, (draft) => {
+                            if (draft?.data && result?.data) {
+                                draft.data.unshift(result.data as Task);
+                            }
+                        })
+                    );
+                } catch {
+                    // invalidatesTags will handle refetch on error
+                }
+            },
+            invalidatesTags: [{ type: 'Tasks', id: 'INDIVIDUAL' }],
+        }),
+
+        updateIndividualTask: builder.mutation<ApiResponse<Task>, { taskId: string; data: UpdateTaskRequest }>({
+            query: ({ taskId, data }) => ({
+                url: `/projects/tasks/individual/${taskId}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            async onQueryStarted({ taskId, data }, { dispatch, queryFulfilled }) {
+                // Optimistically update status/fields in the cache immediately
+                const patchResult1 = dispatch(
+                    projectApi.util.updateQueryData('getIndividualTasks', undefined, (draft) => {
+                        if (draft?.data) {
+                            const task = draft.data.find((t: Task) => t._id === taskId);
+                            if (task) {
+                                Object.assign(task, data);
+                            }
+                        }
+                    })
+                );
+                const patchResult2 = dispatch(
+                    projectApi.util.updateQueryData('getIndividualTasks', { date: new Date().toLocaleDateString('en-CA') }, (draft) => {
+                        if (draft?.data) {
+                            const task = draft.data.find((t: Task) => t._id === taskId);
+                            if (task) {
+                                Object.assign(task, data);
+                            }
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult1.undo();
+                    patchResult2.undo();
+                }
+            },
+            invalidatesTags: (_result, _error, { data }) => [
+                { type: 'Tasks', id: 'INDIVIDUAL' },
+                ...(data.projectId ? [{ type: 'Tasks' as const, id: data.projectId }] : [])
+            ],
+        }),
+
+        deleteIndividualTask: builder.mutation<ApiResponse, { taskId: string }>({
+            query: ({ taskId }) => ({
+                url: `/projects/tasks/individual/${taskId}`,
+                method: 'DELETE',
+            }),
+            async onQueryStarted({ taskId }, { dispatch, queryFulfilled }) {
+                const patchResult = dispatch(
+                    projectApi.util.updateQueryData('getIndividualTasks', undefined, (draft) => {
+                        if (draft?.data) {
+                            draft.data = draft.data.filter((t: Task) => t._id !== taskId);
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult.undo();
+                }
+            },
+            invalidatesTags: [{ type: 'Tasks', id: 'INDIVIDUAL' }],
+        }),
+
+
         getTasks: builder.query<ApiResponse<Task[]>, { projectId: string; status?: string; assignee?: string; includeSubtasks?: boolean }>({
             query: ({ projectId, ...params }) => ({
                 url: `/projects/${projectId}/tasks`,
@@ -192,9 +296,36 @@ export const projectApi = api.injectEndpoints({
                 method: 'PATCH',
                 body: data,
             }),
-            invalidatesTags: (_result, _error, { projectId, taskId }) => [
+            async onQueryStarted({ projectId, taskId, data }, { dispatch, queryFulfilled }) {
+                // Optimistically update the task in the cache
+                const patchResult1 = dispatch(
+                    projectApi.util.updateQueryData('getTasks', { projectId }, (draft) => {
+                        if (draft?.data) {
+                            const task = draft.data.find((t: Task) => t._id === taskId);
+                            if (task) Object.assign(task, data);
+                        }
+                    })
+                );
+                const patchResult2 = dispatch(
+                    projectApi.util.updateQueryData('getIndividualTasks', { date: new Date().toLocaleDateString('en-CA') }, (draft) => {
+                        if (draft?.data) {
+                            const task = draft.data.find((t: Task) => t._id === taskId);
+                            if (task) Object.assign(task, data);
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchResult1.undo();
+                    patchResult2.undo();
+                }
+            },
+            invalidatesTags: (_result, _error, { projectId, taskId, data }) => [
                 { type: 'Tasks', id: projectId },
                 { type: 'Tasks', id: taskId },
+                { type: 'Tasks', id: 'INDIVIDUAL' },
+                ...(data.projectId && data.projectId !== projectId ? [{ type: 'Tasks' as const, id: data.projectId }] : []),
                 // When a status change creates a TimeLog (pause/complete), invalidate time-log caches
                 'TimeLogs',
             ],
@@ -258,7 +389,16 @@ export const projectApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: ['TimeLogs'],
+            invalidatesTags: ['TimeLogs', 'Tasks'],
+        }),
+
+        createIndividualTaskTimeLog: builder.mutation<ApiResponse<TimeLog>, { taskId: string; data: CreateTimeLogRequest }>({
+            query: ({ taskId, data }) => ({
+                url: `/projects/tasks/individual/${taskId}/timelogs`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['TimeLogs', { type: 'Tasks', id: 'INDIVIDUAL' }],
         }),
 
         getProjectTimeLogs: builder.query<ApiResponse<TimeLog[]>, { projectId: string; userId?: string; startDate?: string; endDate?: string; billable?: string }>({
@@ -317,6 +457,40 @@ export const projectApi = api.injectEndpoints({
                 params,
             }),
             providesTags: ['Meetings'],
+        }),
+
+        getIndividualMeetings: builder.query<ApiResponse<Meeting[]>, { type?: string; startDate?: string; endDate?: string } | void>({
+            query: (params) => ({
+                url: `/projects/meetings/individual`,
+                params: params || {},
+            }),
+            providesTags: [{ type: 'Meetings', id: 'INDIVIDUAL' }],
+        }),
+
+        createIndividualMeeting: builder.mutation<ApiResponse<Meeting>, CreateMeetingRequest>({
+            query: (data) => ({
+                url: `/projects/meetings/individual`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [{ type: 'Meetings', id: 'INDIVIDUAL' }],
+        }),
+
+        updateIndividualMeeting: builder.mutation<ApiResponse<Meeting>, { id: string; data: UpdateMeetingRequest }>({
+            query: ({ id, data }) => ({
+                url: `/projects/meetings/individual/${id}`,
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: [{ type: 'Meetings', id: 'INDIVIDUAL' }, 'Meetings'],
+        }),
+
+        deleteIndividualMeeting: builder.mutation<ApiResponse, { id: string }>({
+            query: ({ id }) => ({
+                url: `/projects/meetings/individual/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: [{ type: 'Meetings', id: 'INDIVIDUAL' }, 'Meetings'],
         }),
 
         getMeetingById: builder.query<ApiResponse<Meeting>, { projectId: string; id: string }>({
@@ -681,15 +855,20 @@ export const {
 
     // Tasks
     useGetTasksQuery,
+    useGetIndividualTasksQuery,
     useGetTaskByIdQuery,
     useCreateTaskMutation,
+    useCreateIndividualTaskMutation,
     useUpdateTaskMutation,
+    useUpdateIndividualTaskMutation,
     useDeleteTaskMutation,
+    useDeleteIndividualTaskMutation,
     useGetSubtasksQuery,
     useCreateSubtaskMutation,
 
     // Time Logs
     useCreateTimeLogMutation,
+    useCreateIndividualTaskTimeLogMutation,
     useGetProjectTimeLogsQuery,
     useGetTaskTimeLogsQuery,
     useGetMyTimeLogsQuery,
@@ -702,6 +881,10 @@ export const {
     useGetMeetingByIdQuery,
     useUpdateMeetingMutation,
     useDeleteMeetingMutation,
+    useGetIndividualMeetingsQuery,
+    useCreateIndividualMeetingMutation,
+    useUpdateIndividualMeetingMutation,
+    useDeleteIndividualMeetingMutation,
 
     // Credentials
     useCreateCredentialMutation,

@@ -1,12 +1,8 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Construction, ArrowLeft } from 'lucide-react';
 
 export default function ComingSoonPage() {
-    const location = useLocation();
-
     // Extract module name from path
-    const moduleName = location.pathname.split('/')[1] || 'Module';
-    const displayName = moduleName.charAt(0).toUpperCase() + moduleName.slice(1);
 
     return (
         <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
@@ -21,12 +17,7 @@ export default function ComingSoonPage() {
                     <Construction size={28} />
                 </div>
 
-                <h1
-                    className="text-xl font-semibold mb-2"
-                    style={{ color: 'var(--color-text-primary)' }}
-                >
-                    {displayName} — Coming Soon
-                </h1>
+                
 
                 <p
                     className="text-sm mb-6 max-w-sm mx-auto"

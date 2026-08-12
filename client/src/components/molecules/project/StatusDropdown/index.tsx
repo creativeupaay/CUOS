@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Lock, Clock } from 'lucide-react';
+import { ChevronDown, Lock } from 'lucide-react';
 import { useUpdateTaskMutation } from '@/features/project';
 import type { Task } from '@/features/project';
 import { StatusBadge } from '../../StatusBadge';
@@ -17,31 +17,6 @@ const getEntityId = (value: unknown): string => {
     }
     return String(value);
 };
-
-// ─── Live Session Timer ───────────────────────────────────────────────────────
-function LiveTimer({ startedAt, baseSeconds = 0 }: { startedAt: string; baseSeconds?: number }) {
-    const [currentSessionSecs, setCurrentSessionSecs] = useState(0);
-
-    useEffect(() => {
-        const start = new Date(startedAt).getTime();
-        const update = () =>
-            setCurrentSessionSecs(Math.max(0, Math.floor((Date.now() - start) / 1000)));
-        update();
-        const id = setInterval(update, 1000);
-        return () => clearInterval(id);
-    }, [startedAt]);
-
-    const totalSecs = baseSeconds + currentSessionSecs;
-    const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
-    const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
-    const s = (totalSecs % 60).toString().padStart(2, '0');
-
-    return (
-        <span className="text-[10px] font-mono tabular-nums leading-none" style={{ color: 'var(--color-success, #10B981)' }}>
-            {h}:{m}:{s}
-        </span>
-    );
-}
 
 // ─── Status Dropdown ──────────────────────────────────────────────────────────
 export interface StatusDropdownProps {
@@ -87,9 +62,6 @@ export function StatusDropdown({
         return () => document.removeEventListener('mousedown', handler);
     }, [isOpen]);
 
-    const activeTimer = task.activeTimers?.find((t) => getEntityId(t.userId) === currentUserId);
-    const accEntry = task.accumulatedSeconds?.find((a) => getEntityId(a.userId) === currentUserId);
-    const baseSeconds = accEntry?.seconds ?? 0;
 
     const allowedNext: Record<string, Task['status'][]> = {
         'todo': ['in-progress'],
@@ -159,12 +131,7 @@ export function StatusDropdown({
                 {isLocked ? <Lock size={8} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={12} style={{ color: 'var(--color-text-muted)' }} />}
             </button>
 
-            {activeTimer && (
-                <div className="flex items-center gap-1 pl-1">
-                    <Clock size={9} style={{ color: 'var(--color-success, #10B981)' }} className="animate-pulse flex-shrink-0" />
-                    <LiveTimer startedAt={activeTimer.startedAt} baseSeconds={baseSeconds} />
-                </div>
-            )}
+
 
             {isOpen && !isLocked && createPortal(
                 <div

@@ -156,12 +156,7 @@ export default function AdminRolesPage() {
                         <Shield size={22} />
                     </div>
                     <div>
-                        <h1
-                            className="text-2xl font-bold"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
-                            Roles & Permissions
-                        </h1>
+                        
                         <p
                             className="text-sm"
                             style={{ color: 'var(--color-text-secondary)' }}

@@ -8,7 +8,9 @@ import {
     FileText,
     Plus,
     Lock,
+    Clock,
 } from 'lucide-react';
+import { formatElapsed } from '@/hooks/useTaskTimer';
 import type { RootState } from '@/app/store';
 import {
     useGetProjectByIdQuery,
@@ -78,6 +80,7 @@ export function TaskCard({ task, projectId, onEdit, onDelete, onSubtaskEdit }: T
     })();
 
     const pStyle = PRIORITY_STYLES[task.priority] || PRIORITY_STYLES.medium;
+    const totalSecs = (task.accumulatedSeconds || []).reduce((a, b) => a + b.seconds, 0);
 
     const handleSubtaskSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -109,7 +112,7 @@ export function TaskCard({ task, projectId, onEdit, onDelete, onSubtaskEdit }: T
             onClick={() => setIsExpanded(v => !v)}
         >
             <div className={`grid grid-cols-12 gap-4 px-4 py-3 items-center ${isExpanded ? 'bg-[var(--color-primary-soft)]/20 border-b border-[var(--color-border-default)]' : ''}`}>
-                <div className="col-span-5 flex items-center gap-2">
+                <div className="col-span-4 flex items-center gap-2">
                     <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-text-muted)' }}>
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
@@ -143,6 +146,16 @@ export function TaskCard({ task, projectId, onEdit, onDelete, onSubtaskEdit }: T
                 </div>
                 <div className="col-span-1">
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded capitalize" style={{ backgroundColor: pStyle.bg, color: pStyle.text }}>{task.priority}</span>
+                </div>
+                <div className="col-span-1 flex items-center">
+                    {totalSecs > 0 ? (
+                        <span className="flex items-center gap-1 text-[11px] font-mono" style={{ color: 'var(--color-text-secondary)' }}>
+                            <Clock size={11} />
+                            {formatElapsed(totalSecs)}
+                        </span>
+                    ) : (
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
+                    )}
                 </div>
                 <div className="col-span-1 flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     {isProjectManager && (

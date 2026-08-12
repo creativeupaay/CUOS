@@ -432,12 +432,7 @@ export default function HiringApplicationDetailPage() {
                     >
                         <div className="flex items-start justify-between">
                             <div>
-                                <h1
-                                    className="text-xl font-semibold"
-                                    style={{ color: 'var(--color-text-primary)' }}
-                                >
-                                    {application.name}
-                                </h1>
+                                
                                 <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
                                     {jobTitle}
                                     {jobDept ? ` · ${jobDept}` : ''}

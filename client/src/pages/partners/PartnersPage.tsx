@@ -84,9 +84,7 @@ export default function PartnersPage() {
                         <Handshake size={28} strokeWidth={2.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            Manage Partners
-                        </h1>
+                        
                         <p className="text-base mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             {total} partner{total !== 1 ? 's' : ''} in your network
                         </p>

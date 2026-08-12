@@ -47,9 +47,7 @@ export default function MyProfileChangePasswordPage() {
             >
                 <div className="flex items-center gap-2 mb-5">
                     <KeyRound size={18} style={{ color: 'var(--color-primary)' }} />
-                    <h1 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        Change Password
-                    </h1>
+                    
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">

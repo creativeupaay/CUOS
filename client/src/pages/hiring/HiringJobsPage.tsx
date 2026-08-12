@@ -183,12 +183,7 @@ export default function HiringJobsPage() {
                 {/* ── Header ───────────────────────────────── */}
                 <div className="flex justify-between items-center mb-8">
                     <div>
-                        <h1
-                            className="text-2xl font-bold"
-                            style={{ color: 'var(--color-text-primary)' }}
-                        >
-                            Job Postings
-                        </h1>
+                        
                         <p
                             className="text-sm mt-1"
                             style={{ color: 'var(--color-text-secondary)' }}

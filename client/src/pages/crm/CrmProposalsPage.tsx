@@ -9,7 +9,7 @@ export default function CrmProposalsPage() {
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-200 bg-white">
                         <Construction size={28} className="text-amber-600" />
                     </div>
-                    <h1 className="mt-5 text-3xl font-bold text-neutral-900">Proposal Generator Coming Soon</h1>
+                    
                     <p className="mt-3 text-neutral-600">
                         This module is being rebuilt based on upcoming requirements. The existing proposal workflow has been paused for now.
                     </p>

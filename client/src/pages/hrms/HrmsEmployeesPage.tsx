@@ -73,9 +73,7 @@ export default function HrmsEmployeesPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        Employees
-                    </h1>
+                    
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                         Manage employee profiles, departments, and onboarding
                     </p>

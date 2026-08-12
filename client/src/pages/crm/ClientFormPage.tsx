@@ -324,9 +324,7 @@ export default function ClientFormPage() {
             >
                 <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-neutral-50">
                     <div>
-                        <h1 className="text-xl font-bold text-neutral-900">
-                            {isEdit ? 'Edit Client' : fromLeadId ? 'Convert Lead to Client' : 'New Client'}
-                        </h1>
+                        
                         <p className="text-sm text-neutral-600 mt-1">
                             {isEdit ? 'Update client profile details' : 'Add and onboard a new client record'}
                         </p>

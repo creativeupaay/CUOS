@@ -119,7 +119,7 @@ export default function FinanceReceivablesPage() {
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Receivables Audit</h1>
+                
                 <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                     Unified view of pending finance invoices and project phase-wise due pipeline.
                 </p>

@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
-import { logout } from '@/features/auth/slices/authSlice';
 import { useLogoutMutation } from '@/features/auth/authApi';
+import { logout as logoutAction } from '@/features/auth/slices/authSlice';
 import { api } from '@/services/api';
 import { useGetProjectsQuery } from '@/features/project/projectApi';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
-import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasHrmsSelfSubmoduleAccess, hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import {
-    ArrowLeft, FolderKanban, Users2, ListTodo, BarChart3,
-    FileText, LogOut, ChevronRight, ChevronDown, ShieldCheck,
+    ArrowLeft, Users2, ListTodo, BarChart3,
+    FileText, ChevronRight, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
-    Folder, FolderOpen, Grid2X2, Building2,
+    Folder, FolderOpen, Grid2X2, Building2, LogOut,
 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 interface NavItem {
     key?: string;
@@ -111,13 +111,28 @@ function getModuleConfig(
     const isPartner = roleName === 'partner';
     const isPartnerEmployee = !!user?.isPartnerEmployee;
 
+    // ── Tasks hub — must be checked BEFORE the generic /projects block ──
+    if (pathname.startsWith('/tasks') || pathname.startsWith('/reports')) {
+        const hasAccess = hasModuleViewAccess(user, 'projectManagement') || (isPartner && mp?.projectManagement?.enabled);
+        if (!hasAccess) return null;
+        return {
+            title: 'Tasks',
+            items: [
+                { label: 'My Tasks', path: '/tasks', icon: <ListTodo size={18} />, matchPrefix: '/tasks' },
+                { label: 'Reports', path: '/reports', icon: <BarChart3 size={18} />, matchPrefix: '/reports' },
+            ],
+        };
+    }
+
     if (pathname.startsWith('/projects')) {
         const hasAccess = hasModuleViewAccess(user, 'projectManagement') || (isPartner && mp?.projectManagement?.enabled);
         if (!hasAccess) return null;
         const projectSubItems = projects?.map(p => ({ label: p.name, path: `/projects/${p._id}` })) || [];
         return {
             title: 'Project Management',
-            items: [{ label: 'Projects', path: '/projects', icon: <FolderKanban size={18} />, matchPrefix: '/projects', subItems: projectSubItems, alwaysExpanded: true }],
+            items: [
+                { label: 'Dashboard', path: '/projects', icon: <Grid2X2 size={18} />, matchPrefix: '/projects', subItems: projectSubItems, alwaysExpanded: true },
+            ],
         };
     }
     if (pathname.startsWith('/finance')) {
@@ -319,19 +334,19 @@ const NavItemComponent = ({
         if (item.alwaysExpanded || active || isSubItemActive) setIsExpanded(true);
     }, [pathname, active, isSubItemActive, item.alwaysExpanded]);
 
-    const toggleExpand = (e: React.MouseEvent) => {
-        if (hasSubItems && !item.alwaysExpanded) { e.preventDefault(); setIsExpanded(!isExpanded); }
-    };
-
     const isItemHighlighted = active && !isSubItemActive;
 
     return (
         <div>
             <NavLink
                 to={item.path}
+                state={{ newTab: true }}
                 end={item.path === '/projects'}
                 onClick={(e) => {
-                    toggleExpand(e);
+                    if (hasSubItems) {
+                        e.preventDefault();
+                        setIsExpanded(!isExpanded);
+                    }
                     if (!hasSubItems || item.alwaysExpanded) {
                         onNavigate?.();
                     }
@@ -401,6 +416,7 @@ const NavItemComponent = ({
                             <NavLink
                                 key={sub.path}
                                 to={sub.path}
+                                state={{ newTab: true }}
                                 onClick={() => onNavigate?.()}
                                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all"
                                 style={
@@ -476,6 +492,7 @@ const ProjectFoldersNav = ({
         <div className="space-y-3">
             <NavLink
                 to="/projects"
+                state={{ newTab: true }}
                 end
                 onClick={() => onNavigate?.()}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 select-none relative"
@@ -518,6 +535,8 @@ const ProjectFoldersNav = ({
                 <span className="flex-1 truncate">Dashboard</span>
             </NavLink>
 
+
+
             <div className="space-y-1.5">
                 {groups.map((group) => {
                     const isExpanded = expandedFolders[group.id] ?? group.kind === 'internal';
@@ -555,6 +574,7 @@ const ProjectFoldersNav = ({
 
                                 <NavLink
                                     to={group.path}
+                                    state={{ newTab: true }}
                                     onClick={() => onNavigate?.()}
                                     className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
                                     style={
@@ -629,6 +649,7 @@ const ProjectFoldersNav = ({
                                                     <NavLink
                                                         key={project._id}
                                                         to={`/projects/${project._id}`}
+                                                        state={{ newTab: true }}
                                                         onClick={() => onNavigate?.()}
                                                         className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200"
                                                         style={
@@ -693,19 +714,19 @@ export default function Sidebar({
     onNavigate?: () => void;
     mobile?: boolean;
 }) {
-    const dispatch = useAppDispatch();
+
     const navigate = useNavigate();
     const location = useLocation();
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
     const user = useAppSelector((state) => state.auth.user);
-    const [logoutApi] = useLogoutMutation();
     const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string } } | null)?.backgroundLocation;
     const effectivePathname = backgroundLocation?.pathname || location.pathname;
 
+    const dispatch = useAppDispatch();
+    const [logoutApi] = useLogoutMutation();
+
     const handleLogout = async () => {
         try { await logoutApi().unwrap(); } catch { /* ignore */ }
-
-        // Determine logout redirect based on user role and partner status
-        const isPartner = roleName === 'partner';
         const partnerSlug = (user as any)?.partnerSlug || (
             typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
         );
@@ -715,14 +736,9 @@ export default function Sidebar({
                 ? '/partner/login'
                 : '/login';
 
-        if (typeof window !== 'undefined') {
-            window.location.replace(logoutPath);
-            return;
-        }
-
-        dispatch(logout());
+        dispatch(logoutAction());
         dispatch(api.util.resetApiState());
-        navigate(logoutPath);
+        window.location.href = logoutPath;
     };
 
     const roleName = user?.role
@@ -730,7 +746,6 @@ export default function Sidebar({
         : '';
     const isPartner = roleName === 'partner';
     const canManageProjects = hasModuleAdminAccess(user, 'projectManagement') && !isPartner;
-    const displayRole = user?.role ? (typeof user.role === 'object' ? (user.role as any).name : String(user.role)) : 'User';
 
     // Partner branding
     const partnerCompanyName = (user as any)?.companyName;
@@ -740,9 +755,6 @@ export default function Sidebar({
     // const brandInitials = isPartner && partnerCompanyName
     //     ? partnerCompanyName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
     //     : 'CU';
-
-    const { data: employeeProfile } = useGetMyProfileQuery(undefined, { skip: isPartner });
-    const sidebarPhotoUrl = (employeeProfile?.data?.employee as any)?.profilePhoto?.url;
 
     const isPMRoute = effectivePathname.startsWith('/projects');
     const { data: projectsResponse } = useGetProjectsQuery({}, { skip: !isPMRoute });
@@ -850,71 +862,67 @@ export default function Sidebar({
                 </div>
             </nav>
 
-            {/* ── User section ───────────────────────────────────────── */}
-            <div className="px-3 py-3 border-t shrink-0" style={{ borderColor: 'var(--color-border-default)' }}>
-                <div
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl"
-                    style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+            {/* ── Logout Button ──────────────────────────────────────── */}
+            <div className="p-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                <button
+                    onClick={() => setShowLogoutModal(true)}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 group"
+                    style={{
+                        color: 'var(--color-text-secondary)',
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fee2e2';
+                        e.currentTarget.style.color = '#dc2626';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                    }}
                 >
-                    {/* Avatar with gradient ring */}
-                    <div className="relative shrink-0">
-                        {sidebarPhotoUrl ? (
-                            <img
-                                src={sidebarPhotoUrl}
-                                alt={user?.name || 'Profile'}
-                                className="w-8 h-8 rounded-full object-cover"
-                            />
-                        ) : (
-                            <div
-                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                style={{
-                                    background: isPartner
-                                        ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
-                                        : 'linear-gradient(135deg,#059669,#0369a1)'
-                                }}
-                            >
-                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                            </div>
-                        )}
-                        <div
-                            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
-                            style={{ backgroundColor: 'var(--color-success)' }}
-                        />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                        <div className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
-                            {user?.name || 'User'}
-                        </div>
-                        <span
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize"
-                            style={{ background: 'var(--color-primary-soft)', color: 'var(--color-primary-darker)', display: 'inline-block', marginTop: '1px' }}
-                        >
-                            {displayRole}
-                        </span>
-                    </div>
-
-                    <button
-                        onClick={async () => {
-                            await handleLogout();
-                            onNavigate?.();
-                        }}
-                        className="p-1.5 rounded-lg transition-all duration-150 shrink-0"
-                        style={{ color: 'var(--color-text-muted)' }}
-                        title="Logout"
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = 'var(--color-danger-soft)';
-                            e.currentTarget.style.color = 'var(--color-danger)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                            e.currentTarget.style.color = 'var(--color-text-muted)';
-                        }}
-                    >
-                        <LogOut size={15} />
-                    </button>
-                </div>
+                    <span className="flex-1 text-left pl-1">Logout</span>
+                    <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 text-inherit">
+                        <LogOut size={16} />
+                    </span>
+                </button>
             </div>
+
+            {/* ── Logout Modal ──────────────────────────────────────── */}
+            {showLogoutModal && (
+                <ModalPortal>
+                    <div className="bg-white rounded-xl shadow-2xl w-[400px] max-w-[90vw] overflow-hidden animate-in fade-in zoom-in duration-200 relative border border-gray-100">
+                        <div className="p-6">
+                            <div 
+                                className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 border"
+                                style={{ backgroundColor: 'var(--color-primary-soft)', borderColor: 'var(--color-primary-soft)' }}
+                            >
+                                <LogOut size={24} style={{ color: 'var(--color-primary-dark)' }} />
+                            </div>
+                            <h3 className="text-lg font-bold text-center text-gray-900 mb-2">Ready to Leave?</h3>
+                            <p className="text-center text-gray-500 text-sm">
+                                Are you sure you want to logout?
+                            </p>
+                        </div>
+                        <div className="bg-gray-50 px-6 py-4 flex gap-3 justify-end border-t border-gray-100">
+                            <button
+                                onClick={() => setShowLogoutModal(false)}
+                                className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="px-5 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-sm"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary)'}
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </ModalPortal>
+            )}
+
         </aside>
     );
 }

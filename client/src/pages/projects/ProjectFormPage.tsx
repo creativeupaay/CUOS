@@ -829,9 +829,7 @@ export default function ProjectFormPage({
                 </div>
             )}
 
-            <h1 className={embedded ? 'text-lg font-semibold mb-7' : 'text-xl font-semibold mb-6'} style={{ color: 'var(--color-text-primary)' }}>
-                {isEditing ? (mode === 'phases' ? 'Edit Project Phases' : 'Edit Project Details') : 'Create New Project'}
-            </h1>
+            
 
             {error && (
                 <div

@@ -5,6 +5,7 @@ import { clientPortalApi } from '@/features/client-portal/clientPortalApi';
 import clientPortalReducer from '@/features/client-portal/clientPortalSlice';
 import collaborationReducer from '@/features/collaboration/collaborationSlice';
 import notificationReducer from '@/features/notification/slices/notificationSlice';
+import workspaceReducer from '@/features/workspace/workspaceSlice';
 
 /**
  * Redux store configuration
@@ -25,6 +26,7 @@ export const store = configureStore({
     clientPortal: clientPortalReducer,
     collaboration: collaborationReducer,
     notification: notificationReducer,
+    workspace: workspaceReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

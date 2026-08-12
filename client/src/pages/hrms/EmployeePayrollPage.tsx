@@ -21,7 +21,7 @@ export default function EmployeePayrollPage() {
             <div className="flex items-center gap-2.5 mb-6">
                 <FileText size={21} style={{ color: 'var(--color-primary)' }} />
                 <div>
-                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>My Payslips</h1>
+                    
                     <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>View your salary and payslip history</p>
                 </div>
             </div>

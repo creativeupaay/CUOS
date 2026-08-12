@@ -21,6 +21,24 @@ export const createMeeting = asyncHandler(
     }
 );
 
+export const createIndividualMeeting = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const userId = req.user?.id!;
+
+        const meeting = await meetingService.createMeeting({
+            ...req.body,
+            // no projectId passed
+            createdBy: userId,
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Individual meeting created successfully',
+            data: meeting,
+        });
+    }
+);
+
 export const getMeetings = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const userId = req.user?.id!;
@@ -44,6 +62,40 @@ export const getMeetings = asyncHandler(
         res.status(200).json({
             success: true,
             message: 'Meetings retrieved successfully',
+            data: meetings,
+        });
+    }
+);
+
+export const getIndividualMeetings = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const userId = req.user?.id!;
+        const roleRaw = req.user?.role;
+        const userRole =
+            typeof roleRaw === 'string'
+                ? roleRaw.toLowerCase()
+                : typeof roleRaw === 'object' && roleRaw
+                    ? String((roleRaw as any).name || '').toLowerCase()
+                    : '';
+        const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+
+        const meetings = await meetingService.getIndividualMeetings(
+            userId,
+            isAdmin,
+            {
+                type: req.query.type as 'internal' | 'external',
+                startDate: req.query.startDate
+                    ? new Date(req.query.startDate as string)
+                    : undefined,
+                endDate: req.query.endDate
+                    ? new Date(req.query.endDate as string)
+                    : undefined,
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Individual meetings retrieved successfully',
             data: meetings,
         });
     }

@@ -166,12 +166,7 @@ export default function HrmsAnnouncementsPage() {
         <div className="mx-auto page-enter" style={{ maxWidth: '1080px' }}>
             <div className="flex items-start justify-between gap-4 mb-6">
                 <div>
-                    <h1
-                        className="text-2xl font-bold mb-1"
-                        style={{ color: 'var(--color-text-primary)', fontFamily: 'Outfit, sans-serif' }}
-                    >
-                        Company Announcements
-                    </h1>
+                    
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         {isAdminSide
                             ? 'Publish company-wide updates and manage announcement history.'

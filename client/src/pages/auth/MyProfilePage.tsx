@@ -6,12 +6,15 @@ import {
 } from '@/features/hrms/hrmsApi';
 import {
     User, Briefcase, ShieldCheck, Eye, EyeOff,
-    Edit, X, Loader2, Save, Camera, Building2, UserCircle2
+    Edit, X, Loader2, Save, Camera, Building2, UserCircle2, LogOut
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
-import { useAppSelector } from '@/app/hooks';
+import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { useGetPartnerByIdQuery, useUpdatePartnerMutation, useUploadPartnerImageMutation } from '@/features/partners/partnersApi';
 import { useGetPartnerEmployeeByIdQuery, useUpdatePartnerEmployeeMutation } from '@/features/partners/partnerEmployeeApi';
+import { useLogoutMutation } from '@/features/auth/authApi';
+import { logout as logoutAction } from '@/features/auth/slices/authSlice';
+import { api } from '@/services/api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -92,6 +95,31 @@ export default function MyProfilePage() {
     const photoInputRef = useRef<HTMLInputElement | null>(null);
     const partnerLogoInputRef = useRef<HTMLInputElement | null>(null);
     const partnerPhotoInputRef = useRef<HTMLInputElement | null>(null);
+
+    const dispatch = useAppDispatch();
+    const [logoutApi] = useLogoutMutation();
+
+    const handleLogout = async () => {
+        try { await logoutApi().unwrap(); } catch { /* ignore */ }
+
+        const partnerSlug = (user as any)?.partnerSlug || (
+            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
+        );
+        const logoutPath = isPartner && partnerSlug
+            ? `/partner/${partnerSlug}/login`
+            : isPartner
+                ? '/partner/login'
+                : '/login';
+
+        if (typeof window !== 'undefined') {
+            (window as any).location.href = logoutPath;
+            return;
+        }
+
+        dispatch(logoutAction());
+        dispatch(api.util.resetApiState());
+        (window as any).location.href = logoutPath;
+    };
 
     const isLoading = empLoading || partnerLoading || peLoading;
     const isSaving = isSavingEmp || isSavingPartner || isSavingPe || isUploadingPartnerImage;
@@ -339,6 +367,17 @@ export default function MyProfilePage() {
                                 {key === 'company' ? 'Company Info' : 'Personal Info'}
                             </button>
                         ))}
+
+                        <div className="ml-auto mb-[-8px] pb-2">
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                            >
+                                <LogOut size={12} />
+                                Logout
+                            </button>
+                        </div>
                     </div>
 
                     <div className="p-6 md:p-7">
@@ -527,7 +566,7 @@ export default function MyProfilePage() {
         <div className="mx-auto" style={{ maxWidth: '1000px' }}>
             {/* ── Profile Header ──────────────────────────────────── */}
             <div
-                className="rounded-xl border p-6 mb-6 flex items-center gap-5"
+                className="rounded-xl border p-6 mb-6 flex items-center gap-5 relative"
                 style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
             >
                 {isPartnerEmployee ? (
@@ -540,9 +579,7 @@ export default function MyProfilePage() {
                             {partnerEmployeeInfo?.name?.substring(0, 2).toUpperCase() || 'P'}
                         </div>
                         <div>
-                            <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {partnerEmployeeInfo?.name}
-                            </h1>
+                            
                             <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
                                 {partnerEmployeeInfo?.designation || 'Partner Team Member'}
                             </p>
@@ -567,9 +604,7 @@ export default function MyProfilePage() {
                             </div>
                         )}
                         <div>
-                            <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                {employee?.userId?.name}
-                            </h1>
+                            
                             <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
                                 {employee?.designation}
                                 {employee?.employeeId && (
@@ -603,6 +638,17 @@ export default function MyProfilePage() {
                         </div>
                     </>
                 )}
+
+                <div className="absolute top-6 right-6 flex items-center">
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors"
+                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                    >
+                        <LogOut size={12} />
+                        Logout
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-5">

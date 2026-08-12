@@ -575,7 +575,7 @@ export default function AdminPermissionsPage() {
                     <ShieldCheck size={22} />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Module Permissions</h1>
+                    
                     <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Select a user and configure which modules and sub-sections they can access</p>
                 </div>
             </div>

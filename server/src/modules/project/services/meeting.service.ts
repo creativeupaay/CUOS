@@ -4,12 +4,13 @@ import AppError from '../../../utils/appError';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
+import { addDays, isBefore, isSameDay, getDay } from 'date-fns';
 
 export interface CreateMeetingData {
     title: string;
     description?: string;
     type: 'internal' | 'external';
-    projectId: string;
+    projectId?: string;
     participants: Array<{
         userId?: string;
         externalEmail?: string;
@@ -30,6 +31,11 @@ export interface CreateMeetingData {
     accessLevel?: 'project-team' | 'managers-only' | 'custom';
     customAccessUsers?: string[];
     createdBy: string;
+    recurrence?: {
+        frequency: 'daily' | 'weekly';
+        endDate: string;
+        daysOfWeek?: number[];
+    };
 }
 
 export interface UpdateMeetingData {
@@ -59,7 +65,49 @@ export interface UpdateMeetingData {
 
 export const createMeeting = async (
     data: CreateMeetingData
-): Promise<IMeeting> => {
+): Promise<IMeeting | IMeeting[]> => {
+    if (data.recurrence) {
+        const { frequency, endDate, daysOfWeek } = data.recurrence;
+        const end = new Date(endDate);
+        const start = new Date(data.scheduledAt);
+        end.setHours(23, 59, 59, 999);
+
+        const meetingsToCreate: any[] = [];
+        let current = new Date(start);
+        
+        let iterations = 0;
+        const maxIterations = 365;
+
+        while ((isBefore(current, end) || isSameDay(current, end)) && iterations < maxIterations) {
+            iterations++;
+            
+            let shouldCreate = false;
+            if (frequency === 'daily') {
+                shouldCreate = true;
+            } else if (frequency === 'weekly' && daysOfWeek && daysOfWeek.length > 0) {
+                if (daysOfWeek.includes(getDay(current))) {
+                    shouldCreate = true;
+                }
+            }
+
+            if (shouldCreate) {
+                meetingsToCreate.push({
+                    ...data,
+                    scheduledAt: new Date(current),
+                });
+            }
+
+            current = addDays(current, 1);
+        }
+
+        if (meetingsToCreate.length === 0) {
+            meetingsToCreate.push(data);
+        }
+
+        const meetings = await Meeting.insertMany(meetingsToCreate);
+        return meetings as any;
+    }
+
     const meeting = await Meeting.create(data);
     return meeting;
 };
@@ -127,6 +175,43 @@ export const getMeetings = async (
             return false;
         });
     }
+
+    return meetings;
+};
+
+export const getIndividualMeetings = async (
+    userId: string,
+    isAdmin: boolean,
+    filters?: {
+        type?: 'internal' | 'external';
+        startDate?: Date;
+        endDate?: Date;
+    }
+): Promise<IMeeting[]> => {
+    // We only fetch meetings where projectId is not set (individual meetings)
+    // AND the user is either the creator or a participant (unless admin)
+    const query: any = {
+        projectId: { $exists: false },
+    };
+
+    if (!isAdmin) {
+        query.$or = [
+            { createdBy: userId },
+            { 'participants.userId': userId },
+        ];
+    }
+
+    if (filters?.type) query.type = filters.type;
+    if (filters?.startDate || filters?.endDate) {
+        query.scheduledAt = {};
+        if (filters.startDate) query.scheduledAt.$gte = filters.startDate;
+        if (filters.endDate) query.scheduledAt.$lte = filters.endDate;
+    }
+
+    const meetings = await Meeting.find(query)
+        .populate('participants.userId', 'name email')
+        .populate('createdBy', 'name email')
+        .sort({ scheduledAt: -1 });
 
     return meetings;
 };

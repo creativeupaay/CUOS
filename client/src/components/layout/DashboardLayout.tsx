@@ -1,15 +1,17 @@
-import { Outlet, useLocation, Link } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Settings, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
+import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
 import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
 
 import { Toaster } from 'react-hot-toast';
-
+import TabBar from './TabBar';
+import DashboardRoutes from './DashboardRoutes';
 /**
  * DashboardLayout
  *
@@ -21,6 +23,9 @@ import { Toaster } from 'react-hot-toast';
 
 const ROUTE_TITLES: Record<string, string> = {
     '/projects': 'Projects',
+    '/tasks': 'Tasks',
+    '/tasks/daily-overview': 'Daily Overview',
+    '/reports': 'Reports',
     '/finance': 'Finance',
     '/finance/cash-in-bank': 'Cash in Bank',
     '/finance/expenses': 'Expenses',
@@ -137,6 +142,8 @@ export default function DashboardLayout() {
         setMobileSidebarOpen(false);
     }, [effectivePathname]);
 
+    const { tabs, activeTabId } = useAppSelector(state => state.workspace);
+
     return (
         <div
             className="min-h-screen"
@@ -173,7 +180,7 @@ export default function DashboardLayout() {
                     },
                 }}
             />
-            <div className="hidden lg:block">
+            <div className="hidden lg:block print:hidden">
                 <Sidebar />
             </div>
 
@@ -206,11 +213,11 @@ export default function DashboardLayout() {
             )}
 
             {/* ── Content area ───────────────────────────────────────── */}
-            <div className="lg:ml-[var(--sidebar-width)]">
+            <div className="lg:ml-[var(--sidebar-width)] print:ml-0">
 
                 {/* ── Sticky top bar ─────────────────────────────────── */}
                 <header
-                    className="sticky top-0 z-20 flex items-center justify-between px-4 sm:px-5 lg:px-7"
+                    className="sticky top-0 z-20 flex items-center justify-between px-4 sm:px-5 lg:px-7 print:hidden"
                     style={{
                         height: 'var(--topbar-height)',
                         background: 'rgba(255,255,255,0.88)',
@@ -221,7 +228,8 @@ export default function DashboardLayout() {
                     }}
                 >
                     {/* Page title */}
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-2 flex-1">
+                        {/* Mobile menu toggle */}
                         <button
                             onClick={() => setMobileSidebarOpen(true)}
                             className="lg:hidden p-2 -ml-2 rounded-lg"
@@ -238,28 +246,20 @@ export default function DashboardLayout() {
                         </h1>
                     </div>
 
-                    {/* Right: notifications + name + avatar + settings */}
-                    <div className="flex items-center gap-2.5">
-                        {/* Notification Bell */}
-                        <NotificationBell />
-
-                        <div className="text-right hidden sm:block">
-                            <div className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
-                                {user?.name || 'User'}
-                            </div>
-                            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                                {user?.email || ''}
-                            </div>
+                    {/* Right: timer + profile + notifications */}
+                    <div className="flex items-center justify-end gap-4 flex-1">
+                        {/* Timer */}
+                        <div className="shrink-0">
+                            <GlobalTimerWidget />
                         </div>
 
-                        {/* Avatar — display only, not clickable */}
-                        <div className="shrink-0">
+                        {/* Avatar — clickable to open settings */}
+                        <Link to="/my-hrms/profile" title="My Profile & Settings" className="shrink-0 transition-transform hover:scale-105 active:scale-95">
                             {profilePhotoUrl ? (
                                 <img
                                     src={profilePhotoUrl}
                                     alt={user?.name || 'Profile'}
                                     className="w-8 h-8 rounded-full object-cover"
-                                    style={{ boxShadow: 'var(--shadow-brand)' }}
                                 />
                             ) : (
                                 <div
@@ -267,34 +267,39 @@ export default function DashboardLayout() {
                                     style={{
                                         background: isPartner
                                             ? 'linear-gradient(135deg, #6366F1, #8B5CF6)'
-                                            : 'linear-gradient(135deg, #059669, #0EA5E9)',
-                                        boxShadow: 'var(--shadow-brand)'
+                                            : 'linear-gradient(135deg, #059669, #0EA5E9)'
                                     }}
                                 >
                                     {initials}
                                 </div>
                             )}
-                        </div>
-
-                        {/* Settings button — opens My Profile */}
-                        <Link
-                            to="/my-hrms/profile"
-                            title="My Profile &amp; Settings"
-                            className="flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors hover:bg-gray-100"
-                            style={{ color: 'var(--color-text-muted)' }}
-                        >
-                            <Settings size={15} />
                         </Link>
+
+                        {/* Notification Bell (far right) */}
+                        <NotificationBell />
                     </div>
                 </header>
 
+                {/* ── Workspace Tab Bar ──────────────────────────────── */}
+                <div className="sticky z-10 print:hidden" style={{ top: 'var(--topbar-height)' }}>
+                    <TabBar />
+                </div>
+
                 {/* ── Page content ───────────────────────────────────── */}
                 <main
-                    className="page-enter"
-                    style={{ minHeight: 'calc(100vh - var(--topbar-height))' }}
+                    className="page-enter relative"
+                    style={{ minHeight: 'calc(100vh - var(--topbar-height) - 40px)' }}
                 >
                     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
-                        <Outlet />
+                        {tabs.length === 0 || !activeTabId ? (
+                            <DashboardRoutes />
+                        ) : null}
+
+                        {tabs.map(tab => (
+                                <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
+                                    <DashboardRoutes location={tab.url + tab.search} />
+                                </div>
+                        ))}
                     </div>
                 </main>
             </div>

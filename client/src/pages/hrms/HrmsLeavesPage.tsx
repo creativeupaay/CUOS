@@ -744,7 +744,7 @@ export default function HrmsLeavesPage() {
                 <div className="flex items-center gap-2.5">
                     <Calendar size={21} style={{ color: 'var(--color-primary)' }} />
                     <div>
-                        <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Leaves</h1>
+                        
                         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                             Manage leave requests and track employee absences
                         </p>

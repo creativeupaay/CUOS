@@ -20,7 +20,7 @@ export interface IMeeting extends Document {
     description?: string;
     type: 'internal' | 'external';
 
-    projectId: Types.ObjectId;
+    projectId?: Types.ObjectId;
 
     participants: IMeetingParticipant[];
 
@@ -74,7 +74,7 @@ const MeetingSchema = new Schema<IMeeting>(
             required: true,
         },
 
-        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
 
         participants: [MeetingParticipantSchema],
 

@@ -357,9 +357,7 @@ export default function AssignmentReviewPage() {
             style={{ backgroundColor: 'var(--color-bg-app)', minHeight: '100vh' }}
         >
             <div className="mb-6">
-                <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    Assignment
-                </h1>
+                
                 <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                     Create and edit assignments job-wise, and review candidate submissions.
                 </p>

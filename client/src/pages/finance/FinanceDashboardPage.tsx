@@ -566,9 +566,7 @@ export default function FinanceDashboardPage() {
                 {/* ── Header with Filters ─────────────────────────────────────── */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                            Finance Dashboard
-                        </h1>
+                        
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
                             Financial overview and analytics
                         </p>

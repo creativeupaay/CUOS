@@ -358,7 +358,7 @@ export default function ClientDetailPage() {
                 </button>
                 <div className="flex-1">
                     <div className="flex items-center gap-3">
-                        <h1 className="text-3xl font-bold text-neutral-900">{client.name}</h1>
+                        
                         <span
                             className={`px-3 py-1 text-sm font-medium rounded ${client.status === 'active'
                                 ? 'bg-green-100 text-green-800'

@@ -179,12 +179,7 @@ export default function ProjectDetailPage() {
             {/* Header */}
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h1
-                        className="text-xl font-semibold mb-1"
-                        style={{ color: 'var(--color-text-primary)' }}
-                    >
-                        {project.name}
-                    </h1>
+
                     {project.description && (
                         <p
                             className="text-sm"

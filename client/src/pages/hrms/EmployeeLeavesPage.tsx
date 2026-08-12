@@ -191,7 +191,7 @@ export default function EmployeeLeavesPage() {
                         <ListTodo size={24} style={{ color: 'var(--color-primary)' }} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>My Leaves</h1>
+                        
                         <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>Manage your leave balances and requests</p>
                     </div>
                 </div>

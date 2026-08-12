@@ -176,8 +176,6 @@ export default function HrmsReimbursementsPage() {
         changes_requested: 'Changes Req.', rejected: 'Rejected',
     };
 
-    // Header title / subtitle
-    const pageTitle = isOrgView ? 'Org Reimbursements' : 'My Expenses & Reimbursements';
     const pageSubtitle = isOrgView
         ? 'Review and process employee expense claims'
         : 'Manage and track your personal expense claims';
@@ -187,7 +185,7 @@ export default function HrmsReimbursementsPage() {
             {/* ── Header ─────────────────────────────────────────────── */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{pageTitle}</h1>
+                    
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>{pageSubtitle}</p>
                 </div>
                 <div className="flex items-center gap-3">

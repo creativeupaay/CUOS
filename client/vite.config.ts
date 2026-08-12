@@ -65,3 +65,5 @@ export default defineConfig({
     },
   },
 })
+
+// force restart

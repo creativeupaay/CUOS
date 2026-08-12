@@ -7,7 +7,7 @@ export interface ITask extends Document {
     status: 'todo' | 'in-progress' | 'paused' | 'completed';
     priority: 'low' | 'medium' | 'high' | 'critical';
 
-    projectId: Types.ObjectId;
+    projectId?: Types.ObjectId;
     parentTaskId?: Types.ObjectId;
 
     startDate?: Date;
@@ -44,7 +44,7 @@ const TaskSchema = new Schema<ITask>(
             default: 'medium',
         },
 
-        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+        projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
         parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task', default: null },
 
         startDate: Date,

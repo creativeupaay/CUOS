@@ -212,7 +212,7 @@ export default function FinanceSalariesPayrollPage() {
 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Salaries & Payrolls</h1>
+                    
                     <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         Finance view of HRMS salary structures and payroll payouts. All changes stay synced with HRMS.
                     </p>

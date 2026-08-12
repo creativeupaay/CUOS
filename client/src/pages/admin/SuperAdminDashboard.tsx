@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAppSelector, useAppDispatch } from '@/app/hooks';
-import { logout } from '@/features/auth/slices/authSlice';
-import { useLogoutMutation } from '@/features/auth/authApi';
+import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { api } from '@/services/api';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, LogOut, Sparkles, Settings, Briefcase, Handshake
+    ArrowRight, Clock, Sparkles, Briefcase, Handshake, ListTodo
 } from 'lucide-react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
+import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
 import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasModuleViewAccess } from '@/utils/modulePermissions';
@@ -30,6 +28,7 @@ interface Department {
 
 const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     projectManagement: { from: '#059669', to: '#0EA5E9' },
+    tasks: { from: '#7C3AED', to: '#059669' },
     finance: { from: '#7C3AED', to: '#EC4899' },
     crm: { from: '#EA580C', to: '#F59E0B' },
     hrms: { from: '#0369A1', to: '#06B6D4' },
@@ -45,7 +44,7 @@ function DepartmentCard({ title, description, icon, path, isActive, accentFrom, 
 
     return (
         <div
-            onClick={() => isActive && navigate(path)}
+            onClick={() => isActive && navigate(path, { state: { newTab: true } })}
             className="relative rounded-2xl border overflow-hidden transition-all duration-200 group"
             style={{
                 backgroundColor: 'var(--color-bg-surface)',
@@ -130,11 +129,7 @@ function DepartmentCard({ title, description, icon, path, isActive, accentFrom, 
 
 /* ── Main Dashboard ──────────────────────────────────────── */
 export default function SuperAdminDashboard() {
-    const dispatch = useAppDispatch();
-    const navigate = useNavigate();
     const user = useAppSelector((state) => state.auth.user);
-
-    const [logoutApi] = useLogoutMutation();
 
     // Initialize notification socket listeners
     useNotificationSocket();
@@ -148,36 +143,7 @@ export default function SuperAdminDashboard() {
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner';
-    const displayRole = user?.role
-        ? typeof user.role === 'object'
-            ? (user.role as any).name
-            : String(user.role)
-        : 'User';
 
-    const handleLogout = async () => {
-        try { await logoutApi().unwrap(); } catch { /* ignore */ }
-
-        // Determine logout redirect based on user role and partner status
-        const partnerSlug = (user as any)?.partnerSlug || (
-            typeof window !== 'undefined' ? window.sessionStorage.getItem('partnerPortalSlug') : null
-        );
-
-        // Redirect to partner's personalized login page if they have a slug
-        const logoutPath = isPartner && partnerSlug
-            ? `/partner/${partnerSlug}/login`
-            : isPartner
-                ? '/partner/login'
-                : '/login';
-
-        if (typeof window !== 'undefined') {
-            window.location.replace(logoutPath);
-            return;
-        }
-
-        dispatch(logout());
-        dispatch(api.util.resetApiState());
-        navigate(logoutPath);
-    };
 
 
     const { data: profileData } = useGetMyProfileQuery(undefined, { skip: isPartner });
@@ -205,6 +171,13 @@ export default function SuperAdminDashboard() {
             description: 'Manage projects, tasks, time logs and team collaboration',
             icon: <FolderKanban size={22} />,
             path: '/projects',
+        },
+        {
+            key: 'tasks',
+            title: 'Tasks',
+            description: 'View and manage all your tasks and meetings across all projects',
+            icon: <ListTodo size={22} />,
+            path: '/tasks',
         },
         {
             key: 'finance',
@@ -281,8 +254,10 @@ export default function SuperAdminDashboard() {
 
     const nonAdminDepartments = allDepartments
         .filter(d => {
-            if (!['projectManagement', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring'].includes(d.key)) return false;
-            if (!hasModuleViewAccess(user, d.key as any, { isJobManager })) return false;
+            if (!['projectManagement', 'tasks', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring'].includes(d.key)) return false;
+            // Tasks module reuses projectManagement access
+            const permKey = d.key === 'tasks' ? 'projectManagement' : d.key;
+            if (!hasModuleViewAccess(user, permKey as any, { isJobManager })) return false;
             return true;
         })
         .map(d => ({
@@ -295,8 +270,6 @@ export default function SuperAdminDashboard() {
     const departments: Department[] = isPartner
             ? partnerDepartments
             : nonAdminDepartments;
-
-    const firstName = user?.name?.split(' ')[0] || 'there';
 
     // Partner branding - get company info from user object (set during partner login)
     const partnerCompanyName = (user as any)?.companyName;
@@ -326,9 +299,9 @@ export default function SuperAdminDashboard() {
                     boxShadow: 'var(--shadow-xs)',
                 }}
             >
-                <div className="flex items-center justify-between px-6 h-14" style={{ maxWidth: '1300px', margin: '0 auto' }}>
+                <div className="flex items-center justify-between px-6 h-14">
                     {/* Brand */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
                         {partnerCompanyLogo && isPartner ? (
                             <img
                                 src={partnerCompanyLogo}
@@ -355,65 +328,33 @@ export default function SuperAdminDashboard() {
                         </div>
                     </div>
 
-                    {/* User + Logout */}
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2.5 pr-3" style={{ borderRight: '1px solid var(--color-border-default)' }}>
-                            <div className="text-right hidden sm:block">
-                                <div className="text-sm font-semibold leading-tight" style={{ color: 'var(--color-text-primary)' }}>
-                                    {user?.name || 'User'}
-                                </div>
+                    {/* Right: timer + profile + notifications */}
+                    <div className="flex items-center justify-end gap-4 flex-1">
+                        {/* Timer */}
+                        <div className="shrink-0">
+                            <GlobalTimerWidget />
+                        </div>
+
+                        {/* Avatar — clickable to open settings */}
+                        <Link to="/my-hrms/profile" title="My Profile & Settings" className="shrink-0 transition-transform hover:scale-105 active:scale-95">
+                            {profilePhotoUrl ? (
+                                <img
+                                    src={profilePhotoUrl}
+                                    alt={user?.name || 'Profile'}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                />
+                            ) : (
                                 <div
-                                    className="text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize inline-block mt-0.5"
-                                    style={{
-                                        background: 'var(--color-primary-soft)',
-                                        color: 'var(--color-primary-dark)',
-                                    }}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                    style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)' }}
                                 >
-                                    {displayRole}
+                                    {user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
                                 </div>
-                            </div>
+                            )}
+                        </Link>
 
-                            <div className="shrink-0">
-                                {profilePhotoUrl ? (
-                                    <img
-                                        src={profilePhotoUrl}
-                                        alt={user?.name || 'Profile'}
-                                        className="w-8 h-8 rounded-full object-cover"
-                                        style={{ boxShadow: 'var(--shadow-brand)' }}
-                                    />
-                                ) : (
-                                    <div
-                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                        style={{ background: 'linear-gradient(135deg,#059669,#0EA5E9)', boxShadow: 'var(--shadow-brand)' }}
-                                    >
-                                        {user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
-                                    </div>
-                                )}
-                            </div>
-
-                            <Link
-                                to="/my-hrms/profile"
-                                title="My Profile & Settings"
-                                className="flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors hover:bg-gray-100 ml-1.5"
-                                style={{ color: 'var(--color-text-muted)' }}
-                            >
-                                <Settings size={15} />
-                            </Link>
-                        </div>
-
-                        {/* Notification Bell */}
-                        <div className="flex items-center pr-1">
-                            <NotificationBell />
-                        </div>
-
-                        <button
-                            onClick={handleLogout}
-                            className="btn btn-ghost"
-                            style={{ height: '34px', padding: '0 12px', gap: '6px' }}
-                        >
-                            <LogOut size={14} />
-                            <span className="hidden sm:inline">Logout</span>
-                        </button>
+                        {/* Notification Bell (far right) */}
+                        <NotificationBell />
                     </div>
                 </div>
             </header>
@@ -445,12 +386,7 @@ export default function SuperAdminDashboard() {
                                     WORKSPACE
                                 </span>
                             </div>
-                            <h1
-                                className="text-3xl font-bold text-white mb-2"
-                                style={{ fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.03em' }}
-                            >
-                                Good to see you, {firstName}!
-                            </h1>
+                            
                             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '14px' }}>
                                 Select a module below to get started
                             </p>

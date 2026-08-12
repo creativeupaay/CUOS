@@ -24,6 +24,23 @@ export const createTask = asyncHandler(
     }
 );
 
+export const createIndividualTask = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const userId = req.user?.id!;
+
+        const task = await taskService.createTask({
+            ...req.body,
+            createdBy: userId,
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Individual task created successfully',
+            data: task,
+        });
+    }
+);
+
 export const getTasks = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const tasks = await taskService.getTasks(req.params.projectId, {
@@ -35,6 +52,29 @@ export const getTasks = asyncHandler(
         res.status(200).json({
             success: true,
             message: 'Tasks retrieved successfully',
+            data: tasks,
+        });
+    }
+);
+
+export const getIndividualTasks = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const userId = req.user?.id!;
+        const roleRaw = req.user?.role;
+        const userRole =
+            typeof roleRaw === 'string'
+                ? roleRaw.toLowerCase()
+                : typeof roleRaw === 'object' && roleRaw
+                    ? String((roleRaw as any).name || '').toLowerCase()
+                    : '';
+        const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+
+        const tasks = await taskService.getIndividualTasks(userId, isAdmin, date);
+
+        res.status(200).json({
+            success: true,
+            message: 'Individual tasks retrieved successfully',
             data: tasks,
         });
     }
@@ -73,16 +113,23 @@ export const updateTask = asyncHandler(
         let isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
 
         if (!isAdmin) {
-            const task = await Task.findById(req.params.taskId).select('projectId').lean();
+            const task = await Task.findById(req.params.taskId).select('projectId createdBy').lean();
             if (task) {
-                const employee = await Employee.findOne({ userId }).select('_id').lean();
-                if (employee) {
-                    const project = await Project.findById(task.projectId).select('assignees').lean();
-                    const assignment = (project as any)?.assignees?.find(
-                        (a: any) => a.employeeId?.toString() === (employee as any)._id?.toString()
-                    );
-                    if (assignment?.role === 'manager') {
-                        isAdmin = true;
+                // If it's an individual task, allow the creator
+                if (!task.projectId) {
+                    if (task.createdBy?.toString() === userId) {
+                        isAdmin = true; // treat creator as admin for their own individual task
+                    }
+                } else {
+                    const employee = await Employee.findOne({ userId }).select('_id').lean();
+                    if (employee) {
+                        const project = await Project.findById(task.projectId).select('assignees').lean();
+                        const assignment = (project as any)?.assignees?.find(
+                            (a: any) => a.employeeId?.toString() === (employee as any)._id?.toString()
+                        );
+                        if (assignment?.role === 'manager') {
+                            isAdmin = true;
+                        }
                     }
                 }
             }
@@ -105,6 +152,34 @@ export const updateTask = asyncHandler(
 
 export const deleteTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
+        // Enforce delete permissions
+        const userId = req.user?.id!;
+        const roleRaw = req.user?.role;
+        const userRole =
+            typeof roleRaw === 'string'
+                ? roleRaw.toLowerCase()
+                : typeof roleRaw === 'object' && roleRaw
+                    ? String((roleRaw as any).name || '').toLowerCase()
+                    : '';
+        
+        let isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        
+        const task = await Task.findById(req.params.taskId).select('projectId createdBy').lean();
+        if (!task) {
+            return next(new AppError('Task not found', 404));
+        }
+
+        if (!isAdmin) {
+            // Creators can delete their own tasks
+            if (task.createdBy?.toString() === userId) {
+                isAdmin = true;
+            }
+        }
+
+        if (!isAdmin) {
+            return next(new AppError('You do not have permission to delete this task', 403));
+        }
+
         await taskService.deleteTask(req.params.taskId);
 
         res.status(200).json({

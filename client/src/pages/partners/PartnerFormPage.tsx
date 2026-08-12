@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Copy, Link2, RefreshCcw, CheckCircle } from 'lucide-react';
 import {
@@ -82,7 +82,7 @@ export default function PartnerFormPage() {
         });
     }, [partnerData, isEdit]);
 
-    const title = useMemo(() => (isEdit ? 'Edit Partner' : 'Add New Partner'), [isEdit]);
+
 
     const handleCopy = async (text: string) => {
         try {
@@ -157,7 +157,7 @@ export default function PartnerFormPage() {
                     <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="w-8 h-8 text-green-600" />
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Partner Created Successfully!</h1>
+                    
                     <p className="text-gray-600 mb-6">
                         An onboarding form link has been generated. Share this link with <strong>{form.name}</strong> to complete their registration.
                     </p>
@@ -217,7 +217,7 @@ export default function PartnerFormPage() {
                 >
                     <ArrowLeft size={22} />
                 </button>
-                <h1 className="text-3xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{title}</h1>
+                
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">

@@ -3,7 +3,7 @@ import { useGetMeetingsQuery, useCreateMeetingMutation, useDeleteMeetingMutation
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink } from 'lucide-react';
+import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink, Repeat } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { ProjectTabHeader } from '@/components/organisms/ProjectTabHeader';
 
@@ -13,7 +13,9 @@ export default function ProjectMeetingsTab() {
     const { id: projectId } = useParams<{ id: string }>();
     const [showForm, setShowForm] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
-    const [activeTab, setActiveTab] = useState<Meeting['type']>('internal');
+    const [activeTab, setActiveTab] = useState<Meeting['type'] | 'all'>('all');
+    const [page, setPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
 
     useBodyScrollLock(showForm);
 
@@ -22,13 +24,19 @@ export default function ProjectMeetingsTab() {
 
     const internalCount = meetings.filter((m: Meeting) => m.type === 'internal').length;
     const externalCount = meetings.filter((m: Meeting) => m.type === 'external').length;
-    const filteredMeetings = meetings.filter((m: Meeting) => m.type === activeTab);
+    const filteredByTab = activeTab === 'all' ? meetings : meetings.filter((m: Meeting) => m.type === activeTab);
+    
+    const totalPages = Math.ceil(filteredByTab.length / ITEMS_PER_PAGE);
+    const paginatedMeetings = filteredByTab.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
     const [createMeeting, { isLoading: isCreating }] = useCreateMeetingMutation();
     const [deleteMeeting] = useDeleteMeetingMutation();
 
-    const [form, setForm] = useState({ purpose: '', members: '', datetime: '', notesLink: '', type: 'internal' as Meeting['type'] });
-    const setField = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
+    const [form, setForm] = useState({ 
+        purpose: '', members: '', datetime: '', notesLink: '', type: 'internal' as Meeting['type'],
+        isRecurring: false, recurrenceFreq: 'weekly' as 'daily'|'weekly', recurrenceEndDate: '', recurrenceDays: [] as number[]
+    });
+    const setField = (k: keyof typeof form, v: any) => setForm(f => ({ ...f, [k]: v }));
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -44,9 +52,16 @@ export default function ProjectMeetingsTab() {
                     type: form.type,
                     participants: [],
                     duration: 1,
+                    ...(form.isRecurring && form.recurrenceEndDate ? {
+                        recurrence: {
+                            frequency: form.recurrenceFreq,
+                            endDate: form.recurrenceEndDate,
+                            daysOfWeek: form.recurrenceFreq === 'weekly' ? form.recurrenceDays : undefined,
+                        }
+                    } : {})
                 }
             }).unwrap();
-            setForm({ purpose: '', members: '', datetime: '', notesLink: '', type: activeTab });
+            setForm({ purpose: '', members: '', datetime: '', notesLink: '', type: 'internal', isRecurring: false, recurrenceFreq: 'weekly', recurrenceEndDate: '', recurrenceDays: [] });
             closeForm();
         } catch (err) {
             logger.error('Failed to save meeting:', err);
@@ -59,8 +74,12 @@ export default function ProjectMeetingsTab() {
         try { await deleteMeeting({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
 
-    const openForm = (type: Meeting['type']) => {
-        setForm({ purpose: '', members: '', datetime: '', notesLink: '', type });
+    const openForm = (type: Meeting['type'] | 'all') => {
+        setForm({ 
+            purpose: '', members: '', datetime: '', notesLink: '', 
+            type: type === 'all' ? 'internal' : type,
+            isRecurring: false, recurrenceFreq: 'weekly', recurrenceEndDate: '', recurrenceDays: []
+        });
         setShowForm(true);
         setTimeout(() => setIsAnimating(true), 10);
     };
@@ -107,25 +126,29 @@ export default function ProjectMeetingsTab() {
                 }
             />
 
-            {/* Sub-tabs: Internal / External */}
-            <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                {(['internal', 'external'] as Meeting['type'][]).map(tab => {
-                    const count = tab === 'internal' ? internalCount : externalCount;
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+                {(['all', 'internal', 'external'] as const).map(tab => {
+                    const count = tab === 'all' ? meetings.length : tab === 'internal' ? internalCount : externalCount;
                     const isActive = activeTab === tab;
+                    let label = 'All Meetings';
+                    if (tab === 'internal') label = '🏢 Internal';
+                    if (tab === 'external') label = '🌐 External';
+
                     return (
                         <button
                             key={tab}
-                            onClick={() => { setActiveTab(tab); closeForm(); }}
-                            className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all"
+                            onClick={() => { setActiveTab(tab); setPage(1); closeForm(); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all border"
                             style={{
-                                backgroundColor: isActive ? 'var(--color-bg-surface)' : 'transparent',
-                                color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-bg-surface)',
+                                color: isActive ? '#fff' : 'var(--color-text-secondary)',
+                                borderColor: isActive ? 'var(--color-primary)' : 'var(--color-border-default)',
                             }}>
-                            {tab === 'internal' ? 'Internal' : 'External'}
-                            <span className="text-[11px] font-normal px-1.5 py-0.5 rounded-full"
+                            {label}
+                            <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full"
                                 style={{
-                                    backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-bg-body)',
+                                    backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-bg-subtle)',
                                     color: isActive ? '#fff' : 'var(--color-text-muted)',
                                 }}>
                                 {count}
@@ -213,6 +236,82 @@ export default function ProjectMeetingsTab() {
                                         className={inputCls} style={inputSty} required />
                                 </div>
 
+                                {/* Recurrence (Repeat Meeting) */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-xs font-semibold mb-2 cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={form.isRecurring}
+                                            onChange={e => setField('isRecurring', e.target.checked)}
+                                            className="rounded"
+                                        />
+                                        <Repeat size={14} className="inline" />
+                                        Repeat Meeting
+                                    </label>
+                                    
+                                    {form.isRecurring && (
+                                        <div className="p-3 rounded-xl border mt-2 space-y-3" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                            <div>
+                                                <label className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Frequency</label>
+                                                <select
+                                                    value={form.recurrenceFreq}
+                                                    onChange={e => setField('recurrenceFreq', e.target.value as 'daily' | 'weekly')}
+                                                    className="w-full px-2 py-1.5 rounded-lg border text-xs outline-none appearance-none"
+                                                    style={inputSty}
+                                                >
+                                                    <option value="daily">Daily</option>
+                                                    <option value="weekly">Weekly</option>
+                                                </select>
+                                            </div>
+                                            
+                                            {form.recurrenceFreq === 'weekly' && (
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Repeat on</label>
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {[0, 1, 2, 3, 4, 5, 6].map(day => {
+                                                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                                            const isSelected = form.recurrenceDays.includes(day);
+                                                            return (
+                                                                <button
+                                                                    key={day}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (isSelected) {
+                                                                            setField('recurrenceDays', form.recurrenceDays.filter(d => d !== day));
+                                                                        } else {
+                                                                            setField('recurrenceDays', [...form.recurrenceDays, day]);
+                                                                        }
+                                                                    }}
+                                                                    className={`px-2 py-1 text-[10px] font-medium rounded border transition-colors ${isSelected ? 'border-primary' : ''}`}
+                                                                    style={{
+                                                                        backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-bg-surface)',
+                                                                        color: isSelected ? '#fff' : 'var(--color-text-muted)',
+                                                                        borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border-default)'
+                                                                    }}
+                                                                >
+                                                                    {dayNames[day]}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>End Date (Required)</label>
+                                                <input
+                                                    type="date"
+                                                    required={form.isRecurring}
+                                                    value={form.recurrenceEndDate}
+                                                    onChange={e => setField('recurrenceEndDate', e.target.value)}
+                                                    className="w-full px-2 py-1.5 rounded-lg border text-xs outline-none"
+                                                    style={inputSty}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* Members */}
                                 <div>
                                     <label className={labelCls} style={labelSty}>Members / Attendees</label>
@@ -267,20 +366,20 @@ export default function ProjectMeetingsTab() {
                 <div className="flex items-center justify-center py-16">
                     <Loader2 size={20} className="animate-spin text-gray-400" />
                 </div>
-            ) : filteredMeetings.length === 0 ? (
+            ) : filteredByTab.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
                         <Video size={22} />
                     </div>
                     <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                        No {activeTab} meetings logged yet
+                        No {activeTab !== 'all' ? activeTab : ''} meetings logged yet
                     </p>
                     <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Click "Add Meeting" to record one</p>
                 </div>
             ) : (
                 <div className="space-y-2">
-                    {filteredMeetings.map((meeting: Meeting) => {
+                    {paginatedMeetings.map((meeting: Meeting) => {
                         const hasLink = !!meeting.notes;
                         const isExternal = meeting.type === 'external';
                         return (
@@ -366,6 +465,36 @@ export default function ProjectMeetingsTab() {
                             </div>
                         );
                     })}
+
+                    {/* Pagination */}
+                    {filteredByTab.length > ITEMS_PER_PAGE && (
+                        <div className="border-t px-4 py-3 flex items-center justify-between mt-4 rounded-xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
+                            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                Showing {((page - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(page * ITEMS_PER_PAGE, filteredByTab.length)} of {filteredByTab.length} meetings
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="px-2.5 py-1 text-xs rounded border disabled:opacity-50 transition-colors hover:bg-black/5"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                >
+                                    Prev
+                                </button>
+                                <div className="text-xs font-semibold px-2" style={{ color: 'var(--color-text-primary)' }}>
+                                    {page} / {totalPages}
+                                </div>
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page === totalPages}
+                                    className="px-2.5 py-1 text-xs rounded border disabled:opacity-50 transition-colors hover:bg-black/5"
+                                    style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
