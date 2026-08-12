@@ -106,11 +106,17 @@ export function useWorkspaceTabsManager() {
             console.log('[DEBUG] isNewTabRequest for:', currentUrl, 'Found existing tab?', !!existingTab, 'Current tabs:', tabs.map(t => t.url));
             
             if (existingTab) {
-                // Switch to the existing tab
+                // Switch to the existing tab and update its search params
                 console.log('[DEBUG] Switching to existing tab:', existingTab.id);
+                dispatch(updateTabUrl({
+                    id: existingTab.id,
+                    url: currentUrl,
+                    search: location.search,
+                    title: resolveTabTitle(currentUrl)
+                }));
                 dispatch(setActiveTab(existingTab.id));
                 isNavigatingRef.current = true;
-                navigate(existingTab.url + existingTab.search, { replace: true, state: {} });
+                navigate(currentUrl + location.search, { replace: true, state: {} });
             } else {
                 // Open a new tab
                 console.log('[DEBUG] Creating new tab for:', currentUrl);
@@ -127,7 +133,14 @@ export function useWorkspaceTabsManager() {
             }
         } else {
             // It's an in-page navigation (e.g., clicking a project card) or a direct URL visit.
-            if (activeTabId && tabs.length > 0) {
+            
+            // Wait, is it a cross-module navigation without newTab:true?
+            // If the base URL changed completely (e.g., /reports to /tasks), we should ideally treat it as a new tab request or switch to existing.
+            // But if it's just in-page navigation, update the active tab.
+            
+            const isBaseUrlChanged = activeTab && normalizeUrl(activeTab.url) !== normalizeUrl(currentUrl);
+
+            if (activeTabId && tabs.length > 0 && !isBaseUrlChanged) {
                 // Update the active tab's URL to reflect the new navigation
                 dispatch(updateTabUrl({
                     id: activeTabId,
@@ -136,10 +149,16 @@ export function useWorkspaceTabsManager() {
                     title: resolveTabTitle(currentUrl)
                 }));
             } else {
-                // We are coming from outside (e.g., Dashboard) or initial load.
+                // We are coming from outside (e.g., Dashboard) or initial load, OR base URL changed significantly
                 // Check if a tab for this URL already exists in the background!
                 const existingTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
                 if (existingTab) {
+                    dispatch(updateTabUrl({
+                        id: existingTab.id,
+                        url: currentUrl,
+                        search: location.search,
+                        title: resolveTabTitle(currentUrl)
+                    }));
                     dispatch(setActiveTab(existingTab.id));
                 } else {
                     dispatch(addTab({

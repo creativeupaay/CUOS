@@ -268,7 +268,7 @@ export default function ReportsPage() {
                             <div 
                                 onClick={() => {
                                     console.log('[DEBUG] Navigating to /tasks?activeTab=my&isOverdue=true');
-                                    navigate('/tasks?activeTab=my&isOverdue=true');
+                                    navigate('/tasks?activeTab=my&isOverdue=true', { state: { newTab: true } });
                                 }}
                                 className="bg-white rounded-xl border p-4 shadow-sm print:break-inside-avoid cursor-pointer hover:bg-gray-50 transition-colors" 
                                 style={{ borderColor: 'rgba(0,0,0,0.06)' }}
