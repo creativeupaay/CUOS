@@ -6,6 +6,8 @@ export interface Tab {
     search: string;
     title: string;
     isPinned: boolean;
+    /** Optional group key for deduplication — e.g. "projects-detail" for all /projects/:id pages */
+    group?: string;
 }
 
 export interface WorkspaceState {
