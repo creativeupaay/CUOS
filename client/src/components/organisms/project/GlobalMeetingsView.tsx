@@ -122,7 +122,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             const data = {
                 title: form.purpose,
                 description: form.members,
-                scheduledAt: form.datetime,
+                scheduledAt: new Date(form.datetime).toISOString(),
                 notes: form.notesLink,
                 type: form.type,
                 participants: [],
