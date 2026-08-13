@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-
-import { Play, Pause, AlertTriangle, X } from 'lucide-react';
+import { Play, Pause, AlertTriangle, X, PictureInPicture2 } from 'lucide-react';
 import { useTimer, formatElapsed, LIMIT_SECONDS } from '@/hooks/useTaskTimer';
 import { createPortal } from 'react-dom';
 import GlobalEndDayContainer from './GlobalEndDayContainer';
+import { useDocumentPiP } from '@/hooks/useDocumentPiP';
+import PipTimerWidget from './PipTimerWidget';
+import toast from 'react-hot-toast';
 
 export default function GlobalTimerWidget() {
     const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit } = useTimer();
     const [showLimitPopup, setShowLimitPopup] = useState(false);
     const [showEndDayPopup, setShowEndDayPopup] = useState(false);
-
-
+    const { isSupported, isPipOpen, pipContainer, openPiP, closePiP, resizePiP } = useDocumentPiP();
 
     useEffect(() => {
         if (isRunning && !timer?.limitBypassed && elapsed >= LIMIT_SECONDS) {
@@ -21,6 +22,31 @@ export default function GlobalTimerWidget() {
 
     const handleEndDay = () => {
         pauseTimer();
+        setShowEndDayPopup(true);
+    };
+
+    const handlePopOut = async () => {
+        if (!isSupported) {
+            toast.error('Document Picture-in-Picture is unavailable in your browser.');
+            return;
+        }
+        const success = await openPiP({
+            width: 330,
+            height: 215,
+            title: 'CUOS Universal Timer',
+        });
+        if (!success && !isPipOpen) {
+            toast.error('Failed to open Picture-in-Picture timer window.');
+        }
+    };
+
+    const handleEndDayFromPip = () => {
+        pauseTimer();
+        try {
+            window.focus();
+        } catch {
+            // Browser window focus ignored
+        }
         setShowEndDayPopup(true);
     };
 
@@ -47,6 +73,24 @@ export default function GlobalTimerWidget() {
                 >
                     End day
                 </button>
+
+                <button
+                    onClick={handlePopOut}
+                    title="Pop out floating timer"
+                    aria-label="Pop out floating timer"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 transition-all shrink-0 ml-0.5"
+                >
+                    <PictureInPicture2 size={16} />
+                </button>
+
+                {isPipOpen && pipContainer && createPortal(
+                    <PipTimerWidget
+                        onClosePiP={closePiP}
+                        onEndDay={handleEndDayFromPip}
+                        resizePiP={resizePiP}
+                    />,
+                    pipContainer
+                )}
             </div>
         );
     }
@@ -93,6 +137,28 @@ export default function GlobalTimerWidget() {
             >
                 End day
             </button>
+
+            <button
+                onClick={handlePopOut}
+                title="Pop out floating timer"
+                aria-label="Pop out floating timer"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 ml-0.5 ${
+                    isPipOpen
+                        ? 'bg-emerald-100 text-emerald-700 font-bold'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+            >
+                <PictureInPicture2 size={16} />
+            </button>
+
+            {isPipOpen && pipContainer && createPortal(
+                <PipTimerWidget
+                    onClosePiP={closePiP}
+                    onEndDay={handleEndDayFromPip}
+                    resizePiP={resizePiP}
+                />,
+                pipContainer
+            )}
 
             {showLimitPopup && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -144,3 +210,4 @@ export default function GlobalTimerWidget() {
         </div>
     );
 }
+

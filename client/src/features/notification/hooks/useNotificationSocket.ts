@@ -11,12 +11,66 @@ import type { INotification } from '../types';
 import { playNotificationSound } from '../utils/sound';
 
 /**
- * Hook to handle notification socket events and browser notification permission
+ * Universal helper to trigger single CUOS native OS push notification
+ */
+export function sendDesktopPushNotification(
+    title: string,
+    message: string,
+    options: { link?: string; tag?: string; icon?: string; forceNative?: boolean } = {}
+) {
+    if (typeof window === 'undefined' || !title) return;
+
+    logger.info('[DesktopPushNotification] Triggering native OS push notification:', { title, message });
+
+    // 1. Play audio chime
+    try {
+        playNotificationSound();
+    } catch {
+        // Ignore audio error
+    }
+
+    const iconUrl = options.icon || `${window.location.origin}/company-logo2.png`;
+    const notificationTag = options.tag || `cuos-notif-${title.slice(0, 15)}`;
+
+    // 2. Dispatch SINGLE Native Browser OS Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            const notification = new Notification(title, {
+                body: message,
+                icon: iconUrl,
+                tag: notificationTag,
+                requireInteraction: true,
+            });
+
+            notification.onclick = () => {
+                try {
+                    window.focus();
+                } catch {
+                    // Ignore focus error
+                }
+                if (options.link) {
+                    window.location.href = options.link;
+                }
+                notification.close();
+            };
+        } catch (err) {
+            logger.error('[DesktopPushNotification] Direct Notification error:', err);
+        }
+    } else if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then((p) => {
+            if (p === 'granted') {
+                sendDesktopPushNotification(title, message, options);
+            }
+        });
+    }
+}
+
+/**
+ * Hook to handle notification socket events and browser push notifications
  */
 export const useNotificationSocket = () => {
     const dispatch = useAppDispatch();
     const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
-    const browserPermission = useAppSelector((state) => state.notification.browserPermission);
     const soundEnabled = useAppSelector((state) => state.notification.soundEnabled);
 
     const soundEnabledRef = useRef(soundEnabled);
@@ -26,7 +80,7 @@ export const useNotificationSocket = () => {
 
     // Request browser notification permission
     const requestBrowserPermission = useCallback(async () => {
-        if (!('Notification' in window)) {
+        if (typeof window === 'undefined' || !('Notification' in window)) {
             return;
         }
 
@@ -38,40 +92,19 @@ export const useNotificationSocket = () => {
                 const permission = await Notification.requestPermission();
                 dispatch(setBrowserPermission(permission));
             } catch (error) {
-                logger.error('[NotificationSocket] Error requesting permission:', error);
+                logger.error('[NotificationSocket] Error requesting browser notification permission:', error);
             }
         }
     }, [dispatch]);
 
-    // Show browser notification
-    const showBrowserNotification = useCallback(
-        (notification: INotification) => {
-            if (browserPermission !== 'granted') return;
-            if (document.hasFocus()) return; // Don't show if tab is focused
-
-            try {
-                const browserNotification = new Notification(notification.title, {
-                    body: notification.message,
-                    icon: '/favicon.ico',
-                    tag: notification._id,
-                });
-
-                browserNotification.onclick = () => {
-                    window.focus();
-                    if (notification.link) {
-                        window.location.href = notification.link;
-                    }
-                    browserNotification.close();
-                };
-
-                // Auto close after 5 seconds
-                setTimeout(() => browserNotification.close(), 5000);
-            } catch (error) {
-                logger.error('[NotificationSocket] Error showing browser notification:', error);
-            }
-        },
-        [browserPermission]
-    );
+    // Show native desktop push notification outside the browser
+    const showBrowserNotification = useCallback((notification: INotification) => {
+        if (!notification || !notification.title) return;
+        sendDesktopPushNotification(notification.title, notification.message, {
+            link: notification.link,
+            tag: notification._id,
+        });
+    }, []);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -79,7 +112,7 @@ export const useNotificationSocket = () => {
         // Ensure socket is connected
         connectSocket();
 
-        // Request browser notification permission
+        // Request browser push notification permission
         requestBrowserPermission();
 
         // Request initial unread count on connect
@@ -87,13 +120,21 @@ export const useNotificationSocket = () => {
             socket.emit('notification:getUnreadCount');
         };
 
-        // Handle new notifications
-        const handleNewNotification = (data: { notification: INotification }) => {
-            dispatch(addNotification(data.notification));
-            showBrowserNotification(data.notification);
-            if (soundEnabledRef.current) {
-                playNotificationSound();
+        // Handle new notifications (defensively handle both { notification } wrapper and raw notification object)
+        const handleNewNotification = (data: any) => {
+            logger.info('[NotificationSocket] Received socket event notification:new', data);
+            
+            const notification: INotification = data?.notification || data;
+
+            if (!notification || !notification.title) {
+                logger.warn('[NotificationSocket] Received invalid notification payload:', data);
+                return;
             }
+
+            dispatch(addNotification(notification));
+
+            // Trigger single desktop push notification outside browser
+            showBrowserNotification(notification);
         };
 
         // Handle unread count updates
