@@ -255,6 +255,14 @@ export default function DailyOverviewPage() {
     );
     const allTasks = useMemo(() => (tasksRes?.data ?? []) as Task[], [tasksRes]);
 
+    // Separate query without date filter — needed to detect activeTimers across ALL tasks
+    // (a timer may be running on an overdue task from a previous day)
+    const { data: allTasksRes } = useGetIndividualTasksQuery(
+        undefined,
+        { pollingInterval: 5000 }
+    );
+    const allTasksForTimers = useMemo(() => (allTasksRes?.data ?? []) as Task[], [allTasksRes]);
+
     const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
 
     // Group by assignees (fallback to creator if no assignees)
@@ -339,23 +347,32 @@ export default function DailyOverviewPage() {
     // Compute per-user timer status from activeTimers on ALL tasks (not just today's)
     const userTimerStatusMap = useMemo(() => {
         const map = new Map<string, TimerStatus>();
-        allTasks.forEach(task => {
+        // Use allTasksForTimers (no date filter) so we catch timers on overdue tasks
+        allTasksForTimers.forEach(task => {
             if (!task.activeTimers || task.activeTimers.length === 0) return;
             task.activeTimers.forEach(timer => {
                 const uid = typeof timer.userId === 'object' ? (timer.userId as any)._id : timer.userId;
                 if (uid) map.set(uid, 'working');
             });
         });
-        // Mark paused: user has in-progress/paused tasks but no active timer
-        groupedAll.forEach(({ user: u, tasks: uTasks }) => {
+        // Mark paused: user has in-progress/paused tasks (across all tasks) but no active timer
+        groupedAll.forEach(({ user: u }) => {
             if (!map.has(u._id)) {
-                const hasActive = uTasks.some(t => t.status === 'in-progress' || t.status === 'paused');
-                if (hasActive) map.set(u._id, 'paused');
-                else map.set(u._id, 'offline');
+                const hasActiveStatus = allTasksForTimers.some(t => {
+                    const isAssigned = (t.assignees || []).some(a => {
+                        const uid = typeof a === 'object' ? (a as any)._id : a;
+                        return uid === u._id;
+                    });
+                    const isCreator = typeof t.createdBy === 'object'
+                        ? (t.createdBy as any)._id === u._id
+                        : t.createdBy === u._id;
+                    return (isAssigned || isCreator) && (t.status === 'in-progress' || t.status === 'paused');
+                });
+                map.set(u._id, hasActiveStatus ? 'paused' : 'offline');
             }
         });
         return map;
-    }, [allTasks, groupedAll]);
+    }, [allTasksForTimers, groupedAll]);
 
     const isToday = selectedDate === today;
 
