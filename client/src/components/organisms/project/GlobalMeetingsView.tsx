@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat } from 'lucide-react';
+import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
-import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, type Meeting } from '@/features/project';
+import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 
 type MeetingType = Meeting['type'];
@@ -34,6 +34,53 @@ const EMPTY_FORM: MeetingForm = {
     recurrenceDays: [],
 };
 
+function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onEdit: (m: GlobalMeeting) => void; onDelete: (m: GlobalMeeting) => void }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                onClick={() => setOpen(p => !p)}
+                className="p-1.5 rounded-lg transition-all hover:bg-black/5"
+                style={{ color: 'var(--color-text-muted)' }}
+            >
+                <MoreHorizontal size={14} />
+            </button>
+            {open && (
+                <div
+                    className="absolute right-0 top-8 w-32 rounded-xl border shadow-xl py-1 z-50"
+                    style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                >
+                    <button
+                        onClick={() => { onEdit(meeting); setOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-black/5"
+                        style={{ color: 'var(--color-text-primary)' }}
+                    >
+                        <Pencil size={12} /> Edit
+                    </button>
+                    <button
+                        onClick={() => { onDelete(meeting); setOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                        <Trash2 size={12} /> Delete
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
 export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'all' }) {
     const { allMeetings, filteredMeetings, isLoading, deleteMeeting, projects, filters, setFilters, isAdmin } = useGlobalMeetings();
 
@@ -43,6 +90,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     const [showForm, setShowForm] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [meetingToEdit, setMeetingToEdit] = useState<GlobalMeeting | null>(null);
     const [form, setForm] = useState<MeetingForm>({ ...EMPTY_FORM });
     const [activeTab, setActiveTab] = useState<MeetingType | 'all'>('all');
     const [page, setPage] = useState(1);
@@ -95,6 +143,29 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     const openForm = () => {
         setForm({ ...EMPTY_FORM, type: activeTab === 'all' ? 'internal' : activeTab, projectId: 'general' });
+        setMeetingToEdit(null);
+        setShowForm(true);
+        setTimeout(() => setIsAnimating(true), 10);
+    };
+
+    const handleEdit = (meeting: GlobalMeeting) => {
+        const d = new Date(meeting.scheduledAt);
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const localDatetime = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+        setForm({
+            purpose: meeting.title,
+            members: meeting.description || '',
+            datetime: localDatetime,
+            notesLink: meeting.notes || '',
+            type: meeting.type,
+            projectId: meeting._projectId || 'general',
+            isRecurring: false,
+            recurrenceFreq: 'weekly',
+            recurrenceEndDate: '',
+            recurrenceDays: []
+        });
+        setMeetingToEdit(meeting);
         setShowForm(true);
         setTimeout(() => setIsAnimating(true), 10);
     };
@@ -111,6 +182,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
     }, [activeTab]); // Depend on activeTab so openForm captures the right tab
 
     const [createIndividualMeeting] = useCreateIndividualMeetingMutation();
+    const [updateMeeting] = useUpdateMeetingMutation();
+    const [updateIndividualMeeting] = useUpdateIndividualMeetingMutation();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -136,16 +209,25 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                 } : {})
             };
 
-            if (form.projectId === 'general') {
-                await createIndividualMeeting(data).unwrap();
+            if (meetingToEdit) {
+                if (form.projectId === 'general' || !meetingToEdit._projectId) {
+                    await updateIndividualMeeting({ id: meetingToEdit._id, data }).unwrap();
+                } else {
+                    await updateMeeting({ projectId: form.projectId, id: meetingToEdit._id, data }).unwrap();
+                }
             } else {
-                await createMeeting({
-                    projectId: form.projectId,
-                    data,
-                }).unwrap();
+                if (form.projectId === 'general') {
+                    await createIndividualMeeting(data).unwrap();
+                } else {
+                    await createMeeting({
+                        projectId: form.projectId,
+                        data,
+                    }).unwrap();
+                }
             }
 
             setForm({ ...EMPTY_FORM });
+            setMeetingToEdit(null);
             closeForm();
         } catch (err) {
             logger.error('Failed to save meeting:', err);
@@ -467,9 +549,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                         
                                         {/* Actions */}
                                         <td className="py-2.5 pr-4 pl-2 text-right">
-                                            <button onClick={() => setDeleteConfirm({ id: meeting._id, projectId: meeting._projectId, title: meeting.title })} className="p-1.5 rounded transition-colors hover:bg-red-500/10 opacity-0 group-hover:opacity-100" style={{ color: 'var(--color-danger)' }} title="Delete">
-                                                <Trash2 size={14} />
-                                            </button>
+                                            <RowActions 
+                                                meeting={meeting} 
+                                                onEdit={handleEdit} 
+                                                onDelete={(m) => setDeleteConfirm({ id: m._id, projectId: m._projectId, title: m.title })} 
+                                            />
                                         </td>
                                     </tr>
                                 );
@@ -543,9 +627,9 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             >
                                 <X size={16} />
                             </button>
-                            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                                New Meeting Entry
-                            </span>
+                            <h2 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                {meetingToEdit ? 'Edit Meeting' : 'Create Meeting'}
+                            </h2>
                         </div>
 
                         {/* Scrollable body */}
@@ -742,11 +826,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 type="submit"
                                 form="global-meeting-form"
                                 disabled={isCreating}
-                                className="flex items-center gap-1.5 px-5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-                                style={{ height: '34px', backgroundColor: 'var(--color-primary)' }}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+                                style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
                             >
-                                {isCreating && <Loader2 size={14} className="animate-spin" />}
-                                <Plus size={14} /> Save Meeting
+                                {isCreating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                {meetingToEdit ? 'Save Changes' : 'Create Meeting'}
                             </button>
                         </div>
                     </div>
