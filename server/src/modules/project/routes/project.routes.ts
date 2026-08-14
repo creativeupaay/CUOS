@@ -168,6 +168,13 @@ router.delete(
 );
 
 // ============================================
+// Timer Status Routes
+// ============================================
+
+router.post('/timer-status', authenticate, taskController.setTimerStatus);
+router.get('/timer-status', authenticate, taskController.getTimerStatuses);
+
+// ============================================
 // PROJECT ROUTES
 // ============================================
 
@@ -581,5 +588,9 @@ router.delete(
     checkProjectAccess,
     noteController.deleteNote
 );
+
+// ── Timer status (day timer working/away tracking) ──────────────────────────
+router.post('/timer-status', authenticate, taskController.setTimerStatus);
+router.get('/timer-status', authenticate, taskController.getTimerStatuses);
 
 export default router;

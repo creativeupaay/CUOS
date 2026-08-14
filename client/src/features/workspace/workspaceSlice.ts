@@ -5,7 +5,10 @@ export interface Tab {
     url: string;
     search: string;
     title: string;
+    customTitle?: string;
     isPinned: boolean;
+    /** Optional group key for deduplication — e.g. "projects-detail" for all /projects/:id pages */
+    group?: string;
 }
 
 export interface WorkspaceState {
@@ -58,6 +61,12 @@ export const workspaceSlice = createSlice({
                 }
             }
         },
+        setTabCustomTitle: (state, action: PayloadAction<{ id: string, title: string }>) => {
+            const tab = state.tabs.find(t => t.id === action.payload.id);
+            if (tab) {
+                tab.customTitle = action.payload.title;
+            }
+        },
         reorderTabs: (state, action: PayloadAction<{ sourceIndex: number, destinationIndex: number }>) => {
             const result = Array.from(state.tabs);
             const [removed] = result.splice(action.payload.sourceIndex, 1);
@@ -102,6 +111,7 @@ export const {
     removeTab, 
     setActiveTab, 
     updateTabUrl, 
+    setTabCustomTitle,
     reorderTabs,
     pinTab,
     clearAllTabs,

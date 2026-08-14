@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
+import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video } from 'lucide-react';
 import type { Task } from '@/features/project';
@@ -51,7 +52,7 @@ function getInitials(name: string): string {
 
 // ─── Employee Card ─────────────────────────────────────────────────────────────
 
-type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number };
+type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; isWorking: boolean };
 
 const STATUS_CFG: Record<string, { icon: React.ReactNode; color: string }> = {
     todo:          { icon: <Circle size={14} />,       color: '#3B82F6' },
@@ -78,7 +79,7 @@ const getFoldedCornerStyle = (color: string) => ({
     borderBottomRightRadius: '0px',
 });
 
-function EmployeeCard({ user, tasks, meetings, index }: EmployeeCardProps) {
+function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardProps) {
     const aColor = avatarColor(user.name);
     const cardBgColor = CARD_COLORS[index % CARD_COLORS.length];
 
@@ -119,9 +120,29 @@ function EmployeeCard({ user, tasks, meetings, index }: EmployeeCardProps) {
                             {getInitials(user.name)}
                         </div>
                     )}
-                    <div className="min-w-0">
-                        <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
-                            {user.name}
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
+                                {user.name}
+                            </div>
+                            {/* Timer-only status chip */}
+                            {isWorking ? (
+                                <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                                    Working
+                                </span>
+                            ) : (
+                                <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                                    Away
+                                </span>
+                            )}
                         </div>
                         <div className="text-xs truncate" style={{ color: '#6B7280' }}>
                             {user.email}
@@ -233,6 +254,11 @@ export default function DailyOverviewPage() {
     );
     const allTasks = useMemo(() => (tasksRes?.data ?? []) as Task[], [tasksRes]);
 
+    // Separate query without date filter — needed to detect activeTimers across ALL tasks
+    // (a timer may be running on an overdue task from a previous day)
+    const { data: timerStatusRes } = useGetTimerStatusesQuery(undefined, { pollingInterval: 5000 });
+    const runningUserIds = useMemo(() => new Set(Object.keys(timerStatusRes?.data ?? {})), [timerStatusRes]);
+
     const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
 
     // Group by assignees (fallback to creator if no assignees)
@@ -313,6 +339,10 @@ export default function DailyOverviewPage() {
         allTasks.forEach(t => { if (c[t.status] !== undefined) c[t.status]++; });
         return c;
     }, [allTasks]);
+
+    // Timer status: use dedicated server-side endpoint for accurate real-time status
+    // runningUserIds is built from the server's in-memory map (updated on start/pause)
+    // Nothing else needed
 
     const isToday = selectedDate === today;
 
@@ -443,7 +473,14 @@ export default function DailyOverviewPage() {
                         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}
                     >
                         {filtered.map(({ user: u, tasks, meetings }, i) => (
-                            <EmployeeCard key={u._id} user={u} tasks={tasks} meetings={meetings} index={i} />
+                            <EmployeeCard 
+                                key={u._id} 
+                                user={u} 
+                                tasks={tasks} 
+                                meetings={meetings} 
+                                index={i} 
+                                isWorking={runningUserIds.has(u._id)}
+                            />
                         ))}
                     </div>
                 )}

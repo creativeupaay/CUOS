@@ -60,6 +60,48 @@ export function resolveTabTitle(pathname: string): string {
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
 }
 
+/**
+ * Resolves a stable "group key" for a URL path.
+ * URLs in the same group share a single tab slot — navigating between them
+ * updates the existing tab rather than opening a new one.
+ *
+ * Examples:
+ *   /projects/abc123  → "projects-detail"
+ *   /projects/xyz456  → "projects-detail"   ← same group, reuse tab
+ *   /projects         → null                 ← no group (exact URL dedup)
+ */
+export function resolveTabGroup(pathname: string): string | undefined {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return undefined;
+
+    // /projects/:id  (but not /projects or /projects/new)
+    if (segments[0] === 'projects' && segments[1] && segments[1] !== 'new') {
+        return 'projects-detail-' + segments[1];
+    }
+
+    // /crm/leads/:id
+    if (segments[0] === 'crm' && segments[1] === 'leads' && segments[2]) {
+        return 'crm-lead-detail-' + segments[2];
+    }
+
+    // /crm/clients/:id
+    if (segments[0] === 'crm' && segments[1] === 'clients' && segments[2]) {
+        return 'crm-client-detail-' + segments[2];
+    }
+
+    // /hrms/employees/:id
+    if (segments[0] === 'hrms' && segments[1] === 'employees' && segments[2]) {
+        return 'hrms-employee-detail-' + segments[2];
+    }
+
+    // /hiring/applications/:id
+    if (segments[0] === 'hiring' && segments[1] === 'applications' && segments[2]) {
+        return 'hiring-application-detail-' + segments[2];
+    }
+
+    return undefined;
+}
+
 export function useWorkspaceTabsManager() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -77,7 +119,7 @@ export function useWorkspaceTabsManager() {
             return;
         }
 
-        // Prevent double processing in StrictMode
+        // Prevent double processing in StrictMode / React re-renders
         if (processedLocationKeyRef.current === location.key) {
             return;
         }
@@ -91,7 +133,7 @@ export function useWorkspaceTabsManager() {
             return;
         }
 
-        // Dashboard is outside the workspace tabs context. We should just deactivate all tabs.
+        // Dashboard is outside the workspace tabs context. Deactivate all tabs.
         if (currentUrl === '/dashboard' || currentUrl.startsWith('/dashboard/')) {
             dispatch(setActiveTab(null));
             return;
@@ -100,73 +142,83 @@ export function useWorkspaceTabsManager() {
         // Did the user explicitly request a new tab? (e.g. clicked a link in the Sidebar)
         const isNewTabRequest = location.state?.newTab === true;
 
+        // Determine the group for this URL (enables same-slot reuse for dynamic routes)
+        const group = resolveTabGroup(currentUrl);
+
         if (isNewTabRequest) {
-            // Check if a tab with this exact URL already exists
-            const existingTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
-            console.log('[DEBUG] isNewTabRequest for:', currentUrl, 'Found existing tab?', !!existingTab, 'Current tabs:', tabs.map(t => t.url));
-            
-            if (existingTab) {
-                // Switch to the existing tab and update its search params
-                console.log('[DEBUG] Switching to existing tab:', existingTab.id);
+            // 1. Check for an exact URL match first
+            const exactTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
+
+            // 2. If no exact match but there's a group, check for a tab in the same group
+            const groupTab = !exactTab && group
+                ? tabs.find(t => t.group === group)
+                : null;
+
+            const targetTab = exactTab || groupTab;
+
+            if (targetTab) {
+                // Reuse the existing tab — update its URL and make it active
                 dispatch(updateTabUrl({
-                    id: existingTab.id,
+                    id: targetTab.id,
                     url: currentUrl,
                     search: location.search,
-                    title: resolveTabTitle(currentUrl)
+                    title: resolveTabTitle(currentUrl),
                 }));
-                dispatch(setActiveTab(existingTab.id));
+                dispatch(setActiveTab(targetTab.id));
                 isNavigatingRef.current = true;
                 navigate(currentUrl + location.search, { replace: true, state: {} });
             } else {
-                // Open a new tab
-                console.log('[DEBUG] Creating new tab for:', currentUrl);
+                // Open a genuinely new tab
                 dispatch(addTab({
                     id: nanoid(),
                     url: currentUrl,
                     search: location.search,
                     title: resolveTabTitle(currentUrl),
-                    isPinned: false
+                    isPinned: false,
+                    group,
                 }));
-                // Clear the state so refreshing doesn't keep opening new tabs
+                // Clear navigation state so refreshing doesn't keep opening new tabs
                 isNavigatingRef.current = true;
                 navigate(currentUrl + location.search, { replace: true, state: {} });
             }
         } else {
-            // It's an in-page navigation (e.g., clicking a project card) or a direct URL visit.
-            
-            // Wait, is it a cross-module navigation without newTab:true?
-            // If the base URL changed completely (e.g., /reports to /tasks), we should ideally treat it as a new tab request or switch to existing.
-            // But if it's just in-page navigation, update the active tab.
-            
+            // In-page navigation (e.g. navigating within a project page) — no newTab flag.
+            // Detect if the base URL changed significantly (cross-module jump without sidebar).
             const isBaseUrlChanged = activeTab && normalizeUrl(activeTab.url) !== normalizeUrl(currentUrl);
 
+            // If we have an active tab and the base URL didn't change, just update the active tab.
             if (activeTabId && tabs.length > 0 && !isBaseUrlChanged) {
-                // Update the active tab's URL to reflect the new navigation
                 dispatch(updateTabUrl({
                     id: activeTabId,
                     url: currentUrl,
                     search: location.search,
-                    title: resolveTabTitle(currentUrl)
+                    title: resolveTabTitle(currentUrl),
                 }));
             } else {
-                // We are coming from outside (e.g., Dashboard) or initial load, OR base URL changed significantly
-                // Check if a tab for this URL already exists in the background!
-                const existingTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
-                if (existingTab) {
+                // Coming from dashboard, initial load, or cross-module jump.
+                // Check for exact match first, then group match.
+                const exactTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
+                const groupTab = !exactTab && group
+                    ? tabs.find(t => t.group === group)
+                    : null;
+                const targetTab = exactTab || groupTab;
+
+                if (targetTab) {
                     dispatch(updateTabUrl({
-                        id: existingTab.id,
+                        id: targetTab.id,
                         url: currentUrl,
                         search: location.search,
-                        title: resolveTabTitle(currentUrl)
+                        title: resolveTabTitle(currentUrl),
                     }));
-                    dispatch(setActiveTab(existingTab.id));
+                    dispatch(setActiveTab(targetTab.id));
                 } else {
                     dispatch(addTab({
                         id: nanoid(),
                         url: currentUrl,
                         search: location.search,
                         title: resolveTabTitle(currentUrl),
-                        isPinned: false
+                        isPinned: false,
+                        group,
                     }));
                 }
             }
@@ -209,9 +261,6 @@ export function useWorkspaceTabsManager() {
 
     const clearAll = () => {
         dispatch(closeAllTabs());
-        // Since closeAllTabs preserves pinned tabs, we need to check if any tabs are left.
-        // We'll read from the current Redux state (which might be slightly delayed) or just
-        // rely on the next render. But to navigate immediately:
         const remainingTabs = tabs.filter(t => t.isPinned);
         if (remainingTabs.length > 0) {
             isNavigatingRef.current = true;

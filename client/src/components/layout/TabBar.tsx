@@ -76,7 +76,7 @@ export default function TabBar() {
                             
                             {/* Title */}
                             <span className="truncate text-xs font-medium flex-1">
-                                {tab.title}
+                                {tab.customTitle || tab.title}
                             </span>
                             
                             {/* Close Button */}

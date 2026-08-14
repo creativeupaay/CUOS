@@ -1,5 +1,6 @@
 import { useParams, Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { setTabCustomTitle } from '@/features/workspace/workspaceSlice';
 import type { RootState } from '@/app/store';
 import { useGetProjectByIdQuery } from '@/features/project';
 import { createPortal } from 'react-dom';
@@ -44,6 +45,18 @@ export default function ProjectDetailPage() {
     const project = data?.data;
     const [showEditProjectPanel, setShowEditProjectPanel] = useState(false);
     const [isClosingEditProjectPanel, setIsClosingEditProjectPanel] = useState(false);
+
+    const dispatch = useDispatch();
+    const workspaceTabs = useSelector((s: RootState) => s.workspace.tabs);
+
+    useEffect(() => {
+        if (!project?.name || project._id !== id) return;
+        // Find the tab that corresponds to THIS project's URL, not just any active tab
+        const projectTab = workspaceTabs.find(t => t.url.startsWith('/projects/' + id));
+        if (projectTab) {
+            dispatch(setTabCustomTitle({ id: projectTab.id, title: project.name }));
+        }
+    }, [project?.name, project?._id, id, workspaceTabs, dispatch]);
 
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const roleName = currentUser?.role

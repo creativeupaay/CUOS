@@ -22,7 +22,6 @@ export default function ReportsPage() {
         : '';
     const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(roleName);
 
-    const [activeTab, setActiveTab] = useState<'overview' | 'my' | 'team'>('overview');
     const [viewBy, setViewBy] = useState<string>('me');
     const [timeRange, setTimeRange] = useState<'this-week' | 'last-week' | 'last-month' | 'custom'>('this-week');
     const [customStartDate, setCustomStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -78,7 +77,7 @@ export default function ReportsPage() {
     });
 
     const { data: response, isLoading } = projectApi.useGetReportsDashboardQuery({
-        viewBy: isAdmin && activeTab === 'team' ? 'everyone' : viewBy,
+        viewBy,
         startDate,
         endDate
     });
@@ -97,29 +96,12 @@ export default function ReportsPage() {
 
     return (
         <div className="flex flex-col min-h-full print:h-auto print:overflow-visible bg-[var(--color-bg-app)]">
-            {/* Header Tabs */}
-            <div className="px-6 pt-4 flex items-center gap-6 border-b border-gray-100 print:hidden" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
-                <button 
-                    onClick={() => setActiveTab('overview')}
-                    className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview' ? 'border-[var(--color-primary)] text-[var(--color-primary-darker)]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    Overview
-                </button>
-                {isAdmin && (
-                    <button 
-                        onClick={() => setActiveTab('team')}
-                        className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'team' ? 'border-[var(--color-primary)] text-[var(--color-primary-darker)]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Team Reports
-                    </button>
-                )}
-            </div>
 
             <div className="flex-1 p-6 space-y-6 print:p-0">
                 {/* Filters Row */}
                 <div className="flex items-center justify-between print:hidden">
                     <div className="flex items-center gap-4">
-                        {isAdmin && activeTab !== 'team' && (
+                        {isAdmin && (
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-600">View by</span>
                                 <select 
@@ -128,6 +110,7 @@ export default function ReportsPage() {
                                     className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft)]"
                                 >
                                     <option value="me">Me</option>
+                                    <option value="everyone">All</option>
                                     {displayUsers.map((u: any) => (
                                         <option key={u._id} value={u._id}>{u.name || u.email}</option>
                                     ))}
