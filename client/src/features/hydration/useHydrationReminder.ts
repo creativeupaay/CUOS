@@ -6,7 +6,7 @@ import { pickFallbackMessage } from './hydrationMessages';
 import type { HydrationState, HydrationStage } from './hydrationTypes';
 
 // ─── Thresholds (in seconds) ─────────────────────────────────────────────────
-export const HYDRATION_THRESHOLD_90  = 90 * 60;  // 90 minutes
+export const HYDRATION_THRESHOLD_90 = 90 * 60;  // 90 minutes
 export const HYDRATION_THRESHOLD_120 = 120 * 60; // 120 minutes
 export const HYDRATION_THRESHOLD_150 = 150 * 60; // 150 minutes
 export const HYDRATION_THRESHOLD_180 = 180 * 60; // 180 minutes
@@ -283,7 +283,7 @@ export function useHydrationReminder() {
                 Notification.permission === 'default'
             ) {
                 // Request permission in background — don't await (don't block tick)
-                Notification.requestPermission().catch(() => {/* ignore */});
+                Notification.requestPermission().catch(() => {/* ignore */ });
             }
         };
 

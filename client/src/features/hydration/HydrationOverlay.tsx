@@ -228,16 +228,16 @@ export function HydrationOverlay() {
     if (mounted) {
         switch (stage) {
             case 'REMINDER_90':
-                overlayHeight = '30vh';
-                minHeight = '320px'; // Ensure text fits
+                overlayHeight = '35vh';
+                minHeight = '480px'; // Increased to fit the new UI content
                 break;
             case 'REMINDER_120':
-                overlayHeight = '45vh';
-                minHeight = '360px';
+                overlayHeight = '50vh';
+                minHeight = '520px';
                 break;
             case 'REMINDER_150':
                 overlayHeight = '70vh';
-                minHeight = '420px';
+                minHeight = '580px';
                 break;
             case 'BLOCKED_180':
                 overlayHeight = 'calc(100vh - 40px)';
