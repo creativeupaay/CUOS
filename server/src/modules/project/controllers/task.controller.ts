@@ -231,6 +231,8 @@ export const setTimerStatus = asyncHandler(
     async (req: Request, res: Response) => {
         const userId = req.user?.id!;
         const { status } = req.body as { status: 'running' | 'paused' };
+        
+        console.log(`[TimerStatus] Setting status for user ${userId} to ${status}`);
 
         if (status === 'running') {
             timerStatusMap.set(userId, 'running');
@@ -249,6 +251,9 @@ export const getTimerStatuses = asyncHandler(
         timerStatusMap.forEach((status, uid) => {
             if (status === 'running') result[uid] = 'running';
         });
+        
+        console.log(`[TimerStatus] getTimerStatuses called. Returning:`, result);
+        
         res.status(200).json({ success: true, data: result });
     }
 );

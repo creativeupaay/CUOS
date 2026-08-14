@@ -168,6 +168,13 @@ router.delete(
 );
 
 // ============================================
+// Timer Status Routes
+// ============================================
+
+router.post('/timer-status', authenticate, taskController.setTimerStatus);
+router.get('/timer-status', authenticate, taskController.getTimerStatuses);
+
+// ============================================
 // PROJECT ROUTES
 // ============================================
 

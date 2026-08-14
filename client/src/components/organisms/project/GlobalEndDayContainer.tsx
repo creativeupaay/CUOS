@@ -62,9 +62,22 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
         }
     }, [updateTask, logTime, onSuccess]);
 
+    const myTasks = allTasks.filter(t => {
+        const creatorId = typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
+        if (creatorId === currentUserId) return true;
+        
+        if (Array.isArray(t.assignees)) {
+            return t.assignees.some(a => {
+                const aId = typeof a === 'object' ? (a as any)._id : a;
+                return aId === currentUserId;
+            });
+        }
+        return false;
+    });
+
     return (
         <EndOfDayModal
-            allTasks={allTasks}
+            allTasks={myTasks}
             todayMeetings={todayMeetings}
             projects={projects}
             timerSeconds={timerSeconds}

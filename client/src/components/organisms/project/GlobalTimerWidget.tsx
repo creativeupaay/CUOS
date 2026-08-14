@@ -19,8 +19,19 @@ export default function GlobalTimerWidget() {
     // Auto-sync status on mount and when it changes (e.g., across tabs or page reloads)
     useEffect(() => {
         syncStatus(isRunning ? 'running' : 'paused');
-    }, [isRunning]);
+        
+        let intervalId: number | null = null;
+        // Periodically sync with backend every 30s to recover from backend restarts
+        if (isRunning) {
+            intervalId = window.setInterval(() => {
+                syncStatus('running');
+            }, 30000);
+        }
 
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [isRunning]);
 
     useEffect(() => {
         if (isRunning && !timer?.limitBypassed && elapsed >= LIMIT_SECONDS) {
