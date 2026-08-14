@@ -5,6 +5,8 @@ import { useGetMeQuery } from './features/auth/authApi';
 import { setInitialized, setUser } from './features/auth/slices/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import { TimerProvider } from './hooks/useTaskTimer';
+import { HydrationProvider } from './features/hydration/HydrationProvider';
+import { HydrationOverlay } from './features/hydration/HydrationOverlay';
 import {
   hasModuleAdminAccess,
   hasModuleViewAccess,
@@ -234,7 +236,10 @@ function App() {
   return (
     <BrowserRouter>
       <TimerProvider>
-        <AppRoutes />
+        <HydrationProvider>
+          <AppRoutes />
+          <HydrationOverlay />
+        </HydrationProvider>
       </TimerProvider>
     </BrowserRouter>
   );
