@@ -834,6 +834,21 @@ export const projectApi = api.injectEndpoints({
                 'FinanceDashboard',
             ],
         }),
+
+        // ── Timer Status ────────────────────────────────────────────────────────
+        getTimerStatuses: builder.query<ApiResponse<Record<string, 'running'>>, void>({
+            query: () => '/projects/timer-status',
+            providesTags: [{ type: 'Tasks', id: 'TIMER_STATUS' }],
+        }),
+
+        setTimerStatus: builder.mutation<ApiResponse<{ status: string }>, { status: 'running' | 'paused' }>({
+            query: (body) => ({
+                url: '/projects/timer-status',
+                method: 'POST',
+                body,
+            }),
+            invalidatesTags: [{ type: 'Tasks', id: 'TIMER_STATUS' }],
+        }),
     }),
     overrideExisting: false,
 });
@@ -929,4 +944,8 @@ export const {
     // Phase Payments
     useGetProjectPaymentSummaryQuery,
     useMarkPhasePaymentReceivedMutation,
+
+    // Timer Status
+    useGetTimerStatusesQuery,
+    useSetTimerStatusMutation,
 } = projectApi;

@@ -219,3 +219,36 @@ export const getSubtasks = asyncHandler(
         });
     }
 );
+
+// ── Timer Status Tracking ──────────────────────────────────────────────────
+// A simple in-memory map: userId → 'running' | 'paused'
+// This is deliberately NOT persisted — it resets on server restart,
+// which is the correct behaviour (no stale "working" status after restart).
+const timerStatusMap = new Map<string, 'running' | 'paused'>();
+
+/** POST /projects/timer-status — called by the client when timer starts/pauses/resumes */
+export const setTimerStatus = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const { status } = req.body as { status: 'running' | 'paused' };
+
+        if (status === 'running') {
+            timerStatusMap.set(userId, 'running');
+        } else {
+            timerStatusMap.delete(userId); // remove = not running
+        }
+
+        res.status(200).json({ success: true, data: { status } });
+    }
+);
+
+/** GET /projects/timer-status — admin can see who's running a timer */
+export const getTimerStatuses = asyncHandler(
+    async (_req: Request, res: Response) => {
+        const result: Record<string, 'running'> = {};
+        timerStatusMap.forEach((status, uid) => {
+            if (status === 'running') result[uid] = 'running';
+        });
+        res.status(200).json({ success: true, data: result });
+    }
+);

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
+import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video } from 'lucide-react';
 import type { Task } from '@/features/project';
@@ -255,11 +256,8 @@ export default function DailyOverviewPage() {
 
     // Separate query without date filter — needed to detect activeTimers across ALL tasks
     // (a timer may be running on an overdue task from a previous day)
-    const { data: allTasksRes } = useGetIndividualTasksQuery(
-        undefined,
-        { pollingInterval: 5000 }
-    );
-    const allTasksForTimers = useMemo(() => (allTasksRes?.data ?? []) as Task[], [allTasksRes]);
+    const { data: timerStatusRes } = useGetTimerStatusesQuery(undefined, { pollingInterval: 5000 });
+    const runningUserIds = useMemo(() => new Set(Object.keys(timerStatusRes?.data ?? {})), [timerStatusRes]);
 
     const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
 
@@ -342,17 +340,9 @@ export default function DailyOverviewPage() {
         return c;
     }, [allTasks]);
 
-    // Timer status: purely based on activeTimers — Working if timer running, Away otherwise
-    const userTimerStatusMap = useMemo(() => {
-        const working = new Set<string>();
-        allTasksForTimers.forEach(task => {
-            (task.activeTimers ?? []).forEach(timer => {
-                const uid = typeof timer.userId === 'object' ? (timer.userId as any)._id : timer.userId;
-                if (uid) working.add(uid);
-            });
-        });
-        return working;
-    }, [allTasksForTimers]);
+    // Timer status: use dedicated server-side endpoint for accurate real-time status
+    // runningUserIds is built from the server's in-memory map (updated on start/pause)
+    // Nothing else needed
 
     const isToday = selectedDate === today;
 
@@ -489,7 +479,7 @@ export default function DailyOverviewPage() {
                                 tasks={tasks} 
                                 meetings={meetings} 
                                 index={i} 
-                                isWorking={userTimerStatusMap.has(u._id)}
+                                isWorking={runningUserIds.has(u._id)}
                             />
                         ))}
                     </div>

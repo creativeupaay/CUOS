@@ -4,23 +4,30 @@ import { Play, Pause, AlertTriangle, X } from 'lucide-react';
 import { useTimer, formatElapsed, LIMIT_SECONDS } from '@/hooks/useTaskTimer';
 import { createPortal } from 'react-dom';
 import GlobalEndDayContainer from './GlobalEndDayContainer';
+import { useSetTimerStatusMutation } from '@/features/project/projectApi';
 
 export default function GlobalTimerWidget() {
     const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit } = useTimer();
     const [showLimitPopup, setShowLimitPopup] = useState(false);
     const [showEndDayPopup, setShowEndDayPopup] = useState(false);
+    const [setTimerStatus] = useSetTimerStatusMutation();
 
+    const syncStatus = (status: 'running' | 'paused') => {
+        setTimerStatus({ status }).catch(() => {/* silent fail */});
+    };
 
 
     useEffect(() => {
         if (isRunning && !timer?.limitBypassed && elapsed >= LIMIT_SECONDS) {
             pauseTimer();
+            syncStatus('paused');
             setShowLimitPopup(true);
         }
     }, [isRunning, timer?.limitBypassed, elapsed, pauseTimer]);
 
     const handleEndDay = () => {
         pauseTimer();
+        syncStatus('paused');
         setShowEndDayPopup(true);
     };
 
@@ -28,7 +35,7 @@ export default function GlobalTimerWidget() {
         return (
             <div className="flex items-center gap-1.5 p-1 rounded-full" style={{ backgroundColor: '#F8FAFC' }}>
                 <button
-                    onClick={() => startTimer()}
+                    onClick={() => { startTimer(); syncStatus('running'); }}
                     title="Start day timer"
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
                     style={{ backgroundColor: 'var(--color-primary)' }}
@@ -58,7 +65,7 @@ export default function GlobalTimerWidget() {
         >
             {isRunning ? (
                 <button
-                    onClick={pauseTimer}
+                    onClick={() => { pauseTimer(); syncStatus('paused'); }}
                     title="Pause"
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
                     style={{ backgroundColor: 'var(--color-primary)' }}
@@ -67,7 +74,7 @@ export default function GlobalTimerWidget() {
                 </button>
             ) : (
                 <button
-                    onClick={resumeTimer}
+                    onClick={() => { resumeTimer(); syncStatus('running'); }}
                     title="Resume"
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
                     style={{ backgroundColor: 'var(--color-primary)' }}
