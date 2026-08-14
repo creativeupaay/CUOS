@@ -80,8 +80,14 @@ TaskSchema.index({ createdAt: -1 });
 
 // Pre-save hook to set completedAt when status changes to completed
 TaskSchema.pre('save', function (next) {
-    if (this.isModified('status') && this.status === 'completed' && !this.completedAt) {
-        this.completedAt = new Date();
+    if (this.isModified('status')) {
+        if (this.status === 'completed') {
+            if (!this.completedAt) {
+                this.completedAt = new Date();
+            }
+        } else {
+            this.completedAt = undefined;
+        }
     }
     next();
 });

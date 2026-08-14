@@ -188,6 +188,8 @@ export default function NotificationPanel() {
                     </div>
                 </div>
 
+
+
                 {/* Notifications List */}
                 <div className="flex-1 overflow-y-auto">
                     {isLoading ? (

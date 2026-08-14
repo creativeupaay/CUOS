@@ -70,29 +70,38 @@ export default function EndOfDayModal({
     const allocatedTotal = allocatedTaskMinutes + allocatedMeetingMinutes;
     const unallocatedMinutes = totalTimerMinutes - allocatedTotal;
 
-    const incompleteTasks = useMemo(() => allTasks.filter(t => t.status !== 'completed'), [allTasks]);
+    const isToday = (dateVal?: string | Date) => {
+        if (!dateVal) return false;
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return false;
+        const today = new Date();
+        return d.getDate() === today.getDate() &&
+               d.getMonth() === today.getMonth() &&
+               d.getFullYear() === today.getFullYear();
+    };
+
+    const todayTasks = useMemo(() => {
+        return allTasks.filter(t => {
+            if (t.status !== 'completed') return true;
+            return isToday(t.completedAt) || isToday(t.updatedAt);
+        });
+    }, [allTasks]);
     
     const displayTasks = useMemo(() => {
-        const tasks = [...incompleteTasks];
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            return allTasks.filter(t => t.title.toLowerCase().includes(q) || (t._projectName || '').toLowerCase().includes(q));
+        }
+
+        const tasks = [...todayTasks];
         entries.forEach(e => {
             if (!tasks.some(t => t._id === e.task._id)) {
                 tasks.push(e.task);
             }
         });
-        
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            return tasks.filter(t => t.title.toLowerCase().includes(q) || (t._projectName || '').toLowerCase().includes(q));
-        }
         return tasks;
-    }, [incompleteTasks, entries, search]);
+    }, [todayTasks, allTasks, entries, search]);
 
-    const getMissingFields = (task: GlobalTask) => {
-        const missing = [];
-        if (!task._projectId) missing.push('Project');
-        if (!task.deadline) missing.push('Due Date');
-        return missing;
-    };
 
     const toggleTask = (task: GlobalTask) => {
         setEntries(prev => {
@@ -424,7 +433,7 @@ export default function EndOfDayModal({
 
                         {displayTasks.length === 0 && (
                             <div className="text-center py-6 border rounded-xl" style={{ borderColor: 'var(--color-border-default)', borderStyle: 'dashed' }}>
-                                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No incomplete tasks found.</p>
+                                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No tasks found.</p>
                             </div>
                         )}
 
@@ -432,39 +441,68 @@ export default function EndOfDayModal({
                             {displayTasks.map(task => {
                                 const entry = entries.find(e => e.task._id === task._id);
                                 const isChecked = !!entry;
-                                const missing = getMissingFields(task);
+                                const hasNoTime = !entry || !entry.allocatedMinutes || entry.allocatedMinutes <= 0;
+                                const isMissingDetails = (!task._projectId && (!entry || !entry.projectId)) || (!task.deadline && (!entry || !entry.deadline));
 
                                 return (
                                     <div
                                         key={task._id}
                                         className="rounded-xl border overflow-hidden transition-all"
-                                        style={{ borderColor: isChecked ? 'var(--color-primary)' : 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}
+                                        style={{
+                                            borderColor: isChecked 
+                                                ? (hasNoTime ? '#F59E0B' : 'var(--color-primary)') 
+                                                : 'var(--color-border-default)', 
+                                            backgroundColor: 'var(--color-bg-surface)' 
+                                        }}
                                     >
                                         <div
                                             className="relative flex items-center gap-3 p-3 pb-6 cursor-pointer hover:bg-black/5"
                                             onClick={() => toggleTask(task)}
-                                            style={{ backgroundColor: isChecked ? 'rgba(16, 185, 129, 0.05)' : 'transparent' }}
+                                            style={{ backgroundColor: isChecked ? (hasNoTime ? 'rgba(245, 158, 11, 0.04)' : 'rgba(16, 185, 129, 0.05)') : 'transparent' }}
                                         >
                                             <div
-                                                className="w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                                                className="w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0"
                                                 style={{
-                                                    backgroundColor: isChecked ? 'var(--color-primary)' : 'transparent',
-                                                    borderColor: isChecked ? 'var(--color-primary)' : 'var(--color-border-default)',
+                                                    backgroundColor: isChecked ? (hasNoTime ? '#F59E0B' : 'var(--color-primary)') : 'transparent',
+                                                    borderColor: isChecked ? (hasNoTime ? '#F59E0B' : 'var(--color-primary)') : 'var(--color-border-default)',
                                                 }}
                                             >
                                                 {isChecked && <CheckCircle2 size={14} style={{ color: '#fff' }} />}
                                             </div>
                                             <div className="flex-1 min-w-0 pr-4">
-                                                <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{task.title}</p>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className={`text-sm font-semibold truncate ${task.status === 'completed' ? 'line-through opacity-70' : ''}`} style={{ color: 'var(--color-text-primary)' }}>{task.title}</p>
+                                                    {task.status === 'completed' && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                                                            Completed
+                                                        </span>
+                                                    )}
+                                                    {isChecked && (entry.allocatedMinutes > 0) && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0">
+                                                            {formatHrsMins(entry.allocatedMinutes)} assigned
+                                                        </span>
+                                                    )}
+                                                    {isChecked && hasNoTime && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0">
+                                                            Time not assigned
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{task._projectName || 'No Project'}</p>
                                             </div>
-                                            {!isChecked && missing.length > 0 && (
-                                                <div className="absolute bottom-2 right-3">
+                                            <div className="absolute bottom-2 right-3 flex items-center gap-2.5">
+                                                {hasNoTime && (
+                                                    <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                                                        <Clock size={11} />
+                                                        *Time not assigned
+                                                    </span>
+                                                )}
+                                                {isMissingDetails && (
                                                     <span className="text-xs font-semibold text-red-500">
                                                         *Missing details
                                                     </span>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
 
                                         {isChecked && entry && (
@@ -472,9 +510,16 @@ export default function EndOfDayModal({
                                                 {/* Row 1: Time & Status & Project */}
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                                                     <div>
-                                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                                            Time Spent <span className="text-red-500">*</span>
-                                                        </label>
+                                                        <div className="flex items-center justify-between mb-1.5">
+                                                            <label className="block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                Time Spent <span className="text-red-500">*</span>
+                                                            </label>
+                                                            {hasNoTime && (
+                                                                <span className="text-[10px] font-semibold text-red-500">
+                                                                    *Required
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center gap-2">
                                                             <div className="relative flex-1">
                                                                 <input

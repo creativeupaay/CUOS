@@ -18,6 +18,7 @@ import notificationRoutes from '../../modules/notification/routes/notification.r
 import gameZoneRoutes from '../../modules/game-zone/routes/game.routes';
 import wordleRoutes from '../../modules/game-zone/routes/wordle.routes';
 import quizRoutes from '../../modules/game-zone/routes/quiz.routes';
+import wellnessRoutes from '../../modules/wellness/routes/wellness.routes';
 
 const router = Router();
 
@@ -60,5 +61,7 @@ router.use('/game-zone', gameZoneRoutes);
 router.use('/wordle', wordleRoutes);
 // Quiz (isolated from Imposter and Wordle)
 router.use('/quiz', quizRoutes);
+// Wellness (hydration reminders and future wellness features)
+router.use('/wellness', wellnessRoutes);
 
 export default router;
