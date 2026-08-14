@@ -8,7 +8,7 @@ import {
     ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis 
 } from 'recharts';
 import { 
-    CheckCircle2, Clock, AlertCircle, Calendar, Download, ChevronRight
+    CheckCircle2, Clock, Calendar, Download, ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -49,7 +49,7 @@ export default function ReportsPage() {
             end.setDate(end.getDate() - 7);
             start.setDate(end.getDate() - 6);
         } else if (timeRange === 'last-month') {
-            start.setMonth(start.getMonth() - 1);
+            start.setDate(end.getDate() - 29); // Enforce exactly 30 days inclusive
         } else if (timeRange === 'custom') {
             return {
                 startDate: new Date(customStartDate).toISOString(),
@@ -186,122 +186,93 @@ export default function ReportsPage() {
                         {/* Metrics Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             {/* Total Tasks */}
-                            <div className="bg-white rounded-xl border p-4 shadow-sm print:break-inside-avoid" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
-                                <div className="flex justify-between items-start mb-4">
+                            <div className="bg-white rounded-xl border p-5 shadow-sm print:break-inside-avoid md:col-span-2 flex flex-col" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                <div className="flex justify-between items-start mb-6">
                                     <div>
                                         <div className="text-sm font-medium text-gray-500 mb-1">Total Tasks</div>
                                         <div className="text-3xl font-bold text-gray-800">{data.totalTasks?.total || 0}</div>
                                     </div>
-                                    <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600">
-                                        <CheckCircle2 size={20} />
+                                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600">
+                                        <CheckCircle2 size={24} />
                                     </div>
                                 </div>
-                                <div className="space-y-1.5 text-xs">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-1.5 text-gray-600">
-                                            <div className="w-2 h-2 rounded-full bg-green-500" /> Completed
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm mt-auto">
+                                    <div className="flex justify-between items-center bg-gray-50/80 px-3 py-2.5 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-2.5 text-gray-600">
+                                            <div className="w-2 h-2 rounded-full bg-green-500 shadow-sm" /> 
+                                            <span className="font-medium">Completed</span>
                                         </div>
-                                        <span className="font-medium">{data.totalTasks?.completed || 0}</span>
+                                        <span className="font-semibold text-gray-800">{data.totalTasks?.completed || 0}</span>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-1.5 text-gray-600">
-                                            <div className="w-2 h-2 rounded-full bg-blue-500" /> In Progress
+                                    <div className="flex justify-between items-center bg-gray-50/80 px-3 py-2.5 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-2.5 text-gray-600">
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm" /> 
+                                            <span className="font-medium">In Progress</span>
                                         </div>
-                                        <span className="font-medium">{data.totalTasks?.inProgress || 0}</span>
+                                        <span className="font-semibold text-gray-800">{data.totalTasks?.inProgress || 0}</span>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-1.5 text-gray-600">
-                                            <div className="w-2 h-2 rounded-full bg-gray-300" /> To Do
+                                    <div className="flex justify-between items-center bg-gray-50/80 px-3 py-2.5 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-2.5 text-gray-600">
+                                            <div className="w-2 h-2 rounded-full bg-gray-400 shadow-sm" /> 
+                                            <span className="font-medium">To Do</span>
                                         </div>
-                                        <span className="font-medium">{data.totalTasks?.toDo || 0}</span>
+                                        <span className="font-semibold text-gray-800">{data.totalTasks?.toDo || 0}</span>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-1.5 text-gray-600">
-                                            <div className="w-2 h-2 rounded-full bg-red-500" /> Overdue
+                                    <div className="flex justify-between items-center bg-gray-50/80 px-3 py-2.5 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-2.5 text-gray-600">
+                                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-sm" /> 
+                                            <span className="font-medium">Overdue</span>
                                         </div>
-                                        <span className="font-medium">{data.overdueTasks?.overdue || 0}</span>
+                                        <span className="font-semibold text-gray-800">{data.overdueTasks?.overdue || 0}</span>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Time Tracked */}
-                            <div className="bg-white rounded-xl border p-4 shadow-sm print:break-inside-avoid" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                            <div className="bg-white rounded-xl border p-5 shadow-sm print:break-inside-avoid flex flex-col" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
                                         <div className="text-sm font-medium text-gray-500 mb-1">Time Tracked</div>
                                         <div className="text-3xl font-bold text-gray-800">{formatTime(data.timeTracked?.thisPeriodMinutes || 0)}</div>
                                     </div>
-                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                                        <Clock size={20} />
+                                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                        <Clock size={24} />
                                     </div>
                                 </div>
-                                <div className="space-y-2 mt-6">
+                                <div className="space-y-3 mt-auto">
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-gray-500">This Period</span>
-                                        <span className="font-medium">{formatTime(data.timeTracked?.thisPeriodMinutes || 0)}</span>
+                                        <span className="font-medium text-gray-800">{formatTime(data.timeTracked?.thisPeriodMinutes || 0)}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-gray-500">Last Period</span>
-                                        <span className="font-medium">{formatTime(data.timeTracked?.lastPeriodMinutes || 0)}</span>
+                                        <span className="font-medium text-gray-800">{formatTime(data.timeTracked?.lastPeriodMinutes || 0)}</span>
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* Overdue Tasks */}
-                            <div 
-                                onClick={() => {
-                                    console.log('[DEBUG] Navigating to /tasks?activeTab=my&isOverdue=true');
-                                    navigate('/tasks?activeTab=my&isOverdue=true', { state: { newTab: true } });
-                                }}
-                                className="bg-white rounded-xl border p-4 shadow-sm print:break-inside-avoid cursor-pointer hover:bg-gray-50 transition-colors" 
-                                style={{ borderColor: 'rgba(0,0,0,0.06)' }}
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <div className="text-sm font-medium text-gray-500 mb-1">Overdue Tasks</div>
-                                        <div className="text-3xl font-bold text-gray-800">{data.overdueTasks?.overdue || 0}</div>
-                                    </div>
-                                    <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-600">
-                                        <AlertCircle size={20} />
-                                    </div>
-                                </div>
-                                <div className="space-y-2 mt-6">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-gray-500">Overdue</span>
-                                        <span className="font-medium">{data.overdueTasks?.overdue || 0}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-gray-500">Due Soon</span>
-                                        <span className="font-medium">{data.overdueTasks?.dueSoon || 0}</span>
-                                    </div>
-                                    {data.overdueTasks?.overdue > 0 && (
-                                        <div className="text-xs text-red-500 font-medium pt-2">Needs attention</div>
-                                    )}
                                 </div>
                             </div>
 
                             {/* Work Consistency */}
-                            <div className="bg-white rounded-xl border p-4 shadow-sm print:break-inside-avoid" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                            <div className="bg-white rounded-xl border p-5 shadow-sm print:break-inside-avoid flex flex-col" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
                                         <div className="text-sm font-medium text-gray-500 mb-1">Work Consistency</div>
                                         <div className="text-3xl font-bold text-gray-800">{data.workConsistency?.activeDays || 0} / {data.workConsistency?.totalDays || 6}</div>
                                     </div>
-                                    <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
-                                        <Calendar size={20} />
+                                    <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
+                                        <Calendar size={24} />
                                     </div>
                                 </div>
-                                <div className="space-y-2 mt-6">
+                                <div className="space-y-3 mt-auto">
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-gray-500">Active Days</span>
-                                        <span className="font-medium">{data.workConsistency?.activeDays || 0} / {data.workConsistency?.totalDays || 6}</span>
+                                        <span className="font-medium text-gray-800">{data.workConsistency?.activeDays || 0} / {data.workConsistency?.totalDays || 6}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-gray-500">Daily Avg. Time</span>
-                                        <span className="font-medium">{formatTime(data.workConsistency?.dailyAvgMinutes || 0)}</span>
+                                        <span className="font-medium text-gray-800">{formatTime(data.workConsistency?.dailyAvgMinutes || 0)}</span>
                                     </div>
                                     {(data.workConsistency?.activeDays || 0) > 4 && (
-                                        <div className="text-xs text-green-500 font-medium pt-2">Excellent</div>
+                                        <div className="text-xs text-green-500 font-medium pt-1">Excellent</div>
                                     )}
                                 </div>
                             </div>

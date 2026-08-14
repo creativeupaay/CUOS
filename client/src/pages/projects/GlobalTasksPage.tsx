@@ -73,30 +73,55 @@ function PriorityCell({ priority }: { priority: string }) {
 
 function RowActions({ task, onEdit, onDelete }: { task: GlobalTask; onEdit: (t: GlobalTask) => void; onDelete: (t: GlobalTask) => void }) {
     const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
+    const btnRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState({ top: 0, right: 0 });
 
     useEffect(() => {
         if (!open) return;
         const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+            if (btnRef.current?.contains(e.target as Node)) return;
+            if (menuRef.current?.contains(e.target as Node)) return;
+            setOpen(false);
         };
+        const scrollHandler = () => setOpen(false);
         document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        window.addEventListener('scroll', scrollHandler, true);
+        return () => {
+            document.removeEventListener('mousedown', handler);
+            window.removeEventListener('scroll', scrollHandler, true);
+        };
     }, [open]);
 
+    const handleOpen = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+        }
+        setOpen(!open);
+    };
+
     return (
-        <div ref={ref} className="relative">
+        <>
             <button
-                onClick={() => setOpen(p => !p)}
+                ref={btnRef}
+                onClick={handleOpen}
                 className="p-1.5 rounded-lg transition-all hover:bg-black/5"
                 style={{ color: 'var(--color-text-muted)' }}
             >
                 <MoreHorizontal size={14} />
             </button>
-            {open && (
+            {open && createPortal(
                 <div
-                    className="absolute right-0 top-8 w-32 rounded-xl border shadow-xl py-1 z-50"
-                    style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                    ref={menuRef}
+                    className="fixed w-32 rounded-xl border shadow-xl py-1 z-[9999]"
+                    style={{ 
+                        top: coords.top, 
+                        right: coords.right,
+                        backgroundColor: 'var(--color-bg-surface)', 
+                        borderColor: 'var(--color-border-default)' 
+                    }}
                 >
                     <button
                         onClick={() => { onEdit(task); setOpen(false); }}
@@ -111,9 +136,10 @@ function RowActions({ task, onEdit, onDelete }: { task: GlobalTask; onEdit: (t: 
                     >
                         <Trash2 size={12} /> Delete
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
-        </div>
+        </>
     );
 }
 
@@ -293,6 +319,8 @@ function GlobalTasksInner() {
     const [showFilters, setShowFilters] = useState(false);
     const [searchExpanded, setSearchExpanded] = useState(false);
     const [taskToDelete, setTaskToDelete] = useState<GlobalTask | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const [dailyTodosView, setDailyTodosView] = useState<'board' | 'list'>('board');
     const [filterTab, setFilterTab] = useState<'priority' | 'project' | 'date' | 'user'>('priority');
@@ -343,6 +371,8 @@ function GlobalTasksInner() {
             toast.error('Please select a project.');
             return;
         }
+        setIsSaving(true);
+        try {
         const result = await createTask(data.taskType === 'individual' ? '' : data.projectId, {
             title: data.title,
             description: data.description || undefined,
@@ -367,21 +397,29 @@ function GlobalTasksInner() {
             toast.success(data.taskType === 'individual' ? 'Individual task created!' : 'Task created!');
             setShowForm(false);
         }
+        } finally {
+            setIsSaving(false);
+        }
     }, [createTask, logTime]);
 
     const handleEditTaskSubmit = useCallback(async (data: NewTaskFormData) => {
         if (!taskToEdit) return;
-        await updateTask(taskToEdit._projectId, taskToEdit._id, {
-            title: data.title,
-            description: data.description || undefined,
-            status: data.status,
-            priority: data.priority,
-            deadline: data.deadline || undefined,
-            estimatedHours: (data.timeSpentHours + data.timeSpentMins / 60) || undefined,
-            projectId: data.taskType === 'project' ? data.projectId : undefined,
-        });
-        toast.success('Task updated!');
-        setTaskToEdit(undefined);
+        setIsSaving(true);
+        try {
+            await updateTask(taskToEdit._projectId, taskToEdit._id, {
+                title: data.title,
+                description: data.description || undefined,
+                status: data.status,
+                priority: data.priority,
+                deadline: data.deadline || undefined,
+                estimatedHours: (data.timeSpentHours + data.timeSpentMins / 60) || undefined,
+                projectId: data.taskType === 'project' ? data.projectId : undefined,
+            });
+            toast.success('Task updated!');
+            setTaskToEdit(undefined);
+        } finally {
+            setIsSaving(false);
+        }
     }, [taskToEdit, updateTask]);
 
     const handleDelete = useCallback((task: GlobalTask) => {
@@ -390,9 +428,14 @@ function GlobalTasksInner() {
 
     const executeDeleteTask = useCallback(async () => {
         if (!taskToDelete) return;
-        await deleteTask(taskToDelete._projectId, taskToDelete._id);
-        toast.success('Task deleted');
-        setTaskToDelete(null);
+        setIsDeleting(true);
+        try {
+            await deleteTask(taskToDelete._projectId, taskToDelete._id);
+            toast.success('Task deleted');
+            setTaskToDelete(null);
+        } finally {
+            setIsDeleting(false);
+        }
     }, [taskToDelete, deleteTask]);
 
 
@@ -455,7 +498,7 @@ function GlobalTasksInner() {
             </div>
 
             {/* ── Owner tabs ── */}
-            <div className="flex gap-0 border-b mb-4" style={{ borderColor: 'var(--color-border-default)' }}>
+            <div className="flex gap-0 border-b mb-4 overflow-x-auto hide-scrollbar whitespace-nowrap" style={{ borderColor: 'var(--color-border-default)' }}>
                 {mainTabs.map(tab => (
                     <button
                         key={tab.value}
@@ -747,7 +790,8 @@ function GlobalTasksInner() {
                 </div>
             ) : (
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                    <table className="w-full border-collapse text-left">
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-left whitespace-nowrap min-w-[800px]">
                         <thead>
                             <tr style={{ backgroundColor: 'var(--color-bg-subtle)', borderBottom: '1px solid var(--color-border-default)' }}>
                                 <th className="py-2.5 pl-4 pr-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Task name</th>
@@ -772,6 +816,7 @@ function GlobalTasksInner() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                     {/* Add task row */}
                     <div
                         className="border-t px-4 py-2.5"
@@ -824,7 +869,7 @@ function GlobalTasksInner() {
             {(showForm || taskToEdit) && (
                 <GlobalTaskFormPanel
                     projects={projects}
-                    isCreating={isCreating}
+                    isCreating={isSaving || isCreating}
                     initialData={taskToEdit}
                     onClose={() => { setShowForm(false); setTaskToEdit(undefined); }}
                     onSubmit={taskToEdit ? handleEditTaskSubmit : handleCreateTask}
@@ -858,10 +903,11 @@ function GlobalTasksInner() {
                                 </button>
                                 <button
                                     onClick={executeDeleteTask}
-                                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-80"
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
                                     style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}
                                 >
-                                    Delete
+                                    {isDeleting ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}
                                 </button>
                             </div>
                         </div>

@@ -2,7 +2,7 @@ import { useGetProjectsQuery, useDeleteProjectMutation, useUpdateProjectMutation
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical, X } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical, X, Search } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
 import ProjectFormPage from './ProjectFormPage';
@@ -44,6 +44,7 @@ export default function ProjectsPage() {
     const partnerParam = searchParams.get('partnerId') || '';
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const partnerFilter = scopeParam === 'internal' ? '' : partnerParam;
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
     const [deleteVerificationText, setDeleteVerificationText] = useState('');
@@ -65,9 +66,17 @@ export default function ProjectsPage() {
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const allLoadedProjects = data?.data || [];
-    const projects = scopeParam === 'internal'
-        ? allLoadedProjects.filter((project) => !project.partnerId)
+    let projects = scopeParam === 'internal'
+        ? allLoadedProjects.filter((project: any) => !project.partnerId)
         : allLoadedProjects;
+
+    if (searchTerm) {
+        const lowerSearch = searchTerm.toLowerCase();
+        projects = projects.filter((p: any) => 
+            p.name?.toLowerCase().includes(lowerSearch) || 
+            p.description?.toLowerCase().includes(lowerSearch)
+        );
+    }
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -218,6 +227,26 @@ export default function ProjectsPage() {
 
                     {/* ── Filters ───────────────────────────────────────────── */}
                     <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                        <div className="relative w-full md:w-64">
+                            <input 
+                                type="text"
+                                placeholder="Search projects..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="rounded-lg border px-3 py-2 pl-9 text-sm outline-none transition-colors w-full"
+                                style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                    <X size={14} style={{ color: 'var(--color-text-muted)' }} />
+                                </button>
+                            )}
+                        </div>
+
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}

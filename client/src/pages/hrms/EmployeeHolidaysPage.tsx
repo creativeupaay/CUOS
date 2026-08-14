@@ -129,21 +129,24 @@ export default function EmployeeHolidaysPage() {
                                 return (
                                     <div key={i} className="rounded-lg p-1 min-h-[64px] relative"
                                         style={{
-                                            backgroundColor: hols.length > 0 ? TYPE_CFG[hols[0].type].bg + '60' : (isSunday ? '#FFF5F5' : 'var(--color-bg-subtle)'),
+                                            backgroundColor: hols.length > 0 ? (TYPE_CFG[hols[0].type] || TYPE_CFG.holiday).bg + '60' : (isSunday ? '#FFF5F5' : 'var(--color-bg-subtle)'),
                                             border: isToday ? '2px solid var(--color-primary)' : '1px solid var(--color-border-default)',
                                         }}>
                                         <div className="text-xs font-semibold mb-1"
                                             style={{ color: isToday ? 'var(--color-primary)' : isSunday ? '#EF4444' : 'var(--color-text-secondary)' }}>
                                             {dayNum}
                                         </div>
-                                        {hols.map((h, hi) => (
-                                            <button key={hi} onClick={() => setPreviewHoliday(h)}
-                                                className="text-xs rounded px-1 py-0.5 mb-0.5 truncate font-medium w-full text-left cursor-pointer hover:opacity-90 transition-opacity"
-                                                style={{ backgroundColor: TYPE_CFG[h.type].bg, color: TYPE_CFG[h.type].color }}
-                                                title={h.name}>
-                                                {TYPE_CFG[h.type].emoji} {h.name}
-                                            </button>
-                                        ))}
+                                        {hols.map((h, hi) => {
+                                            const cfg = TYPE_CFG[h.type] || TYPE_CFG.holiday;
+                                            return (
+                                                <button key={hi} onClick={() => setPreviewHoliday(h)}
+                                                    className="text-xs rounded px-1 py-0.5 mb-0.5 truncate font-medium w-full text-left cursor-pointer hover:opacity-90 transition-opacity"
+                                                    style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                                                    title={h.name}>
+                                                    {cfg.emoji} {h.name}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 );
                             })}
@@ -175,8 +178,8 @@ export default function EmployeeHolidaysPage() {
                                     <div key={i} className="flex items-center justify-between px-5 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl"
-                                                style={{ backgroundColor: TYPE_CFG[h.type].bg }}>
-                                                {TYPE_CFG[h.type].emoji}
+                                                style={{ backgroundColor: (TYPE_CFG[h.type] || TYPE_CFG.holiday).bg }}>
+                                                {(TYPE_CFG[h.type] || TYPE_CFG.holiday).emoji}
                                             </div>
                                             <div>
                                                 <div className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{h.name}</div>

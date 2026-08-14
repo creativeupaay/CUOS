@@ -2,6 +2,7 @@ import { Task } from '../models/Task.model';
 import { TimeLog } from '../models/TimeLog.model';
 import { Meeting } from '../models/Meeting.model';
 import { Project } from '../models/Project.model';
+import { Holiday } from '../../hrms/models/Holiday.model';
 import mongoose from 'mongoose';
 
 export const getDashboardReports = async (filters: {
@@ -34,10 +35,26 @@ export const getDashboardReports = async (filters: {
 
     // 1. Total Tasks in period
     const tasksCurrent = await Task.aggregate([
-        { $match: { ...taskUserMatch, createdAt: { $lte: end } } },
+        { 
+            $match: { 
+                ...taskUserMatch, 
+                createdAt: { $lte: end },
+                $or: [
+                    { status: { $ne: 'completed' } },
+                    { completedAt: { $exists: false } },
+                    { completedAt: { $gte: start } }
+                ]
+            } 
+        },
         {
             $group: {
-                _id: '$status',
+                _id: {
+                    $cond: [
+                        { $and: [{ $eq: ['$status', 'completed'] }, { $gt: ['$completedAt', end] }] },
+                        'in-progress',
+                        '$status'
+                    ]
+                },
                 count: { $sum: 1 }
             }
         }
@@ -96,8 +113,22 @@ export const getDashboardReports = async (filters: {
     const loopEnd = new Date(end);
     loopEnd.setHours(23,59,59,999);
     
+    const holidaysRaw = await Holiday.find({
+        date: { $gte: loopStart, $lte: loopEnd },
+        type: 'holiday'
+    }).select('date').lean();
+    
+    // Create a Set of holiday dates (as YYYY-MM-DD strings for easy lookup)
+    const holidayDates = new Set(holidaysRaw.map(h => {
+        const d = new Date(h.date);
+        return d.toISOString().split('T')[0];
+    }));
+    
     for (let d = new Date(loopStart); d <= loopEnd; d.setDate(d.getDate() + 1)) {
-        if (d.getDay() !== 0) totalDays++; // Exclude Sundays
+        const dateStr = d.toISOString().split('T')[0];
+        if (d.getDay() !== 0 && !holidayDates.has(dateStr)) {
+            totalDays++; // Exclude Sundays and Holidays
+        }
     }
     if (totalDays === 0) totalDays = 1;
     const dailyAvgMinutes = activeDays > 0 ? Math.round(currentMinutes / activeDays) : 0;
