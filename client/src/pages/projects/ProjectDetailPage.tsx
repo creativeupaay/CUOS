@@ -50,10 +50,10 @@ export default function ProjectDetailPage() {
     const activeTabId = useSelector((s: RootState) => s.workspace.activeTabId);
 
     useEffect(() => {
-        if (project?.name && activeTabId) {
+        if (project?.name && project._id === id && activeTabId) {
             dispatch(setTabCustomTitle({ id: activeTabId, title: project.name }));
         }
-    }, [project?.name, activeTabId, dispatch]);
+    }, [project?.name, project?._id, id, activeTabId, dispatch]);
 
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const roleName = currentUser?.role
