@@ -51,8 +51,7 @@ function getInitials(name: string): string {
 
 // ─── Employee Card ─────────────────────────────────────────────────────────────
 
-type TimerStatus = 'working' | 'paused' | 'offline';
-type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; timerStatus: TimerStatus };
+type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; isWorking: boolean };
 
 const STATUS_CFG: Record<string, { icon: React.ReactNode; color: string }> = {
     todo:          { icon: <Circle size={14} />,       color: '#3B82F6' },
@@ -79,7 +78,7 @@ const getFoldedCornerStyle = (color: string) => ({
     borderBottomRightRadius: '0px',
 });
 
-function EmployeeCard({ user, tasks, meetings, index, timerStatus }: EmployeeCardProps) {
+function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardProps) {
     const aColor = avatarColor(user.name);
     const cardBgColor = CARD_COLORS[index % CARD_COLORS.length];
 
@@ -125,8 +124,8 @@ function EmployeeCard({ user, tasks, meetings, index, timerStatus }: EmployeeCar
                             <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
                                 {user.name}
                             </div>
-                            {/* Status chip */}
-                            {timerStatus === 'working' && (
+                            {/* Timer-only status chip */}
+                            {isWorking ? (
                                 <span
                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
                                     style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
@@ -134,8 +133,7 @@ function EmployeeCard({ user, tasks, meetings, index, timerStatus }: EmployeeCar
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
                                     Working
                                 </span>
-                            )}
-                            {timerStatus === 'paused' && (
+                            ) : (
                                 <span
                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
                                     style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}
@@ -344,35 +342,17 @@ export default function DailyOverviewPage() {
         return c;
     }, [allTasks]);
 
-    // Compute per-user timer status from activeTimers on ALL tasks (not just today's)
+    // Timer status: purely based on activeTimers — Working if timer running, Away otherwise
     const userTimerStatusMap = useMemo(() => {
-        const map = new Map<string, TimerStatus>();
-        // Use allTasksForTimers (no date filter) so we catch timers on overdue tasks
+        const working = new Set<string>();
         allTasksForTimers.forEach(task => {
-            if (!task.activeTimers || task.activeTimers.length === 0) return;
-            task.activeTimers.forEach(timer => {
+            (task.activeTimers ?? []).forEach(timer => {
                 const uid = typeof timer.userId === 'object' ? (timer.userId as any)._id : timer.userId;
-                if (uid) map.set(uid, 'working');
+                if (uid) working.add(uid);
             });
         });
-        // Mark paused: user has in-progress/paused tasks (across all tasks) but no active timer
-        groupedAll.forEach(({ user: u }) => {
-            if (!map.has(u._id)) {
-                const hasActiveStatus = allTasksForTimers.some(t => {
-                    const isAssigned = (t.assignees || []).some(a => {
-                        const uid = typeof a === 'object' ? (a as any)._id : a;
-                        return uid === u._id;
-                    });
-                    const isCreator = typeof t.createdBy === 'object'
-                        ? (t.createdBy as any)._id === u._id
-                        : t.createdBy === u._id;
-                    return (isAssigned || isCreator) && (t.status === 'in-progress' || t.status === 'paused');
-                });
-                map.set(u._id, hasActiveStatus ? 'paused' : 'offline');
-            }
-        });
-        return map;
-    }, [allTasksForTimers, groupedAll]);
+        return working;
+    }, [allTasksForTimers]);
 
     const isToday = selectedDate === today;
 
@@ -509,7 +489,7 @@ export default function DailyOverviewPage() {
                                 tasks={tasks} 
                                 meetings={meetings} 
                                 index={i} 
-                                timerStatus={userTimerStatusMap.get(u._id) ?? 'offline'}
+                                isWorking={userTimerStatusMap.has(u._id)}
                             />
                         ))}
                     </div>
