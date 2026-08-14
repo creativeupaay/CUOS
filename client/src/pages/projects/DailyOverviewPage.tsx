@@ -51,7 +51,8 @@ function getInitials(name: string): string {
 
 // ─── Employee Card ─────────────────────────────────────────────────────────────
 
-type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number };
+type TimerStatus = 'working' | 'paused' | 'offline';
+type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; timerStatus: TimerStatus };
 
 const STATUS_CFG: Record<string, { icon: React.ReactNode; color: string }> = {
     todo:          { icon: <Circle size={14} />,       color: '#3B82F6' },
@@ -78,7 +79,7 @@ const getFoldedCornerStyle = (color: string) => ({
     borderBottomRightRadius: '0px',
 });
 
-function EmployeeCard({ user, tasks, meetings, index }: EmployeeCardProps) {
+function EmployeeCard({ user, tasks, meetings, index, timerStatus }: EmployeeCardProps) {
     const aColor = avatarColor(user.name);
     const cardBgColor = CARD_COLORS[index % CARD_COLORS.length];
 
@@ -119,9 +120,30 @@ function EmployeeCard({ user, tasks, meetings, index }: EmployeeCardProps) {
                             {getInitials(user.name)}
                         </div>
                     )}
-                    <div className="min-w-0">
-                        <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
-                            {user.name}
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
+                                {user.name}
+                            </div>
+                            {/* Status chip */}
+                            {timerStatus === 'working' && (
+                                <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                                    Working
+                                </span>
+                            )}
+                            {timerStatus === 'paused' && (
+                                <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                                    Away
+                                </span>
+                            )}
                         </div>
                         <div className="text-xs truncate" style={{ color: '#6B7280' }}>
                             {user.email}
@@ -314,6 +336,27 @@ export default function DailyOverviewPage() {
         return c;
     }, [allTasks]);
 
+    // Compute per-user timer status from activeTimers on ALL tasks (not just today's)
+    const userTimerStatusMap = useMemo(() => {
+        const map = new Map<string, TimerStatus>();
+        allTasks.forEach(task => {
+            if (!task.activeTimers || task.activeTimers.length === 0) return;
+            task.activeTimers.forEach(timer => {
+                const uid = typeof timer.userId === 'object' ? (timer.userId as any)._id : timer.userId;
+                if (uid) map.set(uid, 'working');
+            });
+        });
+        // Mark paused: user has in-progress/paused tasks but no active timer
+        groupedAll.forEach(({ user: u, tasks: uTasks }) => {
+            if (!map.has(u._id)) {
+                const hasActive = uTasks.some(t => t.status === 'in-progress' || t.status === 'paused');
+                if (hasActive) map.set(u._id, 'paused');
+                else map.set(u._id, 'offline');
+            }
+        });
+        return map;
+    }, [allTasks, groupedAll]);
+
     const isToday = selectedDate === today;
 
     return (
@@ -443,7 +486,14 @@ export default function DailyOverviewPage() {
                         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}
                     >
                         {filtered.map(({ user: u, tasks, meetings }, i) => (
-                            <EmployeeCard key={u._id} user={u} tasks={tasks} meetings={meetings} index={i} />
+                            <EmployeeCard 
+                                key={u._id} 
+                                user={u} 
+                                tasks={tasks} 
+                                meetings={meetings} 
+                                index={i} 
+                                timerStatus={userTimerStatusMap.get(u._id) ?? 'offline'}
+                            />
                         ))}
                     </div>
                 )}
