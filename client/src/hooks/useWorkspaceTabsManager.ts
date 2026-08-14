@@ -76,27 +76,27 @@ export function resolveTabGroup(pathname: string): string | undefined {
 
     // /projects/:id  (but not /projects or /projects/new)
     if (segments[0] === 'projects' && segments[1] && segments[1] !== 'new') {
-        return 'projects-detail';
+        return 'projects-detail-' + segments[1];
     }
 
     // /crm/leads/:id
     if (segments[0] === 'crm' && segments[1] === 'leads' && segments[2]) {
-        return 'crm-lead-detail';
+        return 'crm-lead-detail-' + segments[2];
     }
 
     // /crm/clients/:id
     if (segments[0] === 'crm' && segments[1] === 'clients' && segments[2]) {
-        return 'crm-client-detail';
+        return 'crm-client-detail-' + segments[2];
     }
 
     // /hrms/employees/:id
     if (segments[0] === 'hrms' && segments[1] === 'employees' && segments[2]) {
-        return 'hrms-employee-detail';
+        return 'hrms-employee-detail-' + segments[2];
     }
 
     // /hiring/applications/:id
     if (segments[0] === 'hiring' && segments[1] === 'applications' && segments[2]) {
-        return 'hiring-application-detail';
+        return 'hiring-application-detail-' + segments[2];
     }
 
     return undefined;
