@@ -16,6 +16,11 @@ export default function GlobalTimerWidget() {
         setTimerStatus({ status }).catch(() => {/* silent fail */});
     };
 
+    // Auto-sync status on mount and when it changes (e.g., across tabs or page reloads)
+    useEffect(() => {
+        syncStatus(isRunning ? 'running' : 'paused');
+    }, [isRunning]);
+
 
     useEffect(() => {
         if (isRunning && !timer?.limitBypassed && elapsed >= LIMIT_SECONDS) {
