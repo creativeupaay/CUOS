@@ -47,13 +47,16 @@ export default function ProjectDetailPage() {
     const [isClosingEditProjectPanel, setIsClosingEditProjectPanel] = useState(false);
 
     const dispatch = useDispatch();
-    const activeTabId = useSelector((s: RootState) => s.workspace.activeTabId);
+    const tabs = useSelector((s: RootState) => s.workspace.tabs);
 
     useEffect(() => {
-        if (project?.name && project._id === id && activeTabId) {
-            dispatch(setTabCustomTitle({ id: activeTabId, title: project.name }));
+        if (!project?.name || project._id !== id) return;
+        // Find the tab that corresponds to THIS project's URL, not just any active tab
+        const projectTab = tabs.find(t => t.url.startsWith('/projects/' + id));
+        if (projectTab) {
+            dispatch(setTabCustomTitle({ id: projectTab.id, title: project.name }));
         }
-    }, [project?.name, project?._id, id, activeTabId, dispatch]);
+    }, [project?.name, project?._id, id, tabs, dispatch]);
 
     const currentUser = useSelector((s: RootState) => s.auth.user);
     const roleName = currentUser?.role
