@@ -15,6 +15,7 @@ interface MeetingForm {
     notesLink: string;
     type: MeetingType;
     projectId: string;
+    isProjectMeeting: boolean;
     isRecurring: boolean;
     recurrenceFreq: 'daily' | 'weekly';
     recurrenceEndDate: string;
@@ -28,6 +29,7 @@ const EMPTY_FORM: MeetingForm = {
     notesLink: '',
     type: 'internal',
     projectId: '',
+    isProjectMeeting: true,
     isRecurring: false,
     recurrenceFreq: 'weekly',
     recurrenceEndDate: '',
@@ -36,30 +38,55 @@ const EMPTY_FORM: MeetingForm = {
 
 function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onEdit: (m: GlobalMeeting) => void; onDelete: (m: GlobalMeeting) => void }) {
     const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
+    const btnRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState({ top: 0, right: 0 });
 
     useEffect(() => {
         if (!open) return;
         const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+            if (btnRef.current?.contains(e.target as Node)) return;
+            if (menuRef.current?.contains(e.target as Node)) return;
+            setOpen(false);
         };
+        const scrollHandler = () => setOpen(false);
         document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        window.addEventListener('scroll', scrollHandler, true);
+        return () => {
+            document.removeEventListener('mousedown', handler);
+            window.removeEventListener('scroll', scrollHandler, true);
+        };
     }, [open]);
 
+    const handleOpen = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+        }
+        setOpen(!open);
+    };
+
     return (
-        <div ref={ref} className="relative">
+        <>
             <button
-                onClick={() => setOpen(p => !p)}
+                ref={btnRef}
+                onClick={handleOpen}
                 className="p-1.5 rounded-lg transition-all hover:bg-black/5"
                 style={{ color: 'var(--color-text-muted)' }}
             >
                 <MoreHorizontal size={14} />
             </button>
-            {open && (
+            {open && createPortal(
                 <div
-                    className="absolute right-0 top-8 w-32 rounded-xl border shadow-xl py-1 z-50"
-                    style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}
+                    ref={menuRef}
+                    className="fixed w-32 rounded-xl border shadow-xl py-1 z-[9999]"
+                    style={{ 
+                        top: coords.top, 
+                        right: coords.right,
+                        backgroundColor: 'var(--color-bg-surface)', 
+                        borderColor: 'var(--color-border-default)' 
+                    }}
                 >
                     <button
                         onClick={() => { onEdit(meeting); setOpen(false); }}
@@ -74,9 +101,10 @@ function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onE
                     >
                         <Trash2 size={12} /> Delete
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
-        </div>
+        </>
     );
 }
 
@@ -96,6 +124,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
     const [page, setPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; projectId: string; title: string } | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const [showFilters, setShowFilters] = useState(false);
     const [searchExpanded, setSearchExpanded] = useState(false);
@@ -142,7 +172,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         setForm(f => ({ ...f, [k]: v }));
 
     const openForm = () => {
-        setForm({ ...EMPTY_FORM, type: activeTab === 'all' ? 'internal' : activeTab, projectId: 'general' });
+        setForm({ ...EMPTY_FORM, type: activeTab === 'all' ? 'internal' : activeTab });
         setMeetingToEdit(null);
         setShowForm(true);
         setTimeout(() => setIsAnimating(true), 10);
@@ -160,6 +190,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             notesLink: meeting.notes || '',
             type: meeting.type,
             projectId: meeting._projectId || 'general',
+            isProjectMeeting: !!meeting._projectId,
             isRecurring: false,
             recurrenceFreq: 'weekly',
             recurrenceEndDate: '',
@@ -187,10 +218,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.purpose || !form.datetime || !form.projectId) {
+        if (!form.purpose || !form.datetime || (form.isProjectMeeting && !form.projectId)) {
             alert('Purpose, Date/Time, and Project are required.');
             return;
         }
+        setIsSaving(true);
         try {
             const data = {
                 title: form.purpose,
@@ -232,16 +264,21 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         } catch (err) {
             logger.error('Failed to save meeting:', err);
             alert('Failed to save meeting. Please try again.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
     const executeDelete = async () => {
         if (!deleteConfirm) return;
+        setIsDeleting(true);
         try {
             await deleteMeeting(deleteConfirm.id, deleteConfirm.projectId);
             setDeleteConfirm(null);
         } catch (e) {
             logger.error('Failed to delete meeting:', e);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -469,7 +506,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             ) : (
                 <>
                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
-                    <table className="w-full border-collapse text-left">
+                    <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left whitespace-nowrap min-w-[800px]">
                         <thead>
                             <tr style={{ backgroundColor: 'var(--color-bg-subtle)', borderBottom: '1px solid var(--color-border-default)' }}>
                                 <th className="py-2.5 pl-4 pr-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Meeting Name</th>
@@ -560,6 +598,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             })}
                         </tbody>
                     </table>
+                    </div>
                 </div>
                     
                     {/* Pagination */}
@@ -636,22 +675,45 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                         <div className="flex-1 overflow-y-auto px-6 py-5">
                             <form id="global-meeting-form" onSubmit={handleSubmit} className="space-y-5">
 
-                                {/* Project selector */}
+                                {/* Is Project Meeting Toggle */}
                                 <div>
-                                    <label className={labelCls} style={labelSty}>Project *</label>
-                                    <select
-                                        value={form.projectId}
-                                        onChange={e => setField('projectId', e.target.value)}
-                                        className={inputCls}
-                                        style={inputSty}
-                                        required
-                                    >
-                                        <option value="general">Select a project... (General Meeting)</option>
-                                        {projects.map(p => (
-                                            <option key={p._id} value={p._id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                    <label className="flex items-center gap-2 text-xs font-semibold mb-2 cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!form.isProjectMeeting}
+                                            onChange={e => {
+                                                const notProject = e.target.checked;
+                                                setField('isProjectMeeting', !notProject);
+                                                if (notProject) {
+                                                    setField('projectId', 'general');
+                                                } else {
+                                                    setField('projectId', '');
+                                                }
+                                            }}
+                                            className="rounded"
+                                        />
+                                        Not a project meeting
+                                    </label>
                                 </div>
+
+                                {/* Project selector */}
+                                {form.isProjectMeeting && (
+                                    <div>
+                                        <label className={labelCls} style={labelSty}>Project *</label>
+                                        <select
+                                            value={form.projectId}
+                                            onChange={e => setField('projectId', e.target.value)}
+                                            className={inputCls}
+                                            style={inputSty}
+                                            required
+                                        >
+                                            <option value="">Select a project...</option>
+                                            {projects.map(p => (
+                                                <option key={p._id} value={p._id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 {/* Meeting Type Toggle */}
                                 <div>
@@ -825,11 +887,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             <button
                                 type="submit"
                                 form="global-meeting-form"
-                                disabled={isCreating}
+                                disabled={isSaving || isCreating}
                                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
                                 style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
                             >
-                                {isCreating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                {isSaving || isCreating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                                 {meetingToEdit ? 'Save Changes' : 'Create Meeting'}
                             </button>
                         </div>
@@ -862,10 +924,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 </button>
                                 <button
                                     onClick={executeDelete}
-                                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-80"
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
                                     style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}
                                 >
-                                    Delete
+                                    {isDeleting ? <Loader2 size={16} className="animate-spin" /> : 'Delete'}
                                 </button>
                             </div>
                         </div>

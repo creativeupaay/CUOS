@@ -193,10 +193,26 @@ export default function DailyTodosList() {
     const { allTasks, currentUserId, updateTask, projects } = useGlobalTasks();
 
     const { todoTasks, inProgressTasks, pausedTasks, completedTasks } = useMemo(() => {
+        const isToday = (dateVal?: string | Date) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            if (isNaN(d.getTime())) return false;
+            const today = new Date();
+            return d.getDate() === today.getDate() &&
+                   d.getMonth() === today.getMonth() &&
+                   d.getFullYear() === today.getFullYear();
+        };
+
         const myTodos = allTasks.filter(t => {
-            const isAssigned = t.assignees.some(a => getEntityId(a) === currentUserId);
+            const isAssigned = Array.isArray(t.assignees) && t.assignees.some(a => getEntityId(a) === currentUserId);
+            if (isAssigned) return true;
+
             const isCreator = getEntityId(t.createdBy) === currentUserId;
-            return isAssigned || isCreator;
+            const hasOtherAssignees = Array.isArray(t.assignees) && t.assignees.length > 0;
+
+            if (isCreator && !hasOtherAssignees) return true;
+            
+            return false;
         });
 
         // Sort them by date (newest first)
@@ -209,7 +225,7 @@ export default function DailyTodosList() {
         const todoTasks = myTodos.filter(t => t.status === 'todo');
         const inProgressTasks = myTodos.filter(t => t.status === 'in-progress');
         const pausedTasks = myTodos.filter(t => t.status === 'paused');
-        const completedTasks = myTodos.filter(t => t.status === 'completed').slice(0, 4); // Only show last 4
+        const completedTasks = myTodos.filter(t => t.status === 'completed' && (isToday(t.completedAt) || isToday(t.updatedAt))).slice(0, 4); // Only show last 4
 
         return { todoTasks, inProgressTasks, pausedTasks, completedTasks };
     }, [allTasks, currentUserId]);

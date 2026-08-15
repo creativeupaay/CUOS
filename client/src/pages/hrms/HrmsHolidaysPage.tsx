@@ -15,10 +15,10 @@ const TYPE_CFG = {
 } as const;
 
 function TypeBadge({ type }: { type: Holiday['type'] }) {
-    const c = TYPE_CFG[type];
+    const c = TYPE_CFG[type as keyof typeof TYPE_CFG] || TYPE_CFG.holiday;
     return (
         <span
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
             style={{ backgroundColor: c.bg, color: c.color }}
         >
             {c.emoji} {c.label}
@@ -251,7 +251,7 @@ function MonthCalendar({ year, month, holidays, onHolidayClick }: { year: number
                             key={i}
                             className="rounded-lg p-1 min-h-[64px] relative"
                             style={{
-                                backgroundColor: hols.length > 0 ? TYPE_CFG[hols[0].type].bg + '60' : (isSunday ? '#FFF5F5' : 'var(--color-bg-subtle)'),
+                                backgroundColor: hols.length > 0 ? (TYPE_CFG[hols[0].type] || TYPE_CFG.holiday).bg + '60' : (isSunday ? '#FFF5F5' : 'var(--color-bg-subtle)'),
                                 border: isToday ? '2px solid var(--color-primary)' : '1px solid var(--color-border-default)',
                             }}
                         >
@@ -261,17 +261,20 @@ function MonthCalendar({ year, month, holidays, onHolidayClick }: { year: number
                             >
                                 {dayNum}
                             </div>
-                            {hols.map((h, hi) => (
-                                <button
-                                    key={hi}
-                                    onClick={() => onHolidayClick(h)}
-                                    className="text-xs rounded px-1 py-0.5 mb-0.5 truncate font-medium w-full text-left cursor-pointer hover:opacity-90 transition-opacity"
-                                    style={{ backgroundColor: TYPE_CFG[h.type].bg, color: TYPE_CFG[h.type].color }}
-                                    title={h.name}
-                                >
-                                    {TYPE_CFG[h.type].emoji} {h.name}
-                                </button>
-                            ))}
+                            {hols.map((h, hi) => {
+                                const cfg = TYPE_CFG[h.type] || TYPE_CFG.holiday;
+                                return (
+                                    <button
+                                        key={hi}
+                                        onClick={() => onHolidayClick(h)}
+                                        className="text-xs rounded px-1 py-0.5 mb-0.5 truncate font-medium w-full text-left cursor-pointer hover:opacity-90 transition-opacity"
+                                        style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                                        title={h.name}
+                                    >
+                                        {cfg.emoji} {h.name}
+                                    </button>
+                                );
+                            })}
                         </div>
                     );
                 })}
@@ -449,12 +452,12 @@ export default function HrmsHolidaysPage() {
                                         {/* Date block */}
                                         <div
                                             className="rounded-xl p-3 text-center flex-shrink-0 min-w-[56px]"
-                                            style={{ backgroundColor: TYPE_CFG[h.type].bg }}
+                                            style={{ backgroundColor: (TYPE_CFG[h.type] || TYPE_CFG.holiday).bg }}
                                         >
-                                            <div className="text-xl font-bold" style={{ color: TYPE_CFG[h.type].color }}>
+                                            <div className="text-xl font-bold" style={{ color: (TYPE_CFG[h.type] || TYPE_CFG.holiday).color }}>
                                                 {dayNum}
                                             </div>
-                                            <div className="text-xs font-medium" style={{ color: TYPE_CFG[h.type].color }}>
+                                            <div className="text-xs font-medium" style={{ color: (TYPE_CFG[h.type] || TYPE_CFG.holiday).color }}>
                                                 {monthStr}
                                             </div>
                                         </div>

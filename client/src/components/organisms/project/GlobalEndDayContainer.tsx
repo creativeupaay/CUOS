@@ -14,7 +14,7 @@ interface GlobalEndDayContainerProps {
 }
 
 export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess }: GlobalEndDayContainerProps) {
-    const { allTasks, projects, updateTask, logTime } = useGlobalTasks();
+    const { allTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
     const { allMeetings } = useGlobalMeetings();
     const currentUserId = useSelector((state: RootState) => state.auth.user?._id);
 
@@ -52,7 +52,24 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
                 }
             }
             if (unallocatedMinutes > 0) {
-                await logTime('', '000000000000000000000000', unallocatedMinutes, 'Unallocated Time');
+                let unallocatedTask = myTasks.find(t => t.title === 'Unallocated Time' && !t._projectId);
+                let targetTaskId = '000000000000000000000000';
+                
+                if (unallocatedTask) {
+                    targetTaskId = unallocatedTask._id;
+                } else if (createTask) {
+                    const newTask = await createTask('', { 
+                        title: 'Unallocated Time', 
+                        status: 'completed', 
+                        priority: 'low',
+                        description: 'Automatically created to store unallocated tracked time.',
+                    });
+                    if (newTask) {
+                        targetTaskId = newTask._id;
+                    }
+                }
+                
+                await logTime('', targetTaskId, unallocatedMinutes, 'Unallocated Time');
             }
             onSuccess();
             toast.success('Day ended successfully!');
@@ -63,15 +80,24 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
     }, [updateTask, logTime, onSuccess]);
 
     const myTasks = allTasks.filter(t => {
-        const creatorId = t.createdBy && typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
-        if (creatorId === currentUserId) return true;
-        
+        let isAssignedToMe = false;
+        let hasOtherAssignees = false;
+
         if (Array.isArray(t.assignees)) {
-            return t.assignees.some(a => {
+            hasOtherAssignees = t.assignees.length > 0;
+            isAssignedToMe = t.assignees.some((a: any) => {
                 const aId = a && typeof a === 'object' ? (a as any)._id : a;
                 return aId === currentUserId;
             });
         }
+        
+        if (isAssignedToMe) return true;
+
+        const creatorId = t.createdBy && typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
+        const isCreator = creatorId === currentUserId;
+
+        if (isCreator && !hasOtherAssignees) return true;
+
         return false;
     });
 

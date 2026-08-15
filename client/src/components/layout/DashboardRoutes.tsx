@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { useAppSelector } from '@/app/hooks';
+
 import {
   hasHrmsSelfSubmoduleAccess,
   hasModuleAdminAccess,

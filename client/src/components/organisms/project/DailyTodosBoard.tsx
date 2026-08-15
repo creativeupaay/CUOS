@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { DndContext, useDraggable, useDroppable, type DragEndEvent, pointerWithin } from '@dnd-kit/core';
 import { useGlobalTasks, type GlobalTask } from '@/hooks/useGlobalTasks';
-import { Calendar, Clock, User2 } from 'lucide-react';
-import { formatElapsed } from '@/hooks/useTaskTimer';
+import { Calendar, User2 } from 'lucide-react';
+
 
 const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
     low:      { color: '#10B981', label: 'Low'      },
@@ -34,7 +34,7 @@ function TaskCard({ task }: { task: GlobalTask }) {
         borderColor: 'var(--color-border-default)'
     };
     
-    const totalSecs = (task.accumulatedSeconds || []).reduce((a, b) => a + b.seconds, 0);
+
     const pc = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG['medium'];
 
     const creatorName = task.createdBy && typeof task.createdBy === 'object' ? (task.createdBy as any).name || (task.createdBy as any).email : 'Unknown';
@@ -88,13 +88,6 @@ function TaskCard({ task }: { task: GlobalTask }) {
                         <User2 size={12} />
                         <span className="truncate">{creatorName}</span>
                     </span>
-                    
-                    {task.status === 'in-progress' && (
-                        <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
-                            <Clock size={12} />
-                            {formatElapsed(totalSecs)}
-                        </span>
-                    )}
                 </div>
             </div>
         </div>
@@ -126,13 +119,36 @@ function Column({ id, title, tasks }: { id: string; title: string; tasks: Global
 export default function DailyTodosBoard() {
     const { allTasks, currentUserId, updateTask } = useGlobalTasks();
 
+    const isToday = (dateVal?: string | Date) => {
+        if (!dateVal) return false;
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return false;
+        const today = new Date();
+        return d.getDate() === today.getDate() &&
+               d.getMonth() === today.getMonth() &&
+               d.getFullYear() === today.getFullYear();
+    };
+
     // Filter logic: Include if user is assigned OR user created it.
     const filterAndSort = (status: GlobalTask['status'], sortNewestFirst = false) => {
         const filtered = allTasks.filter(t => {
             if (t.status !== status) return false;
-            const isAssigned = t.assignees.some(a => getEntityId(a) === currentUserId);
+            
+            if (status === 'completed') {
+                if (!isToday(t.completedAt) && !isToday(t.updatedAt)) {
+                    return false;
+                }
+            }
+
+            const isAssigned = Array.isArray(t.assignees) && t.assignees.some(a => getEntityId(a) === currentUserId);
+            if (isAssigned) return true;
+
             const isCreator = getEntityId(t.createdBy) === currentUserId;
-            return isAssigned || isCreator;
+            const hasOtherAssignees = Array.isArray(t.assignees) && t.assignees.length > 0;
+
+            if (isCreator && !hasOtherAssignees) return true;
+            
+            return false;
         });
 
         if (sortNewestFirst) {

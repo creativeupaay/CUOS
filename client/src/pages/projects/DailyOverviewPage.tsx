@@ -265,6 +265,20 @@ export default function DailyOverviewPage() {
     const groupedAll = useMemo(() => {
         const map = new Map<string, { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[] }>();
         allTasks.forEach(task => {
+            // Check if task belongs to the selected day
+            if (selectedDate) {
+                const createdDate = task.createdAt ? toLocalDateString(new Date(task.createdAt)) : '';
+                const completedDate = task.completedAt ? toLocalDateString(new Date(task.completedAt)) : (task.updatedAt ? toLocalDateString(new Date(task.updatedAt)) : '');
+                
+                const isCreatedThatDay = createdDate === selectedDate;
+                const isInProgress = task.status === 'in-progress';
+                const isCompletedThatDay = task.status === 'completed' && completedDate === selectedDate;
+                
+                if (!isCreatedThatDay && !isInProgress && !isCompletedThatDay) {
+                    return; // skip this task
+                }
+            }
+
             const assignees = Array.isArray(task.assignees) ? task.assignees : [];
             const usersToGroup = assignees.length > 0 
                 ? assignees.map(a => resolveUser(a as any)).filter(Boolean)

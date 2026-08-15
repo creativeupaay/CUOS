@@ -99,6 +99,11 @@ export function resolveTabGroup(pathname: string): string | undefined {
         return 'hiring-application-detail-' + segments[2];
     }
 
+    // Treat all my-hrms tabs as a single group so switching between them reuses the tab
+    if (segments[0] === 'my-hrms') {
+        return 'my-hrms';
+    }
+
     return undefined;
 }
 
@@ -184,7 +189,11 @@ export function useWorkspaceTabsManager() {
         } else {
             // In-page navigation (e.g. navigating within a project page) — no newTab flag.
             // Detect if the base URL changed significantly (cross-module jump without sidebar).
-            const isBaseUrlChanged = activeTab && normalizeUrl(activeTab.url) !== normalizeUrl(currentUrl);
+            const getBaseModule = (u: string) => {
+                const base = u.split('/')[1];
+                return base === 'my-hrms' ? 'hrms' : base;
+            };
+            const isBaseUrlChanged = activeTab && getBaseModule(normalizeUrl(activeTab.url)) !== getBaseModule(normalizeUrl(currentUrl));
 
             // If we have an active tab and the base URL didn't change, just update the active tab.
             if (activeTabId && tabs.length > 0 && !isBaseUrlChanged) {

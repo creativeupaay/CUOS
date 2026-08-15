@@ -163,7 +163,7 @@ export default function EndOfDayModal({
 
         // Validate task mandatory fields
         for (const entry of entries) {
-            if (!entry.projectId) {
+            if (entry.task._projectId && !entry.projectId) {
                 import('react-hot-toast').then(toast => toast.default.error(`Project is missing for task: "${entry.task.title}"`));
                 return;
             }
@@ -442,7 +442,7 @@ export default function EndOfDayModal({
                                 const entry = entries.find(e => e.task._id === task._id);
                                 const isChecked = !!entry;
                                 const hasNoTime = !entry || !entry.allocatedMinutes || entry.allocatedMinutes <= 0;
-                                const isMissingDetails = (!task._projectId && (!entry || !entry.projectId)) || (!task.deadline && (!entry || !entry.deadline));
+                                const isMissingDetails = (!!task._projectId && (!entry || !entry.projectId)) || (!task.deadline && (!entry || !entry.deadline));
 
                                 return (
                                     <div
@@ -571,7 +571,7 @@ export default function EndOfDayModal({
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                                            Project <span className="text-red-500">*</span>
+                                                            Project {!!entry.task._projectId && <span className="text-red-500">*</span>}
                                                         </label>
                                                         <select
                                                             value={entry.projectId}
