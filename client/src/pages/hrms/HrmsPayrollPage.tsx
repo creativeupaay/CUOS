@@ -97,7 +97,7 @@ export default function HrmsPayrollPage() {
     // Filter employees who do not have a salary structure yet (for the creation step)
     const employeesWithoutSalary = useMemo(() => {
         return employees.filter(emp => !salaries.some((sal) => {
-            const salEmpId = typeof sal.employeeId === 'object' ? sal.employeeId._id : sal.employeeId;
+            const salEmpId = sal.employeeId && typeof sal.employeeId === 'object' ? sal.employeeId._id : sal.employeeId;
             return salEmpId === emp._id;
         }));
     }, [employees, salaries]);

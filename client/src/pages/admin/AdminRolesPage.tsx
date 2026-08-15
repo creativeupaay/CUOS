@@ -65,7 +65,7 @@ export default function AdminRolesPage() {
             description: role.description,
             level: role.level,
             permissions: role.permissions.map((p: any) =>
-                typeof p === 'object' ? p._id : p
+                p && typeof p === 'object' ? p._id : p
             ),
         });
         setError('');

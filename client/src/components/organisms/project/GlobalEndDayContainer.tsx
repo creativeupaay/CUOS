@@ -26,10 +26,10 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
         if (!isToday) return false;
 
         const isParticipant = m.participants?.some(p => {
-            const pId = typeof p.userId === 'object' ? (p.userId as any)._id : p.userId;
+            const pId = p.userId && typeof p.userId === 'object' ? (p.userId as any)._id : p.userId;
             return pId === currentUserId;
         });
-        const creatorId = typeof m.createdBy === 'object' ? (m.createdBy as any)._id : m.createdBy;
+        const creatorId = m.createdBy && typeof m.createdBy === 'object' ? (m.createdBy as any)._id : m.createdBy;
         const isCreator = creatorId === currentUserId;
 
         return isParticipant || isCreator;
@@ -63,12 +63,12 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
     }, [updateTask, logTime, onSuccess]);
 
     const myTasks = allTasks.filter(t => {
-        const creatorId = typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
+        const creatorId = t.createdBy && typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
         if (creatorId === currentUserId) return true;
         
         if (Array.isArray(t.assignees)) {
             return t.assignees.some(a => {
-                const aId = typeof a === 'object' ? (a as any)._id : a;
+                const aId = a && typeof a === 'object' ? (a as any)._id : a;
                 return aId === currentUserId;
             });
         }
