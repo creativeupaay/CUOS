@@ -56,7 +56,7 @@ export const integrationApi = api.injectEndpoints({
                 url: '/integrations/google/meet/sync',
                 method: 'POST',
             }),
-            invalidatesTags: ['GlobalMeetings'],
+            invalidatesTags: ['Meetings'],
         }),
 
         /**
