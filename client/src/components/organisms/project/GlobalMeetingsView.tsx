@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil } from 'lucide-react';
+import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil, RefreshCw, Clock } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
 import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
+import { useSyncMeetNowMutation, useGetUpcomingCalendarMeetingsQuery } from '@/features/integration/integrationApi';
+import { toast } from 'react-hot-toast';
 
 type MeetingType = Meeting['type'];
 
@@ -111,6 +113,13 @@ function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onE
 
 export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'all' }) {
     const { allMeetings, filteredMeetings, isLoading, deleteMeeting, projects, filters, setFilters, isAdmin } = useGlobalMeetings();
+
+    // Integrations hooks
+    const [syncMeetNow, { isLoading: isSyncing }] = useSyncMeetNowMutation();
+    const { data: upcomingResponse, isLoading: isUpcomingLoading } = useGetUpcomingCalendarMeetingsQuery(undefined, {
+        skip: owner !== 'my',
+    });
+    const upcomingMeetings = upcomingResponse?.data || [];
 
     useEffect(() => {
         setFilters({ owner });
@@ -346,6 +355,28 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             <X size={14} />
                         </button>
                     )}
+                    {owner === 'my' && (
+                        <button
+                            onClick={async () => {
+                                try {
+                                    await syncMeetNow().unwrap();
+                                    toast.success('Meetings synced successfully');
+                                } catch (err: any) {
+                                    if (err.status === 404) {
+                                        toast.error('No connected Google account found');
+                                    } else {
+                                        toast.error('Failed to sync meetings');
+                                    }
+                                }
+                            }}
+                            disabled={isSyncing}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all border disabled:opacity-50"
+                            style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                        >
+                            <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
+                            Sync Meetings
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -484,6 +515,69 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                     </div>
                 </div>
             </div>
+
+            {/* Upcoming Meetings Banner */}
+            {owner === 'my' && activeTab === 'all' && (
+                <div className="mb-4">
+                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                        <Calendar size={14} style={{ color: 'var(--color-primary)' }} /> Upcoming from Calendar
+                    </h3>
+                    {isUpcomingLoading ? (
+                        <div className="flex items-center gap-2 py-4 px-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            <Loader2 size={12} className="animate-spin" /> Fetching upcoming meetings...
+                        </div>
+                    ) : upcomingMeetings.length === 0 ? (
+                        <div className="text-xs px-2" style={{ color: 'var(--color-text-muted)' }}>
+                            No upcoming Google Meet events found in your calendar.
+                        </div>
+                    ) : (
+                        <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+                            {upcomingMeetings.map((event: any) => {
+                                const d = new Date(event.startTime);
+                                const isToday = d.toDateString() === new Date().toDateString();
+                                const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                
+                                return (
+                                    <div 
+                                        key={event.id}
+                                        className="flex-shrink-0 flex flex-col justify-between w-64 rounded-xl border p-3 bg-gradient-to-br from-white to-gray-50/50 shadow-sm transition-transform hover:-translate-y-0.5"
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
+                                        <div>
+                                            <h4 className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }} title={event.title}>
+                                                {event.title}
+                                            </h4>
+                                            <div className="flex items-center gap-2 mt-1.5 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+                                                <div className="flex items-center gap-1 font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                                    <Clock size={10} />
+                                                    {isToday ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, {timeStr}
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <Video size={10} />
+                                                    {event.scheduledDurationMinutes}m
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {event.meetLink && (
+                                            <a 
+                                                href={event.meetLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="mt-3 flex items-center justify-center gap-1.5 w-full py-1.5 text-xs font-semibold rounded-lg text-white transition-opacity hover:opacity-90"
+                                                style={{ backgroundColor: 'var(--color-primary)' }}
+                                            >
+                                                <Video size={12} />
+                                                Join Meet
+                                            </a>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Meeting list */}
             {isLoading ? (

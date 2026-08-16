@@ -21,6 +21,10 @@ import { env } from '../../../config/env.config';
 import AppError from '../../../utils/appError';
 import { logger } from '../../../utils/logger';
 import crypto from 'crypto';
+import { GoogleIntegration } from '../models/GoogleIntegration.model';
+import { syncUserMeetings } from '../jobs/googleMeetSync.job';
+import { getValidAccessToken } from '../services/google.oauth.service';
+import { fetchCalendarEventsWithMeet } from '../services/google.calendar.service';
 
 // ─── Connect (redirect to Google consent) ────────────────────────────────────
 
@@ -157,3 +161,78 @@ export const disconnectGoogle = async (
         next(err);
     }
 };
+
+// ─── Manual Sync ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/integrations/google/meet/sync
+ * Manually trigger the Google Meet sync for the current user.
+ */
+export const syncMeetNow = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        if (!req.user?.id) return next(new AppError('Authentication required', 401));
+
+        const integration = await GoogleIntegration.findOne({ 
+            userId: req.user.id, 
+            status: 'active' 
+        }).select('+accessToken +refreshToken').lean<any>();
+
+        if (!integration) {
+            return next(new AppError('No active Google integration found.', 404));
+        }
+
+        // Run sync synchronously so frontend can wait and reload
+        await syncUserMeetings(integration);
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Meetings synced successfully',
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// ─── Upcoming Meetings ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/integrations/google/calendar/upcoming
+ * Fetches upcoming Google Calendar meetings with Meet links.
+ */
+export const getUpcomingMeetings = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        if (!req.user?.id) return next(new AppError('Authentication required', 401));
+
+        const integration = await GoogleIntegration.findOne({ 
+            userId: req.user.id, 
+            status: 'active' 
+        }).select('+accessToken +refreshToken').lean<any>();
+
+        if (!integration) {
+            return next(new AppError('No active Google integration found.', 404));
+        }
+
+        const accessToken = await getValidAccessToken(integration);
+
+        const timeMin = new Date();
+        const timeMax = new Date(timeMin.getTime() + 7 * 24 * 60 * 60 * 1000); // next 7 days
+
+        const events = await fetchCalendarEventsWithMeet(accessToken, timeMin, timeMax);
+
+        res.status(200).json({
+            status: 'success',
+            data: events,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+

@@ -4,6 +4,8 @@ import {
     handleGoogleCallback,
     getGoogleStatus,
     disconnectGoogle,
+    syncMeetNow,
+    getUpcomingMeetings
 } from '../controllers/google.controller';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 
@@ -35,5 +37,17 @@ router.get('/status', authenticate, getGoogleStatus);
  * Revoke Google tokens and remove the integration.
  */
 router.delete('/disconnect', authenticate, disconnectGoogle);
+
+/**
+ * POST /api/v1/integrations/google/meet/sync
+ * Manually trigger a Google Meet sync for the current user.
+ */
+router.post('/meet/sync', authenticate, syncMeetNow);
+
+/**
+ * GET /api/v1/integrations/google/calendar/upcoming
+ * Fetch upcoming Google Calendar meetings.
+ */
+router.get('/calendar/upcoming', authenticate, getUpcomingMeetings);
 
 export default router;

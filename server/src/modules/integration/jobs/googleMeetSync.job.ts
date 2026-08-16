@@ -22,7 +22,7 @@ import { TimeLog } from '../../project/models/TimeLog.model';
 import { User } from '../../auth/models/User.model';
 import { getValidAccessToken } from '../services/google.oauth.service';
 import { fetchCalendarEventsWithMeet } from '../services/google.calendar.service';
-import { fetchMeetConferenceData } from '../services/google.meet.service';
+import { fetchMeetConferenceData, fetchRecentConferenceIds } from '../services/google.meet.service';
 import { calculateUniqueMinutes, type Interval } from '../../../utils/intervalUtils';
 import type { Types } from 'mongoose';
 
@@ -69,7 +69,7 @@ async function runSyncCycle(): Promise<void> {
 
 // ─── Per-user sync ────────────────────────────────────────────────────────────
 
-async function syncUserMeetings(
+export async function syncUserMeetings(
     integration: IGoogleIntegration & { accessToken: string; refreshToken: string; googleUserId?: string; googleEmail?: string }
 ): Promise<void> {
     const userId = integration.userId.toString();
@@ -91,10 +91,16 @@ async function syncUserMeetings(
     // 3. Fetch Calendar events with Meet data
     const calendarEvents = await fetchCalendarEventsWithMeet(accessToken, timeMin, timeMax);
 
-    // 4. Build list of unique conference IDs to process
+    // 4. Fetch recent conference records directly (catches instant meetings)
+    const recentConferenceIds = await fetchRecentConferenceIds(accessToken, timeMin);
+
+    // 5. Build list of unique conference IDs to process
     const conferenceIdSet = new Set<string>();
     for (const ev of calendarEvents) {
         if (ev.meetConferenceId) conferenceIdSet.add(ev.meetConferenceId);
+    }
+    for (const cid of recentConferenceIds) {
+        conferenceIdSet.add(cid);
     }
 
     // 6. Process each conference

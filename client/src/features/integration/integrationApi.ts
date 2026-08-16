@@ -47,6 +47,25 @@ export const integrationApi = api.injectEndpoints({
             }),
             invalidatesTags: ['GoogleIntegrations'],
         }),
+        /**
+         * POST /api/v1/integrations/google/meet/sync
+         * Manually sync Google Meet conferences.
+         */
+        syncMeetNow: builder.mutation<ApiResponse<void>, void>({
+            query: () => ({
+                url: '/integrations/google/meet/sync',
+                method: 'POST',
+            }),
+            invalidatesTags: ['GlobalMeetings'],
+        }),
+
+        /**
+         * GET /api/v1/integrations/google/calendar/upcoming
+         * Fetch upcoming calendar events with Meet links.
+         */
+        getUpcomingCalendarMeetings: builder.query<ApiResponse<any[]>, void>({
+            query: () => '/integrations/google/calendar/upcoming',
+        }),
     }),
     overrideExisting: false,
 });
@@ -54,4 +73,6 @@ export const integrationApi = api.injectEndpoints({
 export const {
     useGetGoogleIntegrationStatusQuery,
     useDisconnectGoogleMutation,
+    useSyncMeetNowMutation,
+    useGetUpcomingCalendarMeetingsQuery,
 } = integrationApi;

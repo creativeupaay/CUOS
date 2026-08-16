@@ -137,3 +137,51 @@ export async function fetchMeetConferenceData(
         return null;
     }
 }
+
+/**
+ * Fetch all Meet conferences organized by the user within a time window.
+ * This is crucial for discovering "instant meetings" that don't have a calendar event.
+ * Returns a list of conference record names (IDs).
+ */
+export async function fetchRecentConferenceIds(
+    accessToken: string,
+    timeMin: Date
+): Promise<string[]> {
+    try {
+        const auth = getOAuth2Client();
+        auth.setCredentials({ access_token: accessToken });
+
+        const meet = google.meet({ version: 'v2', auth });
+
+        // Filter for conferences organized by the user starting after timeMin
+        const filter = `start_time>="${timeMin.toISOString()}"`;
+
+        const response = await meet.conferenceRecords.list({
+            filter,
+            pageSize: 100,
+        });
+
+        const records = response.data.conferenceRecords ?? [];
+        const meetingCodes = new Set<string>();
+
+        // Fetch the space for each record to get the 10-character meetingCode
+        for (const r of records) {
+            if (r.space) {
+                try {
+                    const spaceRes = await meet.spaces.get({ name: r.space });
+                    if (spaceRes.data.meetingCode) {
+                        meetingCodes.add(spaceRes.data.meetingCode);
+                    }
+                } catch (err) {
+                    // ignore if space fetch fails
+                }
+            }
+        }
+
+        return Array.from(meetingCodes);
+    } catch (err: any) {
+        if (err?.code === 403 || err?.status === 403) return [];
+        logger.error({ err }, '[Google Meet] Failed to fetch recent conference IDs from Meet API');
+        return [];
+    }
+}
