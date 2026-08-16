@@ -6,7 +6,8 @@ import {
 } from '@/features/hrms/hrmsApi';
 import {
     User, Briefcase, ShieldCheck, Eye, EyeOff,
-    Edit, X, Loader2, Save, Camera, Building2, UserCircle2, LogOut
+    Edit, X, Loader2, Save, Camera, Building2, UserCircle2, LogOut,
+    Link, Unlink, CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
@@ -15,6 +16,11 @@ import { useGetPartnerEmployeeByIdQuery, useUpdatePartnerEmployeeMutation } from
 import { useLogoutMutation } from '@/features/auth/authApi';
 import { logout as logoutAction } from '@/features/auth/slices/authSlice';
 import { api } from '@/services/api';
+import {
+    useGetGoogleIntegrationStatusQuery,
+    useDisconnectGoogleMutation,
+} from '@/features/integration/integrationApi';
+
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -847,6 +853,11 @@ export default function MyProfilePage() {
                 </div>
             </div>
 
+            {/* ── Google Integration Section ──────────────────────────────── */}
+            <div className="mt-6">
+                <GoogleIntegrationSection />
+            </div>
+
             {/* ── Personal Info Modal ──────────────────────────────── */}
             {activeModal === 'personal' && (
                 <ModalPortal>
@@ -993,6 +1004,144 @@ export default function MyProfilePage() {
                     </div>
                 </ModalPortal>
             )}
+        </div>
+    );
+}
+
+// ─── Google Integration Section ───────────────────────────────────────────────
+
+function GoogleIntegrationSection() {
+    const { data, isLoading, isFetching } = useGetGoogleIntegrationStatusQuery();
+    const [disconnect, { isLoading: isDisconnecting }] = useDisconnectGoogleMutation();
+
+    const status = data?.data;
+    const isConnected = status?.connected && status?.status === 'active';
+    const requiresReauth = status?.status === 'requires_reauth';
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+    const connectUrl = `${API_BASE}/integrations/google/connect`;
+
+    const handleDisconnect = async () => {
+        if (!window.confirm('Disconnect your Google account? Meeting tracking will stop and existing records will remain.')) return;
+        try {
+            await disconnect().unwrap();
+        } catch {
+            alert('Failed to disconnect. Please try again.');
+        }
+    };
+
+    const formatDate = (iso?: string) => {
+        if (!iso) return '';
+        return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    return (
+        <div className="rounded-xl border p-6" style={{ backgroundColor: 'var(--color-bg-surface)', borderColor: 'var(--color-border-default)' }}>
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-1">
+                <span style={{ color: 'var(--color-primary)' }}><Link size={20} /></span>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Integrations</h2>
+            </div>
+            <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+                Connect external services to extend CUOS functionality.
+            </p>
+
+            {/* Google Meet Card */}
+            <div
+                className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border"
+                style={{
+                    borderColor: isConnected ? '#BBF7D0' : requiresReauth ? '#FED7AA' : 'var(--color-border-default)',
+                    backgroundColor: isConnected ? '#F0FDF4' : requiresReauth ? '#FFF7ED' : 'var(--color-bg-subtle)',
+                }}
+            >
+                {/* Google Meet logo */}
+                <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+                >
+                    <svg viewBox="0 0 48 48" width="28" height="28">
+                        <path fill="#EA4335" d="M36 14H24v8l6-2 6 2V14z"/>
+                        <path fill="#34A853" d="M36 22l6 2v8l-6 2-6-2v-8z"/>
+                        <path fill="#4285F4" d="M30 34l6-2V22l-6-2v14z"/>
+                        <path fill="#FBBC04" d="M24 30l6 2v-8l-6-2v8z"/>
+                        <rect width="16" height="22" x="8" y="13" fill="#4285F4" rx="2"/>
+                        <path fill="#fff" d="M8 13h16v22H8z" opacity="0"/>
+                        <path fill="#fff" d="M12 20h8v2h-8zm0 4h8v2h-8zm0 4h5v2h-5z"/>
+                    </svg>
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            Google Meet Auto-Tracking
+                        </span>
+                        {isLoading || isFetching ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                <Loader2 size={10} className="animate-spin" /> Checking…
+                            </span>
+                        ) : isConnected ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}>
+                                <CheckCircle size={11} /> Connected
+                            </span>
+                        ) : requiresReauth ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}>
+                                <AlertCircle size={11} /> Requires re-authentication
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                Not connected
+                            </span>
+                        )}
+                    </div>
+                    {isConnected && status?.googleEmail && (
+                        <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                            {status.googleEmail}
+                            {status.connectedSince && ` · Connected ${formatDate(status.connectedSince)}`}
+                            {status.lastSyncedAt && ` · Last synced ${formatDate(status.lastSyncedAt)}`}
+                        </p>
+                    )}
+                    {!isConnected && !requiresReauth && (
+                        <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
+                            Automatically detect Google Meet attendance and log meeting time in CUOS.
+                        </p>
+                    )}
+                    {requiresReauth && (
+                        <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                            Your Google access token has expired. Please reconnect to resume syncing.
+                        </p>
+                    )}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    {isConnected ? (
+                        <button
+                            onClick={handleDisconnect}
+                            disabled={isDisconnecting}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all disabled:opacity-50"
+                            style={{ borderColor: '#FCA5A5', color: '#DC2626', backgroundColor: '#FFF1F2' }}
+                        >
+                            {isDisconnecting ? <Loader2 size={14} className="animate-spin" /> : <Unlink size={14} />}
+                            {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                        </button>
+                    ) : (
+                        <a
+                            href={connectUrl}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            <ExternalLink size={14} />
+                            {requiresReauth ? 'Reconnect Google' : 'Connect Google'}
+                        </a>
+                    )}
+                </div>
+            </div>
+
+            <p className="text-xs mt-3" style={{ color: '#9CA3AF' }}>
+                Meetings sync every 15 minutes. 
+                Read-only access — CUOS never modifies your calendar.
+            </p>
         </div>
     );
 }

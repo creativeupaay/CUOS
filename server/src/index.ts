@@ -17,6 +17,7 @@ import { initializeSocket } from "./config/socket.config";
 import otService from "./modules/collaboration/services/otService";
 import { initAttendanceReminderJob } from "./modules/notification/jobs/attendanceReminder.job";
 import { initBirthdayNotificationJob } from "./modules/notification/jobs/birthdayNotification.job";
+import { initGoogleMeetSyncJob } from "./modules/integration/jobs/googleMeetSync.job";
 
 // Register models
 import "./modules/auth/models/Permission.model";
@@ -137,6 +138,12 @@ const io = initializeSocket(httpServer);
 // Initialize scheduled jobs
 initAttendanceReminderJob();
 initBirthdayNotificationJob();
+// Google Meet auto-tracking — only if Google OAuth is configured
+if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+  initGoogleMeetSyncJob();
+} else {
+  logger.info('[GoogleMeet] Sync job skipped — GOOGLE_CLIENT_ID not set in .env');
+}
 
 // Start server
 httpServer.listen(PORT, () => {

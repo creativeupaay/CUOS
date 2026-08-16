@@ -15,6 +15,9 @@ export interface ITimeLog extends Document {
     billable?: boolean;
     hourlyRate?: number;
 
+    /** Source of the time log entry */
+    source?: 'manual' | 'timer' | 'google_meet';
+
     createdAt: Date;
     updatedAt: Date;
 }
@@ -33,6 +36,11 @@ const TimeLogSchema = new Schema<ITimeLog>(
         description: { type: String, trim: true },
         billable: { type: Boolean, default: true },
         hourlyRate: { type: Number },
+        source: {
+            type: String,
+            enum: ['manual', 'timer', 'google_meet'],
+            default: 'manual',
+        },
     },
     {
         timestamps: true,

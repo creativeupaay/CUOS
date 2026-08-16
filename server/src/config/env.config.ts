@@ -91,6 +91,29 @@ const envSchema = z.object({
     z.string().optional()
   ),
 
+  // ── Google OAuth 2.0 — Google Meet auto-tracking ──────────────────────────
+  GOOGLE_CLIENT_ID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
+  GOOGLE_CLIENT_SECRET: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
+  GOOGLE_REDIRECT_URI: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().url().optional()
+  ),
+  /** 32-byte hex key used for AES-256 encryption of stored OAuth tokens */
+  GOOGLE_TOKEN_ENCRYPTION_KEY: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(32).optional()
+  ),
+  /** Google Workspace customer ID (e.g. C0xxxxxxx) — required for Admin Reports API */
+  GOOGLE_WORKSPACE_CUSTOMER_ID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().optional()
+  ),
 });
 
 /**

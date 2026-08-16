@@ -19,6 +19,7 @@ import gameZoneRoutes from '../../modules/game-zone/routes/game.routes';
 import wordleRoutes from '../../modules/game-zone/routes/wordle.routes';
 import quizRoutes from '../../modules/game-zone/routes/quiz.routes';
 import wellnessRoutes from '../../modules/wellness/routes/wellness.routes';
+import googleRoutes from '../../modules/integration/routes/google.routes';
 
 const router = Router();
 
@@ -63,5 +64,7 @@ router.use('/wordle', wordleRoutes);
 router.use('/quiz', quizRoutes);
 // Wellness (hydration reminders and future wellness features)
 router.use('/wellness', wellnessRoutes);
+// Google OAuth integrations (Meet auto-tracking)
+router.use('/integrations/google', googleRoutes);
 
 export default router;

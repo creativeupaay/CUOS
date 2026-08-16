@@ -3,7 +3,7 @@ import { useGetMeetingsQuery, useCreateMeetingMutation, useDeleteMeetingMutation
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink, Repeat } from 'lucide-react';
+import { Plus, Loader2, Video, Trash2, Calendar, Users, Link2, BookOpen, X, ExternalLink, Repeat, Clock, CheckCircle2 } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { ProjectTabHeader } from '@/components/organisms/ProjectTabHeader';
 
@@ -390,7 +390,7 @@ export default function ProjectMeetingsTab() {
                                 {/* Header bar */}
                                 <div className="flex items-center gap-3 px-4 py-3"
                                     style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-                                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                                         <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                                             {meeting.title}
                                         </span>
@@ -401,6 +401,14 @@ export default function ProjectMeetingsTab() {
                                             }}>
                                             {isExternal ? '🌐 External' : '🏢 Internal'}
                                         </span>
+                                        {/* Google Meet auto-tracked badge */}
+                                        {(meeting as any).source === 'google_meet' && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                                                style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>
+                                                <CheckCircle2 size={10} />
+                                                Auto-tracked
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {hasLink && (
@@ -458,6 +466,28 @@ export default function ProjectMeetingsTab() {
                                                     {meeting.notes}
                                                     <ExternalLink size={11} />
                                                 </a>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Actual attendance duration (Google Meet only) */}
+                                    {(meeting as any).source === 'google_meet' && (
+                                        <div className="flex items-center gap-2">
+                                            <Clock size={13} style={{ color: 'var(--color-text-muted)' }} />
+                                            <div>
+                                                <div className="text-[10px] font-medium mb-0.5" style={{ color: 'var(--color-text-muted)' }}>Duration</div>
+                                                <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {(meeting as any).actualDuration != null
+                                                        ? `${(meeting as any).actualDuration} min actual`
+                                                        : meeting.duration
+                                                            ? `${meeting.duration} min scheduled`
+                                                            : '—'}
+                                                </div>
+                                                {(meeting as any).conferenceStatus && (
+                                                    <div className="text-[10px] mt-0.5 capitalize" style={{ color: '#9CA3AF' }}>
+                                                        {(meeting as any).conferenceStatus}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}

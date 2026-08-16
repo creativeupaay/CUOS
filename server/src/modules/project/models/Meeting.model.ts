@@ -25,7 +25,7 @@ export interface IMeeting extends Document {
     participants: IMeetingParticipant[];
 
     scheduledAt: Date;
-    duration: number; // in minutes
+    duration: number; // in minutes (scheduled)
     location?: string;
 
     agenda?: string;
@@ -38,6 +38,22 @@ export interface IMeeting extends Document {
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
+
+    // ── Google Meet fields (all optional — manually created meetings are unaffected) ──
+    /** 'manual' for user-created meetings; 'google_meet' for auto-imported ones */
+    source: 'manual' | 'google_meet';
+    /** Google Meet conference record ID — the primary deduplication key */
+    googleConferenceId?: string;
+    /** Google Calendar event ID (if a Calendar event exists for this meeting) */
+    googleCalendarEventId?: string;
+    /** Actual conference start time (from Google Meet data) */
+    actualStartTime?: Date;
+    /** Actual conference end time (from Google Meet data) */
+    actualEndTime?: Date;
+    /** Actual conference duration in minutes (may differ from scheduled duration) */
+    actualDuration?: number;
+    /** Conference lifecycle state */
+    conferenceStatus: 'scheduled' | 'active' | 'ended' | 'no_show';
 }
 
 const MeetingParticipantSchema = new Schema<IMeetingParticipant>(
@@ -79,7 +95,7 @@ const MeetingSchema = new Schema<IMeeting>(
         participants: [MeetingParticipantSchema],
 
         scheduledAt: { type: Date, required: true },
-        duration: { type: Number, required: true, min: 1 }, // in minutes
+        duration: { type: Number, required: true, min: 1 }, // scheduled duration in minutes
         location: String,
 
         agenda: String,
@@ -94,6 +110,29 @@ const MeetingSchema = new Schema<IMeeting>(
         customAccessUsers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
         createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+
+        // ── Google Meet fields ──────────────────────────────────────────────
+        source: {
+            type: String,
+            enum: ['manual', 'google_meet'],
+            default: 'manual',
+        },
+        googleConferenceId: {
+            type: String,
+            trim: true,
+        },
+        googleCalendarEventId: {
+            type: String,
+            trim: true,
+        },
+        actualStartTime: Date,
+        actualEndTime: Date,
+        actualDuration: { type: Number, min: 0 }, // minutes
+        conferenceStatus: {
+            type: String,
+            enum: ['scheduled', 'active', 'ended', 'no_show'],
+            default: 'scheduled',
+        },
     },
     {
         timestamps: true,
@@ -105,5 +144,10 @@ MeetingSchema.index({ projectId: 1 });
 MeetingSchema.index({ scheduledAt: 1 });
 MeetingSchema.index({ 'participants.userId': 1 });
 MeetingSchema.index({ type: 1 });
+MeetingSchema.index({ source: 1 });
+// Unique sparse index — one CUOS meeting per Google conference occurrence
+MeetingSchema.index({ googleConferenceId: 1 }, { unique: true, sparse: true });
+MeetingSchema.index({ googleCalendarEventId: 1 }, { sparse: true });
+MeetingSchema.index({ conferenceStatus: 1 });
 
 export const Meeting = mongoose.model<IMeeting>('Meeting', MeetingSchema);
