@@ -33,6 +33,11 @@ export interface CalendarEvent {
     meetLink?: string;
     description?: string;
     organizer?: string;
+    attendees?: Array<{
+        email: string;
+        displayName?: string;
+        responseStatus?: string;
+    }>;
 }
 
 /**
@@ -61,7 +66,7 @@ export async function fetchCalendarEventsWithMeet(
             singleEvents: true,     // expand recurring events into individual occurrences
             orderBy: 'startTime',
             maxResults: 100,
-            fields: 'items(id,summary,start,end,conferenceData,description,organizer)',
+            fields: 'items(id,summary,start,end,conferenceData,description,organizer,attendees)',
         });
 
         const items = response.data.items ?? [];
@@ -105,6 +110,11 @@ export async function fetchCalendarEventsWithMeet(
                 meetLink: videoEntry?.uri ?? undefined,
                 description: event.description ?? undefined,
                 organizer: event.organizer?.email ?? undefined,
+                attendees: event.attendees?.map((a: any) => ({
+                    email: a.email,
+                    displayName: a.displayName,
+                    responseStatus: a.responseStatus,
+                })).filter((a: any) => !!a.email),
             });
         }
 

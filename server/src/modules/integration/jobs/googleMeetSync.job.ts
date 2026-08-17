@@ -84,9 +84,9 @@ export async function syncUserMeetings(
         return; // status already marked requires_reauth by getValidAccessToken
     }
 
-    // 2. Define time window: past 48h (to catch delayed Reports API data) to now
-    const timeMax = new Date();
-    const timeMin = new Date(timeMax.getTime() - 48 * 60 * 60_000);
+    // 2. Define time window: past 48h to 30 days in the future
+    const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60_000);
+    const timeMin = new Date(Date.now() - 48 * 60 * 60_000);
 
     // 3. Fetch Calendar events with Meet data
     const calendarEvents = await fetchCalendarEventsWithMeet(accessToken, timeMin, timeMax);
@@ -137,7 +137,7 @@ async function processConference(
     userId: string,
     accessToken: string,
     integration: IGoogleIntegration & { accessToken: string; refreshToken: string; googleUserId?: string; googleEmail?: string },
-    calendarEvent?: { title: string; startTime: Date; endTime: Date; scheduledDurationMinutes: number; id: string; description?: string } | undefined
+    calendarEvent?: { title: string; startTime: Date; endTime: Date; scheduledDurationMinutes: number; id: string; description?: string; attendees?: any[] } | undefined
 ): Promise<string[]> {
 
     // 1. Fetch actual Meet data from Meet v2 API
@@ -173,7 +173,44 @@ async function processConference(
         return [];
     }
 
-    // 4. Upsert the Meeting document (atomic — prevents duplicate on concurrent sync)
+    // 4. Build participants list
+    const participantEmails = new Set<string>();
+    
+    // Add calendar attendees
+    if (calendarEvent?.attendees) {
+        for (const attendee of calendarEvent.attendees) {
+            if (attendee.email) participantEmails.add(attendee.email.toLowerCase());
+        }
+    }
+    
+    // Add actual conference participants
+    if (conferenceData?.sessions) {
+        for (const session of conferenceData.sessions) {
+            if (session.email) participantEmails.add(session.email.toLowerCase());
+        }
+    }
+    
+    // Also make sure the syncing user is added
+    if (integration.googleEmail) {
+        participantEmails.add(integration.googleEmail.toLowerCase());
+    }
+
+    // Map emails to CUOS users
+    const matchedUsers = await User.find({ email: { $in: Array.from(participantEmails) }, isActive: true }).select('_id email').lean();
+    const matchedEmails = new Set(matchedUsers.map(u => u.email.toLowerCase()));
+    
+    const participantsList: any[] = matchedUsers.map(u => ({
+        userId: u._id,
+        role: 'required',
+    }));
+    
+    for (const email of participantEmails) {
+        if (!matchedEmails.has(email)) {
+            participantsList.push({ externalEmail: email, role: 'required' });
+        }
+    }
+
+    // 5. Upsert the Meeting document (atomic — prevents duplicate on concurrent sync)
     const meetingDoc = await Meeting.findOneAndUpdate(
         { googleConferenceId: conferenceId },
         {
@@ -195,7 +232,7 @@ async function processConference(
                 conferenceStatus: conferenceData
                     ? conferenceData.isActive ? 'active' : 'ended'
                     : 'scheduled',
-                // Update participants list (users who attended)
+                participants: participantsList,
             },
         },
         {
