@@ -18,7 +18,56 @@ import { DailyTodosBoard, DailyTodosList } from '@/components/organisms/project'
 import DailyOverviewPage from './DailyOverviewPage';
 import toast from 'react-hot-toast';
 
+// ─── Bulk Task Modal Component ───────────────────────────────────────────────
 
+function BulkTaskModal({ isOpen, onClose, onSubmit, isSubmitting }: { isOpen: boolean; onClose: () => void; onSubmit: (tasks: string[]) => void; isSubmitting: boolean }) {
+    const [text, setText] = useState('');
+    
+    if (!isOpen) return null;
+    
+    const handleSubmit = () => {
+        const lines = text.split('\n').map(t => t.trim()).filter(Boolean);
+        if (lines.length === 0) return;
+        onSubmit(lines);
+    };
+
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    <div>
+                        <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>Add Bulk Tasks</h2>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Enter each task on a new line.</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: 'var(--color-text-muted)' }}><X size={18} /></button>
+                </div>
+                <div className="p-6">
+                    <textarea 
+                        autoFocus
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        placeholder="Task 1&#10;Task 2&#10;Task 3..."
+                        className="w-full h-64 p-4 border rounded-xl text-sm outline-none resize-none"
+                        style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
+                    />
+                </div>
+                <div className="px-6 py-4 border-t flex justify-end gap-3" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg border" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}>Cancel</button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={isSubmitting || !text.trim()} 
+                        className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white rounded-lg opacity-90 hover:opacity-100 disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                    >
+                        {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                        Add {text.split('\n').filter(t => t.trim()).length || ''} Tasks
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -314,6 +363,20 @@ function GlobalTasksInner() {
 
 
     const [showForm, setShowForm] = useState(false);
+    const [showBulkForm, setShowBulkForm] = useState(false);
+    const [showTaskMenu, setShowTaskMenu] = useState(false);
+    const taskMenuRef = useRef<HTMLDivElement>(null);
+
+    // Close task menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (taskMenuRef.current && !taskMenuRef.current.contains(e.target as Node)) {
+                setShowTaskMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
     const [taskToEdit, setTaskToEdit] = useState<GlobalTask | undefined>();
     
     const [showFilters, setShowFilters] = useState(false);
@@ -438,6 +501,26 @@ function GlobalTasksInner() {
         }
     }, [taskToDelete, deleteTask]);
 
+    const handleBulkTaskSubmit = useCallback(async (taskTitles: string[]) => {
+        setIsSaving(true);
+        try {
+            await Promise.all(taskTitles.map(title => 
+                createTask('', {
+                    title,
+                    status: 'todo',
+                    priority: 'medium'
+                })
+            ));
+            toast.success(`Successfully added ${taskTitles.length} tasks!`);
+            setShowBulkForm(false);
+        } catch (error) {
+            console.error('Failed to add bulk tasks:', error);
+            toast.error('Failed to add some tasks. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [createTask]);
+
 
 
 
@@ -487,13 +570,35 @@ function GlobalTasksInner() {
                     >
                         Add Meeting
                     </button>
-                    <button
-                        onClick={() => setShowForm(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 shadow-sm"
-                        style={{ backgroundColor: 'var(--color-primary)' }}
-                    >
-                        <Plus size={15} /> New Task
-                    </button>
+                    <div className="relative" ref={taskMenuRef}>
+                        <div className="flex rounded-xl shadow-sm overflow-hidden border" style={{ borderColor: 'var(--color-primary)' }}>
+                            <button
+                                onClick={() => setShowForm(true)}
+                                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 border-r border-white/20"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                <Plus size={15} /> New Task
+                            </button>
+                            <button
+                                onClick={() => setShowTaskMenu(p => !p)}
+                                className="px-2 py-2 text-white transition-all hover:opacity-90 active:scale-95 flex items-center justify-center"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                        </div>
+                        {showTaskMenu && (
+                            <div className="absolute right-0 mt-1 w-48 bg-white border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                <button
+                                    onClick={() => { setShowBulkForm(true); setShowTaskMenu(false); }}
+                                    className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                                    Add Bulk Tasks
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -765,6 +870,12 @@ function GlobalTasksInner() {
             </div>
 
             {/* ── Forms and Modals ── */}
+            <BulkTaskModal 
+                isOpen={showBulkForm} 
+                onClose={() => setShowBulkForm(false)} 
+                onSubmit={handleBulkTaskSubmit} 
+                isSubmitting={isSaving} 
+            />
             {isLoading ? (
                 <div className="flex items-center justify-center py-24">
                     <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-primary)' }} />

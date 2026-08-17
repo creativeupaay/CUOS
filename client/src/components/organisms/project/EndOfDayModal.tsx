@@ -30,6 +30,7 @@ interface EndOfDayModalProps {
     timerSeconds: number;
     onClose: () => void;
     onSubmit: (entries: TaskSummaryEntry[], meetingEntries: MeetingSummaryEntry[], unallocatedMinutes: number) => Promise<void>;
+    onAddNewTask?: () => void;
 }
 
 // ─── Config maps ─────────────────────────────────────────────────────────────
@@ -57,12 +58,14 @@ export default function EndOfDayModal({
     timerSeconds,
     onClose,
     onSubmit,
+    onAddNewTask,
 }: EndOfDayModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [entries, setEntries] = useState<TaskSummaryEntry[]>([]);
     const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>([]);
     const [search, setSearch] = useState('');
+    const [confirmAction, setConfirmAction] = useState<'perfect' | 'less' | null>(null);
 
     const totalTimerMinutes = Math.floor(timerSeconds / 60);
     const allocatedTaskMinutes = entries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0);
@@ -136,7 +139,8 @@ export default function EndOfDayModal({
             if (exists) {
                 return prev.filter(e => e.meeting._id !== meeting._id);
             } else {
-                return [...prev, { meeting, allocatedMinutes: 0 }];
+                const duration = (meeting as any).actualDuration || (meeting as any).scheduledDurationMinutes || 0;
+                return [...prev, { meeting, allocatedMinutes: duration }];
             }
         });
     };
@@ -185,12 +189,25 @@ export default function EndOfDayModal({
             }
         }
 
+        if (unallocatedMinutes === 0) {
+            setConfirmAction('perfect');
+            return;
+        } else if (unallocatedMinutes > 0) {
+            setConfirmAction('less');
+            return;
+        }
+
+        await executeSubmit();
+    };
+
+    const executeSubmit = async () => {
         setIsSubmitting(true);
         try {
             await onSubmit(entries, meetingEntries, unallocatedMinutes);
             onClose();
         } finally {
             setIsSubmitting(false);
+            setConfirmAction(null);
         }
     };
 
@@ -413,11 +430,23 @@ export default function EndOfDayModal({
 
                     {/* ── Tasks Section ── */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Clock size={14} style={{ color: 'var(--color-primary)' }} />
-                            <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
-                                Tasks you worked on
-                            </label>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Clock size={14} style={{ color: 'var(--color-primary)' }} />
+                                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Tasks you worked on
+                                </label>
+                            </div>
+                            {onAddNewTask && (
+                                <button
+                                    onClick={onAddNewTask}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-all hover:opacity-90 active:scale-95 shadow-sm"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    Add Task
+                                </button>
+                            )}
                         </div>
                         <div className="relative">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
@@ -662,6 +691,37 @@ export default function EndOfDayModal({
                     </button>
                 </div>
             </div>
+
+            {/* Confirmation Modals */}
+            {confirmAction && (
+                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in zoom-in-95">
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">
+                            {confirmAction === 'perfect' ? 'Submit Timesheet?' : 'End Day with Less Time?'}
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-6">
+                            {confirmAction === 'perfect' 
+                                ? 'You have perfectly allocated your time. Are you ready to save your tasks and submit?' 
+                                : `You have allocated ${formatHrsMins(allocatedTotal)}, which is less than your total logged time of ${formatElapsed(timerSeconds)}. Unallocated time will be saved as "Unallocated". Are you sure you want to proceed?`}
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmAction(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={executeSubmit}
+                                disabled={isSubmitting}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                            >
+                                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Confirm & Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>,
         document.body
     );

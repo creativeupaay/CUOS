@@ -1,8 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useGlobalTasks } from '@/hooks/useGlobalTasks';
 import { useGlobalMeetings } from '@/hooks/useGlobalMeetings';
 import type { TaskSummaryEntry, MeetingSummaryEntry } from './EndOfDayModal';
 import EndOfDayModal from './EndOfDayModal';
+import GlobalTaskFormPanel, { type NewTaskFormData } from './GlobalTaskFormPanel';
 import { toast } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
@@ -16,7 +17,9 @@ interface GlobalEndDayContainerProps {
 export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess }: GlobalEndDayContainerProps) {
     const { allTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
     const { allMeetings } = useGlobalMeetings();
-    const currentUserId = useSelector((state: RootState) => state.auth.user?._id);
+    const currentUserId = useSelector((state: RootState) => state.auth.user?._id) || '';
+    
+    const [showTaskForm, setShowTaskForm] = useState(false);
 
     const todayMeetings = allMeetings.filter(m => {
         if (!m.scheduledAt) return false;
@@ -102,13 +105,42 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
     });
 
     return (
-        <EndOfDayModal
-            allTasks={myTasks}
-            todayMeetings={todayMeetings}
-            projects={projects}
-            timerSeconds={timerSeconds}
-            onClose={onClose}
-            onSubmit={handleEndDaySubmit}
-        />
+        <>
+            <EndOfDayModal
+                allTasks={myTasks}
+                todayMeetings={todayMeetings}
+                projects={projects}
+                timerSeconds={timerSeconds}
+                onClose={onClose}
+                onSubmit={handleEndDaySubmit}
+                onAddNewTask={() => setShowTaskForm(true)}
+            />
+
+            {showTaskForm && (
+                <GlobalTaskFormPanel
+                    isCreating={false}
+                    onClose={() => setShowTaskForm(false)}
+                    onSubmit={async (data: NewTaskFormData) => {
+                        try {
+                            await createTask('', {
+                                title: data.title,
+                                description: data.description || undefined,
+                                status: data.status,
+                                priority: data.priority,
+                                deadline: data.deadline || undefined,
+                                estimatedHours: (data.timeSpentHours + data.timeSpentMins / 60) || undefined,
+                                projectId: data.taskType === 'project' ? data.projectId : undefined,
+                            });
+                            toast.success('Task created successfully!');
+                            setShowTaskForm(false);
+                        } catch (err) {
+                            console.error('Failed to create task:', err);
+                            toast.error('Failed to create task.');
+                        }
+                    }}
+                    projects={projects}
+                />
+            )}
+        </>
     );
 }
