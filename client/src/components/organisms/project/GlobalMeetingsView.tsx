@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil, RefreshCw, Clock } from 'lucide-react';
+import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil, RefreshCw, Clock, Users, Hourglass, VideoOff } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
 import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
@@ -532,45 +532,74 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                         </div>
                     ) : (
                         <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
-                            {upcomingMeetings.map((event: any) => {
-                                const d = new Date(event.startTime);
-                                const isToday = d.toDateString() === new Date().toDateString();
-                                const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            {upcomingMeetings
+                                .filter((event: any) => new Date(event.endTime) > new Date())
+                                .map((event: any) => {
+                                const startD = new Date(event.startTime);
+                                const endD = new Date(event.endTime);
+                                const isToday = startD.toDateString() === new Date().toDateString();
+                                const isTomorrow = startD.toDateString() === new Date(Date.now() + 86400000).toDateString();
+                                const timeStr = startD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                const endTimeStr = endD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                const dateLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : startD.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                                const attendeesCount = event.attendees?.length || 0;
                                 
                                 return (
                                     <div 
                                         key={event.id}
-                                        className="flex-shrink-0 flex flex-col justify-between w-64 rounded-xl border p-3 bg-gradient-to-br from-white to-gray-50/50 shadow-sm transition-transform hover:-translate-y-0.5"
-                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                        className="flex-shrink-0 flex flex-col justify-between w-72 rounded-2xl border p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 group bg-white"
+                                        style={{ borderColor: 'var(--color-border-subtle, #e5e7eb)' }}
                                     >
                                         <div>
-                                            <h4 className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }} title={event.title}>
-                                                {event.title}
-                                            </h4>
-                                            <div className="flex items-center gap-2 mt-1.5 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-                                                <div className="flex items-center gap-1 font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                                    <Clock size={10} />
-                                                    {isToday ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, {timeStr}
+                                            <div className="flex justify-between items-start mb-2 gap-3">
+                                                <h4 className="text-[15px] font-semibold text-gray-800 line-clamp-2 leading-tight" title={event.title}>
+                                                    {event.title}
+                                                </h4>
+                                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0 text-emerald-600">
+                                                    <Video size={16} />
                                                 </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Video size={10} />
-                                                    {event.scheduledDurationMinutes}m
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-2.5 mt-4">
+                                                <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
+                                                    <Clock size={14} className="text-gray-400" />
+                                                    <span>{dateLabel}, {timeStr} - {endTimeStr}</span>
+                                                </div>
+                                                
+                                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Hourglass size={13} className="text-gray-400" />
+                                                        <span>{event.scheduledDurationMinutes} mins</span>
+                                                    </div>
+                                                    
+                                                    {attendeesCount > 0 && (
+                                                        <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                                                            <Users size={12} className="text-gray-400" />
+                                                            <span className="font-medium">{attendeesCount} {attendeesCount === 1 ? 'Guest' : 'Guests'}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                         
-                                        {event.meetLink && (
-                                            <a 
-                                                href={event.meetLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="mt-3 flex items-center justify-center gap-1.5 w-full py-1.5 text-xs font-semibold rounded-lg text-white transition-opacity hover:opacity-90"
-                                                style={{ backgroundColor: 'var(--color-primary)' }}
-                                            >
-                                                <Video size={12} />
-                                                Join Meet
-                                            </a>
-                                        )}
+                                        <div className="mt-5 pt-4 border-t border-gray-100">
+                                            {event.meetLink ? (
+                                                <a 
+                                                    href={event.meetLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold rounded-xl text-emerald-700 bg-emerald-50 transition-colors hover:bg-emerald-100"
+                                                >
+                                                    <Video size={16} />
+                                                    Join Google Meet
+                                                </a>
+                                            ) : (
+                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-medium rounded-xl text-gray-400 bg-gray-50 border border-dashed border-gray-200">
+                                                    <VideoOff size={16} />
+                                                    No Meet Link
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}

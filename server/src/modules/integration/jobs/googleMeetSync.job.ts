@@ -228,10 +228,36 @@ async function processConference(
         role: 'required',
     }));
     
+    // Explicitly add syncing user if they aren't matched by email
+    if (!participantsList.some(p => p.userId.toString() === userId.toString())) {
+        participantsList.push({
+            userId,
+            role: 'required',
+        });
+    }
+    
     for (const email of participantEmails) {
-        if (!matchedEmails.has(email)) {
+        if (!matchedEmails.has(email) && email.toLowerCase() !== integration.googleEmail?.toLowerCase()) {
             participantsList.push({ externalEmail: email, role: 'required' });
         }
+    }
+
+    const updateFields: any = {
+        googleCalendarEventId: calendarEvent?.id,
+    };
+
+    // Only overwrite actual Meet data if we have it (otherwise we might overwrite what the organizer's sync saved)
+    if (conferenceData) {
+        updateFields.actualStartTime = conferenceData.actualStartTime;
+        updateFields.actualEndTime = conferenceData.actualEndTime;
+        updateFields.actualDuration = actualDuration;
+        updateFields.conferenceStatus = conferenceData.isActive ? 'active' : 'ended';
+        updateFields.participants = participantsList;
+    } else {
+        updateFields.conferenceStatus = 'scheduled';
+        // Only update participants if it's currently empty (we don't want to overwrite actual attendees)
+        // A better approach would be to merge participants, but Mongoose $set replaces the array.
+        // For now, we'll let the organizer's sync handle the definitive participants list.
     }
 
     // 5. Upsert the Meeting document (atomic — prevents duplicate on concurrent sync)
@@ -247,17 +273,9 @@ async function processConference(
                 googleConferenceId: conferenceId,
                 createdBy: userId, // The syncing user created it
                 accessLevel: 'project-team',
+                participants: participantsList, // set initial participants if inserting
             },
-            $set: {
-                googleCalendarEventId: calendarEvent?.id,
-                actualStartTime: conferenceData?.actualStartTime,
-                actualEndTime: conferenceData?.actualEndTime,
-                actualDuration,
-                conferenceStatus: conferenceData
-                    ? conferenceData.isActive ? 'active' : 'ended'
-                    : 'scheduled',
-                participants: participantsList,
-            },
+            $set: updateFields,
         },
         {
             new: true,

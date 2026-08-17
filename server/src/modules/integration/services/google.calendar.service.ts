@@ -83,9 +83,9 @@ export async function fetchCalendarEventsWithMeet(
                     const conf = event.conferenceData;
                     const videoEntry = conf?.entryPoints?.find((ep: any) => ep.entryPointType === 'video');
 
-                    const startRaw = event.start?.dateTime ?? event.start?.date;
-                    const endRaw   = event.end?.dateTime   ?? event.end?.date;
-                    if (!startRaw || !endRaw) continue;
+                    const startRaw = event.start?.dateTime;
+                    const endRaw   = event.end?.dateTime;
+                    if (!startRaw || !endRaw) continue; // Ignore all-day events like public holidays
 
                     const startTime = new Date(startRaw);
                     const endTime   = new Date(endRaw);

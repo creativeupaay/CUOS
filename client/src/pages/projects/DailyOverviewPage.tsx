@@ -185,18 +185,32 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardP
                 {/* Meetings */}
                 {meetings && meetings.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-dashed" style={{ borderColor: 'rgba(0,0,0,0.1)' }}>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Meetings</span>
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded">
+                                {meetings.reduce((acc, m) => acc + (m.duration || 0), 0)} mins total
+                            </span>
+                        </div>
                         <div className="flex flex-col gap-2">
                             {meetings.map(meeting => {
                                 const end = new Date(meeting.scheduledAt);
                                 end.setMinutes(end.getMinutes() + (meeting.duration || 0));
                                 const isDone = end < now;
+                                
+                                // Format participants
+                                const parts = meeting.participants?.map((p: any) => {
+                                    if (p.userId && typeof p.userId === 'object' && p.userId.name) return p.userId.name;
+                                    return p.name || p.externalEmail;
+                                }).filter(Boolean) || [];
+                                const participantsText = parts.length > 0 ? parts.join(', ') : '';
+
                                 return (
                                     <div key={meeting._id} className="flex items-start gap-2">
                                         <span className="mt-0.5 shrink-0" style={{ color: isDone ? '#9CA3AF' : '#8b5cf6' }}>
                                             <Video size={14} />
                                         </span>
                                         <span
-                                            className="text-[13px] leading-snug"
+                                            className="text-[13px] leading-snug w-full"
                                             style={{
                                                 color: isDone ? '#9CA3AF' : '#374151',
                                                 textDecoration: isDone ? 'line-through' : 'none',
@@ -204,10 +218,26 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardP
                                             }}
                                             title={meeting.title}
                                         >
-                                            {meeting.title}
-                                            <span className="text-[10px] ml-1 opacity-70 block">
-                                                {formatTime(meeting.scheduledAt)}
-                                            </span>
+                                            <div className="flex justify-between items-start gap-2">
+                                                <span>{meeting.title}</span>
+                                                <span className="text-[10px] opacity-70 whitespace-nowrap bg-gray-50 px-1 py-0.5 rounded border border-gray-100">
+                                                    {meeting.duration || 0}m
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="text-[10px] opacity-70">
+                                                    {formatTime(meeting.scheduledAt)}
+                                                </span>
+                                                {participantsText && (
+                                                    <>
+                                                        <span className="text-[10px] opacity-40">•</span>
+                                                        <span className="text-[10px] opacity-70 truncate max-w-[120px]" title={participantsText}>
+                                                            {participantsText}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
                                         </span>
                                     </div>
                                 );

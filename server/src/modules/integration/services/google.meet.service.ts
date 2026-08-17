@@ -92,33 +92,34 @@ export async function fetchMeetConferenceData(
 
         const participants = participantsRes.data.participants ?? [];
 
-        for (const p of participants) {
-            if (!p.name) continue;
+        const participantPromises = participants.map(async (p: any) => {
+            if (!p.name) return [];
 
             const isCurrentUser = p.signedinUser?.user === `users/${googleUserId}`;
-            
-            // If you want to only track the authenticated user's time, uncomment the next line:
-            // if (!isCurrentUser) continue;
-
             const participantId = p.signedinUser?.user || p.anonymousUser?.displayName || 'unknown';
 
-            // Fetch sessions for this participant
-            const sessionsRes = await meet.conferenceRecords.participants.participantSessions.list({
-                parent: p.name,
-                pageSize: 100,
-            });
+            try {
+                // Fetch sessions for this participant
+                const sessionsRes = await meet.conferenceRecords.participants.participantSessions.list({
+                    parent: p.name,
+                    pageSize: 100,
+                });
 
-            const pSessions = sessionsRes.data.participantSessions ?? [];
-            for (const s of pSessions) {
-                sessions.push({
+                const pSessions = sessionsRes.data.participantSessions ?? [];
+                return pSessions.map((s: any) => ({
                     sessionId: s.name || undefined,
                     participantId: participantId,
                     email: isCurrentUser ? googleEmail : (participantId || undefined), // Use the authenticated user's email if matched
                     joinTime: s.startTime ? new Date(s.startTime) : (actualStartTime || new Date()),
                     leaveTime: s.endTime ? new Date(s.endTime) : undefined,
-                });
+                }));
+            } catch (err) {
+                return [];
             }
-        }
+        });
+
+        const nestedSessions = await Promise.all(participantPromises);
+        sessions.push(...nestedSessions.flat());
 
         return {
             conferenceId: record.name || '',
@@ -164,19 +165,21 @@ export async function fetchRecentConferenceIds(
         const records = response.data.conferenceRecords ?? [];
         const meetingCodes = new Set<string>();
 
-        // Fetch the space for each record to get the 10-character meetingCode
-        for (const r of records) {
-            if (r.space) {
-                try {
-                    const spaceRes = await meet.spaces.get({ name: r.space });
-                    if (spaceRes.data.meetingCode) {
-                        meetingCodes.add(spaceRes.data.meetingCode);
-                    }
-                } catch (err) {
-                    // ignore if space fetch fails
-                }
+        // Fetch the space for each record in parallel
+        const spacePromises = records.map(async (r: any) => {
+            if (!r.space) return null;
+            try {
+                const spaceRes = await meet.spaces.get({ name: r.space });
+                return spaceRes.data.meetingCode;
+            } catch (err) {
+                return null;
             }
-        }
+        });
+
+        const codes = await Promise.all(spacePromises);
+        codes.forEach(code => {
+            if (code) meetingCodes.add(code);
+        });
 
         return Array.from(meetingCodes);
     } catch (err: any) {
