@@ -37,9 +37,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
     return createPortal(
         <>
-            <div className="fixed inset-0 z-[200]" style={{ backgroundColor: 'rgba(0,0,0,0.20)' }} onClick={onClose} />
+            <div className="fixed inset-0 z-[500]" style={{ backgroundColor: 'rgba(0,0,0,0.20)' }} onClick={onClose} />
             <div
-                className="fixed top-0 right-0 h-full z-[201] flex flex-col"
+                className="fixed top-0 right-0 h-full z-[501] flex flex-col"
                 style={{ width: 'min(520px, 100vw)', backgroundColor: 'var(--color-bg-surface)', borderLeft: '1px solid var(--color-border-default)', boxShadow: '-12px 0 48px rgba(0,0,0,0.14)' }}
             >
                 {/* Header */}

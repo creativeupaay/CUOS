@@ -20,10 +20,10 @@ import toast from 'react-hot-toast';
 
 // ─── Bulk Task Modal Component ───────────────────────────────────────────────
 
-function BulkTaskModal({ isOpen, onClose, onSubmit, isSubmitting }: { isOpen: boolean; onClose: () => void; onSubmit: (tasks: string[]) => void; isSubmitting: boolean }) {
+function BulkTaskModal({ onClose, onSubmit, isSubmitting }: { onClose: () => void; onSubmit: (tasks: string[]) => void; isSubmitting: boolean }) {
     const [text, setText] = useState('');
     
-    if (!isOpen) return null;
+
     
     const handleSubmit = () => {
         const lines = text.split('\n').map(t => t.trim()).filter(Boolean);
@@ -32,7 +32,7 @@ function BulkTaskModal({ isOpen, onClose, onSubmit, isSubmitting }: { isOpen: bo
     };
 
     return createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" style={{ zIndex: 999999 }}>
             <div className="w-full max-w-2xl rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
                 <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                     <div>
@@ -363,7 +363,7 @@ function GlobalTasksInner() {
 
 
     const [showForm, setShowForm] = useState(false);
-    const [showBulkForm, setShowBulkForm] = useState(false);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [showTaskMenu, setShowTaskMenu] = useState(false);
     const taskMenuRef = useRef<HTMLDivElement>(null);
 
@@ -512,7 +512,7 @@ function GlobalTasksInner() {
                 })
             ));
             toast.success(`Successfully added ${taskTitles.length} tasks!`);
-            setShowBulkForm(false);
+            setIsBulkModalOpen(false);
         } catch (error) {
             console.error('Failed to add bulk tasks:', error);
             toast.error('Failed to add some tasks. Please try again.');
@@ -546,6 +546,13 @@ function GlobalTasksInner() {
 
     return (
         <div className="px-6 py-6 page-enter" style={{ maxWidth: '1300px' }}>
+            {isBulkModalOpen && (
+                <BulkTaskModal 
+                    onClose={() => setIsBulkModalOpen(false)} 
+                    onSubmit={handleBulkTaskSubmit} 
+                    isSubmitting={isSaving} 
+                />
+            )}
 
             {/* ── Header ── */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 gap-3">
@@ -561,7 +568,7 @@ function GlobalTasksInner() {
                                 window.dispatchEvent(new CustomEvent('cuos:openMeetingForm'));
                             }
                         }}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:bg-black/5 active:scale-95 border"
+                        className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-full transition-all hover:bg-black/5 active:scale-95 border"
                         style={{ 
                             color: 'var(--color-text-primary)',
                             borderColor: 'var(--color-border-default)',
@@ -571,27 +578,32 @@ function GlobalTasksInner() {
                         Add Meeting
                     </button>
                     <div className="relative" ref={taskMenuRef}>
-                        <div className="flex rounded-xl shadow-sm overflow-hidden border" style={{ borderColor: 'var(--color-primary)' }}>
+                        <div className="flex rounded-full shadow-sm overflow-hidden border transition-all active:scale-95" style={{ borderColor: 'var(--color-primary)' }}>
                             <button
                                 onClick={() => setShowForm(true)}
-                                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 border-r border-white/20"
+                                className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 border-r border-white/20"
                                 style={{ backgroundColor: 'var(--color-primary)' }}
                             >
                                 <Plus size={15} /> New Task
                             </button>
                             <button
                                 onClick={() => setShowTaskMenu(p => !p)}
-                                className="px-2 py-2 text-white transition-all hover:opacity-90 active:scale-95 flex items-center justify-center"
+                                className="px-3 py-2.5 text-white hover:opacity-90 flex items-center justify-center"
                                 style={{ backgroundColor: 'var(--color-primary)' }}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                             </button>
                         </div>
                         {showTaskMenu && (
-                            <div className="absolute right-0 mt-1 w-48 bg-white border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                            <div className="absolute right-0 mt-2 w-48 bg-white border rounded-3xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
                                 <button
-                                    onClick={() => { setShowBulkForm(true); setShowTaskMenu(false); }}
-                                    className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                    type="button"
+                                    onClick={() => {
+                                        toast.success("Opening Bulk Tasks...");
+                                        setIsBulkModalOpen(true);
+                                        setShowTaskMenu(false);
+                                    }}
+                                    className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
                                     Add Bulk Tasks
@@ -869,13 +881,7 @@ function GlobalTasksInner() {
                 </div>
             </div>
 
-            {/* ── Forms and Modals ── */}
-            <BulkTaskModal 
-                isOpen={showBulkForm} 
-                onClose={() => setShowBulkForm(false)} 
-                onSubmit={handleBulkTaskSubmit} 
-                isSubmitting={isSaving} 
-            />
+            {/* ── Task List ── */}
             {isLoading ? (
                 <div className="flex items-center justify-center py-24">
                     <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-primary)' }} />

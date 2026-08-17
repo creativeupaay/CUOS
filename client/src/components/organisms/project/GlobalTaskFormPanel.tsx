@@ -103,15 +103,15 @@ export default function GlobalTaskFormPanel({
 
     return createPortal(
         <>
-            {/* Backdrop */}
+            {/* Overlay */}
             <div
-                className={`fixed inset-0 z-[200] transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
-                style={{ backgroundColor: 'rgba(0,0,0,0.22)' }}
+                className={`fixed inset-0 z-[500] transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
                 onClick={handleClose}
             />
             {/* Panel */}
             <div
-                className={`fixed top-0 right-0 h-full z-[201] flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${visible ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`fixed top-0 right-0 h-full z-[501] flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${visible ? 'translate-x-0' : 'translate-x-full'}`}
                 style={{
                     width: 'min(520px, 100vw)',
                     backgroundColor: 'var(--color-bg-surface)',
