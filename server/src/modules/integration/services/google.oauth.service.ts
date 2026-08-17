@@ -26,6 +26,7 @@ import type { Types } from 'mongoose';
 // calendar.events.readonly: read Calendar event metadata (title, times, conference info)
 // admin.reports.audit.readonly: read Meet participant join/leave data (Workspace only)
 export const GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/calendar.events.readonly',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',

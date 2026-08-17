@@ -223,6 +223,7 @@ export const getUpcomingMeetings = async (
         const accessToken = await getValidAccessToken(integration);
 
         const timeMin = new Date();
+        timeMin.setHours(0, 0, 0, 0); // Start of today
         const timeMax = new Date(timeMin.getTime() + 7 * 24 * 60 * 60 * 1000); // next 7 days
 
         const events = await fetchCalendarEventsWithMeet(accessToken, timeMin, timeMax);
