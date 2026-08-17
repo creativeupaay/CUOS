@@ -116,6 +116,7 @@ export async function fetchCalendarEventsWithMeet(
             }
         } catch (err: any) {
             logger.warn({ err: err.message }, '[Google Calendar] Error fetching events for primary calendar');
+            throw err;
         }
 
         // sort results by start time

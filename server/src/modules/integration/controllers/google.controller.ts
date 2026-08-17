@@ -233,7 +233,17 @@ export const getUpcomingMeetings = async (
         });
     } catch (err: any) {
         logger.error({ err }, 'Error fetching upcoming calendar meetings');
-        // If token is invalid/revoked, fail gracefully
-        res.json({ status: 'success', data: [] });
+        // Return a fake meeting so the error appears directly in the UI!
+        res.json({ 
+            status: 'success', 
+            data: [{
+                id: 'error-debug',
+                title: 'DEBUG ERROR: ' + (err.message || 'Unknown Error'),
+                startTime: new Date(),
+                endTime: new Date(Date.now() + 60 * 60 * 1000),
+                scheduledDurationMinutes: 60,
+                meetLink: 'https://error.com'
+            }] 
+        });
     }
 };
