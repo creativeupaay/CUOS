@@ -97,7 +97,8 @@ export async function syncUserMeetings(
     // 5. Process each calendar event
     const affectedDates = new Set<string>(); // for daily work recalculation
 
-    for (const ev of calendarEvents) {
+    // Process calendar events in parallel
+    const calendarPromises = calendarEvents.map(async (ev) => {
         try {
             const cid = ev.meetConferenceId || `cal_${ev.id}`;
             const dates = await processConference(
@@ -107,27 +108,35 @@ export async function syncUserMeetings(
                 integration,
                 ev
             );
-            for (const d of dates) affectedDates.add(d);
+            return dates;
         } catch (err) {
             logger.error({ err, eventId: ev.id, userId }, '[GoogleMeet] Failed to process calendar event');
+            return [];
         }
-    }
+    });
 
-    // 6. Process any ad-hoc recent conferences not linked to calendar events
-    for (const cid of recentConferenceIds) {
-        if (calendarEvents.some(ev => ev.meetConferenceId === cid)) continue;
-        try {
-            const dates = await processConference(
-                cid,
-                userId,
-                accessToken,
-                integration,
-                undefined
-            );
-            for (const d of dates) affectedDates.add(d);
-        } catch (err) {
-            logger.error({ err, conferenceId: cid, userId }, '[GoogleMeet] Failed to process recent conference');
-        }
+    // Process ad-hoc recent conferences in parallel
+    const recentPromises = recentConferenceIds
+        .filter(cid => !calendarEvents.some(ev => ev.meetConferenceId === cid))
+        .map(async (cid) => {
+            try {
+                const dates = await processConference(
+                    cid,
+                    userId,
+                    accessToken,
+                    integration,
+                    undefined
+                );
+                return dates;
+            } catch (err) {
+                logger.error({ err, conferenceId: cid, userId }, '[GoogleMeet] Failed to process recent conference');
+                return [];
+            }
+        });
+
+    const results = await Promise.all([...calendarPromises, ...recentPromises]);
+    for (const dates of results) {
+        for (const d of dates) affectedDates.add(d);
     }
 
     // 7. Update lastSyncedAt
@@ -169,18 +178,7 @@ async function processConference(
     // 2. Determine meeting metadata
     let title = calendarEvent?.title;
     if (!title || title.trim() === 'Google Meet') {
-        // Try to construct a title from participants
-        const emails = new Set<string>();
-        if (calendarEvent?.attendees) {
-            calendarEvent.attendees.forEach(a => { if (a.email && a.email.toLowerCase() !== integration.googleEmail?.toLowerCase()) emails.add(a.email.toLowerCase()); });
-        }
-        if (conferenceData?.sessions) {
-            conferenceData.sessions.forEach(s => { if (s.email && s.email.toLowerCase() !== integration.googleEmail?.toLowerCase()) emails.add(s.email.toLowerCase()); });
-        }
-        const others = Array.from(emails);
-        if (others.length === 1) title = `Meet with ${others[0]}`;
-        else if (others.length > 1) title = `Meet with ${others[0]} and ${others.length - 1} others`;
-        else title = 'Google Meet — Ad hoc';
+        title = 'Google Meet — Ad hoc';
     }
 
     const scheduledAt = calendarEvent?.startTime ?? conferenceData?.actualStartTime ?? new Date();

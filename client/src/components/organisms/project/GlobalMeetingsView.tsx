@@ -112,7 +112,26 @@ function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onE
 
 
 export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'all' }) {
-    const { allMeetings, filteredMeetings, isLoading, deleteMeeting, projects, filters, setFilters, isAdmin } = useGlobalMeetings();
+    const { allMeetings, filteredMeetings, isLoading, deleteMeeting, projects, filters, setFilters, isAdmin, currentUserId } = useGlobalMeetings();
+
+    const getDynamicMeetingTitle = (meeting: GlobalMeeting) => {
+        if (meeting.title === 'Google Meet — Ad hoc' && meeting.participants && meeting.participants.length > 0) {
+            const otherParticipants = meeting.participants.filter(p => {
+                const pid = p.userId && typeof p.userId === 'object' ? (p.userId as any)._id || (p.userId as any).id : p.userId;
+                return String(pid) !== String(currentUserId);
+            });
+            
+            if (otherParticipants.length > 0) {
+                const names = otherParticipants.map(p => {
+                    return p.name || (p.userId && typeof p.userId === 'object' ? (p.userId as any).name : null) || p.externalEmail || 'Unknown User';
+                }).filter(Boolean);
+                
+                if (names.length === 1) return `Meet with ${names[0]}`;
+                if (names.length > 1) return `Meet with ${names[0]} and ${names.length - 1} others`;
+            }
+        }
+        return meeting.title;
+    };
 
     // Integrations hooks
     const [syncMeetNow, { isLoading: isSyncing }] = useSyncMeetNowMutation();
@@ -128,6 +147,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
     const [showForm, setShowForm] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
     const [meetingToEdit, setMeetingToEdit] = useState<GlobalMeeting | null>(null);
+    const [selectedMeeting, setSelectedMeeting] = useState<GlobalMeeting | null>(null);
     const [form, setForm] = useState<MeetingForm>({ ...EMPTY_FORM });
     const [activeTab, setActiveTab] = useState<MeetingType | 'all'>('all');
     const [page, setPage] = useState(1);
@@ -519,8 +539,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             {/* Upcoming Meetings Banner */}
             {owner === 'my' && activeTab === 'all' && (
                 <div className="mb-4">
-                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
-                        <Calendar size={14} style={{ color: 'var(--color-primary)' }} /> Upcoming from Calendar
+                    <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: 'var(--color-text-primary)' }}>
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center bg-primary/10">
+                            <Calendar size={14} style={{ color: 'var(--color-primary)' }} /> 
+                        </div>
+                        Upcoming from Calendar
                     </h3>
                     {isUpcomingLoading ? (
                         <div className="flex items-center gap-2 py-4 px-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -531,7 +554,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             No upcoming Google Meet events found in your calendar.
                         </div>
                     ) : (
-                        <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+                        <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
                             {upcomingMeetings
                                 .filter((event: any) => new Date(event.endTime) > new Date())
                                 .map((event: any) => {
@@ -547,50 +570,50 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 return (
                                     <div 
                                         key={event.id}
-                                        className="flex-shrink-0 flex flex-col justify-between w-72 rounded-2xl border p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 group bg-white"
+                                        className="flex-shrink-0 flex flex-col justify-between w-[320px] rounded-[20px] border p-5 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 group bg-white"
                                         style={{ borderColor: 'var(--color-border-subtle, #e5e7eb)' }}
                                     >
                                         <div>
-                                            <div className="flex justify-between items-start mb-2 gap-3">
-                                                <h4 className="text-[15px] font-semibold text-gray-800 line-clamp-2 leading-tight" title={event.title}>
+                                            <div className="flex justify-between items-start mb-3 gap-3">
+                                                <h4 className="text-[16px] font-bold text-gray-900 line-clamp-2 leading-snug" title={event.title}>
                                                     {event.title}
                                                 </h4>
-                                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0 text-emerald-600">
-                                                    <Video size={16} />
+                                                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0 text-emerald-600 shadow-sm border border-emerald-100/50">
+                                                    <Video size={18} />
                                                 </div>
                                             </div>
                                             
-                                            <div className="flex flex-col gap-2.5 mt-4">
-                                                <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
-                                                    <Clock size={14} className="text-gray-400" />
+                                            <div className="flex flex-col gap-3 mt-5">
+                                                <div className="flex items-center gap-2.5 text-[13px] text-gray-700 font-medium">
+                                                    <Clock size={15} className="text-gray-400" />
                                                     <span>{dateLabel}, {timeStr} - {endTimeStr}</span>
                                                 </div>
                                                 
-                                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                                <div className="flex items-center justify-between text-[12px] text-gray-500">
                                                     <div className="flex items-center gap-1.5">
-                                                        <Hourglass size={13} className="text-gray-400" />
+                                                        <Hourglass size={14} className="text-gray-400" />
                                                         <span>{event.scheduledDurationMinutes} mins</span>
                                                     </div>
                                                     
                                                     {attendeesCount > 0 && (
-                                                        <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
-                                                            <Users size={12} className="text-gray-400" />
-                                                            <span className="font-medium">{attendeesCount} {attendeesCount === 1 ? 'Guest' : 'Guests'}</span>
+                                                        <div className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100 text-gray-600 font-semibold shadow-sm">
+                                                            <Users size={13} className="text-gray-400" />
+                                                            <span>{attendeesCount} {attendeesCount === 1 ? 'Guest' : 'Guests'}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
                                         
-                                        <div className="mt-5 pt-4 border-t border-gray-100">
+                                        <div className="mt-6 pt-5 border-t border-gray-100">
                                             {event.meetLink ? (
                                                 <a 
                                                     href={event.meetLink}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold rounded-xl text-emerald-700 bg-emerald-50 transition-colors hover:bg-emerald-100"
+                                                    className="flex items-center justify-center gap-2 w-full py-3 text-sm font-bold rounded-xl text-emerald-700 bg-emerald-50 transition-all hover:bg-emerald-100 hover:shadow-sm"
                                                 >
-                                                    <Video size={16} />
+                                                    <Video size={18} />
                                                     Join Google Meet
                                                 </a>
                                             ) : (
@@ -647,11 +670,16 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             {paginatedMeetings.map((meeting: GlobalMeeting) => {
                                 const hasLink = !!meeting.notes;
                                 return (
-                                    <tr key={meeting._id} className="group border-b transition-colors hover:bg-black/[0.02]" style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <tr 
+                                        key={meeting._id} 
+                                        onClick={() => setSelectedMeeting(meeting)}
+                                        className="group border-b transition-colors hover:bg-black/[0.02] cursor-pointer" 
+                                        style={{ borderColor: 'var(--color-border-default)' }}
+                                    >
                                         {/* Meeting Name */}
                                         <td className="py-2.5 pl-4 pr-2" style={{ minWidth: 200 }}>
-                                            <span className="text-sm font-semibold truncate block max-w-[200px]" style={{ color: 'var(--color-text-primary)' }} title={meeting.title}>
-                                                {meeting.title}
+                                            <span className="text-sm font-semibold truncate block max-w-[200px]" style={{ color: 'var(--color-text-primary)' }} title={getDynamicMeetingTitle(meeting)}>
+                                                {getDynamicMeetingTitle(meeting)}
                                             </span>
                                         </td>
                                         
@@ -689,7 +717,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                         </td>
                                         
                                         {/* Notes */}
-                                        <td className="py-2.5 px-3" style={{ minWidth: 100 }}>
+                                        <td className="py-2.5 px-3" style={{ minWidth: 100 }} onClick={e => e.stopPropagation()}>
                                             {hasLink ? (
                                                 <a href={meeting.notes} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs transition-colors hover:underline" style={{ color: 'var(--color-primary)' }} title={meeting.notes}>
                                                     <BookOpen size={12} /> Link
@@ -709,7 +737,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                         )}
                                         
                                         {/* Actions */}
-                                        <td className="py-2.5 pr-4 pl-2 text-right">
+                                        <td className="py-2.5 pr-4 pl-2 text-right" onClick={e => e.stopPropagation()}>
                                             <RowActions 
                                                 meeting={meeting} 
                                                 onEdit={handleEdit} 
@@ -1059,6 +1087,163 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                 </div>,
                 document.body
             )}
+            {/* Meeting Details Modal */}
+            {selectedMeeting && createPortal(
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+                    onClick={() => setSelectedMeeting(null)}
+                >
+                    <div 
+                        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+                        aria-hidden="true"
+                    />
+                    
+                    <div 
+                        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl transition-all"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="sticky top-0 z-10 bg-white px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                                    <Video size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 leading-tight pr-4">
+                                        {getDynamicMeetingTitle(selectedMeeting)}
+                                    </h2>
+                                    <p className="text-sm text-gray-500 font-medium">
+                                        {selectedMeeting._projectName}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedMeeting(null)}
+                                className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="px-6 py-6 space-y-8">
+                            
+                            {/* Key Stats Row */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Type</div>
+                                    <div className="flex items-center gap-1.5 font-semibold text-gray-900 text-sm">
+                                        <div className={`w-2 h-2 rounded-full ${selectedMeeting.type === 'internal' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                                        {selectedMeeting.type === 'internal' ? 'Internal' : 'External'}
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                                    <div className="font-semibold text-gray-900 text-sm capitalize">
+                                        {selectedMeeting.conferenceStatus || 'Scheduled'}
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Duration</div>
+                                    <div className="font-semibold text-gray-900 text-sm">
+                                        {selectedMeeting.actualDuration ? `${selectedMeeting.actualDuration} mins` : `${selectedMeeting.duration} mins`}
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Source</div>
+                                    <div className="font-semibold text-gray-900 text-sm capitalize">
+                                        {selectedMeeting.source === 'google_meet' ? 'Google Meet' : 'Manual'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Timing Details */}
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Clock size={16} className="text-gray-400" /> Date & Time
+                                </h3>
+                                <div className="bg-white border rounded-xl divide-y text-sm" style={{ borderColor: 'var(--color-border-default)' }}>
+                                    <div className="flex justify-between py-3 px-4">
+                                        <span className="text-gray-500 font-medium">Scheduled For</span>
+                                        <span className="font-semibold text-gray-900">{formatDate(selectedMeeting.scheduledAt)}</span>
+                                    </div>
+                                    {selectedMeeting.actualStartTime && (
+                                        <div className="flex justify-between py-3 px-4 bg-emerald-50/30">
+                                            <span className="text-gray-500 font-medium">Actual Start</span>
+                                            <span className="font-semibold text-gray-900">{new Date(selectedMeeting.actualStartTime).toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                    {selectedMeeting.actualEndTime && (
+                                        <div className="flex justify-between py-3 px-4 bg-blue-50/30">
+                                            <span className="text-gray-500 font-medium">Actual End</span>
+                                            <span className="font-semibold text-gray-900">{new Date(selectedMeeting.actualEndTime).toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Participants */}
+                            {selectedMeeting.participants && selectedMeeting.participants.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Users size={16} className="text-gray-400" /> Participants ({selectedMeeting.participants.length})
+                                    </h3>
+                                    <div className="bg-white border rounded-xl overflow-hidden" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        <ul className="divide-y text-sm">
+                                            {selectedMeeting.participants.map((p, i) => (
+                                                <li key={i} className="flex items-center justify-between py-3 px-4 hover:bg-gray-50 transition-colors" style={{ borderTopColor: 'var(--color-border-default)' }}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-xs uppercase">
+                                                            {p.name ? p.name[0] : (p.externalEmail ? p.externalEmail[0] : (p.userId && typeof p.userId === 'object' ? (p.userId as any).name?.[0] : '?'))}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-gray-900">
+                                                                {p.name || (p.userId && typeof p.userId === 'object' ? (p.userId as any).name : 'Unknown User')}
+                                                            </div>
+                                                            {(p.externalEmail || (p.userId && typeof p.userId === 'object' && (p.userId as any).email)) && (
+                                                                <div className="text-[11px] text-gray-500 mt-0.5">
+                                                                    {p.externalEmail || (p.userId as any).email}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 px-2 py-1 rounded-md">
+                                                        {p.role || 'Guest'}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Notes / Description */}
+                            {(selectedMeeting.notes || selectedMeeting.description) && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <BookOpen size={16} className="text-gray-400" /> Additional Info
+                                    </h3>
+                                    <div className="bg-gray-50 border rounded-xl p-4 text-sm text-gray-700" style={{ borderColor: 'var(--color-border-default)' }}>
+                                        {selectedMeeting.description && (
+                                            <div className="mb-4">
+                                                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Description / Purpose</div>
+                                                <p className="whitespace-pre-wrap">{selectedMeeting.description}</p>
+                                            </div>
+                                        )}
+                                        {selectedMeeting.notes && (
+                                            <div>
+                                                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Notes Link</div>
+                                                <a href={selectedMeeting.notes} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                                                    Open Notes <BookOpen size={12} />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            
+                        </div>
+                    </div>
+                </div>
+            , document.body)}
         </div>
     );
 }

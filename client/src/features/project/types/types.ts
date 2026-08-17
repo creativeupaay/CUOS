@@ -213,6 +213,15 @@ export interface Meeting {
     createdBy: string | User;
     createdAt: string;
     updatedAt: string;
+
+    // Google Meet fields
+    source?: 'manual' | 'google_meet';
+    googleConferenceId?: string;
+    googleCalendarEventId?: string;
+    actualStartTime?: string;
+    actualEndTime?: string;
+    actualDuration?: number;
+    conferenceStatus?: 'scheduled' | 'active' | 'ended' | 'no_show';
 }
 
 export interface MeetingParticipant {

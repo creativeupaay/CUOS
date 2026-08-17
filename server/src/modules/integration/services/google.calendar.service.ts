@@ -63,9 +63,8 @@ export async function fetchCalendarEventsWithMeet(
         const calendarListResponse = await calendar.calendarList.list();
         const calendars = calendarListResponse.data.items ?? [];
         
-        const results: CalendarEvent[] = [];
-
-        for (const cal of calendars) {
+        // Fetch events from all calendars in parallel
+        const calendarPromises = calendars.map(async (cal) => {
             try {
                 const response = await calendar.events.list({
                     calendarId: cal.id!,
@@ -78,6 +77,7 @@ export async function fetchCalendarEventsWithMeet(
                 } as any);
 
                 const items = response.data.items ?? [];
+                const calResults: CalendarEvent[] = [];
 
                 for (const event of items) {
                     const conf = event.conferenceData;
@@ -93,7 +93,7 @@ export async function fetchCalendarEventsWithMeet(
                         (endTime.getTime() - startTime.getTime()) / 60_000
                     );
 
-                    results.push({
+                    calResults.push({
                         id: event.id!,
                         title: event.summary?.trim() || 'Google Meet',
                         startTime,
@@ -119,11 +119,16 @@ export async function fetchCalendarEventsWithMeet(
                         })).filter((a: any) => !!a.email),
                     });
                 }
+                return calResults;
             } catch (err: any) {
                 // Ignore errors for individual calendars (e.g. no permission)
                 logger.warn({ err: err.message, calendarId: cal.id }, '[Google Calendar] Error fetching events for calendar');
+                return [];
             }
-        }
+        });
+
+        const nestedResults = await Promise.all(calendarPromises);
+        const results = nestedResults.flat();
 
         // sort results by start time
         results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
