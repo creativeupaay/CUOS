@@ -71,17 +71,17 @@ export async function fetchCalendarEventsWithMeet(
                     calendarId: cal.id!,
                     timeMin: timeMin.toISOString(),
                     timeMax: timeMax.toISOString(),
-                    singleEvents: true,     // expand recurring events into individual occurrences
+                    singleEvents: true,
                     orderBy: 'startTime',
                     maxResults: 100,
-                    fields: 'items(id,summary,start,end,conferenceData,description,organizer,attendees)',
-                });
+                    conferenceDataVersion: 1, // REQUIRED to get Meet links!
+                } as any);
 
                 const items = response.data.items ?? [];
 
                 for (const event of items) {
                     const conf = event.conferenceData;
-                    const videoEntry = conf?.entryPoints?.find(ep => ep.entryPointType === 'video');
+                    const videoEntry = conf?.entryPoints?.find((ep: any) => ep.entryPointType === 'video');
 
                     const startRaw = event.start?.dateTime ?? event.start?.date;
                     const endRaw   = event.end?.dateTime   ?? event.end?.date;
@@ -102,7 +102,7 @@ export async function fetchCalendarEventsWithMeet(
                         conferenceData: conf ? {
                             conferenceId:       conf.conferenceId ?? undefined,
                             conferenceSolution: conf.conferenceSolution?.name ?? undefined,
-                            entryPoints:        (conf.entryPoints ?? []).map(ep => ({
+                            entryPoints:        (conf.entryPoints ?? []).map((ep: any) => ({
                                 entryPointType: ep.entryPointType ?? '',
                                 uri:   ep.uri   ?? undefined,
                                 label: ep.label ?? undefined,
@@ -119,8 +119,9 @@ export async function fetchCalendarEventsWithMeet(
                         })).filter((a: any) => !!a.email),
                     });
                 }
-            } catch (err) {
+            } catch (err: any) {
                 // Ignore errors for individual calendars (e.g. no permission)
+                logger.warn({ err: err.message, calendarId: cal.id }, '[Google Calendar] Error fetching events for calendar');
                 continue;
             }
         }
