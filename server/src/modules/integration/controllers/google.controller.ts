@@ -227,12 +227,28 @@ export const getUpcomingMeetings = async (
 
         const events = await fetchCalendarEventsWithMeet(accessToken, timeMin, timeMax);
 
-        res.status(200).json({
+        res.json({
             status: 'success',
             data: events,
+            debug: {
+                message: 'Success',
+                eventsCount: events.length,
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString()
+            }
         });
-    } catch (err) {
-        next(err);
+    } catch (err: any) {
+        logger.error({ err }, 'Error fetching upcoming calendar meetings');
+        // TEMPORARY: Return error details in response for debugging
+        res.status(500).json({ 
+            status: 'error', 
+            message: err.message || 'Unknown error', 
+            data: [],
+            debug: {
+                stack: err.stack,
+                code: err.code,
+                status: err.status
+            }
+        });
     }
 };
-
