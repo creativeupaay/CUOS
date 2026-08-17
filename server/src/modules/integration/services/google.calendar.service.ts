@@ -74,12 +74,8 @@ export async function fetchCalendarEventsWithMeet(
         const results: CalendarEvent[] = [];
 
         for (const event of items) {
-            // Only process events with Google Meet conference data
             const conf = event.conferenceData;
-            if (!conf) continue;
-
-            const videoEntry = conf.entryPoints?.find(ep => ep.entryPointType === 'video');
-            if (!conf.conferenceId && !videoEntry?.uri) continue;
+            const videoEntry = conf?.entryPoints?.find(ep => ep.entryPointType === 'video');
 
             const startRaw = event.start?.dateTime ?? event.start?.date;
             const endRaw   = event.end?.dateTime   ?? event.end?.date;
@@ -97,7 +93,7 @@ export async function fetchCalendarEventsWithMeet(
                 startTime,
                 endTime,
                 scheduledDurationMinutes,
-                conferenceData: {
+                conferenceData: conf ? {
                     conferenceId:       conf.conferenceId ?? undefined,
                     conferenceSolution: conf.conferenceSolution?.name ?? undefined,
                     entryPoints:        (conf.entryPoints ?? []).map(ep => ({
@@ -105,8 +101,8 @@ export async function fetchCalendarEventsWithMeet(
                         uri:   ep.uri   ?? undefined,
                         label: ep.label ?? undefined,
                     })),
-                },
-                meetConferenceId: conf.conferenceId ?? undefined,
+                } : undefined,
+                meetConferenceId: conf?.conferenceId ?? undefined,
                 meetLink: videoEntry?.uri ?? undefined,
                 description: event.description ?? undefined,
                 organizer: event.organizer?.email ?? undefined,

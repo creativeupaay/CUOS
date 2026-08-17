@@ -94,30 +94,39 @@ export async function syncUserMeetings(
     // 4. Fetch recent conference records directly (catches instant meetings)
     const recentConferenceIds = await fetchRecentConferenceIds(accessToken, timeMin);
 
-    // 5. Build list of unique conference IDs to process
-    const conferenceIdSet = new Set<string>();
-    for (const ev of calendarEvents) {
-        if (ev.meetConferenceId) conferenceIdSet.add(ev.meetConferenceId);
-    }
-    for (const cid of recentConferenceIds) {
-        conferenceIdSet.add(cid);
-    }
-
-    // 6. Process each conference
+    // 5. Process each calendar event
     const affectedDates = new Set<string>(); // for daily work recalculation
 
-    for (const conferenceId of conferenceIdSet) {
+    for (const ev of calendarEvents) {
         try {
+            const cid = ev.meetConferenceId || `cal_${ev.id}`;
             const dates = await processConference(
-                conferenceId,
+                cid,
                 userId,
                 accessToken,
                 integration,
-                calendarEvents.find(ev => ev.meetConferenceId === conferenceId)
+                ev
             );
             for (const d of dates) affectedDates.add(d);
         } catch (err) {
-            logger.error({ err, conferenceId, userId }, '[GoogleMeet] Failed to process conference');
+            logger.error({ err, eventId: ev.id, userId }, '[GoogleMeet] Failed to process calendar event');
+        }
+    }
+
+    // 6. Process any ad-hoc recent conferences not linked to calendar events
+    for (const cid of recentConferenceIds) {
+        if (calendarEvents.some(ev => ev.meetConferenceId === cid)) continue;
+        try {
+            const dates = await processConference(
+                cid,
+                userId,
+                accessToken,
+                integration,
+                undefined
+            );
+            for (const d of dates) affectedDates.add(d);
+        } catch (err) {
+            logger.error({ err, conferenceId: cid, userId }, '[GoogleMeet] Failed to process recent conference');
         }
     }
 
@@ -127,7 +136,7 @@ export async function syncUserMeetings(
         { $set: { lastSyncedAt: new Date() } }
     );
 
-    logger.debug({ userId, conferenceCount: conferenceIdSet.size }, '[GoogleMeet] User sync complete');
+    logger.debug({ userId, calendarEventsCount: calendarEvents.length, recentConferenceCount: recentConferenceIds.length }, '[GoogleMeet] User sync complete');
 }
 
 // ─── Conference processing ────────────────────────────────────────────────────
