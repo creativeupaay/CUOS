@@ -230,25 +230,10 @@ export const getUpcomingMeetings = async (
         res.json({
             status: 'success',
             data: events,
-            debug: {
-                message: 'Success',
-                eventsCount: events.length,
-                timeMin: timeMin.toISOString(),
-                timeMax: timeMax.toISOString()
-            }
         });
     } catch (err: any) {
         logger.error({ err }, 'Error fetching upcoming calendar meetings');
-        // TEMPORARY: Return error details in response for debugging
-        res.status(500).json({ 
-            status: 'error', 
-            message: err.message || 'Unknown error', 
-            data: [],
-            debug: {
-                stack: err.stack,
-                code: err.code,
-                status: err.status
-            }
-        });
+        // If token is invalid/revoked, fail gracefully
+        res.json({ status: 'success', data: [] });
     }
 };
