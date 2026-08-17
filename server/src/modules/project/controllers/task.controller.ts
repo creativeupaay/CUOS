@@ -5,6 +5,7 @@ import AppError from '../../../utils/appError';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Project } from '../models/Project.model';
 import { Task } from '../models/Task.model';
+import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
 
 export const createTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -52,6 +53,36 @@ export const getTasks = asyncHandler(
         res.status(200).json({
             success: true,
             message: 'Tasks retrieved successfully',
+            data: tasks,
+        });
+    }
+);
+
+export const getAllTasks = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const projectIds = (req.query.projectIds as string)?.split(',').filter(Boolean) || [];
+        if (projectIds.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No project IDs provided',
+                data: [],
+            });
+        }
+        
+        const validProjectIds = await getAccessibleProjectIds(req, projectIds);
+        if (validProjectIds.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No accessible projects found',
+                data: [],
+            });
+        }
+
+        const tasks = await taskService.getAllTasksForProjects(validProjectIds);
+
+        res.status(200).json({
+            success: true,
+            message: 'Global tasks retrieved successfully',
             data: tasks,
         });
     }

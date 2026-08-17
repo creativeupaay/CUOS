@@ -167,7 +167,22 @@ async function processConference(
     if (!conferenceData && !calendarEvent) return [];
 
     // 2. Determine meeting metadata
-    const title = calendarEvent?.title ?? 'Google Meet — Ad hoc';
+    let title = calendarEvent?.title;
+    if (!title || title.trim() === 'Google Meet') {
+        // Try to construct a title from participants
+        const emails = new Set<string>();
+        if (calendarEvent?.attendees) {
+            calendarEvent.attendees.forEach(a => { if (a.email && a.email.toLowerCase() !== integration.googleEmail?.toLowerCase()) emails.add(a.email.toLowerCase()); });
+        }
+        if (conferenceData?.sessions) {
+            conferenceData.sessions.forEach(s => { if (s.email && s.email.toLowerCase() !== integration.googleEmail?.toLowerCase()) emails.add(s.email.toLowerCase()); });
+        }
+        const others = Array.from(emails);
+        if (others.length === 1) title = `Meet with ${others[0]}`;
+        else if (others.length > 1) title = `Meet with ${others[0]} and ${others.length - 1} others`;
+        else title = 'Google Meet — Ad hoc';
+    }
+
     const scheduledAt = calendarEvent?.startTime ?? conferenceData?.actualStartTime ?? new Date();
     const scheduledDuration = calendarEvent?.scheduledDurationMinutes ?? 0;
     const actualDuration = conferenceData?.actualStartTime && conferenceData?.actualEndTime

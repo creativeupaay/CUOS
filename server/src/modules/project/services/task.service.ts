@@ -246,6 +246,31 @@ export const getTasks = async (
     return tasks as ITask[];
 };
 
+export const getAllTasksForProjects = async (projectIds: string[]): Promise<ITask[]> => {
+    const tasks = await Task.find({ projectId: { $in: projectIds }, parentTaskId: null })
+        .populate('assignees', 'name email')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .lean<any[]>();
+
+    await attachProfilePhotos(tasks);
+
+    if (tasks.length > 0) {
+        const taskIds = tasks.map((t: any) => t._id);
+        const counts = await Task.aggregate([
+            { $match: { parentTaskId: { $in: taskIds } } },
+            { $group: { _id: '$parentTaskId', count: { $sum: 1 } } },
+        ]);
+        const countMap = new Map(counts.map((c: any) => [c._id.toString(), c.count]));
+        return tasks.map((t: any) => ({
+            ...t,
+            subtaskCount: countMap.get(t._id.toString()) || 0,
+        })) as any[];
+    }
+
+    return tasks as ITask[];
+};
+
 export const getIndividualTasks = async (
     userId: string,
     isAdmin: boolean,

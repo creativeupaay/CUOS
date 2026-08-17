@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import {
     useGetProjectsQuery,
-    useGetTasksQuery,
+    useGetAllTasksQuery,
     useCreateTaskMutation,
     useUpdateTaskMutation,
     useUpdateIndividualTaskMutation,
@@ -63,66 +63,34 @@ export interface GlobalTaskFilters {
 
 // ─── Per-project task fetcher sub-hook ────────────────────────────────────────
 
-const MAX_PROJECTS = 30;
+
 
 function useTasksForProjects(projectIds: string[]): {
     tasksByProject: Record<string, Task[]>;
     isLoading: boolean;
 } {
-    const ids = useMemo(() => {
-        const padded = [...projectIds];
-        while (padded.length < MAX_PROJECTS) padded.push('');
-        return padded.slice(0, MAX_PROJECTS);
-    }, [projectIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    const validProjectIds = useMemo(() => projectIds.filter(Boolean), [projectIds.join(',')]);
 
-    /* eslint-disable react-hooks/rules-of-hooks */
-    const r0  = useGetTasksQuery({ projectId: ids[0]  }, { skip: !ids[0]  });
-    const r1  = useGetTasksQuery({ projectId: ids[1]  }, { skip: !ids[1]  });
-    const r2  = useGetTasksQuery({ projectId: ids[2]  }, { skip: !ids[2]  });
-    const r3  = useGetTasksQuery({ projectId: ids[3]  }, { skip: !ids[3]  });
-    const r4  = useGetTasksQuery({ projectId: ids[4]  }, { skip: !ids[4]  });
-    const r5  = useGetTasksQuery({ projectId: ids[5]  }, { skip: !ids[5]  });
-    const r6  = useGetTasksQuery({ projectId: ids[6]  }, { skip: !ids[6]  });
-    const r7  = useGetTasksQuery({ projectId: ids[7]  }, { skip: !ids[7]  });
-    const r8  = useGetTasksQuery({ projectId: ids[8]  }, { skip: !ids[8]  });
-    const r9  = useGetTasksQuery({ projectId: ids[9]  }, { skip: !ids[9]  });
-    const r10 = useGetTasksQuery({ projectId: ids[10] }, { skip: !ids[10] });
-    const r11 = useGetTasksQuery({ projectId: ids[11] }, { skip: !ids[11] });
-    const r12 = useGetTasksQuery({ projectId: ids[12] }, { skip: !ids[12] });
-    const r13 = useGetTasksQuery({ projectId: ids[13] }, { skip: !ids[13] });
-    const r14 = useGetTasksQuery({ projectId: ids[14] }, { skip: !ids[14] });
-    const r15 = useGetTasksQuery({ projectId: ids[15] }, { skip: !ids[15] });
-    const r16 = useGetTasksQuery({ projectId: ids[16] }, { skip: !ids[16] });
-    const r17 = useGetTasksQuery({ projectId: ids[17] }, { skip: !ids[17] });
-    const r18 = useGetTasksQuery({ projectId: ids[18] }, { skip: !ids[18] });
-    const r19 = useGetTasksQuery({ projectId: ids[19] }, { skip: !ids[19] });
-    const r20 = useGetTasksQuery({ projectId: ids[20] }, { skip: !ids[20] });
-    const r21 = useGetTasksQuery({ projectId: ids[21] }, { skip: !ids[21] });
-    const r22 = useGetTasksQuery({ projectId: ids[22] }, { skip: !ids[22] });
-    const r23 = useGetTasksQuery({ projectId: ids[23] }, { skip: !ids[23] });
-    const r24 = useGetTasksQuery({ projectId: ids[24] }, { skip: !ids[24] });
-    const r25 = useGetTasksQuery({ projectId: ids[25] }, { skip: !ids[25] });
-    const r26 = useGetTasksQuery({ projectId: ids[26] }, { skip: !ids[26] });
-    const r27 = useGetTasksQuery({ projectId: ids[27] }, { skip: !ids[27] });
-    const r28 = useGetTasksQuery({ projectId: ids[28] }, { skip: !ids[28] });
-    const r29 = useGetTasksQuery({ projectId: ids[29] }, { skip: !ids[29] });
-    /* eslint-enable react-hooks/rules-of-hooks */
+    const { data: allTasksData, isLoading } = useGetAllTasksQuery(
+        { projectIds: validProjectIds },
+        { skip: validProjectIds.length === 0 }
+    );
 
-    const results = [r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12,r13,r14,r15,r16,r17,r18,r19,r20,r21,r22,r23,r24,r25,r26,r27,r28,r29];
-
-    // Use a plain object (not Map) so reference equality works cleanly with useMemo
     const tasksByProject = useMemo(() => {
         const obj: Record<string, Task[]> = {};
-        results.forEach((r, i) => {
-            const pid = ids[i];
-            if (!pid) return;
-            obj[pid] = (r.data?.data as Task[]) ?? [];
-        });
+        validProjectIds.forEach(id => { obj[id] = []; });
+        
+        if (allTasksData?.data) {
+            (allTasksData.data as Task[]).forEach(task => {
+                const pid = typeof task.projectId === 'object' ? (task.projectId as any)._id : task.projectId;
+                if (pid) {
+                    if (!obj[pid]) obj[pid] = [];
+                    obj[pid].push(task);
+                }
+            });
+        }
         return obj;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ids.join(','), ...results.map(r => r.data?.data)]);
-
-    const isLoading = results.some((r, i) => !!ids[i] && r.isLoading);
+    }, [allTasksData, validProjectIds]);
 
     return { tasksByProject, isLoading };
 }

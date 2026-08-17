@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import {
     useGetProjectsQuery,
-    useGetMeetingsQuery,
+    useGetAllMeetingsQuery,
     useDeleteMeetingMutation,
     useGetIndividualMeetingsQuery,
     useDeleteIndividualMeetingMutation
@@ -46,65 +46,34 @@ export interface GlobalMeetingFilters {
     search: string;
 }
 
-const MAX_PROJECTS = 30;
+
 
 function useMeetingsForProjects(projectIds: string[], pollingInterval?: number): {
     meetingsByProject: Record<string, Meeting[]>;
     isLoading: boolean;
 } {
-    const ids = useMemo(() => {
-        const padded = [...projectIds];
-        while (padded.length < MAX_PROJECTS) padded.push('');
-        return padded.slice(0, MAX_PROJECTS);
-    }, [projectIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    const validProjectIds = useMemo(() => projectIds.filter(Boolean), [projectIds.join(',')]);
 
-    /* eslint-disable react-hooks/rules-of-hooks */
-    const r0  = useGetMeetingsQuery({ projectId: ids[0]  }, { skip: !ids[0], pollingInterval });
-    const r1  = useGetMeetingsQuery({ projectId: ids[1]  }, { skip: !ids[1], pollingInterval });
-    const r2  = useGetMeetingsQuery({ projectId: ids[2]  }, { skip: !ids[2], pollingInterval });
-    const r3  = useGetMeetingsQuery({ projectId: ids[3]  }, { skip: !ids[3], pollingInterval });
-    const r4  = useGetMeetingsQuery({ projectId: ids[4]  }, { skip: !ids[4], pollingInterval });
-    const r5  = useGetMeetingsQuery({ projectId: ids[5]  }, { skip: !ids[5], pollingInterval });
-    const r6  = useGetMeetingsQuery({ projectId: ids[6]  }, { skip: !ids[6], pollingInterval });
-    const r7  = useGetMeetingsQuery({ projectId: ids[7]  }, { skip: !ids[7], pollingInterval });
-    const r8  = useGetMeetingsQuery({ projectId: ids[8]  }, { skip: !ids[8], pollingInterval });
-    const r9  = useGetMeetingsQuery({ projectId: ids[9]  }, { skip: !ids[9], pollingInterval });
-    const r10 = useGetMeetingsQuery({ projectId: ids[10] }, { skip: !ids[10], pollingInterval });
-    const r11 = useGetMeetingsQuery({ projectId: ids[11] }, { skip: !ids[11], pollingInterval });
-    const r12 = useGetMeetingsQuery({ projectId: ids[12] }, { skip: !ids[12], pollingInterval });
-    const r13 = useGetMeetingsQuery({ projectId: ids[13] }, { skip: !ids[13], pollingInterval });
-    const r14 = useGetMeetingsQuery({ projectId: ids[14] }, { skip: !ids[14], pollingInterval });
-    const r15 = useGetMeetingsQuery({ projectId: ids[15] }, { skip: !ids[15], pollingInterval });
-    const r16 = useGetMeetingsQuery({ projectId: ids[16] }, { skip: !ids[16], pollingInterval });
-    const r17 = useGetMeetingsQuery({ projectId: ids[17] }, { skip: !ids[17], pollingInterval });
-    const r18 = useGetMeetingsQuery({ projectId: ids[18] }, { skip: !ids[18], pollingInterval });
-    const r19 = useGetMeetingsQuery({ projectId: ids[19] }, { skip: !ids[19], pollingInterval });
-    const r20 = useGetMeetingsQuery({ projectId: ids[20] }, { skip: !ids[20], pollingInterval });
-    const r21 = useGetMeetingsQuery({ projectId: ids[21] }, { skip: !ids[21], pollingInterval });
-    const r22 = useGetMeetingsQuery({ projectId: ids[22] }, { skip: !ids[22], pollingInterval });
-    const r23 = useGetMeetingsQuery({ projectId: ids[23] }, { skip: !ids[23], pollingInterval });
-    const r24 = useGetMeetingsQuery({ projectId: ids[24] }, { skip: !ids[24], pollingInterval });
-    const r25 = useGetMeetingsQuery({ projectId: ids[25] }, { skip: !ids[25], pollingInterval });
-    const r26 = useGetMeetingsQuery({ projectId: ids[26] }, { skip: !ids[26], pollingInterval });
-    const r27 = useGetMeetingsQuery({ projectId: ids[27] }, { skip: !ids[27], pollingInterval });
-    const r28 = useGetMeetingsQuery({ projectId: ids[28] }, { skip: !ids[28], pollingInterval });
-    const r29 = useGetMeetingsQuery({ projectId: ids[29] }, { skip: !ids[29], pollingInterval });
-    /* eslint-enable react-hooks/rules-of-hooks */
-
-    const results = [r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12,r13,r14,r15,r16,r17,r18,r19,r20,r21,r22,r23,r24,r25,r26,r27,r28,r29];
+    const { data: allMeetingsData, isLoading } = useGetAllMeetingsQuery(
+        { projectIds: validProjectIds },
+        { skip: validProjectIds.length === 0, pollingInterval }
+    );
 
     const meetingsByProject = useMemo(() => {
         const obj: Record<string, Meeting[]> = {};
-        results.forEach((r, i) => {
-            const pid = ids[i];
-            if (!pid) return;
-            obj[pid] = (r.data?.data as Meeting[]) ?? [];
-        });
-        return obj;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ids.join(','), ...results.map(r => r.data?.data)]);
+        validProjectIds.forEach(id => { obj[id] = []; });
 
-    const isLoading = results.some((r, i) => !!ids[i] && r.isLoading);
+        if (allMeetingsData?.data) {
+            (allMeetingsData.data as Meeting[]).forEach(meeting => {
+                const pid = typeof meeting.projectId === 'object' ? (meeting.projectId as any)._id : meeting.projectId;
+                if (pid) {
+                    if (!obj[pid]) obj[pid] = [];
+                    obj[pid].push(meeting);
+                }
+            });
+        }
+        return obj;
+    }, [allMeetingsData, validProjectIds]);
 
     return { meetingsByProject, isLoading };
 }

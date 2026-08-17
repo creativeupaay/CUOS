@@ -123,6 +123,43 @@ export const checkProjectAccess = async (
 };
 
 /**
+ * Filter an array of projectIds to only those the user has access to.
+ */
+export const getAccessibleProjectIds = async (req: Request, requestedProjectIds: string[]): Promise<string[]> => {
+    if (isProjectAdmin(req.user)) {
+        return requestedProjectIds;
+    }
+
+    const projects = await Project.find({ _id: { $in: requestedProjectIds } });
+    const accessibleIds: string[] = [];
+
+    const userId = req.user?.id;
+    if (!userId) return [];
+
+    let employeeId: string | undefined;
+    if (!req.partnerId) {
+        const employee = await Employee.findOne({ userId });
+        if (employee) employeeId = employee._id.toString();
+    }
+
+    for (const project of projects) {
+        if (req.partnerId) {
+            if (matchesPartnerProject(project, req.partnerId)) {
+                if (!req.isPartnerEmployee || getPartnerEmployeeAssignee(project, userId)) {
+                    accessibleIds.push(project._id.toString());
+                }
+            }
+        } else if (employeeId) {
+            if (isInternalEmployeeAssigned(project, employeeId)) {
+                accessibleIds.push(project._id.toString());
+            }
+        }
+    }
+    
+    return accessibleIds;
+};
+
+/**
  * Check if user is a project manager OR admin
  */
 export const checkProjectManager = async (

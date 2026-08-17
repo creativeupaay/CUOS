@@ -59,60 +59,74 @@ export async function fetchCalendarEventsWithMeet(
 
         const calendar = google.calendar({ version: 'v3', auth });
 
-        const response = await calendar.events.list({
-            calendarId: 'primary',
-            timeMin: timeMin.toISOString(),
-            timeMax: timeMax.toISOString(),
-            singleEvents: true,     // expand recurring events into individual occurrences
-            orderBy: 'startTime',
-            maxResults: 100,
-            fields: 'items(id,summary,start,end,conferenceData,description,organizer,attendees)',
-        });
-
-        const items = response.data.items ?? [];
-
+        // Fetch calendar list
+        const calendarListResponse = await calendar.calendarList.list();
+        const calendars = calendarListResponse.data.items ?? [];
+        
         const results: CalendarEvent[] = [];
 
-        for (const event of items) {
-            const conf = event.conferenceData;
-            const videoEntry = conf?.entryPoints?.find(ep => ep.entryPointType === 'video');
+        for (const cal of calendars) {
+            try {
+                const response = await calendar.events.list({
+                    calendarId: cal.id!,
+                    timeMin: timeMin.toISOString(),
+                    timeMax: timeMax.toISOString(),
+                    singleEvents: true,     // expand recurring events into individual occurrences
+                    orderBy: 'startTime',
+                    maxResults: 100,
+                    fields: 'items(id,summary,start,end,conferenceData,description,organizer,attendees)',
+                });
 
-            const startRaw = event.start?.dateTime ?? event.start?.date;
-            const endRaw   = event.end?.dateTime   ?? event.end?.date;
-            if (!startRaw || !endRaw) continue;
+                const items = response.data.items ?? [];
 
-            const startTime = new Date(startRaw);
-            const endTime   = new Date(endRaw);
-            const scheduledDurationMinutes = Math.round(
-                (endTime.getTime() - startTime.getTime()) / 60_000
-            );
+                for (const event of items) {
+                    const conf = event.conferenceData;
+                    const videoEntry = conf?.entryPoints?.find(ep => ep.entryPointType === 'video');
 
-            results.push({
-                id: event.id!,
-                title: event.summary?.trim() || 'Google Meet',
-                startTime,
-                endTime,
-                scheduledDurationMinutes,
-                conferenceData: conf ? {
-                    conferenceId:       conf.conferenceId ?? undefined,
-                    conferenceSolution: conf.conferenceSolution?.name ?? undefined,
-                    entryPoints:        (conf.entryPoints ?? []).map(ep => ({
-                        entryPointType: ep.entryPointType ?? '',
-                        uri:   ep.uri   ?? undefined,
-                        label: ep.label ?? undefined,
-                    })),
-                } : undefined,
-                meetConferenceId: conf?.conferenceId ?? undefined,
-                meetLink: videoEntry?.uri ?? undefined,
-                description: event.description ?? undefined,
-                organizer: event.organizer?.email ?? undefined,
-                attendees: event.attendees?.map((a: any) => ({
-                    email: a.email,
-                    displayName: a.displayName,
-                    responseStatus: a.responseStatus,
-                })).filter((a: any) => !!a.email),
-            });
+                    const startRaw = event.start?.dateTime ?? event.start?.date;
+                    const endRaw   = event.end?.dateTime   ?? event.end?.date;
+                    if (!startRaw || !endRaw) continue;
+
+                    const startTime = new Date(startRaw);
+                    const endTime   = new Date(endRaw);
+                    const scheduledDurationMinutes = Math.round(
+                        (endTime.getTime() - startTime.getTime()) / 60_000
+                    );
+
+                    results.push({
+                        id: event.id!,
+                        title: event.summary?.trim() || 'Google Meet',
+                        startTime,
+                        endTime,
+                        scheduledDurationMinutes,
+                        conferenceData: conf ? {
+                            conferenceId:       conf.conferenceId ?? undefined,
+                            conferenceSolution: conf.conferenceSolution?.name ?? undefined,
+                            entryPoints:        (conf.entryPoints ?? []).map(ep => ({
+                                entryPointType: ep.entryPointType ?? '',
+                                uri:   ep.uri   ?? undefined,
+                                label: ep.label ?? undefined,
+                            })),
+                        } : undefined,
+                        meetConferenceId: conf?.conferenceId ?? undefined,
+                        meetLink: videoEntry?.uri ?? undefined,
+                        description: event.description ?? undefined,
+                        organizer: event.organizer?.email ?? undefined,
+                        attendees: event.attendees?.map((a: any) => ({
+                            email: a.email,
+                            displayName: a.displayName,
+                            responseStatus: a.responseStatus,
+                        })).filter((a: any) => !!a.email),
+                    });
+                }
+            } catch (err) {
+                // Ignore errors for individual calendars (e.g. no permission)
+                continue;
+            }
         }
+
+        // sort results by start time
+        results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
         return results;
     } catch (err: any) {

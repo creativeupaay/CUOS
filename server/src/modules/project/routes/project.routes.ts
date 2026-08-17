@@ -79,6 +79,12 @@ router.get(
     taskController.getIndividualTasks
 );
 
+// Get all tasks for multiple projects
+router.get(
+    '/tasks/all',
+    taskController.getAllTasks
+);
+
 // Create individual task
 router.post(
     '/tasks/individual',
@@ -113,6 +119,12 @@ router.get(
     '/meetings/individual',
     validateRequest(meetingValidators.getIndividualMeetingsSchema),
     meetingController.getIndividualMeetings
+);
+
+// Get all meetings for multiple projects
+router.get(
+    '/meetings/all',
+    meetingController.getAllMeetings
 );
 
 // Create individual meeting

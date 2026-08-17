@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as meetingService from '../services/meeting.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
+import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
 
 export const createMeeting = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -63,6 +64,40 @@ export const getMeetings = asyncHandler(
             success: true,
             message: 'Meetings retrieved successfully',
             data: meetings,
+        });
+    }
+);
+
+export const getAllMeetings = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const projectIds = (req.query.projectIds as string)?.split(',').filter(Boolean) || [];
+        if (projectIds.length === 0) {
+            return res.status(200).json({ success: true, message: 'No project IDs provided', data: [] });
+        }
+        
+        const validProjectIds = await getAccessibleProjectIds(req, projectIds);
+        if (validProjectIds.length === 0) {
+            return res.status(200).json({ success: true, message: 'No accessible projects found', data: [] });
+        }
+
+        const userId = req.user?.id!;
+        const roleRaw = req.user?.role;
+        const userRole = typeof roleRaw === 'string' ? roleRaw.toLowerCase() : typeof roleRaw === 'object' && roleRaw ? String((roleRaw as any).name || '').toLowerCase() : '';
+
+        const results = await Promise.all(
+            validProjectIds.map(pid => meetingService.getMeetings(pid, userId, userRole, {
+                type: req.query.type as any,
+                startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+                endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+            }))
+        );
+
+        const allMeetings = results.flat();
+
+        res.status(200).json({
+            success: true,
+            message: 'Global meetings retrieved successfully',
+            data: allMeetings,
         });
     }
 );

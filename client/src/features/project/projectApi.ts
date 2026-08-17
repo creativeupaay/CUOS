@@ -271,11 +271,19 @@ export const projectApi = api.injectEndpoints({
 
 
         getTasks: builder.query<ApiResponse<Task[]>, { projectId: string; status?: string; assignee?: string; includeSubtasks?: boolean }>({
-            query: ({ projectId, ...params }) => ({
-                url: `/projects/${projectId}/tasks`,
-                params,
-            }),
-            providesTags: (_result, _error, { projectId }) => [{ type: 'Tasks', id: projectId }],
+            query: ({ projectId, status, assignee, includeSubtasks }) => {
+                let url = `/projects/${projectId}/tasks?`;
+                if (status) url += `status=${status}&`;
+                if (assignee) url += `assignee=${assignee}&`;
+                if (includeSubtasks) url += `includeSubtasks=true`;
+                return url;
+            },
+            providesTags: (_result, _error, arg) => [{ type: 'Tasks', id: arg.projectId }],
+        }),
+
+        getAllTasks: builder.query<ApiResponse<Task[]>, { projectIds: string[] }>({
+            query: ({ projectIds }) => `/projects/tasks/all?projectIds=${projectIds.join(',')}`,
+            providesTags: ['Tasks'],
         }),
 
         getTaskById: builder.query<ApiResponse<Task>, { projectId: string; taskId: string }>({
@@ -453,11 +461,17 @@ export const projectApi = api.injectEndpoints({
             invalidatesTags: ['Meetings'],
         }),
 
-        getMeetings: builder.query<ApiResponse<Meeting[]>, { projectId: string; type?: string; startDate?: string; endDate?: string }>({
-            query: ({ projectId, ...params }) => ({
-                url: `/projects/${projectId}/meetings`,
-                params,
-            }),
+        getMeetings: builder.query<ApiResponse<Meeting[]>, { projectId: string; type?: 'internal' | 'external' }>({
+            query: ({ projectId, type }) => {
+                let url = `/projects/${projectId}/meetings`;
+                if (type) url += `?type=${type}`;
+                return url;
+            },
+            providesTags: (_result, _error, arg) => [{ type: 'Meetings', id: arg.projectId }],
+        }),
+
+        getAllMeetings: builder.query<ApiResponse<Meeting[]>, { projectIds: string[] }>({
+            query: ({ projectIds }) => `/projects/meetings/all?projectIds=${projectIds.join(',')}`,
             providesTags: ['Meetings'],
         }),
 
@@ -471,7 +485,7 @@ export const projectApi = api.injectEndpoints({
 
         createIndividualMeeting: builder.mutation<ApiResponse<Meeting>, CreateMeetingRequest>({
             query: (data) => ({
-                url: `/projects/meetings/individual`,
+                url: '/projects/meetings/individual',
                 method: 'POST',
                 body: data,
             }),
@@ -872,6 +886,7 @@ export const {
 
     // Tasks
     useGetTasksQuery,
+    useGetAllTasksQuery,
     useGetIndividualTasksQuery,
     useGetTaskByIdQuery,
     useCreateTaskMutation,
@@ -895,6 +910,7 @@ export const {
     // Meetings
     useCreateMeetingMutation,
     useGetMeetingsQuery,
+    useGetAllMeetingsQuery,
     useGetMeetingByIdQuery,
     useUpdateMeetingMutation,
     useDeleteMeetingMutation,
