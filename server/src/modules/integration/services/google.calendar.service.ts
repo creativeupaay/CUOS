@@ -130,11 +130,6 @@ export async function fetchCalendarEventsWithMeet(
 
         return results;
     } catch (err: any) {
-        // 403 = insufficient permissions / not a Workspace account
-        if (err?.code === 403 || err?.status === 403) {
-            logger.warn('[Google Calendar] Insufficient permissions to read calendar events');
-            return [];
-        }
         logger.error({ err }, '[Google Calendar] Failed to fetch events');
         throw err;
     }
