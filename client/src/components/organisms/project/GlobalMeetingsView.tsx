@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil, RefreshCw, Clock, Users, Hourglass, VideoOff } from 'lucide-react';
+import { Video, Trash2, Calendar, BookOpen, Loader2, Plus, X, Search, Filter, Repeat, MoreHorizontal, Pencil, RefreshCw, Clock, Users, Hourglass } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
 import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
@@ -559,67 +559,70 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 .filter((event: any) => new Date(event.endTime) > new Date())
                                 .map((event: any) => {
                                 const startD = new Date(event.startTime);
-                                const endD = new Date(event.endTime);
                                 const isToday = startD.toDateString() === new Date().toDateString();
                                 const isTomorrow = startD.toDateString() === new Date(Date.now() + 86400000).toDateString();
                                 const timeStr = startD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                const endTimeStr = endD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                 const dateLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : startD.toLocaleDateString([], { month: 'short', day: 'numeric' });
                                 const attendeesCount = event.attendees?.length || 0;
                                 
                                 return (
                                     <div 
                                         key={event.id}
-                                        className="flex-shrink-0 flex flex-col justify-between w-[320px] rounded-[20px] border p-5 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 group bg-white"
+                                        className="flex-shrink-0 flex flex-col justify-between w-[260px] rounded-2xl border p-4 shadow-sm transition-all hover:shadow-md group bg-white relative overflow-hidden"
                                         style={{ borderColor: 'var(--color-border-subtle, #e5e7eb)' }}
                                     >
                                         <div>
-                                            <div className="flex justify-between items-start mb-3 gap-3">
-                                                <h4 className="text-[16px] font-bold text-gray-900 line-clamp-2 leading-snug" title={event.title}>
+                                            <div className="flex justify-between items-start mb-2 gap-3">
+                                                <h4 className="text-[14px] font-bold text-gray-900 line-clamp-2 leading-snug" title={event.title}>
                                                     {event.title}
                                                 </h4>
-                                                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0 text-emerald-600 shadow-sm border border-emerald-100/50">
-                                                    <Video size={18} />
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-emerald-600 bg-emerald-50">
+                                                    <Video size={14} />
                                                 </div>
                                             </div>
                                             
-                                            <div className="flex flex-col gap-3 mt-5">
-                                                <div className="flex items-center gap-2.5 text-[13px] text-gray-700 font-medium">
-                                                    <Clock size={15} className="text-gray-400" />
-                                                    <span>{dateLabel}, {timeStr} - {endTimeStr}</span>
+                                            <div className="flex flex-col gap-2 mt-3">
+                                                <div className="flex items-center gap-2 text-[12px] text-gray-600 font-medium">
+                                                    <Clock size={13} className="text-gray-400" />
+                                                    <span>{dateLabel}, {timeStr}</span>
                                                 </div>
                                                 
-                                                <div className="flex items-center justify-between text-[12px] text-gray-500">
+                                                <div className="flex items-center justify-between text-[11px] text-gray-500">
                                                     <div className="flex items-center gap-1.5">
-                                                        <Hourglass size={14} className="text-gray-400" />
+                                                        <Hourglass size={12} className="text-gray-400" />
                                                         <span>{event.scheduledDurationMinutes} mins</span>
                                                     </div>
                                                     
                                                     {attendeesCount > 0 && (
-                                                        <div className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100 text-gray-600 font-semibold shadow-sm">
-                                                            <Users size={13} className="text-gray-400" />
-                                                            <span>{attendeesCount} {attendeesCount === 1 ? 'Guest' : 'Guests'}</span>
+                                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-gray-500 font-medium bg-gray-50">
+                                                            <Users size={11} className="text-gray-400" />
+                                                            <span>{attendeesCount} Guest{attendeesCount !== 1 && 's'}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
                                         
-                                        <div className="mt-6 pt-5 border-t border-gray-100">
+                                        <div className="mt-4 pt-3 border-t border-gray-100">
                                             {event.meetLink ? (
                                                 <a 
                                                     href={event.meetLink}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center justify-center gap-2 w-full py-3 text-sm font-bold rounded-xl text-emerald-700 bg-emerald-50 transition-all hover:bg-emerald-100 hover:shadow-sm"
+                                                    className="flex items-center justify-center gap-2 w-full py-2 text-xs font-bold rounded-lg text-emerald-700 bg-emerald-50 transition-all hover:text-white"
+                                                    style={{ 
+                                                        '--hover-bg': 'var(--color-primary, #10B981)' 
+                                                    } as any}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary, #10B981)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ecfdf5'}
                                                 >
-                                                    <Video size={18} />
-                                                    Join Google Meet
+                                                    <Video size={14} />
+                                                    Join Meet
                                                 </a>
                                             ) : (
-                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-medium rounded-xl text-gray-400 bg-gray-50 border border-dashed border-gray-200">
-                                                    <VideoOff size={16} />
-                                                    No Meet Link
+                                                <div className="flex items-center justify-center gap-2 w-full py-2 text-xs font-medium rounded-lg text-gray-400 bg-gray-50 border border-dashed border-gray-200">
+                                                    <Clock size={14} />
+                                                    No Link Found
                                                 </div>
                                             )}
                                         </div>
