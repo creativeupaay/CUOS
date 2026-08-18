@@ -6,7 +6,7 @@ import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings
 import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useSyncMeetNowMutation, useGetUpcomingCalendarMeetingsQuery } from '@/features/integration/integrationApi';
-import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
+import { useGetUsersQuery } from '@/features/auth/authApi';
 import { toast } from 'react-hot-toast';
 
 type MeetingType = Meeting['type'];
@@ -142,12 +142,12 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     // Integrations hooks
     const [syncMeetNow, { isLoading: isSyncing }] = useSyncMeetNowMutation();
-    const { data: upcomingResponse, isLoading: isUpcomingLoading } = useGetUpcomingCalendarMeetingsQuery(undefined, {
+    const { data: upcomingResponse, isLoading: isUpcomingLoading, refetch: refetchUpcoming } = useGetUpcomingCalendarMeetingsQuery(undefined, {
         skip: owner !== 'my'
     });
 
-    const { data: employeesData } = useGetEmployeesQuery({ limit: 1000 });
-    const employees = employeesData?.data?.employees || [];
+    const { data: usersData } = useGetUsersQuery();
+    const users = (usersData?.data as any)?.users || [];
 
     const upcomingMeetings = useMemo(() => upcomingResponse?.data || [], [upcomingResponse]);
 
@@ -171,6 +171,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
     const [searchExpanded, setSearchExpanded] = useState(false);
     const [filterTab, setFilterTab] = useState<'project' | 'date' | 'user'>('project');
     const filterRef = useRef<HTMLDivElement>(null);
+    const [externalEmailInput, setExternalEmailInput] = useState('');
 
     useEffect(() => {
         if (!showFilters) return;
@@ -319,6 +320,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                         data,
                     }).unwrap();
                 }
+            }
+
+            // Invalidate/refetch upcoming meetings to reflect the new Meet
+            if (form.generateMeetLink) {
+                refetchUpcoming();
             }
 
             setForm({ ...EMPTY_FORM });
@@ -684,7 +690,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                         No {activeTab !== 'all' ? activeTab : ''} meetings logged yet
                     </p>
                     <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        Click &ldquo;Add Meeting&rdquo; to record one
+                        Click &ldquo;New Meeting&rdquo; to record one
                     </p>
                 </div>
             ) : (
@@ -859,7 +865,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 <X size={16} />
                             </button>
                             <h2 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-                                {meetingToEdit ? 'Edit Meeting' : 'Create Meeting'}
+                                {meetingToEdit ? 'Edit Meeting' : 'New Meeting'}
                             </h2>
                         </div>
 
@@ -1037,8 +1043,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                     <input
                                         type="number"
                                         min={1}
-                                        value={form.duration}
-                                        onChange={e => setField('duration', parseInt(e.target.value) || 30)}
+                                        value={form.duration === 0 ? '' : form.duration}
+                                        onChange={e => setField('duration', e.target.value === '' ? 0 : parseInt(e.target.value))}
                                         className={inputCls}
                                         style={inputSty}
                                         required
@@ -1056,50 +1062,58 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                 onChange={(e) => {
                                                     const empId = e.target.value;
                                                     if (!empId) return;
-                                                    const emp = employees.find((em: any) => em._id === empId);
+                                                    const emp = users.find((em: any) => em._id === empId);
                                                     if (emp) {
-                                                        const uId = (typeof emp.userId === 'object' && emp.userId !== null ? (emp.userId as any)._id : emp.userId) as string;
-                                                        const uName = emp.userId?.name || 'Unknown';
-                                                        const uEmail = emp.userId?.email || '';
-                                                        if (!form.participants.some(p => p.userId === uId)) {
-                                                            setField('participants', [...form.participants, { userId: uId, name: uName, email: uEmail }]);
+                                                        if (!form.participants.some(p => p.userId === emp._id)) {
+                                                            setField('participants', [...form.participants, { userId: emp._id, name: emp.name, email: emp.email }]);
                                                         }
                                                     }
                                                     e.target.value = '';
                                                 }}
                                             >
                                                 <option value="">+ Add Employee</option>
-                                                {employees.map((emp: any) => (
-                                                    <option key={emp._id} value={emp._id}>{emp.userId?.name || 'Unknown'} ({emp.userId?.email || ''})</option>
+                                                {users.map((emp: any) => (
+                                                    <option key={emp._id} value={emp._id}>{emp.name || 'Unknown'} ({emp.email || ''})</option>
                                                 ))}
                                             </select>
-                                            <input
-                                                type="email"
-                                                placeholder="Or type client email & press Enter"
-                                                className={inputCls}
-                                                style={inputSty}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        const email = e.currentTarget.value.trim();
+                                            <div className="flex w-full gap-1">
+                                                <input
+                                                    type="email"
+                                                    placeholder="External client email..."
+                                                    className={inputCls}
+                                                    style={inputSty}
+                                                    value={externalEmailInput}
+                                                    onChange={e => setExternalEmailInput(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const email = externalEmailInput.trim();
+                                                            if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                                                                if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
+                                                                    setField('participants', [...form.participants, { externalEmail: email, email }]);
+                                                                }
+                                                                setExternalEmailInput('');
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(externalEmailInput.trim())}
+                                                    className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                                                    onClick={() => {
+                                                        const email = externalEmailInput.trim();
                                                         if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                                                             if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
                                                                 setField('participants', [...form.participants, { externalEmail: email, email }]);
                                                             }
-                                                            e.currentTarget.value = '';
+                                                            setExternalEmailInput('');
                                                         }
-                                                    }
-                                                }}
-                                                onBlur={(e) => {
-                                                    const email = e.currentTarget.value.trim();
-                                                    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                                                        if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
-                                                            setField('participants', [...form.participants, { externalEmail: email, email }]);
-                                                        }
-                                                        e.currentTarget.value = '';
-                                                    }
-                                                }}
-                                            />
+                                                    }}
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
                                         </div>
                                         {form.participants.length > 0 && (
                                             <div className="flex flex-wrap gap-2 mt-2">
@@ -1187,7 +1201,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
                             >
                                 {isSaving || isCreating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                                {meetingToEdit ? 'Save Changes' : 'Create Meeting'}
+                                {meetingToEdit ? 'Save Changes' : 'New Meeting'}
                             </button>
                         </div>
                     </div>
