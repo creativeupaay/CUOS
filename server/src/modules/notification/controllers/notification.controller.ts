@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { notificationService } from '../services/notification.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
+import { User } from '../../auth/models/User.model';
+import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
 
 const requireUserId = (req: Request): string => {
     const userId = req.user?.id;
@@ -95,5 +97,73 @@ export const clearAllNotifications = asyncHandler(async (req: Request, res: Resp
     res.json({
         success: true,
         message: 'All notifications cleared',
+    });
+});
+
+// Ping a user — admin sends an alert notification with sound to a specific employee
+export const pingUser = asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) throw new AppError('Not authenticated', 401);
+
+    // Only admins with projectManagement access can ping
+    if (!hasModuleAdminAccess(req.user, 'projectManagement')) {
+        throw new AppError('Admin access required to ping users', 403);
+    }
+
+    const { targetUserId, pingType } = req.body as {
+        targetUserId: string;
+        pingType: 'todo' | 'timer';
+    };
+
+    if (!targetUserId || !pingType) {
+        throw new AppError('targetUserId and pingType are required', 400);
+    }
+
+    // Validate target user exists
+    const targetUser = await User.findById(targetUserId).select('name').lean();
+    if (!targetUser) {
+        throw new AppError('Target user not found', 404);
+    }
+
+    const adminUser = await User.findById(adminId).select('name').lean();
+    const adminName = (adminUser as any)?.name || 'Admin';
+
+    const pingMessages: Record<string, { title: string; message: string }> = {
+        todo: {
+            title: '📋 Please add your daily tasks!',
+            message: `${adminName} is asking you to add your daily to-do tasks. Please update your tasks for today.`,
+        },
+        timer: {
+            title: '⏱️ Don\'t forget to start your timer!',
+            message: `${adminName} noticed your timer is not running. Please resume your day timer.`,
+        },
+    };
+
+    const { title, message } = pingMessages[pingType];
+
+    // Create a persistent notification for the user
+    await notificationService.createNotification({
+        userId: targetUserId,
+        type: 'admin_ping',
+        title,
+        message,
+        metadata: { pingType, adminId, adminName },
+    });
+
+    // Also emit a high-priority socket event for immediate audio + toast on the client
+    const { getSocketIO } = await import('../services/notification.service');
+    const socketIO = getSocketIO();
+    if (socketIO) {
+        socketIO.to(`user:${targetUserId}`).emit('ping:received', {
+            pingType,
+            title,
+            message,
+            adminName,
+        });
+    }
+
+    res.json({
+        success: true,
+        message: `Ping sent to user successfully`,
     });
 });

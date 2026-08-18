@@ -46,6 +46,8 @@ export interface IMeeting extends Document {
     googleConferenceId?: string;
     /** Google Calendar event ID (if a Calendar event exists for this meeting) */
     googleCalendarEventId?: string;
+    /** Auto-generated or manually linked Google Meet URL */
+    meetLink?: string;
     /** Actual conference start time (from Google Meet data) */
     actualStartTime?: Date;
     /** Actual conference end time (from Google Meet data) */
@@ -122,6 +124,10 @@ const MeetingSchema = new Schema<IMeeting>(
             trim: true,
         },
         googleCalendarEventId: {
+            type: String,
+            trim: true,
+        },
+        meetLink: {
             type: String,
             trim: true,
         },

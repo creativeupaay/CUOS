@@ -171,6 +171,7 @@ export interface CreateMeetingRequest {
     location?: string;
     agenda?: string;
     notes?: string;
+    generateMeetLink?: boolean;
     recurrence?: RecurrencePayload;
     actionItems?: MeetingActionItem[];
     accessLevel?: 'project-team' | 'managers-only' | 'custom';

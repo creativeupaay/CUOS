@@ -218,6 +218,7 @@ export interface Meeting {
     source?: 'manual' | 'google_meet';
     googleConferenceId?: string;
     googleCalendarEventId?: string;
+    meetLink?: string;
     actualStartTime?: string;
     actualEndTime?: string;
     actualDuration?: number;

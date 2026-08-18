@@ -6,14 +6,17 @@ import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings
 import { useCreateMeetingMutation, useCreateIndividualMeetingMutation, useUpdateMeetingMutation, useUpdateIndividualMeetingMutation, type Meeting } from '@/features/project';
 import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useSyncMeetNowMutation, useGetUpcomingCalendarMeetingsQuery } from '@/features/integration/integrationApi';
+import { useGetEmployeesQuery } from '@/features/hrms/hrmsApi';
 import { toast } from 'react-hot-toast';
 
 type MeetingType = Meeting['type'];
 
 interface MeetingForm {
     purpose: string;
-    members: string;
+    participants: { email?: string; userId?: string; name?: string; externalEmail?: string }[];
     datetime: string;
+    duration: number;
+    description: string;
     notesLink: string;
     type: MeetingType;
     projectId: string;
@@ -22,12 +25,15 @@ interface MeetingForm {
     recurrenceFreq: 'daily' | 'weekly';
     recurrenceEndDate: string;
     recurrenceDays: number[];
+    generateMeetLink: boolean;
 }
 
 const EMPTY_FORM: MeetingForm = {
     purpose: '',
-    members: '',
+    participants: [],
     datetime: '',
+    duration: 30,
+    description: '',
     notesLink: '',
     type: 'internal',
     projectId: '',
@@ -36,6 +42,7 @@ const EMPTY_FORM: MeetingForm = {
     recurrenceFreq: 'weekly',
     recurrenceEndDate: '',
     recurrenceDays: [],
+    generateMeetLink: false,
 };
 
 function RowActions({ meeting, onEdit, onDelete }: { meeting: GlobalMeeting; onEdit: (m: GlobalMeeting) => void; onDelete: (m: GlobalMeeting) => void }) {
@@ -136,9 +143,13 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
     // Integrations hooks
     const [syncMeetNow, { isLoading: isSyncing }] = useSyncMeetNowMutation();
     const { data: upcomingResponse, isLoading: isUpcomingLoading } = useGetUpcomingCalendarMeetingsQuery(undefined, {
-        skip: owner !== 'my',
+        skip: owner !== 'my'
     });
-    const upcomingMeetings = upcomingResponse?.data || [];
+
+    const { data: employeesData } = useGetEmployeesQuery({ limit: 1000 });
+    const employees = employeesData?.data?.employees || [];
+
+    const upcomingMeetings = useMemo(() => upcomingResponse?.data || [], [upcomingResponse]);
 
     useEffect(() => {
         setFilters({ owner });
@@ -194,8 +205,18 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     // Meetings shown: filtered by activeTab (type)
     const filteredByTab = activeTab === 'all' ? filteredMeetings : filteredMeetings.filter(m => m.type === activeTab);
-    const totalPages = Math.ceil(filteredByTab.length / ITEMS_PER_PAGE);
-    const paginatedMeetings = filteredByTab.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+    
+    // As requested, only show completed meetings in the list (endTime is in the past)
+    const nowForFilter = new Date();
+    const completedMeetingsOnly = filteredByTab.filter(m => {
+        if (!m.scheduledAt) return true; // fallback if no date
+        const end = new Date(m.scheduledAt);
+        end.setMinutes(end.getMinutes() + (m.duration || 0));
+        return end < nowForFilter;
+    });
+
+    const totalPages = Math.ceil(completedMeetingsOnly.length / ITEMS_PER_PAGE);
+    const paginatedMeetings = completedMeetingsOnly.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
     const setField = <K extends keyof MeetingForm>(k: K, v: MeetingForm[K]) =>
         setForm(f => ({ ...f, [k]: v }));
@@ -214,8 +235,19 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
         setForm({
             purpose: meeting.title,
-            members: meeting.description || '',
+            participants: (meeting.participants || []).map(p => {
+                const isObj = typeof p.userId === 'object' && p.userId !== null;
+                const uIdObj = isObj ? (p.userId as any) : null;
+                return {
+                    email: uIdObj?.email || p.externalEmail,
+                    externalEmail: p.externalEmail,
+                    name: p.name || uIdObj?.name,
+                    userId: uIdObj?._id || p.userId
+                };
+            }),
             datetime: localDatetime,
+            duration: meeting.duration || 30,
+            description: meeting.description || '',
             notesLink: meeting.notes || '',
             type: meeting.type,
             projectId: meeting._projectId || 'general',
@@ -223,7 +255,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             isRecurring: false,
             recurrenceFreq: 'weekly',
             recurrenceEndDate: '',
-            recurrenceDays: []
+            recurrenceDays: [],
+            generateMeetLink: false
         });
         setMeetingToEdit(meeting);
         setShowForm(true);
@@ -255,12 +288,13 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         try {
             const data = {
                 title: form.purpose,
-                description: form.members,
+                description: form.description,
                 scheduledAt: new Date(form.datetime).toISOString(),
+                duration: form.duration || 30,
                 notes: form.notesLink,
                 type: form.type,
-                participants: [],
-                duration: 1,
+                participants: form.participants as any,
+                generateMeetLink: form.generateMeetLink,
                 ...(form.isRecurring && form.recurrenceEndDate ? {
                     recurrence: {
                         frequency: form.recurrenceFreq,
@@ -639,7 +673,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                 <div className="flex items-center justify-center py-16">
                     <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
                 </div>
-            ) : filteredByTab.length === 0 ? (
+            ) : completedMeetingsOnly.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', color: 'var(--color-text-muted)' }}>
@@ -671,7 +705,6 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                         </thead>
                         <tbody>
                             {paginatedMeetings.map((meeting: GlobalMeeting) => {
-                                const hasLink = !!meeting.notes;
                                 return (
                                     <tr 
                                         key={meeting._id} 
@@ -721,7 +754,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                         
                                         {/* Notes */}
                                         <td className="py-2.5 px-3" style={{ minWidth: 100 }} onClick={e => e.stopPropagation()}>
-                                            {hasLink ? (
+                                            {meeting.meetLink ? (
+                                                <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-md transition-colors" style={{ color: '#10B981', backgroundColor: '#ecfdf5', border: '1px solid #10B981' }} title="Join Google Meet">
+                                                    <Video size={12} /> Join Meet
+                                                </a>
+                                            ) : meeting.notes ? (
                                                 <a href={meeting.notes} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs transition-colors hover:underline" style={{ color: 'var(--color-primary)' }} title={meeting.notes}>
                                                     <BookOpen size={12} /> Link
                                                 </a>
@@ -758,7 +795,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                     {/* Pagination */}
                     <div className="border-t px-4 py-3 flex items-center justify-between mt-4 rounded-xl border" style={{ borderColor: 'var(--color-border-default)', backgroundColor: 'var(--color-bg-surface)' }}>
                             <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                Showing {((page - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(page * ITEMS_PER_PAGE, filteredByTab.length)} of {filteredByTab.length} meetings
+                                Showing {((page - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(page * ITEMS_PER_PAGE, completedMeetingsOnly.length)} of {completedMeetingsOnly.length} meetings
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
@@ -993,15 +1030,109 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                     )}
                                 </div>
 
-                                {/* Members */}
+                                {/* Duration */}
                                 <div>
-                                    <label className={labelCls} style={labelSty}>Members / Attendees</label>
+                                    <label className={labelCls} style={labelSty}>Duration (minutes) *</label>
                                     <input
-                                        value={form.members}
-                                        onChange={e => setField('members', e.target.value)}
+                                        type="number"
+                                        min={1}
+                                        value={form.duration}
+                                        onChange={e => setField('duration', parseInt(e.target.value) || 30)}
                                         className={inputCls}
                                         style={inputSty}
-                                        placeholder="e.g. Vinay, Rahul, Priya (comma-separated)"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Participants */}
+                                <div>
+                                    <label className={labelCls} style={labelSty}>Members / Attendees</label>
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex gap-2">
+                                            <select
+                                                className={inputCls}
+                                                style={inputSty}
+                                                onChange={(e) => {
+                                                    const empId = e.target.value;
+                                                    if (!empId) return;
+                                                    const emp = employees.find((em: any) => em._id === empId);
+                                                    if (emp) {
+                                                        const uId = (typeof emp.userId === 'object' && emp.userId !== null ? (emp.userId as any)._id : emp.userId) as string;
+                                                        const uName = emp.userId?.name || 'Unknown';
+                                                        const uEmail = emp.userId?.email || '';
+                                                        if (!form.participants.some(p => p.userId === uId)) {
+                                                            setField('participants', [...form.participants, { userId: uId, name: uName, email: uEmail }]);
+                                                        }
+                                                    }
+                                                    e.target.value = '';
+                                                }}
+                                            >
+                                                <option value="">+ Add Employee</option>
+                                                {employees.map((emp: any) => (
+                                                    <option key={emp._id} value={emp._id}>{emp.userId?.name || 'Unknown'} ({emp.userId?.email || ''})</option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="email"
+                                                placeholder="Or type client email & press Enter"
+                                                className={inputCls}
+                                                style={inputSty}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const email = e.currentTarget.value.trim();
+                                                        if (email && /^\S+@\S+\.\S+$/.test(email)) {
+                                                            if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
+                                                                setField('participants', [...form.participants, { externalEmail: email, email }]);
+                                                            }
+                                                            e.currentTarget.value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        {form.participants.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {form.participants.map((p, i) => (
+                                                    <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
+                                                        <span className="truncate max-w-[150px]">{p.name || p.email || p.externalEmail}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setField('participants', form.participants.filter((_, idx) => idx !== i))}
+                                                            className="text-red-500 hover:text-red-700"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Generate Meet Link Toggle */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-xs font-semibold mb-2 cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={form.generateMeetLink}
+                                            onChange={e => setField('generateMeetLink', e.target.checked)}
+                                            className="rounded"
+                                        />
+                                        <Video size={14} className="inline" style={{ color: form.generateMeetLink ? 'var(--color-primary)' : 'inherit' }} />
+                                        Automatically create Google Meet link &amp; send Calendar invites
+                                    </label>
+                                </div>
+
+                                {/* Description / Agenda */}
+                                <div>
+                                    <label className={labelCls} style={labelSty}>Description / Agenda</label>
+                                    <textarea
+                                        value={form.description}
+                                        onChange={e => setField('description', e.target.value)}
+                                        className={inputCls}
+                                        style={{ ...inputSty, height: '80px', paddingTop: '8px', resize: 'none' }}
+                                        placeholder="Add meeting agenda or notes..."
                                     />
                                 </div>
 

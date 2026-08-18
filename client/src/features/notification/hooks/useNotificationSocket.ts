@@ -151,10 +151,52 @@ export const useNotificationSocket = () => {
         socket.on('notification:new', handleNewNotification);
         socket.on('notification:unreadCount', handleUnreadCount);
 
+        // Handle admin ping — plays alert sound and shows a loud, persistent toast
+        const handlePingReceived = (data: { pingType: 'todo' | 'timer'; title: string; message: string; adminName: string }) => {
+            logger.info('[NotificationSocket] Admin ping received:', data);
+
+            // Play notification sound immediately (repeated for extra urgency)
+            try {
+                playNotificationSound(1.0);
+                setTimeout(() => {
+                    try { playNotificationSound(0.8); } catch { /* ignore */ }
+                }, 700);
+            } catch { /* ignore */ }
+
+            // Show native OS desktop notification
+            sendDesktopPushNotification(data.title, data.message, { tag: `ping-${Date.now()}` });
+
+            // Show an in-app toast (lasts 20 seconds)
+            import('react-hot-toast').then((m) => {
+                m.default.dismiss('admin-ping');
+                m.default(data.title + '\n' + data.message, {
+                    id: 'admin-ping',
+                    duration: 20000,
+                    position: 'top-center',
+                    icon: data.pingType === 'todo' ? '📋' : '⏱️',
+                    style: {
+                        maxWidth: '420px',
+                        fontWeight: '600',
+                        background: data.pingType === 'todo' ? '#FEF3C7' : '#DBEAFE',
+                        color: data.pingType === 'todo' ? '#92400E' : '#1E3A8A',
+                        border: `2px solid ${data.pingType === 'todo' ? '#F59E0B' : '#3B82F6'}`,
+                        whiteSpace: 'pre-line',
+                        borderRadius: '12px',
+                        padding: '14px 18px',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                    },
+                });
+            }).catch(() => {});
+        };
+
+        socket.on('ping:received', handlePingReceived);
+
+
         return () => {
             socket.off('connect', handleConnect);
             socket.off('notification:new', handleNewNotification);
             socket.off('notification:unreadCount', handleUnreadCount);
+            socket.off('ping:received', handlePingReceived);
         };
     }, [isAuthenticated, dispatch, requestBrowserPermission, showBrowserNotification]);
 };

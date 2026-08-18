@@ -5,7 +5,18 @@ import AppError from '../../../utils/appError';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Project } from '../models/Project.model';
 import { Task } from '../models/Task.model';
+import { DaySession } from '../models/DaySession.model';
 import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
+
+// ── Date helper ────────────────────────────────────────────────────────────────
+/** Returns 'YYYY-MM-DD' in IST (UTC+5:30). Used as the dateKey for DaySessions. */
+function getTodayKey(): string {
+    const now = new Date();
+    // Offset to IST (+5:30 = 330 minutes)
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + IST_OFFSET);
+    return ist.toISOString().slice(0, 10);
+}
 
 export const createTask = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
@@ -275,16 +286,127 @@ export const setTimerStatus = asyncHandler(
     }
 );
 
-/** GET /projects/timer-status — admin can see who's running a timer */
+/** GET /projects/timer-status — admin can see who's running a timer or checked out */
 export const getTimerStatuses = asyncHandler(
     async (_req: Request, res: Response) => {
-        const result: Record<string, 'running'> = {};
-        timerStatusMap.forEach((status, uid) => {
-            if (status === 'running') result[uid] = 'running';
+        const dateKey = getTodayKey();
+        const sessions = await DaySession.find({ dateKey }).lean();
+        
+        const result: Record<string, { status: string; isEnded: boolean }> = {};
+        sessions.forEach(session => {
+            result[session.userId.toString()] = { 
+                status: session.status,
+                isEnded: session.isEnded || false
+            };
         });
         
-        console.log(`[TimerStatus] getTimerStatuses called. Returning:`, result);
-        
         res.status(200).json({ success: true, data: result });
+    }
+);
+
+// ── DaySession Endpoints ───────────────────────────────────────────────────────
+
+/**
+ * GET /projects/day-session
+ * Returns today's DaySession for the authenticated user.
+ * Returns null if not started yet today.
+ */
+export const getDaySession = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+
+        const session = await DaySession.findOne({ userId, dateKey }).lean();
+        res.status(200).json({ success: true, data: session ?? null });
+    }
+);
+
+/**
+ * POST /projects/day-session/start
+ * Starts or resumes today's DaySession.
+ * - If no session for today exists, creates one (accumulated = 0).
+ * - If session exists and is paused, resumes it (sets startedAt = now, status = running).
+ * - If session already running, no-ops gracefully (idempotent).
+ */
+export const startDaySession = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const now = Date.now();
+
+        const session = await DaySession.findOneAndUpdate(
+            { userId, dateKey },
+            {
+                $setOnInsert: { dayStart: new Date(), accumulated: 0, limitBypassed: false },
+                $set: {
+                    status: 'running',
+                    startedAt: now,
+                },
+            },
+            { upsert: true, new: true }
+        ).lean();
+
+        // Also update in-memory status map for backward compatibility
+        timerStatusMap.set(userId, 'running');
+
+        res.status(200).json({ success: true, data: session });
+    }
+);
+
+/**
+ * PATCH /projects/day-session/pause
+ * Pauses the running DaySession and accumulates elapsed seconds.
+ * Body: { accumulated?: number } — if client sends accumulated, we trust it;
+ *       otherwise we compute it server-side from startedAt.
+ */
+export const pauseDaySession = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const now = Date.now();
+
+        const current = await DaySession.findOne({ userId, dateKey });
+        if (!current) {
+            return res.status(200).json({ success: true, data: null });
+        }
+
+        if (current.status === 'running' && current.startedAt) {
+            const runSeconds = Math.floor((now - current.startedAt) / 1000);
+            current.accumulated = current.accumulated + runSeconds;
+            current.status = 'paused';
+            current.startedAt = null;
+            current.lastPausedAt = new Date();
+        }
+
+        if (req.body?.isEnded === true) {
+            current.isEnded = true;
+        }
+
+        await current.save();
+
+        // Update in-memory status map
+        timerStatusMap.delete(userId);
+
+        res.status(200).json({ success: true, data: current.toObject() });
+    }
+);
+
+/**
+ * PATCH /projects/day-session/bypass-limit
+ * Allows the user to bypass the 12-hour cap and keep running.
+ */
+export const bypassDaySessionLimit = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const now = Date.now();
+
+        const session = await DaySession.findOneAndUpdate(
+            { userId, dateKey },
+            { $set: { limitBypassed: true, status: 'running', startedAt: now } },
+            { new: true }
+        ).lean();
+
+        res.status(200).json({ success: true, data: session });
     }
 );

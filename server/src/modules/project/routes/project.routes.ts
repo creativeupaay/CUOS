@@ -187,6 +187,15 @@ router.post('/timer-status', authenticate, taskController.setTimerStatus);
 router.get('/timer-status', authenticate, taskController.getTimerStatuses);
 
 // ============================================
+// DaySession Routes (universal timer persistence)
+// ============================================
+
+router.get('/day-session', authenticate, taskController.getDaySession);
+router.post('/day-session/start', authenticate, taskController.startDaySession);
+router.patch('/day-session/pause', authenticate, taskController.pauseDaySession);
+router.patch('/day-session/bypass-limit', authenticate, taskController.bypassDaySessionLimit);
+
+// ============================================
 // PROJECT ROUTES
 // ============================================
 

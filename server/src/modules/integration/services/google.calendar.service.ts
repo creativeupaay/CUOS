@@ -139,3 +139,84 @@ export async function fetchCalendarEventsWithMeet(
         throw err;
     }
 }
+
+/**
+ * Creates a Google Calendar event and automatically generates a Google Meet link.
+ * 
+ * @param accessToken - valid decrypted access token
+ * @param title - Event title
+ * @param description - Event description/agenda
+ * @param startTime - Start time (Date)
+ * @param durationMinutes - Duration in minutes
+ * @param attendeeEmails - Array of participant emails to invite
+ * @returns An object containing the generated meetLink and the eventId
+ */
+export async function createCalendarEventWithMeet(
+    accessToken: string,
+    title: string,
+    description: string | undefined,
+    startTime: Date,
+    durationMinutes: number,
+    attendeeEmails: string[]
+): Promise<{ meetLink: string; eventId: string }> {
+    try {
+        const auth = getOAuth2Client();
+        auth.setCredentials({ access_token: accessToken });
+
+        const calendar = google.calendar({ version: 'v3', auth });
+
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60_000);
+
+        const event = {
+            summary: title,
+            description: description,
+            start: {
+                dateTime: startTime.toISOString(),
+                timeZone: 'UTC',
+            },
+            end: {
+                dateTime: endTime.toISOString(),
+                timeZone: 'UTC',
+            },
+            attendees: attendeeEmails.map(email => ({ email })),
+            conferenceData: {
+                createRequest: {
+                    requestId: `cuos-meet-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+                    conferenceSolutionKey: {
+                        type: 'hangoutsMeet'
+                    }
+                }
+            }
+        };
+
+        const response = await calendar.events.insert({
+            calendarId: 'primary',
+            requestBody: event,
+            conferenceDataVersion: 1, // REQUIRED to generate Meet links
+            sendUpdates: 'all',       // Send email invites to attendees
+        });
+
+        const createdEvent = response.data;
+        
+        // Extract the Meet link from conferenceData
+        const conf = createdEvent.conferenceData;
+        const videoEntry = conf?.entryPoints?.find((ep: any) => ep.entryPointType === 'video');
+        
+        if (!videoEntry?.uri || !createdEvent.id) {
+            throw new Error('Google Calendar API did not return a valid Meet link or event ID');
+        }
+
+        return {
+            meetLink: videoEntry.uri,
+            eventId: createdEvent.id,
+        };
+    } catch (err: any) {
+        // If it's a 403 or insufficient scope, throw a specific error so the UI can prompt for re-auth
+        if (err.code === 403 || err.message?.includes('insufficient')) {
+            logger.warn({ err: err.message }, '[Google Calendar] Insufficient permissions to create event. Re-auth required.');
+            throw new Error('insufficient_permissions');
+        }
+        logger.error({ err }, '[Google Calendar] Failed to create event with Meet link');
+        throw new Error('Failed to create Google Meet link');
+    }
+}

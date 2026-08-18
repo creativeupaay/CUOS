@@ -850,7 +850,7 @@ export const projectApi = api.injectEndpoints({
         }),
 
         // ── Timer Status ────────────────────────────────────────────────────────
-        getTimerStatuses: builder.query<ApiResponse<Record<string, 'running'>>, void>({
+        getTimerStatuses: builder.query<ApiResponse<Record<string, { status: string; isEnded: boolean }>>, void>({
             query: () => '/projects/timer-status',
             providesTags: [{ type: 'Tasks', id: 'TIMER_STATUS' }],
         }),
@@ -862,6 +862,46 @@ export const projectApi = api.injectEndpoints({
                 body,
             }),
             invalidatesTags: [{ type: 'Tasks', id: 'TIMER_STATUS' }],
+        }),
+
+        // ── DaySession (universal timer) ─────────────────────────────────────────
+        getDaySession: builder.query<ApiResponse<{
+            _id: string;
+            userId: string;
+            dateKey: string;
+            accumulated: number;
+            startedAt: number | null;
+            status: 'running' | 'paused';
+            dayStart: string;
+            lastPausedAt: string | null;
+            limitBypassed: boolean;
+        } | null>, void>({
+            query: () => '/projects/day-session',
+            providesTags: [{ type: 'Tasks', id: 'DAY_SESSION' }],
+        }),
+
+        startDaySession: builder.mutation<ApiResponse<unknown>, void>({
+            query: () => ({
+                url: '/projects/day-session/start',
+                method: 'POST',
+            }),
+            invalidatesTags: [{ type: 'Tasks', id: 'DAY_SESSION' }, { type: 'Tasks', id: 'TIMER_STATUS' }],
+        }),
+
+        pauseDaySession: builder.mutation<ApiResponse<unknown>, void>({
+            query: () => ({
+                url: '/projects/day-session/pause',
+                method: 'PATCH',
+            }),
+            invalidatesTags: [{ type: 'Tasks', id: 'DAY_SESSION' }, { type: 'Tasks', id: 'TIMER_STATUS' }],
+        }),
+
+        bypassDaySessionLimit: builder.mutation<ApiResponse<unknown>, void>({
+            query: () => ({
+                url: '/projects/day-session/bypass-limit',
+                method: 'PATCH',
+            }),
+            invalidatesTags: [{ type: 'Tasks', id: 'DAY_SESSION' }],
         }),
     }),
     overrideExisting: false,
@@ -964,4 +1004,10 @@ export const {
     // Timer Status
     useGetTimerStatusesQuery,
     useSetTimerStatusMutation,
+
+    // DaySession
+    useGetDaySessionQuery,
+    useStartDaySessionMutation,
+    usePauseDaySessionMutation,
+    useBypassDaySessionLimitMutation,
 } = projectApi;

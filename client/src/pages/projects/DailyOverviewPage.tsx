@@ -5,9 +5,11 @@ import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
 import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { hasModuleAdminAccess } from '@/utils/modulePermissions';
-import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video } from 'lucide-react';
+import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer } from 'lucide-react';
 import type { Task } from '@/features/project';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
+import { usePingUserMutation } from '@/features/notification/api/notificationApi';
+import toast from 'react-hot-toast';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +54,7 @@ function getInitials(name: string): string {
 
 // ─── Employee Card ─────────────────────────────────────────────────────────────
 
-type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; isWorking: boolean };
+type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; isWorking: boolean; isEnded: boolean; onPing: (userId: string, type: 'todo' | 'timer') => void; isPinging: boolean };
 
 const STATUS_CFG: Record<string, { icon: React.ReactNode; color: string }> = {
     todo:          { icon: <Circle size={14} />,       color: '#3B82F6' },
@@ -79,7 +81,7 @@ const getFoldedCornerStyle = (color: string) => ({
     borderBottomRightRadius: '0px',
 });
 
-function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardProps) {
+function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing, isPinging }: EmployeeCardProps) {
     const aColor = avatarColor(user.name);
     const cardBgColor = CARD_COLORS[index % CARD_COLORS.length];
 
@@ -133,6 +135,14 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardP
                                 >
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
                                     Working
+                                </span>
+                            ) : isEnded ? (
+                                <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ backgroundColor: '#F1F5F9', color: '#475569' }}
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+                                    Checked out
                                 </span>
                             ) : (
                                 <span
@@ -256,6 +266,34 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking }: EmployeeCardP
                     </span>
                 </div>
             )}
+
+            {/* Admin Ping Buttons */}
+            <div className="px-4 pb-4 flex items-center gap-2 flex-wrap">
+                {tasks.length === 0 && (
+                    <button
+                        disabled={isPinging}
+                        onClick={() => onPing(user._id, 'todo')}
+                        title="Ping employee to add their daily tasks"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}
+                    >
+                        <Bell size={11} />
+                        Ping: Add todos
+                    </button>
+                )}
+                {!isWorking && (
+                    <button
+                        disabled={isPinging}
+                        onClick={() => onPing(user._id, 'timer')}
+                        title="Ping employee to start their timer"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: '#DBEAFE', color: '#1E3A8A', border: '1px solid #3B82F6' }}
+                    >
+                        <Timer size={11} />
+                        Ping: Start timer
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -287,9 +325,27 @@ export default function DailyOverviewPage() {
     // Separate query without date filter — needed to detect activeTimers across ALL tasks
     // (a timer may be running on an overdue task from a previous day)
     const { data: timerStatusRes } = useGetTimerStatusesQuery(undefined, { pollingInterval: 5000 });
-    const runningUserIds = useMemo(() => new Set(Object.keys(timerStatusRes?.data ?? {})), [timerStatusRes]);
+    const timerStatuses = timerStatusRes?.data ?? {};
+    const runningUserIds = useMemo(() => new Set(Object.entries(timerStatuses).filter(([_, s]) => s.status === 'running').map(([k]) => k)), [timerStatuses]);
+    const endedUserIds = useMemo(() => new Set(Object.entries(timerStatuses).filter(([_, s]) => s.isEnded).map(([k]) => k)), [timerStatuses]);
 
     const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
+
+    // Admin ping
+    const [pingUser] = usePingUserMutation();
+    const [pingingUserId, setPingingUserId] = useState<string | null>(null);
+
+    const handlePing = async (targetUserId: string, pingType: 'todo' | 'timer') => {
+        setPingingUserId(targetUserId);
+        try {
+            await pingUser({ targetUserId, pingType }).unwrap();
+            toast.success(`Ping sent! ${pingType === 'todo' ? '📋' : '⏱️'}`);
+        } catch {
+            toast.error('Failed to send ping. Please try again.');
+        } finally {
+            setPingingUserId(null);
+        }
+    };
 
     // Group by assignees (fallback to creator if no assignees)
     const groupedAll = useMemo(() => {
@@ -524,6 +580,9 @@ export default function DailyOverviewPage() {
                                 meetings={meetings} 
                                 index={i} 
                                 isWorking={runningUserIds.has(u._id)}
+                                isEnded={endedUserIds.has(u._id)}
+                                onPing={handlePing}
+                                isPinging={pingingUserId === u._id}
                             />
                         ))}
                     </div>

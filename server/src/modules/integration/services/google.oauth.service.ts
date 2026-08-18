@@ -23,11 +23,11 @@ import type { Types } from 'mongoose';
 
 // ─── Required OAuth scopes ────────────────────────────────────────────────────
 // Minimum scopes needed for Google Meet tracking.
-// calendar.events.readonly: read Calendar event metadata (title, times, conference info)
+// calendar.events: write/read Calendar event metadata (to create meetings and read them)
 // admin.reports.audit.readonly: read Meet participant join/leave data (Workspace only)
 export const GOOGLE_SCOPES = [
     'https://www.googleapis.com/auth/calendar.readonly',
-    'https://www.googleapis.com/auth/calendar.events.readonly',
+    'https://www.googleapis.com/auth/calendar.events', // Replaced readonly with full events access
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
     // The Meet API scope for fetching individual conference records

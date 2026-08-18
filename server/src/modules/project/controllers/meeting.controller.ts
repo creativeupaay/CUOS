@@ -3,15 +3,65 @@ import * as meetingService from '../services/meeting.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
 import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
+import { GoogleIntegration } from '../../integration/models/GoogleIntegration.model';
+import { getValidAccessToken } from '../../integration/services/google.oauth.service';
+import { createCalendarEventWithMeet } from '../../integration/services/google.calendar.service';
+import { User } from '../../auth/models/User.model';
+
+async function processMeetLinkGeneration(req: Request, userId: string): Promise<{ meetLink?: string, eventId?: string }> {
+    if (!req.body.generateMeetLink) return {};
+
+    const integration = await GoogleIntegration.findOne({ userId }).select('+accessToken +refreshToken');
+    if (!integration) {
+        throw new AppError('Google Account not connected. Please connect your account in Settings.', 400);
+    }
+
+    try {
+        const accessToken = await getValidAccessToken(integration as any);
+        
+        // Collect emails
+        const emails: string[] = [];
+        const participants = req.body.participants || [];
+        
+        for (const p of participants) {
+            if (p.externalEmail) {
+                emails.push(p.externalEmail);
+            } else if (p.userId) {
+                const user = await User.findById(p.userId).select('email').lean();
+                if (user?.email) emails.push(user.email);
+            }
+        }
+
+        const result = await createCalendarEventWithMeet(
+            accessToken,
+            req.body.title || req.body.purpose || 'CUOS Meeting',
+            req.body.description || req.body.agenda,
+            new Date(req.body.scheduledAt),
+            req.body.duration || 30,
+            emails
+        );
+
+        return result;
+    } catch (err: any) {
+        if (err.message === 'insufficient_permissions') {
+            throw new AppError('Google Calendar permissions missing. Please disconnect and reconnect your Google account in Settings.', 403);
+        }
+        throw new AppError('Failed to generate Google Meet link. ' + err.message, 500);
+    }
+}
 
 export const createMeeting = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const userId = req.user?.id!;
 
+        const { meetLink, eventId } = await processMeetLinkGeneration(req, userId);
+
         const meeting = await meetingService.createMeeting({
             ...req.body,
             projectId: req.params.projectId,
             createdBy: userId,
+            meetLink,
+            googleCalendarEventId: eventId,
         });
 
         res.status(201).json({
@@ -26,10 +76,14 @@ export const createIndividualMeeting = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const userId = req.user?.id!;
 
+        const { meetLink, eventId } = await processMeetLinkGeneration(req, userId);
+
         const meeting = await meetingService.createMeeting({
             ...req.body,
             // no projectId passed
             createdBy: userId,
+            meetLink,
+            googleCalendarEventId: eventId,
         });
 
         res.status(201).json({

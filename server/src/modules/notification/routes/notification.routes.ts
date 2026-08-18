@@ -25,4 +25,7 @@ router.delete('/clear-all', notificationController.clearAllNotifications);
 // DELETE /api/v1/notifications/:id - Delete single notification
 router.delete('/:id', notificationController.deleteNotification);
 
+// POST /api/v1/notifications/ping - Admin pings an employee
+router.post('/ping', notificationController.pingUser);
+
 export default router;

@@ -31,6 +31,8 @@ export interface CreateMeetingData {
     accessLevel?: 'project-team' | 'managers-only' | 'custom';
     customAccessUsers?: string[];
     createdBy: string;
+    meetLink?: string;
+    googleCalendarEventId?: string;
     recurrence?: {
         frequency: 'daily' | 'weekly';
         endDate: string;

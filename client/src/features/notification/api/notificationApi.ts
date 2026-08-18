@@ -87,6 +87,15 @@ const notificationApi = api.injectEndpoints({
             // State is managed optimistically via dispatch(clearAllAction()).
             // No need to refetch after clearing.
         }),
+
+        // Admin pings a user with an alert
+        pingUser: builder.mutation<SuccessResponse, { targetUserId: string; pingType: 'todo' | 'timer' }>({
+            query: (body) => ({
+                url: '/notifications/ping',
+                method: 'POST',
+                body,
+            }),
+        }),
     }),
 });
 
@@ -97,6 +106,7 @@ export const {
     useMarkAllAsReadMutation,
     useDeleteNotificationMutation,
     useClearAllNotificationsMutation,
+    usePingUserMutation,
 } = notificationApi;
 
 export default notificationApi;
