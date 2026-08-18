@@ -232,31 +232,51 @@ async function processConference(
 
     // Map emails to CUOS users
     const matchedUsers = await User.find({ email: { $in: Array.from(participantEmails) }, isActive: true }).select('_id email').lean();
-    const matchedEmails = new Set(matchedUsers.map(u => u.email.toLowerCase()));
     
-    const participantsList: any[] = matchedUsers.map(u => ({
-        userId: u._id,
-        role: 'required',
-        actualDuration: participantDurations.get(u.email.toLowerCase()),
-    }));
+    // Also map emails to GoogleIntegrations to catch personal google accounts
+    const matchedIntegrations = await GoogleIntegration.find({ googleEmail: { $in: Array.from(participantEmails) } }).select('userId googleEmail').lean();
+    
+    // Build a map of email -> userId
+    const emailToUserId = new Map<string, string>();
+    for (const u of matchedUsers) {
+        emailToUserId.set(u.email.toLowerCase(), u._id.toString());
+    }
+    for (const intg of matchedIntegrations as any[]) {
+        emailToUserId.set(intg.googleEmail.toLowerCase(), intg.userId.toString());
+    }
+
+    const participantsList: any[] = [];
+    const addedUserIds = new Set<string>();
+
+    for (const email of participantEmails) {
+        const emailLower = email.toLowerCase();
+        const mappedUserId = emailToUserId.get(emailLower);
+        
+        if (mappedUserId) {
+            if (!addedUserIds.has(mappedUserId)) {
+                participantsList.push({
+                    userId: mappedUserId,
+                    role: 'required',
+                    actualDuration: participantDurations.get(emailLower),
+                });
+                addedUserIds.add(mappedUserId);
+            }
+        } else if (emailLower !== integration.googleEmail?.toLowerCase()) {
+            participantsList.push({ 
+                externalEmail: email, 
+                role: 'required',
+                actualDuration: participantDurations.get(emailLower),
+            });
+        }
+    }
     
     // Explicitly add syncing user if they aren't matched by email
-    if (!participantsList.some(p => p.userId.toString() === userId.toString())) {
+    if (!addedUserIds.has(userId.toString())) {
         participantsList.push({
             userId,
             role: 'required',
             actualDuration: integration.googleEmail ? participantDurations.get(integration.googleEmail.toLowerCase()) : undefined,
         });
-    }
-    
-    for (const email of participantEmails) {
-        if (!matchedEmails.has(email) && email.toLowerCase() !== integration.googleEmail?.toLowerCase()) {
-            participantsList.push({ 
-                externalEmail: email, 
-                role: 'required',
-                actualDuration: participantDurations.get(email),
-            });
-        }
     }
 
     // Add anonymous users who had no email but were in the meet

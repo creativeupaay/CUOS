@@ -223,7 +223,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         setForm(f => ({ ...f, [k]: v }));
 
     const openForm = () => {
-        setForm({ ...EMPTY_FORM, type: activeTab === 'all' ? 'internal' : activeTab });
+        setForm({ 
+            ...EMPTY_FORM, 
+            type: activeTab === 'all' ? 'internal' : activeTab,
+            participants: [{ userId: currentUserId }]
+        });
         setMeetingToEdit(null);
         setShowForm(true);
         setTimeout(() => setIsAnimating(true), 10);

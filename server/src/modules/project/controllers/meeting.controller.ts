@@ -8,7 +8,7 @@ import { getValidAccessToken } from '../../integration/services/google.oauth.ser
 import { createCalendarEventWithMeet } from '../../integration/services/google.calendar.service';
 import { User } from '../../auth/models/User.model';
 
-async function processMeetLinkGeneration(req: Request, userId: string): Promise<{ meetLink?: string, eventId?: string }> {
+async function processMeetLinkGeneration(req: Request, userId: string): Promise<{ meetLink?: string, eventId?: string, conferenceId?: string }> {
     if (!req.body.generateMeetLink) return {};
 
     const integration = await GoogleIntegration.findOne({ userId }).select('+accessToken +refreshToken');
@@ -51,7 +51,7 @@ export const createMeeting = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
         const userId = req.user?.id!;
 
-        const { meetLink, eventId } = await processMeetLinkGeneration(req, userId);
+        const { meetLink, eventId, conferenceId } = await processMeetLinkGeneration(req, userId);
 
         const meeting = await meetingService.createMeeting({
             ...req.body,
@@ -59,6 +59,7 @@ export const createMeeting = asyncHandler(
             createdBy: userId,
             meetLink,
             googleCalendarEventId: eventId,
+            googleConferenceId: conferenceId,
         });
 
         res.status(201).json({

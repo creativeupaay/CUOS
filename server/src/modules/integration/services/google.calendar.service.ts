@@ -158,7 +158,7 @@ export async function createCalendarEventWithMeet(
     startTime: Date,
     durationMinutes: number,
     attendeeEmails: string[]
-): Promise<{ meetLink: string; eventId: string }> {
+): Promise<{ meetLink: string; eventId: string; conferenceId?: string }> {
     try {
         const auth = getOAuth2Client();
         auth.setCredentials({ access_token: accessToken });
@@ -209,6 +209,7 @@ export async function createCalendarEventWithMeet(
         return {
             meetLink: videoEntry.uri,
             eventId: createdEvent.id,
+            conferenceId: conf?.conferenceId ?? undefined,
         };
     } catch (err: any) {
         // Log the full exact error from Google API
