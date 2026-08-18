@@ -9,7 +9,7 @@ import {
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
-import { useNotificationSocket } from '@/features/notification/hooks/useNotificationSocket';
+
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasModuleViewAccess } from '@/utils/modulePermissions';
 
@@ -132,8 +132,6 @@ function DepartmentCard({ title, description, icon, path, isActive, accentFrom, 
 export default function SuperAdminDashboard() {
     const user = useAppSelector((state) => state.auth.user);
 
-    // Initialize notification socket listeners
-    useNotificationSocket();
 
     const { data: jobManagerStatus } = useCheckJobManagerStatusQuery();
     const isJobManager = !!jobManagerStatus?.data?.isJobManager;

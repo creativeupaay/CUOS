@@ -171,7 +171,7 @@ export const useNotificationSocket = () => {
                 m.default.dismiss('admin-ping');
                 m.default(data.title + '\n' + data.message, {
                     id: 'admin-ping',
-                    duration: 20000,
+                    duration: 5000,
                     position: 'top-center',
                     icon: data.pingType === 'todo' ? '📋' : '⏱️',
                     style: {

@@ -440,8 +440,8 @@ export default function DailyOverviewPage() {
         if (statusFilter === 'all') return groupedAll;
         return groupedAll
             .map(g => ({ ...g, tasks: g.tasks.filter(t => t.status === statusFilter) }))
-            .filter(g => g.tasks.length > 0 || g.meetings.length > 0);
-    }, [groupedAll, statusFilter]);
+            .filter(g => g.tasks.length > 0 || g.meetings.length > 0 || runningUserIds.has(g.user._id));
+    }, [groupedAll, statusFilter, runningUserIds]);
 
     // Search filter
     const filtered = useMemo(() => {
