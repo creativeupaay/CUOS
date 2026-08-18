@@ -104,7 +104,7 @@ export function useHydrationReminder() {
     const fetchMessage = useCallback(async (workMinutes: number): Promise<string> => {
         const currentUser = userRef.current;
         const firstName = currentUser?.name
-            ? currentUser.name.trim().split(' ')[0]
+            ? currentUser.name.trim().split(/[\s-]/)[0]
             : undefined;
 
         const timeOfDay = new Date().toLocaleTimeString('en-US', {

@@ -126,7 +126,8 @@ export const pingUser = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const adminUser = await User.findById(adminId).select('name').lean();
-    const adminName = (adminUser as any)?.name || 'Admin';
+    const fullAdminName = (adminUser as any)?.name || 'Admin';
+    const adminName = fullAdminName.trim().split(/[\s-]/)[0];
 
     const pingMessages: Record<string, { title: string; message: string }> = {
         todo: {

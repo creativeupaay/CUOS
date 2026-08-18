@@ -164,7 +164,7 @@ export const useNotificationSocket = () => {
             } catch { /* ignore */ }
 
             // Show native OS desktop notification
-            sendDesktopPushNotification(data.title, data.message, { tag: `ping-${Date.now()}` });
+            sendDesktopPushNotification(data.title, data.message, { tag: 'admin-ping' });
 
             // Show an in-app toast (lasts 20 seconds)
             import('react-hot-toast').then((m) => {
