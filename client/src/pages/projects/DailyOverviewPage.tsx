@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
 import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
+import { useGetUsersQuery } from '@/features/auth/authApi';
 import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer } from 'lucide-react';
 import type { Task } from '@/features/project';
@@ -337,6 +338,9 @@ export default function DailyOverviewPage() {
 
     const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
 
+    const { data: usersData } = useGetUsersQuery();
+    const allUsers = useMemo(() => ((usersData?.data as any)?.users ?? []) as any[], [usersData]);
+
     // Admin ping
     const [pingUser] = usePingUserMutation();
     const [pingingUserId, setPingingUserId] = useState<string | null>(null);
@@ -421,8 +425,15 @@ export default function DailyOverviewPage() {
             });
         }
 
+        // Add all active users so admins can ping them even if they have no tasks/meetings
+        allUsers.forEach(user => {
+            if (user.isActive && !map.has(user._id)) {
+                map.set(user._id, { user, tasks: [], meetings: [] });
+            }
+        });
+
         return Array.from(map.values());
-    }, [allTasks, allMeetings, selectedDate]);
+    }, [allTasks, allMeetings, selectedDate, allUsers]);
 
     // Apply status filter on tasks within each card
     const grouped = useMemo(() => {
