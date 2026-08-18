@@ -1301,7 +1301,11 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                                     <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Duration</div>
                                     <div className="font-semibold text-gray-900 text-sm">
-                                        {selectedMeeting.actualDuration ? `${selectedMeeting.actualDuration} mins` : `${selectedMeeting.duration} mins`}
+                                        {(() => {
+                                            const myParticipant = selectedMeeting.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
+                                            const duration = myParticipant?.actualDuration ?? selectedMeeting.actualDuration ?? selectedMeeting.duration;
+                                            return `${duration} mins`;
+                                        })()}
                                     </div>
                                 </div>
                                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">

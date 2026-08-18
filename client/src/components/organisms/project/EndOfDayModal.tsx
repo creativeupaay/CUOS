@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, Clock, CheckCircle2, Search, Loader2, Video, Calendar } from 'lucide-react';
 import type { GlobalTask } from '@/hooks/useGlobalTasks';
 import type { GlobalMeeting } from '@/hooks/useGlobalMeetings';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/app/store';
 import { formatElapsed } from '@/hooks/useTaskTimer';
 import type { Project } from '@/features/project';
 
@@ -61,6 +63,8 @@ export default function EndOfDayModal({
     onAddNewTask,
 }: EndOfDayModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const currentUser = useSelector((state: RootState) => state.auth.user);
+    const currentUserId = currentUser?._id;
     
     const [entries, setEntries] = useState<TaskSummaryEntry[]>([]);
     const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>([]);
@@ -139,7 +143,8 @@ export default function EndOfDayModal({
             if (exists) {
                 return prev.filter(e => e.meeting._id !== meeting._id);
             } else {
-                const duration = (meeting as any).actualDuration || (meeting as any).scheduledDurationMinutes || 0;
+                const myParticipant = meeting.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
+                const duration = myParticipant?.actualDuration ?? (meeting as any).actualDuration ?? meeting.duration ?? 0;
                 return [...prev, { meeting, allocatedMinutes: duration }];
             }
         });

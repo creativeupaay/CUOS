@@ -230,6 +230,7 @@ export interface MeetingParticipant {
     externalEmail?: string;
     name?: string;
     role?: 'organizer' | 'required' | 'optional';
+    actualDuration?: number;
 }
 
 export interface MeetingActionItem {

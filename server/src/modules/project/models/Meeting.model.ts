@@ -5,6 +5,7 @@ export interface IMeetingParticipant {
     externalEmail?: string;
     name?: string;
     role?: 'organizer' | 'required' | 'optional';
+    actualDuration?: number;
 }
 
 export interface IMeetingActionItem {
@@ -68,6 +69,7 @@ const MeetingParticipantSchema = new Schema<IMeetingParticipant>(
             enum: ['organizer', 'required', 'optional'],
             default: 'required',
         },
+        actualDuration: Number,
     },
     { _id: false }
 );

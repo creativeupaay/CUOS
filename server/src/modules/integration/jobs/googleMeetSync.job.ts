@@ -195,20 +195,33 @@ async function processConference(
         return [];
     }
 
-    // 4. Build participants list
+    // 4. Build participants list and calculate durations
     const participantEmails = new Set<string>();
+    const participantDurations = new Map<string, number>();
+
+    // Compute durations from actual conference sessions
+    if (conferenceData?.sessions) {
+        const byEmail = new Map<string, typeof conferenceData.sessions>();
+        for (const session of conferenceData.sessions) {
+            if (session.email) {
+                const email = session.email.toLowerCase();
+                if (!byEmail.has(email)) byEmail.set(email, []);
+                byEmail.get(email)!.push(session);
+                participantEmails.add(email);
+            }
+        }
+        for (const [email, sessions] of byEmail) {
+            const intervals = sessions
+                .filter(s => s.joinTime && s.leaveTime)
+                .map(s => ({ start: new Date(s.joinTime), end: new Date(s.leaveTime!) }));
+            participantDurations.set(email, calculateUniqueMinutes(intervals));
+        }
+    }
     
     // Add calendar attendees
     if (calendarEvent?.attendees) {
         for (const attendee of calendarEvent.attendees) {
             if (attendee.email) participantEmails.add(attendee.email.toLowerCase());
-        }
-    }
-    
-    // Add actual conference participants
-    if (conferenceData?.sessions) {
-        for (const session of conferenceData.sessions) {
-            if (session.email) participantEmails.add(session.email.toLowerCase());
         }
     }
     
@@ -224,6 +237,7 @@ async function processConference(
     const participantsList: any[] = matchedUsers.map(u => ({
         userId: u._id,
         role: 'required',
+        actualDuration: participantDurations.get(u.email.toLowerCase()),
     }));
     
     // Explicitly add syncing user if they aren't matched by email
@@ -231,12 +245,38 @@ async function processConference(
         participantsList.push({
             userId,
             role: 'required',
+            actualDuration: integration.googleEmail ? participantDurations.get(integration.googleEmail.toLowerCase()) : undefined,
         });
     }
     
     for (const email of participantEmails) {
         if (!matchedEmails.has(email) && email.toLowerCase() !== integration.googleEmail?.toLowerCase()) {
-            participantsList.push({ externalEmail: email, role: 'required' });
+            participantsList.push({ 
+                externalEmail: email, 
+                role: 'required',
+                actualDuration: participantDurations.get(email),
+            });
+        }
+    }
+
+    // Add anonymous users who had no email but were in the meet
+    if (conferenceData?.sessions) {
+        const anonymousSessions = conferenceData.sessions.filter(s => !s.email && s.displayName);
+        const byName = new Map<string, typeof anonymousSessions>();
+        for (const session of anonymousSessions) {
+            const name = session.displayName || 'Unknown';
+            if (!byName.has(name)) byName.set(name, []);
+            byName.get(name)!.push(session);
+        }
+        for (const [name, sessions] of byName) {
+            const intervals = sessions
+                .filter(s => s.joinTime && s.leaveTime)
+                .map(s => ({ start: new Date(s.joinTime), end: new Date(s.leaveTime!) }));
+            participantsList.push({
+                name: name,
+                role: 'required',
+                actualDuration: calculateUniqueMinutes(intervals),
+            });
         }
     }
 
@@ -394,18 +434,6 @@ async function processConference(
                 const dateStr = logDate.toISOString().split('T')[0];
                 affectedDates.push(`${cuosUserId}:${dateStr}`);
             }
-
-            // Update Meeting participants array
-            await Meeting.updateOne(
-                { _id: meetingDoc._id, 'participants.userId': { $ne: cuosUserId } },
-                {
-                    $addToSet: {
-                        participants: cuosUserId
-                            ? { userId: cuosUserId, role: 'required' }
-                            : { externalEmail: participantEmail, name: sessions[0].displayName, role: 'required' },
-                    },
-                }
-            );
         }
     } else if (!conferenceData && calendarEvent) {
         // Fallback: Calendar event only — no conference data available (e.g., external meeting)

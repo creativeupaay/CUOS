@@ -198,7 +198,10 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Meetings</span>
                             <span className="text-[10px] font-medium px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded">
-                                {meetings.reduce((acc, m) => acc + (m.duration || 0), 0)} mins total
+                                {meetings.reduce((acc, m) => {
+                                    const p = m.participants?.find((p: any) => p.userId && (p.userId === user._id || p.userId._id === user._id));
+                                    return acc + (p?.actualDuration ?? (m as any).actualDuration ?? m.duration ?? 0);
+                                }, 0)} mins total
                             </span>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -231,7 +234,10 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing
                                             <div className="flex justify-between items-start gap-2">
                                                 <span>{meeting.title}</span>
                                                 <span className="text-[10px] opacity-70 whitespace-nowrap bg-gray-50 px-1 py-0.5 rounded border border-gray-100">
-                                                    {meeting.duration || 0}m
+                                                    {(() => {
+                                                        const p = meeting.participants?.find((p: any) => p.userId && (p.userId === user._id || p.userId._id === user._id));
+                                                        return p?.actualDuration ?? (meeting as any).actualDuration ?? meeting.duration ?? 0;
+                                                    })()}m
                                                 </span>
                                             </div>
                                             
