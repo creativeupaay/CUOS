@@ -7,7 +7,7 @@ import {
     Plus, Search, Pause,
     Calendar, RefreshCcw,
     CheckCircle2, Circle, Loader2, X,
-    Trash2, Clock, MoreHorizontal, Filter, Pencil, LayoutGrid, List,
+    Trash2, Clock, MoreHorizontal, Filter, Pencil, LayoutGrid, List, Video,
 } from 'lucide-react';
 import { useGlobalTasks, type GlobalTask, type GlobalTaskFilters } from '@/hooks/useGlobalTasks';
 
@@ -568,14 +568,14 @@ function GlobalTasksInner() {
                                 window.dispatchEvent(new CustomEvent('cuos:openMeetingForm'));
                             }
                         }}
-                        className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-full transition-all hover:bg-black/5 active:scale-95 border"
+                        className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-full transition-all active:scale-95 border"
                         style={{ 
-                            color: 'var(--color-text-primary)',
-                            borderColor: 'var(--color-border-default)',
-                            backgroundColor: 'var(--color-bg-surface)' 
+                            color: 'var(--color-primary)',
+                            borderColor: 'var(--color-primary)',
+                            backgroundColor: 'transparent' 
                         }}
                     >
-                        Add Meeting
+                        <Video size={15} /> New Meeting
                     </button>
                     <div className="relative" ref={taskMenuRef}>
                         <div className="flex rounded-full shadow-sm overflow-hidden border transition-all active:scale-95" style={{ borderColor: 'var(--color-primary)' }}>

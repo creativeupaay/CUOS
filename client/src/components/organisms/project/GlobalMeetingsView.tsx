@@ -1183,9 +1183,8 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                             <button
                                 type="button"
                                 onClick={closeForm}
-                                className="px-4 text-sm font-medium rounded-lg border transition-colors"
+                                className="px-5 py-2.5 text-sm font-medium rounded-lg border transition-colors"
                                 style={{
-                                    height: '34px',
                                     borderColor: 'var(--color-border-default)',
                                     color: 'var(--color-text-secondary)',
                                     backgroundColor: 'var(--color-bg-surface)',

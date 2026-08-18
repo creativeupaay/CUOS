@@ -180,8 +180,7 @@ export function useGlobalMeetings(options?: { pollingInterval?: number }): UseGl
         return allMeetings.filter(meeting => {
             if (filters.owner === 'my') {
                 const isParticipant = meeting.participants?.some(p => getEntityId(p.userId) === currentUserId);
-                const isCreator = getEntityId(meeting.createdBy) === currentUserId;
-                if (!isParticipant && !isCreator) return false;
+                if (!isParticipant) return false;
             }
             if (filters.type !== 'all' && meeting.type !== filters.type) return false;
             
