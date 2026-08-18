@@ -43,10 +43,7 @@ async function processMeetLinkGeneration(req: Request, userId: string): Promise<
 
         return result;
     } catch (err: any) {
-        if (err.message === 'insufficient_permissions') {
-            throw new AppError('Google Calendar permissions missing. Please disconnect and reconnect your Google account in Settings.', 403);
-        }
-        throw new AppError('Failed to generate Google Meet link. ' + err.message, 500);
+        throw new AppError(err.message || 'Failed to generate Google Meet link.', err.message?.includes('403') ? 403 : 500);
     }
 }
 

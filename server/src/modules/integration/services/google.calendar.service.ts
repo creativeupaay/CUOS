@@ -211,12 +211,14 @@ export async function createCalendarEventWithMeet(
             eventId: createdEvent.id,
         };
     } catch (err: any) {
-        // If it's a 403 or insufficient scope, throw a specific error so the UI can prompt for re-auth
+        // Log the full exact error from Google API
+        logger.error({ err: err.response?.data || err.message }, '[Google Calendar] Failed to create event with Meet link');
+        
+        // If it's a 403, we should return the precise error reason if possible
         if (err.code === 403 || err.message?.includes('insufficient')) {
-            logger.warn({ err: err.message }, '[Google Calendar] Insufficient permissions to create event. Re-auth required.');
-            throw new Error('insufficient_permissions');
+            const googleError = err.response?.data?.error?.message || err.message;
+            throw new Error(`Google API 403: ${googleError}`);
         }
-        logger.error({ err }, '[Google Calendar] Failed to create event with Meet link');
-        throw new Error('Failed to create Google Meet link');
+        throw new Error('Failed to create Google Meet link: ' + (err.response?.data?.error?.message || err.message));
     }
 }

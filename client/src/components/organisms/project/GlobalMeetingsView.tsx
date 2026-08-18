@@ -324,9 +324,10 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
             setForm({ ...EMPTY_FORM });
             setMeetingToEdit(null);
             closeForm();
-        } catch (err) {
+        } catch (err: any) {
             logger.error('Failed to save meeting:', err);
-            alert('Failed to save meeting. Please try again.');
+            const errorMessage = err?.data?.message || err?.message || 'Failed to save meeting. Please try again.';
+            toast.error(errorMessage, { duration: 5000 });
         } finally {
             setIsSaving(false);
         }
@@ -1081,12 +1082,21 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
                                                         const email = e.currentTarget.value.trim();
-                                                        if (email && /^\S+@\S+\.\S+$/.test(email)) {
+                                                        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                                                             if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
                                                                 setField('participants', [...form.participants, { externalEmail: email, email }]);
                                                             }
                                                             e.currentTarget.value = '';
                                                         }
+                                                    }
+                                                }}
+                                                onBlur={(e) => {
+                                                    const email = e.currentTarget.value.trim();
+                                                    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                                                        if (!form.participants.some(p => p.email === email || p.externalEmail === email)) {
+                                                            setField('participants', [...form.participants, { externalEmail: email, email }]);
+                                                        }
+                                                        e.currentTarget.value = '';
                                                     }
                                                 }}
                                             />
