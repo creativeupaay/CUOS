@@ -7,15 +7,12 @@ import { Project } from '../models/Project.model';
 import { Task } from '../models/Task.model';
 import { DaySession } from '../models/DaySession.model';
 import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
+import { getWorkDayLabel } from '../../../utils/intervalUtils';
 
 // ── Date helper ────────────────────────────────────────────────────────────────
-/** Returns 'YYYY-MM-DD' in IST (UTC+5:30). Used as the dateKey for DaySessions. */
+/** Returns the 6am-IST (00:30 UTC) work day label 'YYYY-MM-DD'. Used as the dateKey for DaySessions. */
 function getTodayKey(): string {
-    const now = new Date();
-    // Offset to IST (+5:30 = 330 minutes)
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(now.getTime() + IST_OFFSET);
-    return ist.toISOString().slice(0, 10);
+    return getWorkDayLabel(new Date());
 }
 
 export const createTask = asyncHandler(
