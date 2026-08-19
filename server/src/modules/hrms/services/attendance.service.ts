@@ -5,6 +5,7 @@ import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
+import { getWorkDayBoundsFromDate, getWorkDayBounds } from '../../../utils/intervalUtils';
 
 interface BulkMarkAttendanceOptions extends ArchiveDeleteOptions {
     onlyUnmarked?: boolean;
@@ -15,13 +16,14 @@ export class AttendanceService {
         const employee = await Employee.findOne({ userId });
         if (!employee) throw new AppError('Employee not found for this user', 404);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Use 6am-IST work day boundary (00:30 UTC) to determine "today"
+        // This avoids the bug where setHours(0,0,0,0) uses server local time (IST)
+        const { dayStart } = getWorkDayBoundsFromDate(new Date());
 
         // Check if already checked in today
         const existingAttendance = await Attendance.findOne({
             employeeId: employee._id,
-            date: today,
+            date: dayStart,
         });
 
         if (existingAttendance) {
@@ -30,9 +32,10 @@ export class AttendanceService {
 
         const attendance = await Attendance.create({
             employeeId: employee._id,
-            date: today,
+            date: dayStart,
             checkIn: new Date(),
             status: 'present',
+            source: 'manual',
             ...data,
         });
 
@@ -43,12 +46,12 @@ export class AttendanceService {
         const employee = await Employee.findOne({ userId });
         if (!employee) throw new AppError('Employee not found for this user', 404);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Use 6am-IST work day boundary (00:30 UTC) to determine "today"
+        const { dayStart } = getWorkDayBoundsFromDate(new Date());
 
         const attendance = await Attendance.findOne({
             employeeId: employee._id,
-            date: today,
+            date: dayStart,
         });
 
         if (!attendance) {
@@ -156,8 +159,9 @@ export class AttendanceService {
                         update: {
                             $set: {
                                 status: r.status,
+                                source: 'manual',
                                 notes: r.notes || '',
-                                ...((['present', 'wfh', 'half-day'].includes(r.status)) && {
+                                ...(['present', 'wfh', 'half-day'].includes(r.status) && {
                                     checkIn: checkInTime,
                                 }),
                             },
@@ -203,6 +207,83 @@ export class AttendanceService {
         }
 
         return { saved: upsertOps.length, cleared: deleted, skipped };
+    }
+
+    // ── Auto-mark attendance based on worked hours (called by cron job) ────────
+    /**
+     * Check a specific employee's worked minutes for a given work day and
+     * auto-mark their attendance if they crossed the threshold.
+     *
+     * Thresholds (configurable):
+     *   >= 6 hours (360 min) => 'present'
+     *   >= 4 hours (240 min) => 'half-day'
+     *
+     * Skips if:
+     *  - A non-auto attendance record already exists (manual or leave-based)
+     *  - Employee has on-leave or holiday status
+     */
+    static async autoMarkForEmployee(
+        employeeId: string,
+        userId: string,
+        dateStr: string,
+        uniqueWorkedMinutes: number
+    ): Promise<{ marked: boolean; status?: string; reason?: string }> {
+        const { dayStart } = getWorkDayBounds(dateStr);
+
+        // Check for existing non-auto record
+        const existing = await Attendance.findOne({
+            employeeId: new Types.ObjectId(employeeId),
+            date: dayStart,
+        }).lean();
+
+        if (existing) {
+            // Don't override leave or holiday records
+            if (existing.status === 'on-leave' || existing.status === 'holiday') {
+                return { marked: false, reason: `existing ${existing.status} record — skipped` };
+            }
+            // Don't override a manual record set by admin
+            if (existing.source === 'manual') {
+                return { marked: false, reason: 'manual record exists — skipped' };
+            }
+            // Allow updating a previous auto record if hours improved
+        }
+
+        let newStatus: 'present' | 'half-day' | null = null;
+        if (uniqueWorkedMinutes >= 360) {       // >= 6 hours
+            newStatus = 'present';
+        } else if (uniqueWorkedMinutes >= 240) { // >= 4 hours
+            newStatus = 'half-day';
+        }
+
+        if (!newStatus) {
+            // Not enough hours yet — remove stale auto record if it exists
+            if (existing?.source === 'auto') {
+                await Attendance.deleteOne({ _id: existing._id });
+            }
+            return { marked: false, reason: `only ${uniqueWorkedMinutes} min worked` };
+        }
+
+        const totalHours = Number((uniqueWorkedMinutes / 60).toFixed(2));
+        const notes = `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}`;
+
+        await Attendance.findOneAndUpdate(
+            { employeeId: new Types.ObjectId(employeeId), date: dayStart },
+            {
+                $set: {
+                    status: newStatus,
+                    source: 'auto',
+                    totalHours,
+                    notes,
+                },
+                $setOnInsert: {
+                    employeeId: new Types.ObjectId(employeeId),
+                    date: dayStart,
+                },
+            },
+            { upsert: true, runValidators: false }
+        );
+
+        return { marked: true, status: newStatus };
     }
 
     // ── Admin: Today's overview — all employees + their status ────────

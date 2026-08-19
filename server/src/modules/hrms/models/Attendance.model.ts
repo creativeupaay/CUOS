@@ -8,6 +8,7 @@ export interface IAttendance extends Document {
     checkOut?: Date;
     totalHours: number;
     status: 'present' | 'wfh' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
+    source: 'manual' | 'auto' | 'leave'; // how was this record created?
     projectId?: Types.ObjectId;
     taskId?: Types.ObjectId;
     notes?: string;
@@ -31,6 +32,11 @@ const AttendanceSchema = new Schema<IAttendance>(
             required: true,
             enum: ['present', 'wfh', 'half-day', 'absent', 'on-leave', 'holiday'],
             default: 'present',
+        },
+        source: {
+            type: String,
+            enum: ['manual', 'auto', 'leave'],
+            default: 'manual',
         },
         projectId: {
             type: Schema.Types.ObjectId,

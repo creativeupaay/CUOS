@@ -6,9 +6,11 @@ import { Employee } from '../models/Employee.model';
 import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
+import { notifyTeamOfApprovedLeave } from './leaveNotification.service';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
 import { ArchiveDeleteOptions, DeletedRecordService } from '../../archive';
 import { createArchiveSnapshot } from '../../archive/utils/archiveSnapshot.util';
+import { logger } from '../../../utils/logger';
 
 class LeaveService {
     private shouldConsumePaidLeave(leave: ILeave): boolean {
@@ -248,6 +250,8 @@ class LeaveService {
 
         // Notify the employee about the status update
         const employee = await Employee.findById(leave.employeeId).select('userId').lean();
+        const employeeName = (await Employee.findById(leave.employeeId).populate('userId', 'name').lean() as any)?.userId?.name || 'Team member';
+
         if (employee?.userId) {
             const statusText = nextStatus;
             const statusCapitalized = statusText.charAt(0).toUpperCase() + statusText.slice(1);
@@ -270,6 +274,14 @@ class LeaveService {
                     rejectionReason: data.rejectionReason,
                 },
             });
+        }
+
+        // Broadcast team notification when leave is approved
+        // Fire-and-forget — don't let notification failure block the response
+        if (nextStatus === 'approved') {
+            notifyTeamOfApprovedLeave(leave, employeeName).catch((err) =>
+                logger.warn({ err, leaveId: leave._id }, '[Leave] Failed to send team notification')
+            );
         }
 
         return leave;
@@ -399,6 +411,7 @@ class LeaveService {
                 update: {
                     $set: {
                         status: 'on-leave',
+                        source: 'leave',
                         totalHours: 0,
                         notes: 'Auto-marked on leave due to approved leave',
                     },

@@ -18,7 +18,7 @@
 import { TimeLog } from '../models/TimeLog.model';
 import { MeetingAttendance } from '../../integration/models/MeetingAttendance.model';
 import { Employee } from '../../hrms/models/Employee.model';
-import { calculateDayUniqueMinutes, type Interval } from '../../../utils/intervalUtils';
+import { calculateDayUniqueMinutes, getWorkDayBounds, type Interval } from '../../../utils/intervalUtils';
 import { logger } from '../../../utils/logger';
 import type { Types } from 'mongoose';
 
@@ -53,9 +53,10 @@ export async function calculateDailyWorkSummary(
     userId: string,
     dateStr: string
 ): Promise<DailyWorkSummary> {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-    const dayEnd   = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+    // Use 6am IST (00:30 UTC) work day boundaries instead of UTC midnight.
+    // This ensures employees who work past midnight (up to 6am IST) have
+    // their work counted in the correct day.
+    const { dayStart, dayEnd } = getWorkDayBounds(dateStr);
 
     // ── 1. Get daily target from Employee work schedule ──────────────────────
     let requiredMinutes = 480; // fallback: 8h
@@ -96,8 +97,8 @@ export async function calculateDailyWorkSummary(
         if (log.startTime && log.endTime) {
             allIntervals.push({ start: new Date(log.startTime), end: new Date(log.endTime) });
         } else {
-            // TimeLog without explicit times — use date + duration as a synthetic interval
-            // starting at midnight UTC. This is imprecise but prevents data loss.
+            // TimeLog without explicit times — use work day start + duration as a synthetic interval.
+            // This is imprecise but prevents data loss.
             const syntheticStart = new Date(dayStart);
             const syntheticEnd   = new Date(dayStart.getTime() + duration * 60_000);
             allIntervals.push({ start: syntheticStart, end: syntheticEnd });
@@ -144,12 +145,12 @@ export async function calculateDailyWorkSummary(
     const overtimeMinutes  = Math.max(uniqueWorkedMinutes - requiredMinutes, 0);
 
     // ── 6. Build merged work intervals for timeline display ──────────────────
-    const { mergeIntervals, filterIntervalsForDay, splitAtMidnight } = await import('../../../utils/intervalUtils');
+    const { mergeIntervals, filterIntervalsForDay, splitAtWorkDayBoundary } = await import('../../../utils/intervalUtils');
 
-    // Split midnight-crossing intervals first
+    // Split work-day-crossing intervals first
     const expandedIntervals: Interval[] = [];
     for (const iv of allIntervals) {
-        expandedIntervals.push(...splitAtMidnight(iv));
+        expandedIntervals.push(...splitAtWorkDayBoundary(iv));
     }
     const mergedForDay = filterIntervalsForDay(mergeIntervals(expandedIntervals), dateStr);
 

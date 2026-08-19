@@ -87,6 +87,9 @@ export async function fetchCalendarEventsWithMeet(
                     const endRaw   = event.end?.dateTime;
                     if (!startRaw || !endRaw) continue; // Ignore all-day events like public holidays
 
+                    // Skip events without Google Meet conference data — we only process Meet events
+                    if (!conf?.conferenceId) continue;
+
                     const startTime = new Date(startRaw);
                     const endTime   = new Date(endRaw);
                     const scheduledDurationMinutes = Math.round(

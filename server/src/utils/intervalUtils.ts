@@ -4,12 +4,66 @@
  * KEY RULE: when calculating daily worked time, overlapping intervals from any
  * source (tasks, meetings, multiple devices, manual entries) must be merged so
  * that a single minute of real time is never counted more than once.
+ *
+ * WORK DAY DEFINITION:
+ * A work day runs from 6:00 AM IST to 6:00 AM IST the next day.
+ * In UTC terms: 00:30 UTC (day N) to 00:30 UTC (day N+1).
+ * This allows remote/WFH employees to work late into the night and have
+ * it counted on the correct calendar day.
  */
 
 export interface Interval {
     start: Date;
     end: Date;
 }
+
+// ─── Work Day Boundary (6am IST = 00:30 UTC) ─────────────────────────────────
+
+/** Work day start offset from midnight UTC: 30 minutes (= 00:30 UTC = 6:00 AM IST) */
+export const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 minutes in ms
+
+/**
+ * Given a work day label (YYYY-MM-DD), returns the UTC start and end Date
+ * for that 6am-IST-to-6am-IST window.
+ *
+ * Example: '2026-08-19'
+ *   → dayStart = 2026-08-19T00:30:00Z  (= 6:00 AM IST Aug 19)
+ *   → dayEnd   = 2026-08-20T00:29:59Z  (= 5:59 AM IST Aug 20)
+ */
+export function getWorkDayBounds(dateStr: string): { dayStart: Date; dayEnd: Date } {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    // 6am IST = UTC midnight + 30 minutes
+    const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 30, 0, 0));
+    // End is 00:30 UTC next calendar day - 1ms
+    const dayEnd   = new Date(Date.UTC(y, m - 1, d + 1, 0, 29, 59, 999));
+    return { dayStart, dayEnd };
+}
+
+/**
+ * Given any UTC Date, return the work-day label (YYYY-MM-DD) it belongs to.
+ * Work days start at 00:30 UTC (6am IST). So:
+ *   - 2026-08-19T00:15:00Z (5:45am IST) → belongs to work day '2026-08-18'
+ *   - 2026-08-19T00:30:00Z (6:00am IST) → belongs to work day '2026-08-19'
+ */
+export function getWorkDayLabel(date: Date): string {
+    // Shift back by 30 minutes so that 00:30 UTC becomes 00:00 UTC for labelling
+    const shifted = new Date(date.getTime() - WORK_DAY_START_UTC_MS);
+    const y = shifted.getUTCFullYear();
+    const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Get the work day bounds for a Date object (not a date string).
+ * Returns the 6am-IST bounds that contain the given timestamp.
+ */
+export function getWorkDayBoundsFromDate(date: Date): { dayStart: Date; dayEnd: Date; dateStr: string } {
+    const dateStr = getWorkDayLabel(date);
+    const bounds = getWorkDayBounds(dateStr);
+    return { ...bounds, dateStr };
+}
+
 
 /**
  * Remove intervals where start >= end, or either boundary is not a valid Date.
@@ -88,29 +142,33 @@ export function calculateUniqueMinutes(intervals: Interval[]): number {
 }
 
 /**
- * Split an interval at UTC midnight boundaries.
- * Used when a meeting/task spans two calendar days.
+ * Split an interval at work-day boundaries (6am IST = 00:30 UTC).
+ * Used when a meeting/task spans two work days.
  *
- * Example:
- *   23:30 – 00:30 UTC  →  [23:30–00:00, 00:00–00:30]
+ * Example (work day starts at 00:30 UTC):
+ *   00:00 UTC – 01:00 UTC  →  split at 00:30 UTC:
+ *     [00:00–00:30] belongs to previous work day
+ *     [00:30–01:00] belongs to current work day
  */
-export function splitAtMidnight(interval: Interval): Interval[] {
+export function splitAtWorkDayBoundary(interval: Interval): Interval[] {
     const result: Interval[] = [];
     let current = new Date(interval.start);
     const end = new Date(interval.end);
 
     while (current < end) {
-        // Find end of current UTC day
-        const dayEnd = new Date(
+        // Find the next work-day boundary after `current`
+        // Work day boundary is 00:30 UTC each day
+        const shifted = new Date(current.getTime() - WORK_DAY_START_UTC_MS);
+        const nextBoundary = new Date(
             Date.UTC(
-                current.getUTCFullYear(),
-                current.getUTCMonth(),
-                current.getUTCDate() + 1,
+                shifted.getUTCFullYear(),
+                shifted.getUTCMonth(),
+                shifted.getUTCDate() + 1,
                 0, 0, 0, 0
-            )
+            ) + WORK_DAY_START_UTC_MS
         );
 
-        const segmentEnd = dayEnd < end ? dayEnd : end;
+        const segmentEnd = nextBoundary < end ? nextBoundary : end;
 
         if (current < segmentEnd) {
             result.push({ start: new Date(current), end: segmentEnd });
@@ -123,16 +181,23 @@ export function splitAtMidnight(interval: Interval): Interval[] {
 }
 
 /**
- * Filter a set of merged intervals to only those that fall within a given UTC day (YYYY-MM-DD).
- * Intervals that cross midnight are clipped to the day boundary.
+ * @deprecated Use splitAtWorkDayBoundary instead.
+ * Kept for backward compatibility — splits at UTC midnight, not at 6am IST.
+ */
+export function splitAtMidnight(interval: Interval): Interval[] {
+    return splitAtWorkDayBoundary(interval);
+}
+
+/**
+ * Filter a set of merged intervals to only those that fall within a given work day.
+ * A work day runs from 00:30 UTC (6am IST) to 00:30 UTC the next calendar day.
+ * Intervals that cross the boundary are clipped.
  *
  * @param mergedIntervals - already-merged intervals (output of mergeIntervals)
- * @param dateStr - UTC date string in YYYY-MM-DD format
+ * @param dateStr - work-day date string in YYYY-MM-DD format
  */
 export function filterIntervalsForDay(mergedIntervals: Interval[], dateStr: string): Interval[] {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-    const dayEnd   = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+    const { dayStart, dayEnd } = getWorkDayBounds(dateStr);
 
     const result: Interval[] = [];
 
@@ -148,29 +213,27 @@ export function filterIntervalsForDay(mergedIntervals: Interval[], dateStr: stri
 }
 
 /**
- * Given raw (possibly overlapping, possibly multi-day) intervals and a target date,
- * return the unique minutes worked on that specific day.
- *
- * This is the primary function used by calculateDailyWorkSummary.
+ * Given raw (possibly overlapping, possibly multi-work-day) intervals and a target work day date,
+ * return the unique minutes worked on that specific work day (6am IST – 6am IST).
  *
  * @param intervals - raw intervals from all sources
- * @param dateStr - UTC date string in YYYY-MM-DD format
+ * @param dateStr - work-day date label in YYYY-MM-DD format
  */
 export function calculateDayUniqueMinutes(
     intervals: Interval[],
     dateStr: string
 ): number {
-    // 1. Expand multi-day intervals into per-day segments
+    // 1. Expand multi-work-day intervals into per-work-day segments
     const expanded: Interval[] = [];
     for (const iv of removeInvalidIntervals(intervals)) {
-        const split = splitAtMidnight(iv);
+        const split = splitAtWorkDayBoundary(iv);
         expanded.push(...split);
     }
 
     // 2. Merge within the full expanded set
     const merged = mergeIntervals(expanded);
 
-    // 3. Filter to the requested day
+    // 3. Filter to the requested work day (6am IST boundary)
     const dayIntervals = filterIntervalsForDay(merged, dateStr);
 
     // 4. Calculate total

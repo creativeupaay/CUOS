@@ -11,12 +11,13 @@ export type NotificationType =
     | 'company_announcement'
     | 'task_assigned'
     | 'leave_status_updated'
+    | 'leave_approved_team'
+    | 'auto_attendance_marked'
     | 'credential_access_granted'
     | 'document_access_granted'
     | 'note_mentioned'
     | 'fixed_expense_approval'
     | 'admin_ping';
-
 export interface INotification extends Document {
     _id: Types.ObjectId;
     userId: Types.ObjectId;
@@ -52,6 +53,8 @@ const NotificationSchema = new Schema<INotification>(
                 'company_announcement',
                 'task_assigned',
                 'leave_status_updated',
+                'leave_approved_team',
+                'auto_attendance_marked',
                 'credential_access_granted',
                 'document_access_granted',
                 'note_mentioned',
