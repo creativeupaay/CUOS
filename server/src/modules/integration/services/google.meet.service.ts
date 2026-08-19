@@ -67,67 +67,78 @@ export async function fetchMeetConferenceData(
         const records = response.data.conferenceRecords ?? [];
         if (records.length === 0) return null;
 
-        // Find a record that falls within our expected time bounds
-        const record = records.find((r: any) => {
+        // Find all records that fall within our expected time bounds
+        const matchingRecords = records.filter((r: any) => {
             if (!r.startTime) return false;
             const start = new Date(r.startTime);
             // Allow 2 hours leeway for early/late starts
             return start >= new Date(timeMin.getTime() - 7200_000) && 
                    start <= new Date(timeMax.getTime() + 7200_000);
-        }) || records[0];
+        });
 
-        const conferenceRecordId = record.name;
-        if (!conferenceRecordId) return null;
-
+        const recordsToProcess = matchingRecords.length > 0 ? matchingRecords : [records[0]];
         const sessions: MeetParticipantSession[] = [];
-        const actualStartTime = record.startTime ? new Date(record.startTime) : undefined;
-        const actualEndTime = record.endTime ? new Date(record.endTime) : undefined;
-        const isActive = !record.endTime;
+        let minStartTime: Date | undefined;
+        let maxEndTime: Date | undefined;
+        let anyActive = false;
 
-        // Fetch participants for this conference record
-        const participantsRes = await meet.conferenceRecords.participants.list({
-            parent: conferenceRecordId,
-            pageSize: 100,
-        });
+        for (const record of recordsToProcess) {
+            const conferenceRecordId = record.name;
+            if (!conferenceRecordId) continue;
 
-        const participants = participantsRes.data.participants ?? [];
+            const actualStartTime = record.startTime ? new Date(record.startTime) : undefined;
+            const actualEndTime = record.endTime ? new Date(record.endTime) : undefined;
+            const isActive = !record.endTime;
 
-        const participantPromises = participants.map(async (p: any) => {
-            if (!p.name) return [];
+            if (actualStartTime && (!minStartTime || actualStartTime < minStartTime)) minStartTime = actualStartTime;
+            if (actualEndTime && (!maxEndTime || actualEndTime > maxEndTime)) maxEndTime = actualEndTime;
+            if (isActive) anyActive = true;
 
-            const isCurrentUser = p.signedinUser?.user === `users/${googleUserId}`;
-            const participantId = p.signedinUser?.user || p.anonymousUser?.displayName || 'unknown';
+            // Fetch participants for this conference record
+            const participantsRes = await meet.conferenceRecords.participants.list({
+                parent: conferenceRecordId,
+                pageSize: 100,
+            });
 
-            try {
-                // Fetch sessions for this participant
-                const sessionsRes = await meet.conferenceRecords.participants.participantSessions.list({
-                    parent: p.name,
-                    pageSize: 100,
-                });
+            const participants = participantsRes.data.participants ?? [];
 
-                const pSessions = sessionsRes.data.participantSessions ?? [];
-                return pSessions.map((s: any) => ({
-                    sessionId: s.name || undefined,
-                    participantId: participantId,
-                    email: isCurrentUser ? googleEmail : undefined,
-                    displayName: p.signedinUser?.displayName || p.anonymousUser?.displayName || p.phoneUser?.displayName || undefined,
-                    joinTime: s.startTime ? new Date(s.startTime) : (actualStartTime || new Date()),
-                    leaveTime: s.endTime ? new Date(s.endTime) : undefined,
-                }));
-            } catch (err) {
-                return [];
-            }
-        });
+            const participantPromises = participants.map(async (p: any) => {
+                if (!p.name) return [];
 
-        const nestedSessions = await Promise.all(participantPromises);
-        sessions.push(...nestedSessions.flat());
+                const isCurrentUser = p.signedinUser?.user === `users/${googleUserId}`;
+                const participantId = p.signedinUser?.user || p.anonymousUser?.displayName || 'unknown';
+
+                try {
+                    // Fetch sessions for this participant
+                    const sessionsRes = await meet.conferenceRecords.participants.participantSessions.list({
+                        parent: p.name,
+                        pageSize: 100,
+                    });
+
+                    const pSessions = sessionsRes.data.participantSessions ?? [];
+                    return pSessions.map((s: any) => ({
+                        sessionId: s.name || undefined,
+                        participantId: participantId,
+                        email: isCurrentUser ? googleEmail : undefined,
+                        displayName: p.signedinUser?.displayName || p.anonymousUser?.displayName || p.phoneUser?.displayName || undefined,
+                        joinTime: s.startTime ? new Date(s.startTime) : (actualStartTime || new Date()),
+                        leaveTime: s.endTime ? new Date(s.endTime) : undefined,
+                    }));
+                } catch (err) {
+                    return [];
+                }
+            });
+
+            const nestedSessions = await Promise.all(participantPromises);
+            sessions.push(...nestedSessions.flat());
+        }
 
         return {
-            conferenceId: record.name || '',
-            actualStartTime,
-            actualEndTime,
+            conferenceId: recordsToProcess[0]?.name || '',
+            actualStartTime: minStartTime,
+            actualEndTime: maxEndTime,
             sessions,
-            isActive,
+            isActive: anyActive,
         };
 
     } catch (err: any) {

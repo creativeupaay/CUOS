@@ -182,9 +182,14 @@ async function processConference(
 ): Promise<string[]> {
 
     // 1. Fetch actual Meet data from Meet v2 API
-    // If we have calendar times, use them for timeMin/timeMax
-    const timeMax = calendarEvent?.endTime ?? new Date();
-    const timeMin = calendarEvent?.startTime ?? new Date(timeMax.getTime() - 48 * 60 * 60_000);
+    // If we have calendar times, add generous buffers to timeMin/timeMax
+    // so we don't miss conferences that start early or run late.
+    const timeMax = calendarEvent?.endTime 
+        ? new Date(calendarEvent.endTime.getTime() + 24 * 60 * 60_000) // 24 hours after scheduled end
+        : new Date();
+    const timeMin = calendarEvent?.startTime 
+        ? new Date(calendarEvent.startTime.getTime() - 2 * 60 * 60_000) // 2 hours before scheduled start
+        : new Date(timeMax.getTime() - 48 * 60 * 60_000);
 
     // ── FIX 1: Extract the 10-letter meeting code from the Meet link URL.
     // The Meet v2 API filter `space.meeting_code` expects the short code (e.g. "abc-defg-hij"),
