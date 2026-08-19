@@ -123,7 +123,7 @@ export const useNotificationSocket = () => {
         // Handle new notifications (defensively handle both { notification } wrapper and raw notification object)
         const handleNewNotification = (data: any) => {
             logger.info('[NotificationSocket] Received socket event notification:new', data);
-            
+
             const notification: INotification = data?.notification || data;
 
             if (!notification || !notification.title) {

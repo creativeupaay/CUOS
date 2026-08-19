@@ -124,10 +124,11 @@ Context:
 - Date(s): ${dateRange} (${input.days} day(s))
 
 Rules:
-- Write 1-2 sentences only.
+- Write exactly 1 or 2 sentences.
+- You MUST explicitly include the dates "${dateRange}" in the message.
 - Be warm, professional, and concise.
 - Tell the team who is on leave, what type, and when.
-- Encourage teammates to plan accordingly or reach out early if needed.
+- Explicitly tell teammates that if they have any pending work related to this person, they should finish/sync it up before the leave starts so work continues without a break.
 - Use a relevant emoji at the start (📢 for leave, 🏠 for WFH, 🌓 for half-day).
 - Do not mention salary, pay, or personal reasons.
 - Respond ONLY with the notification message text. No quotes, no explanation.`;
@@ -149,7 +150,7 @@ async function generateWithGemini(input: LeaveNotificationInput): Promise<string
             const result = await withTimeout(model.generateContent(prompt), GENERATION_TIMEOUT_MS);
             const text = result.response.text().trim();
 
-            if (text && text.length >= 10 && text.length <= 500) {
+            if (text && text.length >= 25 && text.length <= 500) {
                 logger.debug(`[LeaveNotification] Generated message with ${modelName}`);
                 return text;
             }
@@ -187,6 +188,17 @@ export async function notifyTeamOfApprovedLeave(
     try {
         const geminiMessage = await generateWithGemini(input);
         message = geminiMessage ?? pickFallbackMessage(input);
+        
+        // Fail-safe: ensure the dates are always in the final message if Gemini hallucinated them away
+        if (geminiMessage) {
+            const start = formatDate(input.startDate);
+            if (!message.includes(start)) {
+                const end = formatDate(input.endDate);
+                const isSameDay = input.startDate.toDateString() === input.endDate.toDateString();
+                const dateRange = isSameDay ? start : `${start} to ${end}`;
+                message = `${message.trim()} (Date: ${dateRange})`;
+            }
+        }
     } catch (err) {
         logger.warn({ err }, '[LeaveNotification] Error generating message — using fallback');
         message = pickFallbackMessage(input);

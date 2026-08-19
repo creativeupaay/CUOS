@@ -1388,12 +1388,12 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                             <span className="text-[11px] font-semibold px-2 py-1 rounded-md" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>
                                                                 ✓ {p.actualDuration} min
                                                             </span>
-                                                        ) : selectedMeeting.conferenceStatus === 'ended' ? (
+                                                        ) : (
                                                             <span className="text-[11px] font-medium px-2 py-1 rounded-md" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>
                                                                 Not attended
                                                             </span>
-                                                        ) : null}
-                                                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 px-2 py-1 rounded-md">
+                                                        )}
+                                                        <span className="text-[11px] font-bold text-gray-500 capitalize tracking-wider bg-gray-100 px-2 py-1 rounded-md">
                                                             {p.role || 'Guest'}
                                                         </span>
                                                     </div>
