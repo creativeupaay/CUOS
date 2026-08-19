@@ -1395,7 +1395,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                     </div>
                                                     <div className="flex items-center gap-2 flex-shrink-0">
                                                         {/* Per-participant actual attendance duration */}
-                                                        {p.actualDuration != null ? (
+                                                        {p.actualDuration != null && p.actualDuration > 0 ? (
                                                             <span className="text-[11px] font-semibold px-2 py-1 rounded-md" style={{ backgroundColor: '#DCFCE7', color: '#15803D' }}>
                                                                 ✓ {p.actualDuration} min
                                                             </span>
