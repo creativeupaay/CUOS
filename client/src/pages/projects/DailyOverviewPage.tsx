@@ -402,13 +402,13 @@ export default function DailyOverviewPage() {
                 if (!meeting.scheduledAt) return;
                 const time = new Date(meeting.scheduledAt).getTime();
                 if (time >= selStart.getTime() && time <= selEnd.getTime()) {
-                    const isCompleted = meeting.conferenceStatus === 'ended' || (time + (meeting.duration || 0) * 60000) < Date.now();
+                    const isStrictSync = meeting.source === 'google_meet' && meeting.conferenceStatus === 'ended' && time > new Date('2026-08-18').getTime();
                     const usersToGroup: UserInfo[] = [];
 
                     meeting.participants?.forEach(p => {
                         const participant = resolveUser(p.userId as any);
                         if (participant && !usersToGroup.some(u => u._id === participant._id)) {
-                            if (isCompleted) {
+                            if (isStrictSync) {
                                 if (p.actualDuration && p.actualDuration > 0) {
                                     usersToGroup.push(participant);
                                 }
@@ -421,7 +421,7 @@ export default function DailyOverviewPage() {
                     if (meeting.createdBy) {
                         const creator = resolveUser(meeting.createdBy as any);
                         if (creator && !usersToGroup.some(u => u._id === creator._id)) {
-                            if (!isCompleted) {
+                            if (!isStrictSync) {
                                 usersToGroup.push(creator);
                             }
                         }

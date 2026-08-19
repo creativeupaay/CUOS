@@ -215,8 +215,9 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         end.setMinutes(end.getMinutes() + (m.duration || 0));
         
         const isCompleted = end < nowForFilter;
+        const isStrictSync = m.source === 'google_meet' && m.conferenceStatus === 'ended' && end.getTime() > new Date('2026-08-18').getTime();
         
-        if (isCompleted && filters.owner === 'my') {
+        if (isStrictSync && filters.owner === 'my') {
             const myParticipant = m.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
             if (!myParticipant || !myParticipant.actualDuration || myParticipant.actualDuration <= 0) {
                 return false;
