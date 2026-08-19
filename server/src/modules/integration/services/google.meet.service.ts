@@ -109,7 +109,8 @@ export async function fetchMeetConferenceData(
                 return pSessions.map((s: any) => ({
                     sessionId: s.name || undefined,
                     participantId: participantId,
-                    email: isCurrentUser ? googleEmail : (participantId || undefined), // Use the authenticated user's email if matched
+                    email: isCurrentUser ? googleEmail : undefined,
+                    displayName: p.signedinUser?.displayName || p.anonymousUser?.displayName || p.phoneUser?.displayName || undefined,
                     joinTime: s.startTime ? new Date(s.startTime) : (actualStartTime || new Date()),
                     leaveTime: s.endTime ? new Date(s.endTime) : undefined,
                 }));

@@ -242,6 +242,39 @@ async function processConference(
 
     // Compute durations from actual conference sessions
     if (conferenceData?.sessions) {
+        // --- Identity Resolution ---
+        for (const session of conferenceData.sessions) {
+            if (session.email) continue;
+            
+            let resolvedEmail: string | undefined;
+            // Step 1: Match by Google integration (users/123 -> 123)
+            if (session.participantId && session.participantId.startsWith('users/')) {
+                const googleId = session.participantId.replace('users/', '');
+                const integrationMatch = await GoogleIntegration.findOne({ googleUserId: googleId }).select('googleEmail').lean() as any;
+                if (integrationMatch?.googleEmail) {
+                    resolvedEmail = integrationMatch.googleEmail;
+                }
+            }
+            // Step 2: Fuzzy match displayName against calendar attendees
+            if (!resolvedEmail && session.displayName && calendarEvent?.attendees) {
+                const match = calendarEvent.attendees.find(a => 
+                    a.displayName?.toLowerCase() === session.displayName!.toLowerCase()
+                );
+                if (match?.email) resolvedEmail = match.email;
+            }
+            // Step 3: Fuzzy match displayName against CUOS users
+            if (!resolvedEmail && session.displayName) {
+                const cuosUsers = await User.find({ name: new RegExp(`^${session.displayName}$`, 'i'), isActive: true }).select('email').lean();
+                if (cuosUsers.length === 1) { // Only use if unambiguous
+                    resolvedEmail = cuosUsers[0].email;
+                }
+            }
+            if (resolvedEmail) {
+                session.email = resolvedEmail;
+            }
+        }
+        // ---------------------------
+
         const byEmail = new Map<string, typeof conferenceData.sessions>();
         for (const session of conferenceData.sessions) {
             if (session.email) {
@@ -320,7 +353,7 @@ async function processConference(
         });
     }
 
-    // Add anonymous users who had no email but were in the meet
+    // Add anonymous users who had no email but were in the meet (not resolved by our logic)
     if (conferenceData?.sessions) {
         const anonymousSessions = conferenceData.sessions.filter(s => !s.email && s.displayName);
         const byName = new Map<string, typeof anonymousSessions>();

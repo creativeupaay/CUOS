@@ -402,17 +402,30 @@ export default function DailyOverviewPage() {
                 if (!meeting.scheduledAt) return;
                 const time = new Date(meeting.scheduledAt).getTime();
                 if (time >= selStart.getTime() && time <= selEnd.getTime()) {
+                    const isCompleted = meeting.conferenceStatus === 'ended' || (time + (meeting.duration || 0) * 60000) < Date.now();
                     const usersToGroup: UserInfo[] = [];
-                    if (meeting.createdBy) {
-                        const creator = resolveUser(meeting.createdBy as any);
-                        if (creator) usersToGroup.push(creator);
-                    }
+
                     meeting.participants?.forEach(p => {
                         const participant = resolveUser(p.userId as any);
                         if (participant && !usersToGroup.some(u => u._id === participant._id)) {
-                            usersToGroup.push(participant);
+                            if (isCompleted) {
+                                if (p.actualDuration && p.actualDuration > 0) {
+                                    usersToGroup.push(participant);
+                                }
+                            } else {
+                                usersToGroup.push(participant);
+                            }
                         }
                     });
+
+                    if (meeting.createdBy) {
+                        const creator = resolveUser(meeting.createdBy as any);
+                        if (creator && !usersToGroup.some(u => u._id === creator._id)) {
+                            if (!isCompleted) {
+                                usersToGroup.push(creator);
+                            }
+                        }
+                    }
 
                     usersToGroup.forEach(user => {
                         if (!map.has(user._id)) map.set(user._id, { user, tasks: [], meetings: [] });

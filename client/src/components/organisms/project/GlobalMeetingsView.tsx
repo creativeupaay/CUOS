@@ -213,7 +213,17 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
         if (!m.scheduledAt) return true; // fallback if no date
         const end = new Date(m.scheduledAt);
         end.setMinutes(end.getMinutes() + (m.duration || 0));
-        return end < nowForFilter;
+        
+        const isCompleted = end < nowForFilter;
+        
+        if (isCompleted && filters.owner === 'my') {
+            const myParticipant = m.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
+            if (!myParticipant || !myParticipant.actualDuration || myParticipant.actualDuration <= 0) {
+                return false;
+            }
+        }
+        
+        return isCompleted;
     });
 
     const totalPages = Math.ceil(completedMeetingsOnly.length / ITEMS_PER_PAGE);
