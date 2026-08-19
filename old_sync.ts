@@ -1,11 +1,11 @@
-/**
+﻿/**
  * googleMeetSync.job.ts
  *
  * Background reconciliation job that syncs Google Meet conferences to CUOS.
  *
  * Architecture:
  * - Runs every 15 minutes via node-cron (same pattern as attendanceReminder.job.ts)
- * - Processes each connected user independently — one failure never blocks others
+ * - Processes each connected user independently ΓÇö one failure never blocks others
  * - Upserts meetings and attendance records atomically to prevent duplicates
  * - Recalculates daily work summaries only for affected users and dates
  *
@@ -26,7 +26,7 @@ import { fetchMeetConferenceData, fetchRecentConferenceIds } from '../services/g
 import { calculateUniqueMinutes, type Interval } from '../../../utils/intervalUtils';
 import type { Types } from 'mongoose';
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Main export ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export const initGoogleMeetSyncJob = () => {
     // Every 15 minutes
@@ -38,7 +38,7 @@ export const initGoogleMeetSyncJob = () => {
     logger.info('[CRON:GoogleMeet] Google Meet sync job scheduled (every 15 minutes)');
 };
 
-// ─── Sync cycle ───────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Sync cycle ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 async function runSyncCycle(): Promise<void> {
     const integrations = await GoogleIntegration.find({ status: 'active' })
@@ -59,7 +59,7 @@ async function runSyncCycle(): Promise<void> {
             // One user's failure must NOT stop others
             logger.error(
                 { err, userId: integration.userId.toString() },
-                '[CRON:GoogleMeet] Sync failed for user — continuing with next'
+                '[CRON:GoogleMeet] Sync failed for user ΓÇö continuing with next'
             );
         }
     }
@@ -67,7 +67,7 @@ async function runSyncCycle(): Promise<void> {
     logger.info('[CRON:GoogleMeet] Sync cycle complete');
 }
 
-// ─── Per-user sync ────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Per-user sync ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export async function syncUserMeetings(
     integration: IGoogleIntegration & { accessToken: string; refreshToken: string; googleUserId?: string; googleEmail?: string }
@@ -80,7 +80,7 @@ export async function syncUserMeetings(
     try {
         accessToken = await getValidAccessToken(integration);
     } catch {
-        logger.warn({ userId }, '[GoogleMeet] Token refresh failed — skipping user');
+        logger.warn({ userId }, '[GoogleMeet] Token refresh failed ΓÇö skipping user');
         return; // status already marked requires_reauth by getValidAccessToken
     }
 
@@ -150,11 +150,11 @@ export async function syncUserMeetings(
     logger.debug({ userId, calendarEventsCount: calendarEvents.length, recentConferenceCount: recentConferenceIds.length }, '[GoogleMeet] User sync complete');
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 /**
  * Extract the 10-letter meeting code from a Google Meet URL.
- * e.g. "https://meet.google.com/abc-defg-hij" → "abc-defg-hij"
+ * e.g. "https://meet.google.com/abc-defg-hij" ΓåÆ "abc-defg-hij"
  * Returns null if the URL is not a valid Meet URL.
  */
 function extractMeetingCode(meetUrl?: string): string | null {
@@ -171,7 +171,7 @@ function extractMeetingCode(meetUrl?: string): string | null {
     }
 }
 
-// ─── Conference processing ────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Conference processing ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 async function processConference(
     conferenceId: string,
@@ -186,16 +186,16 @@ async function processConference(
     const timeMax = calendarEvent?.endTime ?? new Date();
     const timeMin = calendarEvent?.startTime ?? new Date(timeMax.getTime() - 48 * 60 * 60_000);
 
-    // ── FIX 1: Extract the 10-letter meeting code from the Meet link URL.
+    // ΓöÇΓöÇ FIX 1: Extract the 10-letter meeting code from the Meet link URL.
     // The Meet v2 API filter `space.meeting_code` expects the short code (e.g. "abc-defg-hij"),
     // NOT the Google Calendar conference ID (which is a different, longer identifier).
-    // Without this, fetchMeetConferenceData always returns null → actualDuration stays null → UI shows "Pending".
+    // Without this, fetchMeetConferenceData always returns null ΓåÆ actualDuration stays null ΓåÆ UI shows "Pending".
     const meetingCode = extractMeetingCode(calendarEvent?.meetLink);
 
     const conferenceData = integration.googleUserId && integration.googleEmail && meetingCode
         ? await fetchMeetConferenceData(
             accessToken,
-            meetingCode,      // ← correct: short meeting code, not conference ID
+            meetingCode,      // ΓåÉ correct: short meeting code, not conference ID
             timeMin,
             timeMax,
             integration.googleUserId,
@@ -203,13 +203,13 @@ async function processConference(
         )
         : null;
 
-    // If no conference data AND no calendar event → skip
+    // If no conference data AND no calendar event ΓåÆ skip
     if (!conferenceData && !calendarEvent) return [];
 
     // 2. Determine meeting metadata
     let title = calendarEvent?.title;
     if (!title || title.trim() === 'Google Meet') {
-        title = 'Google Meet — Ad hoc';
+        title = 'Google Meet ΓÇö Ad hoc';
     }
 
     const scheduledAt = calendarEvent?.startTime ?? conferenceData?.actualStartTime ?? new Date();
@@ -222,7 +222,7 @@ async function processConference(
 
     // 3. Skip if conference is still active (don't finalize prematurely)
     if (conferenceData?.isActive) {
-        logger.debug({ conferenceId }, '[GoogleMeet] Conference still active — skipping finalization');
+        logger.debug({ conferenceId }, '[GoogleMeet] Conference still active ΓÇö skipping finalization');
         // Even if active, update status on any existing meeting so UI shows "Ongoing"
         await Meeting.updateMany(
             {
@@ -242,39 +242,6 @@ async function processConference(
 
     // Compute durations from actual conference sessions
     if (conferenceData?.sessions) {
-        // --- Identity Resolution ---
-        for (const session of conferenceData.sessions) {
-            if (session.email) continue;
-            
-            let resolvedEmail: string | undefined;
-            // Step 1: Match by Google integration (users/123 -> 123)
-            if (session.participantId && session.participantId.startsWith('users/')) {
-                const googleId = session.participantId.replace('users/', '');
-                const integrationMatch = await GoogleIntegration.findOne({ googleUserId: googleId }).select('googleEmail').lean() as any;
-                if (integrationMatch?.googleEmail) {
-                    resolvedEmail = integrationMatch.googleEmail;
-                }
-            }
-            // Step 2: Fuzzy match displayName against calendar attendees
-            if (!resolvedEmail && session.displayName && calendarEvent?.attendees) {
-                const match = calendarEvent.attendees.find(a => 
-                    a.displayName?.toLowerCase() === session.displayName!.toLowerCase()
-                );
-                if (match?.email) resolvedEmail = match.email;
-            }
-            // Step 3: Fuzzy match displayName against CUOS users
-            if (!resolvedEmail && session.displayName) {
-                const cuosUsers = await User.find({ name: new RegExp(`^${session.displayName}$`, 'i'), isActive: true }).select('email').lean();
-                if (cuosUsers.length === 1) { // Only use if unambiguous
-                    resolvedEmail = cuosUsers[0].email;
-                }
-            }
-            if (resolvedEmail) {
-                session.email = resolvedEmail;
-            }
-        }
-        // ---------------------------
-
         const byEmail = new Map<string, typeof conferenceData.sessions>();
         for (const session of conferenceData.sessions) {
             if (session.email) {
@@ -353,12 +320,12 @@ async function processConference(
         });
     }
 
-    // Add anonymous users who had no email but were in the meet (not resolved by our logic)
+    // Add anonymous users who had no email but were in the meet
     if (conferenceData?.sessions) {
-        const anonymousSessions = conferenceData.sessions.filter(s => !s.email);
+        const anonymousSessions = conferenceData.sessions.filter(s => !s.email && s.displayName);
         const byName = new Map<string, typeof anonymousSessions>();
         for (const session of anonymousSessions) {
-            const name = session.displayName || session.participantId || 'Unknown';
+            const name = session.displayName || 'Unknown';
             if (!byName.has(name)) byName.set(name, []);
             byName.get(name)!.push(session);
         }
@@ -374,67 +341,17 @@ async function processConference(
         }
     }
 
-    // ── FIX 2: Before upserting a new google_meet meeting, look for an existing CUOS
-    // meeting that was created manually with this Google Calendar event or conference ID.
-    // This prevents the bug where a manually-created CUOS meeting never gets its actual
-    // time updated because the sync job creates a new google_meet document instead.
-    let meetingDoc: any = null;
-
-    // Priority 1: match by googleConferenceId (most specific)
-    meetingDoc = await Meeting.findOne({ googleConferenceId: conferenceId });
-
-    // Priority 2: if no match by conferenceId, try matching the manual meeting by calendarEventId
-    if (!meetingDoc && calendarEvent?.id) {
-        meetingDoc = await Meeting.findOne({ googleCalendarEventId: calendarEvent.id });
-    }
-
     const updateFields: any = {};
 
     // Only overwrite actual Meet data if we have it
     if (conferenceData) {
         updateFields.actualStartTime = conferenceData.actualStartTime;
         updateFields.actualEndTime = conferenceData.actualEndTime;
-        
-        const existingMeetingDuration = meetingDoc?.actualDuration || 0;
-        if (actualDuration !== undefined || existingMeetingDuration > 0) {
-            updateFields.actualDuration = Math.max(actualDuration || 0, existingMeetingDuration);
-        }
-        
+        updateFields.actualDuration = actualDuration;
         updateFields.conferenceStatus = 'ended';
-        
-        // MERGE PARTICIPANTS: Safely merge the incoming participantsList with existing participants in the DB.
-        // This ensures that if a non-organizer sync runs, it doesn't overwrite valid durations with 0s.
-        if (meetingDoc && meetingDoc.participants) {
-            const existingParticipants = meetingDoc.participants;
-            for (const p of participantsList) {
-                const existingP = existingParticipants.find((ep: any) => 
-                    (p.userId && ep.userId && p.userId.toString() === ep.userId.toString()) ||
-                    (p.externalEmail && ep.externalEmail && p.externalEmail === ep.externalEmail)
-                );
-                if (existingP) {
-                    p.actualDuration = Math.max(p.actualDuration || 0, existingP.actualDuration || 0);
-                }
-            }
-            // Add any existing participants that were missed entirely by this sync
-            for (const ep of existingParticipants) {
-                const found = participantsList.find((p: any) => 
-                    (p.userId && ep.userId && p.userId.toString() === ep.userId.toString()) ||
-                    (p.externalEmail && ep.externalEmail && p.externalEmail === ep.externalEmail)
-                );
-                if (!found && (ep.userId || ep.externalEmail)) {
-                    participantsList.push({
-                        userId: ep.userId,
-                        externalEmail: ep.externalEmail,
-                        role: ep.role,
-                        actualDuration: ep.actualDuration,
-                    });
-                }
-            }
-        }
-        
         updateFields.participants = participantsList;
     } else {
-        // No real conference data yet — mark as scheduled but link the calendar event
+        // No real conference data yet ΓÇö mark as scheduled but link the calendar event
         updateFields.conferenceStatus = 'scheduled';
     }
 
@@ -446,40 +363,29 @@ async function processConference(
         updateFields.meetLink = calendarEvent.meetLink;
     }
 
-    if (meetingDoc) {
-        // Update the existing document
+    // ΓöÇΓöÇ FIX 2: Before upserting a new google_meet meeting, look for an existing CUOS
+    // meeting that was created manually with this Google Calendar event or conference ID.
+    // This prevents the bug where a manually-created CUOS meeting never gets its actual
+    // time updated because the sync job creates a new google_meet document instead.
+    let meetingDoc: any = null;
+
+    // Priority 1: match by googleConferenceId (most specific)
+    meetingDoc = await Meeting.findOneAndUpdate(
+        { googleConferenceId: conferenceId },
+        { $set: updateFields },
+        { new: true, runValidators: false }
+    );
+
+    // Priority 2: if no match by conferenceId, try matching the manual meeting by calendarEventId
+    if (!meetingDoc && calendarEvent?.id) {
         meetingDoc = await Meeting.findOneAndUpdate(
-            { _id: meetingDoc._id },
-            { $set: updateFields },
+            { googleCalendarEventId: calendarEvent.id },
+            { $set: { ...updateFields, googleConferenceId: conferenceId } },
             { new: true, runValidators: false }
-        );
-    } else {
-        // Priority 3: no existing meeting found — create a new google_meet one
-        meetingDoc = await Meeting.findOneAndUpdate(
-            { googleConferenceId: conferenceId },
-            {
-                $setOnInsert: {
-                    title,
-                    type: 'internal',
-                    scheduledAt,
-                    duration: scheduledDuration || 1,
-                    source: 'google_meet',
-                    googleConferenceId: conferenceId,
-                    createdBy: userId,
-                    accessLevel: 'project-team',
-                    participants: participantsList,
-                },
-                $set: updateFields,
-            },
-            {
-                new: true,
-                upsert: true,
-                runValidators: false,
-            }
         );
     }
 
-    // Priority 3: no existing meeting found — create a new google_meet one
+    // Priority 3: no existing meeting found ΓÇö create a new google_meet one
     if (!meetingDoc) {
         meetingDoc = await Meeting.findOneAndUpdate(
             { googleConferenceId: conferenceId },
@@ -584,7 +490,7 @@ async function processConference(
                 const logDate  = new Date(earliest.start);
                 logDate.setUTCHours(0, 0, 0, 0);
 
-                // Upsert TimeLog — use meetingId + userId as idempotency key
+                // Upsert TimeLog ΓÇö use meetingId + userId as idempotency key
                 const existingLog = attendance?.timeLogId
                     ? await TimeLog.findById(attendance.timeLogId)
                     : await TimeLog.findOne({
@@ -627,9 +533,9 @@ async function processConference(
             }
         }
     } else if (!conferenceData && calendarEvent) {
-        // Fallback: Calendar event only — no conference data available (e.g., external meeting or not yet ended)
+        // Fallback: Calendar event only ΓÇö no conference data available (e.g., external meeting or not yet ended)
         // We log the scheduled time since we can't access the actual Meet records.
-        logger.debug({ conferenceId }, '[GoogleMeet] No conference data — falling back to scheduled time');
+        logger.debug({ conferenceId }, '[GoogleMeet] No conference data ΓÇö falling back to scheduled time');
 
         if (calendarEvent.scheduledDurationMinutes > 0) {
             const logDate = new Date(calendarEvent.startTime);
