@@ -72,14 +72,14 @@ export async function fetchMeetConferenceData(
             if (!r.startTime) return false;
             const start = new Date(r.startTime);
             // Allow 2 hours leeway for early/late starts
-            return start >= new Date(timeMin.getTime() - 7200_000) && 
-                   start <= new Date(timeMax.getTime() + 7200_000);
+            return start >= new Date(timeMin.getTime() - 7200_000) &&
+                start <= new Date(timeMax.getTime() + 7200_000);
         });
 
-        const recordsToProcess = matchingRecords.length > 0 ? matchingRecords : [records[0]];
+        // Sort chronologically and take the first record to ignore accidental later rejoins
+        matchingRecords.sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        const recordsToProcess = matchingRecords.length > 0 ? [matchingRecords[0]] : [records[0]];
         const sessions: MeetParticipantSession[] = [];
-        let minStartTime: Date | undefined;
-        let maxEndTime: Date | undefined;
         let anyActive = false;
 
         for (const record of recordsToProcess) {
@@ -87,11 +87,8 @@ export async function fetchMeetConferenceData(
             if (!conferenceRecordId) continue;
 
             const actualStartTime = record.startTime ? new Date(record.startTime) : undefined;
-            const actualEndTime = record.endTime ? new Date(record.endTime) : undefined;
             const isActive = !record.endTime;
 
-            if (actualStartTime && (!minStartTime || actualStartTime < minStartTime)) minStartTime = actualStartTime;
-            if (actualEndTime && (!maxEndTime || actualEndTime > maxEndTime)) maxEndTime = actualEndTime;
             if (isActive) anyActive = true;
 
             // Fetch participants for this conference record
@@ -133,10 +130,24 @@ export async function fetchMeetConferenceData(
             sessions.push(...nestedSessions.flat());
         }
 
+        // Calculate the true start and end time based on the participants who ACTUALLY joined.
+        // This naturally ignores bots that sat in the waiting room and artificially extended the record.
+        let minStartTime: Date | undefined;
+        let maxEndTime: Date | undefined;
+        
+        for (const s of sessions) {
+            if (s.joinTime) {
+                if (!minStartTime || s.joinTime < minStartTime) minStartTime = s.joinTime;
+            }
+            if (s.leaveTime) {
+                if (!maxEndTime || s.leaveTime > maxEndTime) maxEndTime = s.leaveTime;
+            }
+        }
+
         return {
             conferenceId: recordsToProcess[0]?.name || '',
-            actualStartTime: minStartTime,
-            actualEndTime: maxEndTime,
+            actualStartTime: minStartTime || (recordsToProcess[0]?.startTime ? new Date(recordsToProcess[0].startTime) : undefined),
+            actualEndTime: maxEndTime || (recordsToProcess[0]?.endTime ? new Date(recordsToProcess[0].endTime) : undefined),
             sessions,
             isActive: anyActive,
         };
