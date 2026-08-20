@@ -67,7 +67,18 @@ export default function EndOfDayModal({
     const currentUserId = currentUser?._id;
     
     const [entries, setEntries] = useState<TaskSummaryEntry[]>([]);
-    const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>([]);
+    
+    const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>(() => {
+        const prefilled: MeetingSummaryEntry[] = [];
+        for (const meeting of todayMeetings) {
+            const myParticipant = meeting.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
+            if (myParticipant?.actualDuration && myParticipant.actualDuration > 0) {
+                prefilled.push({ meeting, allocatedMinutes: myParticipant.actualDuration });
+            }
+        }
+        return prefilled;
+    });
+    
     const [search, setSearch] = useState('');
     const [confirmAction, setConfirmAction] = useState<'perfect' | 'less' | null>(null);
 
