@@ -27,23 +27,38 @@ export const getDashboardReports = async (filters: {
     const archivedProjects = await Project.find({ isArchived: true }).select('_id').lean();
     const archivedProjectIds = archivedProjects.map(p => p._id);
 
+    // For task queries, use the same filter as the "My Tasks" page:
+    // tasks the user created OR is assigned to. This ensures Reports matches My Tasks counts.
+    const taskUserFilter = userId
+        ? { $or: [{ createdBy: new mongoose.Types.ObjectId(userId) }, { assignees: new mongoose.Types.ObjectId(userId) }] }
+        : null;
+
+    // taskUserMatch for overdue/completedTasks queries
     const taskUserMatch = {
-        ...(userId ? { $or: [{ createdBy: new mongoose.Types.ObjectId(userId) }, { assignees: new mongoose.Types.ObjectId(userId) }] } : {}),
+        ...(taskUserFilter ? taskUserFilter : {}),
         parentTaskId: null,
         projectId: { $nin: archivedProjectIds }
     };
 
     // 1. Total Tasks in period
+    // Count tasks that were active during the selected period:
+    //   - Created within the period (new tasks)
+    //   - Created before the period but still not completed (carry-overs: in-progress, paused, todo)
+    //   - Completed within the period
+    const periodCondition = {
+        $or: [
+            { createdAt: { $gte: start, $lte: end } },
+            { createdAt: { $lt: start }, status: { $ne: 'completed' } },
+            { completedAt: { $gte: start, $lte: end } }
+        ]
+    };
+
     const tasksCurrent = await Task.aggregate([
         { 
             $match: { 
-                ...taskUserMatch, 
-                createdAt: { $lte: end },
-                $or: [
-                    { status: { $ne: 'completed' } },
-                    { completedAt: { $exists: false } },
-                    { completedAt: { $gte: start } }
-                ]
+                parentTaskId: null,
+                projectId: { $nin: archivedProjectIds },
+                ...(taskUserFilter ? { $and: [taskUserFilter, periodCondition] } : periodCondition)
             } 
         },
         {
@@ -79,7 +94,7 @@ export const getDashboardReports = async (filters: {
         status: { $ne: 'completed' },
         deadline: {
             $gte: new Date(),
-            $lte: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) // next 48 hours
+            $lte: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
         }
     });
 
