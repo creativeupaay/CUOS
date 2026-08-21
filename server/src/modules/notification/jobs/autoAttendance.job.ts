@@ -85,6 +85,8 @@ export const initAutoAttendanceJob = () => {
     cron.schedule('0 17 * * *', runAutoAttendanceCheck, { timezone: 'Asia/Kolkata' });
     // 7:00 PM IST
     cron.schedule('0 19 * * *', runAutoAttendanceCheck, { timezone: 'Asia/Kolkata' });
+    // 8:00 PM IST
+    cron.schedule('0 20 * * *', runAutoAttendanceCheck, { timezone: 'Asia/Kolkata' });
     
     // 7:00 AM IST (Cleanup run for night shift workers, 1 hour after the 6am boundary ends)
     // Note: To check the PREVIOUS day's work, we need to pass a slightly earlier time to getWorkDayLabel
@@ -120,5 +122,5 @@ export const initAutoAttendanceJob = () => {
         }
     }, { timezone: 'Asia/Kolkata' });
 
-    logger.info('[CRON] Auto-attendance jobs scheduled (1pm, 3pm, 5pm, 7pm, 7am IST)');
+    logger.info('[CRON] Auto-attendance jobs scheduled (1pm, 3pm, 5pm, 7pm, 8pm, 7am IST)');
 };

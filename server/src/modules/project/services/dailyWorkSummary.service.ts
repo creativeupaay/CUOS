@@ -79,6 +79,7 @@ export async function calculateDailyWorkSummary(
     let meetingLoggedMinutes = 0;
     let otherLoggedMinutes = 0;
     const allIntervals: Interval[] = [];
+    let nextSyntheticStart = new Date(dayStart);
 
     for (const log of timeLogs) {
         const duration = log.duration ?? 0; // minutes
@@ -99,9 +100,11 @@ export async function calculateDailyWorkSummary(
         } else {
             // TimeLog without explicit times — use work day start + duration as a synthetic interval.
             // This is imprecise but prevents data loss.
-            const syntheticStart = new Date(dayStart);
-            const syntheticEnd   = new Date(dayStart.getTime() + duration * 60_000);
+            // Stack them sequentially using nextSyntheticStart so they don't overlap with each other.
+            const syntheticStart = new Date(nextSyntheticStart);
+            const syntheticEnd   = new Date(syntheticStart.getTime() + duration * 60_000);
             allIntervals.push({ start: syntheticStart, end: syntheticEnd });
+            nextSyntheticStart = syntheticEnd;
         }
     }
 
