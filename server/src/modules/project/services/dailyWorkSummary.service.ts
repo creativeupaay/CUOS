@@ -16,6 +16,7 @@
  */
 
 import { TimeLog } from '../models/TimeLog.model';
+import { DaySession } from '../models/DaySession.model';
 import { MeetingAttendance } from '../../integration/models/MeetingAttendance.model';
 import { Employee } from '../../hrms/models/Employee.model';
 import { calculateDayUniqueMinutes, getWorkDayBounds, type Interval } from '../../../utils/intervalUtils';
@@ -105,6 +106,36 @@ export async function calculateDailyWorkSummary(
             const syntheticEnd   = new Date(syntheticStart.getTime() + duration * 60_000);
             allIntervals.push({ start: syntheticStart, end: syntheticEnd });
             nextSyntheticStart = syntheticEnd;
+        }
+    }
+
+    // ── 2.5 Fetch active DaySession (timer) for this day ────────────────────
+    // If the user hasn't clicked "End Day" yet, their TimeLogs might be empty.
+    // By including the entire elapsed DaySession as a single interval, we ensure
+    // their ongoing attendance is counted correctly in uniqueWorkedMinutes.
+    const daySession = await DaySession.findOne({ userId, dateKey: dateStr }).lean();
+    if (daySession) {
+        let elapsedSeconds = daySession.accumulated || 0;
+        if (daySession.status === 'running' && daySession.startedAt) {
+            elapsedSeconds += Math.floor((Date.now() - daySession.startedAt) / 1000);
+        }
+        
+        // Only cap at 12 hours if they didn't manually bypass the limit
+        const limitSeconds = 12 * 60 * 60;
+        if (!daySession.limitBypassed && elapsedSeconds > limitSeconds) {
+            elapsedSeconds = limitSeconds;
+        }
+        
+        if (elapsedSeconds > 0) {
+            const sessionStart = daySession.dayStart ? new Date(daySession.dayStart) : new Date(dayStart);
+            const sessionEnd = new Date(sessionStart.getTime() + elapsedSeconds * 1000);
+            allIntervals.push({ start: sessionStart, end: sessionEnd });
+            
+            // Also attribute this to 'other' if we have no TimeLogs yet, 
+            // so the dashboard shows the hours before they are categorized on End Day.
+            if (timeLogs.length === 0) {
+                otherLoggedMinutes = Math.floor(elapsedSeconds / 60);
+            }
         }
     }
 

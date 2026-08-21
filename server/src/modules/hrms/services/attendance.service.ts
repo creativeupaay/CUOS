@@ -236,42 +236,59 @@ export class AttendanceService {
             date: dayStart,
         }).lean();
 
+        let autoCalculatedStatus: 'present' | 'half-day' | null = null;
+        if (uniqueWorkedMinutes >= 360) {       // >= 6 hours
+            autoCalculatedStatus = 'present';
+        } else if (uniqueWorkedMinutes >= 240) { // >= 4 hours
+            autoCalculatedStatus = 'half-day';
+        }
+
+        let finalStatus = existing?.status;
+        let isNewStatus = false;
+
         if (existing) {
-            // Don't override leave or holiday records
-            if (existing.status === 'on-leave' || existing.status === 'holiday') {
+            // Don't override leave, holiday, or absent records at all
+            if (['on-leave', 'holiday', 'absent'].includes(existing.status)) {
                 return { marked: false, reason: `existing ${existing.status} record — skipped` };
             }
-            // Don't override a manual record set by admin
+            // If the record was set manually (e.g. WFH, or admin marked Present/Half-day),
+            // we DO NOT change the status. We just keep it as is.
             if (existing.source === 'manual') {
-                return { marked: false, reason: 'manual record exists — skipped' };
+                finalStatus = existing.status;
+            } else {
+                // If it was auto, we can upgrade it based on hours
+                finalStatus = autoCalculatedStatus || existing.status;
+                if (finalStatus !== existing.status && autoCalculatedStatus) {
+                    isNewStatus = true;
+                }
             }
-            // Allow updating a previous auto record if hours improved
+        } else {
+            finalStatus = autoCalculatedStatus || undefined;
+            isNewStatus = !!autoCalculatedStatus;
         }
 
-        let newStatus: 'present' | 'half-day' | null = null;
-        if (uniqueWorkedMinutes >= 360) {       // >= 6 hours
-            newStatus = 'present';
-        } else if (uniqueWorkedMinutes >= 240) { // >= 4 hours
-            newStatus = 'half-day';
-        }
-
-        if (!newStatus) {
-            // Not enough hours yet — remove stale auto record if it exists
-            if (existing?.source === 'auto') {
-                await Attendance.deleteOne({ _id: existing._id });
-            }
+        if (!finalStatus) {
+            // Not enough hours and no existing record
             return { marked: false, reason: `only ${uniqueWorkedMinutes} min worked` };
         }
 
+        // If they didn't meet the threshold and they have a stale auto record, remove it
+        if (!autoCalculatedStatus && existing?.source === 'auto') {
+            await Attendance.deleteOne({ _id: existing._id });
+            return { marked: false, reason: `only ${uniqueWorkedMinutes} min worked — stale record removed` };
+        }
+
         const totalHours = Number((uniqueWorkedMinutes / 60).toFixed(2));
-        const notes = `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}`;
+        const notes = existing?.source === 'manual' 
+            ? (existing.notes && !existing.notes.includes('Auto-update:') ? `${existing.notes}\nAuto-update: ${uniqueWorkedMinutes} min worked` : `Auto-update: ${uniqueWorkedMinutes} min worked`)
+            : `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}`;
 
         await Attendance.findOneAndUpdate(
             { employeeId: new Types.ObjectId(employeeId), date: dayStart },
             {
                 $set: {
-                    status: newStatus,
-                    source: 'auto',
+                    status: finalStatus,
+                    source: existing?.source === 'manual' ? 'manual' : 'auto',
                     totalHours,
                     notes,
                 },
@@ -283,7 +300,7 @@ export class AttendanceService {
             { upsert: true, runValidators: false }
         );
 
-        return { marked: true, status: newStatus };
+        return { marked: isNewStatus, status: finalStatus };
     }
 
     // ── Admin: Today's overview — all employees + their status ────────
