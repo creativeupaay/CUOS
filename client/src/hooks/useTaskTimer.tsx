@@ -7,6 +7,7 @@ export interface TimerState {
     accumulated: number;     // seconds elapsed before current run
     status: 'running' | 'paused';
     limitBypassed?: boolean;
+    dateKey?: string;        // YYYY-MM-DD for the work day
 }
 
 export interface TimerContextValue {
@@ -25,6 +26,7 @@ export interface TimerContextValue {
 const STORAGE_KEY = 'cuos_global_timer';
 const SYNC_POLL_INTERVAL = 15000; // 15 seconds — polls server for cross-device sync
 export const LIMIT_SECONDS = 12 * 60 * 60;
+const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 mins = 00:30 UTC = 6:00 AM IST
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -32,11 +34,27 @@ const TimerContext = createContext<TimerContextValue | null>(null);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function getTodayKey(): string {
+    const shifted = new Date(Date.now() - WORK_DAY_START_UTC_MS);
+    const y = shifted.getUTCFullYear();
+    const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
 function loadFromStorage(): TimerState | null {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
-        return JSON.parse(raw) as TimerState;
+        const parsed = JSON.parse(raw) as TimerState;
+        
+        // Stale state check: If the stored timer is from a previous work day, drop it!
+        if (parsed.dateKey && parsed.dateKey !== getTodayKey()) {
+            localStorage.removeItem(STORAGE_KEY);
+            return null;
+        }
+        
+        return parsed;
     } catch {
         return null;
     }
@@ -61,7 +79,6 @@ export function calcElapsed(timer: TimerState | null): number {
     return total;
 }
 
-/** Converts a server DaySession into a client TimerState */
 function sessionToTimer(session: {
     accumulated: number;
     startedAt: number | null;
@@ -73,6 +90,7 @@ function sessionToTimer(session: {
         accumulated: session.accumulated,
         status: session.status,
         limitBypassed: session.limitBypassed,
+        dateKey: getTodayKey(),
     };
 }
 
@@ -194,10 +212,11 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             try {
                 const session = await apiCall('GET', '/projects/day-session');
                 if (!session) return;
-                // Only update if server says we are still running with the same session
-                // (another device might have paused us)
-                if (session.status === 'paused') {
-                    const serverTimer = sessionToTimer(session);
+                
+                // If server is paused but we are running, or if server's accumulated time differs greatly (drift)
+                // We sync with the server to prevent stale state from persisting.
+                const serverTimer = sessionToTimer(session);
+                if (session.status === 'paused' || Math.abs(serverTimer.accumulated - timer.accumulated) > 30) {
                     setTimer(serverTimer);
                     saveToStorage(serverTimer);
                     broadcastState(serverTimer);
@@ -221,6 +240,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             accumulated: timer?.accumulated ?? 0,   // ← preserve any existing progress!
             status: 'running',
             limitBypassed: timer?.limitBypassed ?? false,
+            dateKey: getTodayKey(),
         };
         setTimer(newTimer);
         saveToStorage(newTimer);
@@ -264,12 +284,23 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     const resumeTimer = useCallback(() => {
         setTimer(prev => {
             if (!prev || prev.status !== 'paused') return prev;
-            const next: TimerState = { ...prev, startedAt: Date.now(), status: 'running' };
+            const next: TimerState = { ...prev, startedAt: Date.now(), status: 'running', dateKey: getTodayKey() };
             saveToStorage(next);
             broadcastState(next);
 
-            // Fire-and-forget server sync (same as start — it upserts)
-            apiCall('POST', '/projects/day-session/start').catch(() => {});
+            // Sync with server and adopt server state (which corrects accumulated drift across days)
+            setIsSyncing(true);
+            apiCall('POST', '/projects/day-session/start')
+                .then((session) => {
+                    if (session) {
+                        const serverTimer = sessionToTimer(session);
+                        setTimer(serverTimer);
+                        saveToStorage(serverTimer);
+                        broadcastState(serverTimer);
+                    }
+                })
+                .catch(() => {})
+                .finally(() => setIsSyncing(false));
 
             return next;
         });

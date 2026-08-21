@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Pause, AlertTriangle, X, PictureInPicture2 } from 'lucide-react';
+import { Play, Pause, AlertTriangle, X, PictureInPicture2, Loader2 } from 'lucide-react';
 import { useTimer, formatElapsed, LIMIT_SECONDS } from '@/hooks/useTaskTimer';
 import { createPortal } from 'react-dom';
 import GlobalEndDayContainer from './GlobalEndDayContainer';
@@ -9,7 +9,7 @@ import PipTimerWidget from './PipTimerWidget';
 import toast from 'react-hot-toast';
 
 export default function GlobalTimerWidget() {
-    const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit } = useTimer();
+    const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit, isSyncing } = useTimer();
     const [showLimitPopup, setShowLimitPopup] = useState(false);
     const [showEndDayPopup, setShowEndDayPopup] = useState(false);
     const [setTimerStatus] = useSetTimerStatusMutation();
@@ -81,10 +81,15 @@ export default function GlobalTimerWidget() {
                 <button
                     onClick={() => { startTimer(); syncStatus('running'); }}
                     title="Start day timer"
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
+                    disabled={isSyncing}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary)' }}
                 >
-                    <Play size={16} fill="currentColor" className="ml-0.5" />
+                    {isSyncing ? (
+                        <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                        <Play size={16} fill="currentColor" className="ml-0.5" />
+                    )}
                 </button>
                 <div className="bg-white rounded-full px-3 py-1">
                     <span className="text-sm font-medium tabular-nums tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
@@ -129,19 +134,29 @@ export default function GlobalTimerWidget() {
                 <button
                     onClick={() => { pauseTimer(); syncStatus('paused'); }}
                     title="Pause"
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
+                    disabled={isSyncing}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary)' }}
                 >
-                    <Pause size={16} fill="currentColor" />
+                    {isSyncing ? (
+                        <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                        <Pause size={16} fill="currentColor" />
+                    )}
                 </button>
             ) : (
                 <button
                     onClick={() => { resumeTimer(); syncStatus('running'); }}
                     title="Resume"
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0"
+                    disabled={isSyncing}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary)' }}
                 >
-                    <Play size={16} fill="currentColor" className="ml-0.5" />
+                    {isSyncing ? (
+                        <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                        <Play size={16} fill="currentColor" className="ml-0.5" />
+                    )}
                 </button>
             )}
 

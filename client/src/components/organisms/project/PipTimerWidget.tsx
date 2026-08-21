@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Pause, Minimize2, Maximize2 } from 'lucide-react';
+import { Play, Pause, Minimize2, Maximize2, Loader2 } from 'lucide-react';
 import { useTimer, formatElapsed } from '@/hooks/useTaskTimer';
 
 interface PipTimerWidgetProps {
@@ -9,7 +9,7 @@ interface PipTimerWidgetProps {
 }
 
 export default function PipTimerWidget({ onEndDay, resizePiP }: PipTimerWidgetProps) {
-    const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer } = useTimer();
+    const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, isSyncing } = useTimer();
     const [mode, setMode] = useState<'expanded' | 'collapsed'>('expanded');
 
     const handleToggleMode = () => {
@@ -46,12 +46,15 @@ export default function PipTimerWidget({ onEndDay, resizePiP }: PipTimerWidgetPr
                 {/* Play / Pause */}
                 <button
                     onClick={handleTogglePlayPause}
+                    disabled={isSyncing}
                     title={isRunning ? 'Pause timer' : 'Resume timer'}
                     aria-label={isRunning ? 'Pause timer' : 'Resume timer'}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 active:scale-95 shrink-0 shadow-sm"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 active:scale-95 shrink-0 shadow-sm disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary, #10B981)' }}
                 >
-                    {isRunning ? (
+                    {isSyncing ? (
+                        <Loader2 size={15} className="animate-spin" />
+                    ) : isRunning ? (
                         <Pause size={15} fill="currentColor" />
                     ) : (
                         <Play size={15} fill="currentColor" className="ml-0.5" />
@@ -136,12 +139,18 @@ export default function PipTimerWidget({ onEndDay, resizePiP }: PipTimerWidgetPr
             <div className="flex items-center justify-center gap-3 pt-1 pb-1">
                 <button
                     onClick={handleTogglePlayPause}
+                    disabled={isSyncing}
                     title={isRunning ? 'Pause timer' : 'Resume timer'}
                     aria-label={isRunning ? 'Pause timer' : 'Resume timer'}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary, #10B981)' }}
                 >
-                    {isRunning ? (
+                    {isSyncing ? (
+                        <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>{isRunning ? 'Pausing' : timer ? 'Resuming' : 'Starting'}</span>
+                        </>
+                    ) : isRunning ? (
                         <>
                             <Pause size={14} fill="currentColor" />
                             <span>Pause</span>
