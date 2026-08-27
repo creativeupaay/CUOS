@@ -57,20 +57,31 @@ export default function GlobalTaskFormPanel({
     defaultProjectId = '',
     initialData
 }: GlobalTaskFormPanelProps) {
-    const [form, setForm] = useState<NewTaskFormData>({
-        title: initialData?.title || '',
-        taskType: initialData ? (initialData._projectId ? 'project' : 'individual') : (defaultProjectId ? 'project' : 'individual'),
-        projectId: initialData?._projectId || defaultProjectId,
-        status: initialData?.status || 'todo',
-        priority: initialData?.priority || 'medium',
-        deadline: initialData?.deadline ? new Date(initialData.deadline).toISOString().slice(0, 10) : '',
-        timeSpentHours: initialData?.estimatedHours ? Math.floor(initialData.estimatedHours) : 0,
-        timeSpentMins: initialData?.estimatedHours ? Math.round((initialData.estimatedHours % 1) * 60) : 0,
-        description: initialData?.description || '',
-        isRecurring: false,
-        recurrenceFreq: 'daily',
-        recurrenceEndDate: '',
-        recurrenceDays: [],
+    const [form, setForm] = useState<NewTaskFormData>(() => {
+        if (!initialData) {
+            try {
+                const saved = sessionStorage.getItem('NEW_TASK_DRAFT');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    return { ...parsed, projectId: parsed.projectId || defaultProjectId };
+                }
+            } catch (e) {}
+        }
+        return {
+            title: initialData?.title || '',
+            taskType: initialData ? (initialData._projectId ? 'project' : 'individual') : (defaultProjectId ? 'project' : 'individual'),
+            projectId: initialData?._projectId || defaultProjectId,
+            status: initialData?.status || 'todo',
+            priority: initialData?.priority || 'medium',
+            deadline: initialData?.deadline ? new Date(initialData.deadline).toISOString().slice(0, 10) : '',
+            timeSpentHours: initialData?.estimatedHours ? Math.floor(initialData.estimatedHours) : 0,
+            timeSpentMins: initialData?.estimatedHours ? Math.round((initialData.estimatedHours % 1) * 60) : 0,
+            description: initialData?.description || '',
+            isRecurring: false,
+            recurrenceFreq: 'daily',
+            recurrenceEndDate: '',
+            recurrenceDays: [],
+        };
     });
     const [visible, setVisible] = useState(false);
 
@@ -78,6 +89,14 @@ export default function GlobalTaskFormPanel({
         const id = window.setTimeout(() => setVisible(true), 12);
         return () => window.clearTimeout(id);
     }, []);
+
+    useEffect(() => {
+        if (!initialData) {
+            try {
+                sessionStorage.setItem('NEW_TASK_DRAFT', JSON.stringify(form));
+            } catch (e) {}
+        }
+    }, [form, initialData]);
 
     const handleClose = () => {
         setVisible(false);
@@ -92,6 +111,11 @@ export default function GlobalTaskFormPanel({
         e.preventDefault();
         if (!form.title.trim()) return;
         await onSubmit(form);
+        if (!initialData) {
+            try {
+                sessionStorage.removeItem('NEW_TASK_DRAFT');
+            } catch (e) {}
+        }
         handleClose();
     };
 

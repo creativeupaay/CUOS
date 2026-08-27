@@ -78,7 +78,7 @@ export interface UseProjectTasksReturn {
     isLoading: boolean;
     isCreating: boolean;
     // CRUD
-    handleSubmit: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
+    handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
     handleDelete: (taskId: string) => Promise<void>;
     handleStatusDrop: (taskId: string, newStatus: string) => void;
     // Subtask CRUD
@@ -172,7 +172,7 @@ export function useProjectTasks(projectId: string): UseProjectTasksReturn {
     const [deleteTask] = useDeleteTaskMutation();
     const [createSubtask] = useCreateSubtaskMutation();
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
 
@@ -192,21 +192,19 @@ export function useProjectTasks(projectId: string): UseProjectTasksReturn {
             assignees: selectedAssignees,
         };
 
-        try {
-            if (editingTask) {
-                await updateTask({
-                    projectId,
-                    taskId: editingTask._id,
-                    data: taskData,
-                }).unwrap();
-            } else {
-                await createTask({ projectId, data: taskData }).unwrap();
-            }
-            setShowForm(false);
-            setEditingTask(null);
-        } catch (error) {
-            logger.error('Failed to save task:', error);
+        if (editingTask) {
+            updateTask({
+                projectId,
+                taskId: editingTask._id,
+                data: taskData,
+            });
+            // Toast would ideally be added here but RTK Query manages errors internally too
+        } else {
+            createTask({ projectId, data: taskData });
         }
+        
+        setShowForm(false);
+        setEditingTask(null);
     };
 
     const handleDelete = async (taskId: string) => {

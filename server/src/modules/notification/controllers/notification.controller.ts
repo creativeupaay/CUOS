@@ -3,7 +3,7 @@ import { notificationService } from '../services/notification.service';
 import asyncHandler from '../../../utils/asyncHandler';
 import AppError from '../../../utils/appError';
 import { User } from '../../auth/models/User.model';
-import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
 
 const requireUserId = (req: Request): string => {
     const userId = req.user?.id;
@@ -105,8 +105,10 @@ export const pingUser = asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
     if (!adminId) throw new AppError('Not authenticated', 401);
 
-    // Only admins with projectManagement access can ping
-    if (!hasModuleAdminAccess(req.user, 'projectManagement')) {
+    // Admins with projectManagement access OR HR admins can ping
+    const isPmAdmin = hasModuleAdminAccess(req.user, 'projectManagement');
+    const isHrAdmin = hasModuleAdminAccess(req.user, 'hrms') || hasModuleViewAccess(req.user, 'hrms');
+    if (!isPmAdmin && !isHrAdmin) {
         throw new AppError('Admin access required to ping users', 403);
     }
 

@@ -5,7 +5,7 @@ import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
 import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { useGetUsersQuery } from '@/features/auth/authApi';
-import { hasModuleAdminAccess } from '@/utils/modulePermissions';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer } from 'lucide-react';
 import type { Task } from '@/features/project';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
@@ -313,7 +313,10 @@ type Filter = 'all' | 'todo' | 'in-progress' | 'paused' | 'completed';
 
 export default function DailyOverviewPage() {
     const user = useSelector((s: RootState) => s.auth.user);
-    const isAdmin = hasModuleAdminAccess(user, 'projectManagement');
+    // Allow both Project Management admins AND HR admins to see the daily overview
+    const isPmAdmin = hasModuleAdminAccess(user, 'projectManagement');
+    const isHrAdmin = hasModuleAdminAccess(user, 'hrms') || hasModuleViewAccess(user, 'hrms');
+    const isAdmin = isPmAdmin || isHrAdmin;
 
     if (!isAdmin) return <Navigate to="/tasks" replace />;
 

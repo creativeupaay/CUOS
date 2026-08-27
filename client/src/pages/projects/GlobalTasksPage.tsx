@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import {
     Plus, Search, Pause,
     Calendar, RefreshCcw,
@@ -20,15 +21,41 @@ import toast from 'react-hot-toast';
 
 // ─── Bulk Task Modal Component ───────────────────────────────────────────────
 
-function BulkTaskModal({ onClose, onSubmit, isSubmitting }: { onClose: () => void; onSubmit: (tasks: string[]) => void; isSubmitting: boolean }) {
-    const [text, setText] = useState('');
-    
+const BULK_TASK_DRAFT_KEY = 'cuos_bulk_task_draft';
 
-    
+function BulkTaskModal({ onClose, onSubmit, isSubmitting }: { onClose: () => void; onSubmit: (tasks: string[]) => void; isSubmitting: boolean }) {
+    // Persist draft in sessionStorage so a page refresh doesn't clear it
+    const [text, setText] = useState<string>(() => {
+        try {
+            return sessionStorage.getItem(BULK_TASK_DRAFT_KEY) || '';
+        } catch {
+            return '';
+        }
+    });
+
+    const handleTextChange = (value: string) => {
+        setText(value);
+        try {
+            sessionStorage.setItem(BULK_TASK_DRAFT_KEY, value);
+        } catch { /* ignore storage errors */ }
+    };
+
+    const clearDraft = () => {
+        try {
+            sessionStorage.removeItem(BULK_TASK_DRAFT_KEY);
+        } catch { /* ignore */ }
+    };
+
     const handleSubmit = () => {
         const lines = text.split('\n').map(t => t.trim()).filter(Boolean);
         if (lines.length === 0) return;
         onSubmit(lines);
+        clearDraft();
+    };
+
+    const handleClose = () => {
+        clearDraft();
+        onClose();
     };
 
     return createPortal(
@@ -37,22 +64,22 @@ function BulkTaskModal({ onClose, onSubmit, isSubmitting }: { onClose: () => voi
                 <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
                     <div>
                         <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>Add Bulk Tasks</h2>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Enter each task on a new line.</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Enter each task on a new line. Your draft is auto-saved.</p>
                     </div>
-                    <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: 'var(--color-text-muted)' }}><X size={18} /></button>
+                    <button onClick={handleClose} className="p-2 rounded-full transition-colors" style={{ color: 'var(--color-text-muted)' }}><X size={18} /></button>
                 </div>
                 <div className="p-6">
                     <textarea 
                         autoFocus
                         value={text}
-                        onChange={e => setText(e.target.value)}
-                        placeholder="Task 1&#10;Task 2&#10;Task 3..."
+                        onChange={e => handleTextChange(e.target.value)}
+                        placeholder={"Task 1\nTask 2\nTask 3..."}
                         className="w-full h-64 p-4 border rounded-xl text-sm outline-none resize-none"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
                     />
                 </div>
                 <div className="px-6 py-4 border-t flex justify-end gap-3" style={{ backgroundColor: 'var(--color-bg-subtle)', borderColor: 'var(--color-border-default)' }}>
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg border" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}>Cancel</button>
+                    <button onClick={handleClose} className="px-4 py-2 text-sm font-medium rounded-lg border" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}>Cancel</button>
                     <button 
                         onClick={handleSubmit} 
                         disabled={isSubmitting || !text.trim()} 
@@ -338,10 +365,16 @@ function GlobalTasksInner() {
         isCreating,
     } = useGlobalTasks();
 
-    const currentUserId = useSelector((state: RootState) => state.auth.user?._id);
+    const currentUser = useSelector((state: RootState) => state.auth.user);
+    const currentUserId = currentUser?._id;
+    // HR admins can also view the daily overview even if not PM admin.
+    // Use both adminAccess and viewAccess checks — versioned permission users may only have
+    // viewAccess for HRMS without the explicit adminAccess flag set.
+    const isHrAdmin = hasModuleAdminAccess(currentUser, 'hrms') || hasModuleViewAccess(currentUser, 'hrms');
+    const canSeeDailyOverview = isAdmin || isHrAdmin;
 
     const [activeMainTab, setActiveMainTab] = useState<'my' | 'all' | 'my-meetings' | 'all-meetings' | 'board' | 'daily-overview'>('board');
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     useEffect(() => {
         const activeTabParam = searchParams.get('activeTab');
@@ -362,8 +395,21 @@ function GlobalTasksInner() {
 
 
 
-    const [showForm, setShowForm] = useState(false);
-    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [showForm, setShowForm] = useState<boolean>(() => {
+        try {
+            return !!sessionStorage.getItem('NEW_TASK_DRAFT');
+        } catch {
+            return false;
+        }
+    });
+    // Auto-reopen modal on refresh if the user had unsaved draft text
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(() => {
+        try {
+            return !!sessionStorage.getItem(BULK_TASK_DRAFT_KEY)?.trim();
+        } catch {
+            return false;
+        }
+    });
     const [showTaskMenu, setShowTaskMenu] = useState(false);
     const taskMenuRef = useRef<HTMLDivElement>(null);
 
@@ -382,10 +428,9 @@ function GlobalTasksInner() {
     const [showFilters, setShowFilters] = useState(false);
     const [searchExpanded, setSearchExpanded] = useState(false);
     const [taskToDelete, setTaskToDelete] = useState<GlobalTask | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const [dailyTodosView, setDailyTodosView] = useState<'board' | 'list'>('board');
+    const [dailyTodosView, setDailyTodosView] = useState<'board' | 'list'>('list');
     const [filterTab, setFilterTab] = useState<'priority' | 'project' | 'date' | 'user'>('priority');
     const filterRef = useRef<HTMLDivElement>(null);
 
@@ -407,7 +452,7 @@ function GlobalTasksInner() {
 
     const mainTabs = [
         { value: 'board' as const, label: "Daily Todo's" },
-        ...(isAdmin ? [{ value: 'daily-overview' as const, label: 'Daily Overview' }] : []),
+        ...(canSeeDailyOverview ? [{ value: 'daily-overview' as const, label: 'Daily Overview' }] : []),
         { value: 'my' as const, label: 'My Tasks' },
         ...(isAdmin ? [{ value: 'all' as const, label: 'All Tasks' }] : []),
         { value: 'my-meetings' as const, label: 'My Meetings' },
@@ -434,9 +479,7 @@ function GlobalTasksInner() {
             toast.error('Please select a project.');
             return;
         }
-        setIsSaving(true);
-        try {
-        const result = await createTask(data.taskType === 'individual' ? '' : data.projectId, {
+        const promise = createTask(data.taskType === 'individual' ? '' : data.projectId, {
             title: data.title,
             description: data.description || undefined,
             status: data.status,
@@ -450,39 +493,32 @@ function GlobalTasksInner() {
                     daysOfWeek: data.recurrenceFreq === 'weekly' ? data.recurrenceDays : undefined,
                 }
             } : {})
-        });
-        if (result) {
-            if (data.timeSpentHours > 0 || data.timeSpentMins > 0) {
-                if (data.taskType !== 'individual') {
-                    await logTime(data.projectId, result._id, data.timeSpentHours * 60 + data.timeSpentMins, 'Initial time');
-                }
+        }).then(result => {
+            if (result && (data.timeSpentHours > 0 || data.timeSpentMins > 0) && data.taskType !== 'individual') {
+                return logTime(data.projectId, result._id, data.timeSpentHours * 60 + data.timeSpentMins, 'Initial time');
             }
-            toast.success(data.taskType === 'individual' ? 'Individual task created!' : 'Task created!');
-            setShowForm(false);
-        }
-        } finally {
-            setIsSaving(false);
-        }
+        });
+        toast.promise(promise, {
+            loading: data.taskType === 'individual' ? 'Creating individual task...' : 'Creating task...',
+            success: data.taskType === 'individual' ? 'Individual task created!' : 'Task created!',
+            error: 'Failed to create task'
+        });
+        setShowForm(false);
     }, [createTask, logTime]);
 
     const handleEditTaskSubmit = useCallback(async (data: NewTaskFormData) => {
         if (!taskToEdit) return;
-        setIsSaving(true);
-        try {
-            await updateTask(taskToEdit._projectId, taskToEdit._id, {
-                title: data.title,
-                description: data.description || undefined,
-                status: data.status,
-                priority: data.priority,
-                deadline: data.deadline || undefined,
-                estimatedHours: (data.timeSpentHours + data.timeSpentMins / 60) || undefined,
-                projectId: data.taskType === 'project' ? data.projectId : undefined,
-            });
-            toast.success('Task updated!');
-            setTaskToEdit(undefined);
-        } finally {
-            setIsSaving(false);
-        }
+        updateTask(taskToEdit._projectId, taskToEdit._id, {
+            title: data.title,
+            description: data.description || undefined,
+            status: data.status,
+            priority: data.priority,
+            deadline: data.deadline || undefined,
+            estimatedHours: (data.timeSpentHours + data.timeSpentMins / 60) || undefined,
+            projectId: data.taskType === 'project' ? data.projectId : undefined,
+        });
+        toast.success('Task updated!');
+        setTaskToEdit(undefined);
     }, [taskToEdit, updateTask]);
 
     const handleDelete = useCallback((task: GlobalTask) => {
@@ -501,24 +537,20 @@ function GlobalTasksInner() {
         }
     }, [taskToDelete, deleteTask]);
 
-    const handleBulkTaskSubmit = useCallback(async (taskTitles: string[]) => {
-        setIsSaving(true);
-        try {
-            await Promise.all(taskTitles.map(title => 
-                createTask('', {
-                    title,
-                    status: 'todo',
-                    priority: 'medium'
-                })
-            ));
-            toast.success(`Successfully added ${taskTitles.length} tasks!`);
-            setIsBulkModalOpen(false);
-        } catch (error) {
-            console.error('Failed to add bulk tasks:', error);
-            toast.error('Failed to add some tasks. Please try again.');
-        } finally {
-            setIsSaving(false);
-        }
+    const handleBulkTaskSubmit = useCallback((taskTitles: string[]) => {
+        setIsBulkModalOpen(false);
+        const promise = Promise.all(taskTitles.map(title => 
+            createTask('', {
+                title,
+                status: 'todo',
+                priority: 'medium'
+            })
+        ));
+        toast.promise(promise, {
+            loading: `Adding ${taskTitles.length} tasks...`,
+            success: `Successfully added ${taskTitles.length} tasks!`,
+            error: 'Failed to add some tasks. Please try again.'
+        });
     }, [createTask]);
 
 
@@ -550,7 +582,7 @@ function GlobalTasksInner() {
                 <BulkTaskModal 
                     onClose={() => setIsBulkModalOpen(false)} 
                     onSubmit={handleBulkTaskSubmit} 
-                    isSubmitting={isSaving} 
+                    isSubmitting={false} 
                 />
             )}
 
@@ -621,6 +653,10 @@ function GlobalTasksInner() {
                         key={tab.value}
                         onClick={() => {
                             setActiveMainTab(tab.value);
+                            setSearchParams(prev => {
+                                prev.set('activeTab', tab.value);
+                                return prev;
+                            }, { replace: true });
                             if (tab.value === 'my' || tab.value === 'all') {
                                 setFilters({ owner: tab.value });
                             }
@@ -986,7 +1022,7 @@ function GlobalTasksInner() {
             {(showForm || taskToEdit) && (
                 <GlobalTaskFormPanel
                     projects={projects}
-                    isCreating={isSaving || isCreating}
+                    isCreating={isCreating}
                     initialData={taskToEdit}
                     onClose={() => { setShowForm(false); setTaskToEdit(undefined); }}
                     onSubmit={taskToEdit ? handleEditTaskSubmit : handleCreateTask}

@@ -122,6 +122,9 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     const intervalRef = useRef<number | null>(null);
     const syncPollRef = useRef<number | null>(null);
     const broadcastRef = useRef<BroadcastChannel | null>(null);
+    // Track when the user last performed a local timer action (start/pause/resume/bypass)
+    // to prevent the server poll from overwriting a fresh local state
+    const lastActionRef = useRef<number>(0);
 
     // ── BroadcastChannel (cross-tab sync within same browser) ─────────────────
     useEffect(() => {
@@ -198,6 +201,18 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         saveToStorage(timer);
     }, [timer]);
 
+    // ── Recalculate elapsed when user returns to tab ──────────────────────────
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Immediately recalculate elapsed so display is accurate when tab is focused
+                setElapsed(calcElapsed(timer));
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [timer]);
+
     // ── Cross-device polling (every 15s while running) ────────────────────────
     useEffect(() => {
         if (!timer?.status || timer.status !== 'running') {
@@ -210,17 +225,41 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
         syncPollRef.current = window.setInterval(async () => {
             try {
+                // ── Grace period guard ──────────────────────────────────────
+                // If the user performed a local action in the last 30 seconds,
+                // skip this poll to avoid overwriting the fresh local state with
+                // a stale server response (e.g., server restarted or hasn't
+                // processed our start/pause yet).
+                const secondsSinceLastAction = (Date.now() - lastActionRef.current) / 1000;
+                if (secondsSinceLastAction < 30) return;
+
                 const session = await apiCall('GET', '/projects/day-session');
                 if (!session) return;
-                
-                // If server is paused but we are running, or if server's accumulated time differs greatly (drift)
-                // We sync with the server to prevent stale state from persisting.
+
+                // Only sync from server if the server's startedAt is NEWER than
+                // what we have locally. This prevents a stale server "paused"
+                // state from overwriting our running local timer.
+                const serverStartedAt = session.startedAt ?? 0;
+                const localStartedAt = timer.startedAt ?? 0;
+                const serverIsNewer = serverStartedAt > localStartedAt;
+
                 const serverTimer = sessionToTimer(session);
-                if (session.status === 'paused' || Math.abs(serverTimer.accumulated - timer.accumulated) > 30) {
+
+                if (session.status === 'running') {
+                    // Server is also running — only sync if there's significant accumulated drift
+                    const serverAccumulated = session.accumulated ?? 0;
+                    if (Math.abs(serverAccumulated - timer.accumulated) > 60) {
+                        setTimer(serverTimer);
+                        saveToStorage(serverTimer);
+                        broadcastState(serverTimer);
+                    }
+                } else if (session.status === 'paused' && serverIsNewer) {
+                    // Server paused AFTER our local start — trust server (e.g., another device paused)
                     setTimer(serverTimer);
                     saveToStorage(serverTimer);
                     broadcastState(serverTimer);
                 }
+                // If server is paused but local startedAt is newer: ignore — our start is more recent
             } catch { /* ignore network errors */ }
         }, SYNC_POLL_INTERVAL);
 
@@ -230,11 +269,13 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 syncPollRef.current = null;
             }
         };
-    }, [timer?.status, broadcastState]);
+    }, [timer?.status, timer?.startedAt, timer?.accumulated, broadcastState]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
     const startTimer = useCallback(() => {
+        // Mark that user just acted — grace period prevents poll from overwriting this
+        lastActionRef.current = Date.now();
         const newTimer: TimerState = {
             startedAt: Date.now(),
             accumulated: timer?.accumulated ?? 0,   // ← preserve any existing progress!
@@ -263,6 +304,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     }, [timer, broadcastState]);
 
     const pauseTimer = useCallback(() => {
+        // Mark that user just acted — grace period prevents poll from overwriting this
+        lastActionRef.current = Date.now();
         setTimer(prev => {
             if (!prev || prev.status !== 'running') return prev;
             const runSeconds = Math.floor((Date.now() - prev.startedAt) / 1000);
@@ -282,6 +325,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     }, [broadcastState]);
 
     const resumeTimer = useCallback(() => {
+        // Mark that user just acted — grace period prevents poll from overwriting this
+        lastActionRef.current = Date.now();
         setTimer(prev => {
             if (!prev || prev.status !== 'paused') return prev;
             const next: TimerState = { ...prev, startedAt: Date.now(), status: 'running', dateKey: getTodayKey() };
@@ -321,8 +366,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             saveToStorage(null);
             broadcastState(null);
 
-            // Sync pause to server
-            apiCall('PATCH', '/projects/day-session/pause').catch(() => {});
+            // Send isEnded: true so server marks the session as fully ended (not just paused)
+            apiCall('PATCH', '/projects/day-session/pause', { isEnded: true }).catch(() => {});
 
             return null;
         });
@@ -336,6 +381,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     }, [broadcastState]);
 
     const bypassLimit = useCallback(() => {
+        // Mark that user just acted — grace period prevents poll from overwriting this
+        lastActionRef.current = Date.now();
         setTimer(prev => {
             if (!prev) return prev;
             const next: TimerState = {

@@ -8,6 +8,7 @@ import { Task } from '../models/Task.model';
 import { DaySession } from '../models/DaySession.model';
 import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
 import { getWorkDayLabel } from '../../../utils/intervalUtils';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
 
 // ── Date helper ────────────────────────────────────────────────────────────────
 /** Returns the 6am-IST (00:30 UTC) work day label 'YYYY-MM-DD'. Used as the dateKey for DaySessions. */
@@ -106,7 +107,10 @@ export const getIndividualTasks = asyncHandler(
                 : typeof roleRaw === 'object' && roleRaw
                     ? String((roleRaw as any).name || '').toLowerCase()
                     : '';
-        const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        const isGlobalAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        const isPmAdmin = hasModuleAdminAccess(req.user, 'projectManagement');
+        const isHrAdmin = hasModuleAdminAccess(req.user, 'hrms') || hasModuleViewAccess(req.user, 'hrms');
+        const isAdmin = isGlobalAdmin || isPmAdmin || isHrAdmin;
         const date = typeof req.query.date === 'string' ? req.query.date : undefined;
 
         const tasks = await taskService.getIndividualTasks(userId, isAdmin, date);

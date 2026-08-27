@@ -134,6 +134,17 @@ function hasPartnerEmployeeModuleAccess(
     if (!allowed) return <Navigate to="/dashboard" replace />;
     return <>{children}</>;
   }
+
+  /** Allows access if user is admin of either Project Management OR has HR role/HRMS access */
+  function HrmsOrPmAdminRoute({ children }: { children: React.ReactNode }) {
+    const user = useAppSelector((state) => state.auth.user);
+    const isPmAdmin = hasModuleAdminAccess(user, 'projectManagement');
+    // Check both admin access AND view access for HRMS — HR users with versioned permissions
+    // may have view access but not adminAccess===true, so we check both.
+    const isHrAdmin = hasModuleAdminAccess(user, 'hrms') || hasModuleViewAccess(user, 'hrms');
+    if (!isPmAdmin && !isHrAdmin) return <Navigate to="/dashboard" replace />;
+    return <>{children}</>;
+  }
   
   function getHrmsSelfHome(user: any): string {
     const submodulePaths: Array<[HrmsSelfSubmodule, string]> = [
@@ -176,7 +187,7 @@ export default function DashboardRoutes({ location }: { location?: Partial<Locat
 
           {/* Project Management Module */}
           <Route path="/projects" element={<ModuleAccessRoute moduleKey="projectManagement"><PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectsPage />)}</PartnerEmployeeModuleRoute></ModuleAccessRoute>} />
-          <Route path="/tasks/daily-overview" element={<ModuleAccessRoute moduleKey="projectManagement" requireAdmin><PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<DailyOverviewPage />)}</PartnerEmployeeModuleRoute></ModuleAccessRoute>} />
+          <Route path="/tasks/daily-overview" element={<HrmsOrPmAdminRoute>{loadable(<DailyOverviewPage />)}</HrmsOrPmAdminRoute>} />
           <Route path="/tasks" element={<ModuleAccessRoute moduleKey="projectManagement"><PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<GlobalTasksPage />)}</PartnerEmployeeModuleRoute></ModuleAccessRoute>} />
           <Route path="/reports" element={<ModuleAccessRoute moduleKey="projectManagement"><PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ReportsPage />)}</PartnerEmployeeModuleRoute></ModuleAccessRoute>} />
           <Route path="/projects/new" element={<ModuleAccessRoute moduleKey="projectManagement" requireAdmin><PartnerEmployeeModuleRoute moduleKey="projectManagement">{loadable(<ProjectFormPage />)}</PartnerEmployeeModuleRoute></ModuleAccessRoute>} />

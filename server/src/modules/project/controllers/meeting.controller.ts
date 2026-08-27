@@ -7,6 +7,7 @@ import { GoogleIntegration } from '../../integration/models/GoogleIntegration.mo
 import { getValidAccessToken } from '../../integration/services/google.oauth.service';
 import { createCalendarEventWithMeet } from '../../integration/services/google.calendar.service';
 import { User } from '../../auth/models/User.model';
+import { hasModuleAdminAccess, hasModuleViewAccess } from '../../../utils/moduleAccess.util';
 
 async function processMeetLinkGeneration(req: Request, userId: string): Promise<{ meetLink?: string, eventId?: string, conferenceId?: string }> {
     if (!req.body.generateMeetLink) return {};
@@ -164,7 +165,10 @@ export const getIndividualMeetings = asyncHandler(
                 : typeof roleRaw === 'object' && roleRaw
                     ? String((roleRaw as any).name || '').toLowerCase()
                     : '';
-        const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        const isGlobalAdmin = ['super-admin', 'super_admin', 'admin'].includes(userRole);
+        const isPmAdmin = hasModuleAdminAccess(req.user, 'projectManagement');
+        const isHrAdmin = hasModuleAdminAccess(req.user, 'hrms') || hasModuleViewAccess(req.user, 'hrms');
+        const isAdmin = isGlobalAdmin || isPmAdmin || isHrAdmin;
 
         const meetings = await meetingService.getIndividualMeetings(
             userId,
