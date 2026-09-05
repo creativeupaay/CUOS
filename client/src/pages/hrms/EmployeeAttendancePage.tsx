@@ -55,9 +55,15 @@ export default function EmployeeAttendancePage() {
     const monthName = new Date(year, month - 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
     const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
 
-    // Count stats for the month
+    // Count stats for the month (excluding Sundays)
     const stats = { present: 0, wfh: 0, 'half-day': 0, 'on-leave': 0, absent: 0 };
-    Object.values(statusMap).forEach(s => { if (s in stats) (stats as any)[s]++; });
+    Object.entries(statusMap).forEach(([dateStr, s]) => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dayOfWeek = new Date(y, m - 1, d).getDay();
+        if (dayOfWeek !== 0 && s in stats) {
+            (stats as any)[s]++;
+        }
+    });
 
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
@@ -139,21 +145,20 @@ export default function EmployeeAttendancePage() {
                                 <div key={i}
                                     className="rounded-lg p-1.5 min-h-[64px] flex flex-col"
                                     style={{
-                                        backgroundColor: cfg ? cfg.bg + '80' : (isSunday ? '#FFF5F5' : 'var(--color-bg-subtle)'),
+                                        backgroundColor: isSunday ? '#FFF5F5' : (cfg ? cfg.bg + '80' : 'var(--color-bg-subtle)'),
                                         border: isToday ? '2px solid var(--color-primary)' : '1px solid var(--color-border-default)',
                                     }}>
                                     <span className="text-xs font-semibold"
                                         style={{ color: isToday ? 'var(--color-primary)' : isSunday ? '#EF4444' : 'var(--color-text-secondary)' }}>
                                         {dayNum}
                                     </span>
-                                    {cfg && (
+                                    {isSunday ? (
+                                        <span className="text-xs mt-auto" style={{ color: '#EF4444' }}>🔴</span>
+                                    ) : cfg ? (
                                         <span className="text-xs mt-auto font-medium" style={{ color: cfg.color }}>
                                             {cfg.emoji}
                                         </span>
-                                    )}
-                                    {isSunday && !cfg && (
-                                        <span className="text-xs mt-auto" style={{ color: '#EF4444' }}>🔴</span>
-                                    )}
+                                    ) : null}
                                 </div>
                             );
                         })}

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
-import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
+import { getRoleName } from '@/utils/modulePermissions';
 import {
     Plus, Search, Pause,
     Calendar, RefreshCcw,
@@ -233,7 +233,7 @@ function TaskRow({
     onDelete: (t: GlobalTask) => void;
 }) {
     const totalSecs = (task.accumulatedSeconds || []).reduce((a, b) => a + b.seconds, 0);
-    const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== 'completed';
+    const isOverdue = task.deadline && !isNaN(new Date(task.deadline).getTime()) && new Date(task.deadline) < new Date() && task.status !== 'completed';
     const sc = getStatusCfg(task.status);
 
     return (
@@ -268,7 +268,7 @@ function TaskRow({
 
             {/* Due date */}
             <td className="py-2.5 px-3" style={{ minWidth: 110 }}>
-                {task.deadline ? (
+                {task.deadline && !isNaN(new Date(task.deadline).getTime()) ? (
                     <span
                         className="flex items-center gap-1 text-xs"
                         style={{ color: isOverdue ? '#EF4444' : 'var(--color-text-secondary)' }}
@@ -367,11 +367,11 @@ function GlobalTasksInner() {
 
     const currentUser = useSelector((state: RootState) => state.auth.user);
     const currentUserId = currentUser?._id;
-    // HR admins can also view the daily overview even if not PM admin.
-    // Use both adminAccess and viewAccess checks — versioned permission users may only have
-    // viewAccess for HRMS without the explicit adminAccess flag set.
-    const isHrAdmin = hasModuleAdminAccess(currentUser, 'hrms') || hasModuleViewAccess(currentUser, 'hrms');
-    const canSeeDailyOverview = isAdmin || isHrAdmin;
+    // Daily Overview is restricted to admin, super admin, and manager roles only.
+    // isAdmin already covers admin/super-admin/manager via hasModuleAdminAccess(projectManagement).
+    // We also do an explicit role name check for "manager" to cover versioned-permission users.
+    const isManager = getRoleName(currentUser?.role) === 'manager';
+    const canSeeDailyOverview = isAdmin || isManager;
 
     const [activeMainTab, setActiveMainTab] = useState<'my' | 'all' | 'my-meetings' | 'all-meetings' | 'board' | 'daily-overview'>('board');
     const [searchParams, setSearchParams] = useSearchParams();

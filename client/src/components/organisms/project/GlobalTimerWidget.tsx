@@ -7,9 +7,12 @@ import { useSetTimerStatusMutation } from '@/features/project/projectApi';
 import { useDocumentPiP } from '@/hooks/useDocumentPiP';
 import PipTimerWidget from './PipTimerWidget';
 import toast from 'react-hot-toast';
+import BreakButton from '@/components/organisms/BreakButton';
+import { useBreak } from '@/hooks/useBreakTimer';
 
 export default function GlobalTimerWidget() {
-    const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit, isSyncing } = useTimer();
+    const { timer, elapsed, isRunning, isHydrated, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit, isSyncing, daySessionMeta, refreshDaySession } = useTimer();
+    const { totalBreakElapsed, isOnBreak, endBreak, resetBreak } = useBreak();
     const [showLimitPopup, setShowLimitPopup] = useState(false);
     const [showEndDayPopup, setShowEndDayPopup] = useState(false);
     const [setTimerStatus] = useSetTimerStatusMutation();
@@ -18,8 +21,10 @@ export default function GlobalTimerWidget() {
         setTimerStatus({ status }).catch(() => {/* silent fail */ });
     };
 
-    // Auto-sync status on mount and when it changes (e.g., across tabs or page reloads)
+    // Auto-sync status only once initial hydration has settled and when status changes
     useEffect(() => {
+        if (!isHydrated) return;
+
         syncStatus(isRunning ? 'running' : 'paused');
 
         let intervalId: number | null = null;
@@ -33,7 +38,7 @@ export default function GlobalTimerWidget() {
         return () => {
             if (intervalId) clearInterval(intervalId);
         };
-    }, [isRunning]);
+    }, [isHydrated, isRunning]);
     const { isSupported, isPipOpen, pipContainer, openPiP, closePiP, resizePiP } = useDocumentPiP();
 
     useEffect(() => {
@@ -44,9 +49,28 @@ export default function GlobalTimerWidget() {
         }
     }, [isRunning, timer?.limitBypassed, elapsed, pauseTimer]);
 
-    const handleEndDay = () => {
+    // Keep day timer running while on break — only run after hydration has settled!
+    useEffect(() => {
+        if (!isHydrated) return;
+
+        if (isOnBreak && !isRunning) {
+            if (!timer) {
+                startTimer();
+                syncStatus('running');
+            } else {
+                resumeTimer();
+                syncStatus('running');
+            }
+        }
+    }, [isHydrated, isOnBreak, isRunning, timer, startTimer, resumeTimer]);
+
+    const handleEndDay = async () => {
+        if (isOnBreak) {
+            await endBreak();
+        }
         pauseTimer();
         syncStatus('paused');
+        await refreshDaySession();
         setShowEndDayPopup(true);
     };
 
@@ -65,8 +89,12 @@ export default function GlobalTimerWidget() {
         }
     };
 
-    const handleEndDayFromPip = () => {
+    const handleEndDayFromPip = async () => {
+        if (isOnBreak) {
+            await endBreak();
+        }
         pauseTimer();
+        await refreshDaySession();
         try {
             window.focus();
         } catch {
@@ -74,6 +102,30 @@ export default function GlobalTimerWidget() {
         }
         setShowEndDayPopup(true);
     };
+
+    // While initial hydration is in flight and there's no cached timer, render a safe loading state
+    if (!isHydrated && !timer) {
+        return (
+            <div className="flex items-center gap-1.5 p-1 rounded-full" style={{ backgroundColor: '#F8FAFC' }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 opacity-70" style={{ backgroundColor: 'var(--color-primary)' }}>
+                    <Loader2 size={16} className="animate-spin" />
+                </div>
+                <div className="bg-white rounded-full px-3 py-1">
+                    <span className="text-sm font-medium tabular-nums tracking-wide text-slate-400">
+                        --:--:--
+                    </span>
+                </div>
+                <button
+                    disabled
+                    className="px-4 py-1.5 rounded-full text-sm font-medium transition-colors opacity-50 cursor-not-allowed shrink-0"
+                    style={{ backgroundColor: '#E2E8F0', color: '#1E293B' }}
+                >
+                    End day
+                </button>
+                <BreakButton />
+            </div>
+        );
+    }
 
     if (!timer) {
         return (
@@ -104,6 +156,8 @@ export default function GlobalTimerWidget() {
                     End day
                 </button>
 
+                <BreakButton />
+
                 <button
                     onClick={handlePopOut}
                     title="Pop out floating timer"
@@ -132,8 +186,15 @@ export default function GlobalTimerWidget() {
         >
             {isRunning ? (
                 <button
-                    onClick={() => { pauseTimer(); syncStatus('paused'); }}
-                    title="Pause"
+                    onClick={() => {
+                        if (isOnBreak) {
+                            toast('Day timer stays on while on break', { icon: '☕' });
+                            return;
+                        }
+                        pauseTimer();
+                        syncStatus('paused');
+                    }}
+                    title={isOnBreak ? 'Timer stays running during break' : 'Pause'}
                     disabled={isSyncing}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: 'var(--color-primary)' }}
@@ -177,6 +238,8 @@ export default function GlobalTimerWidget() {
             >
                 End day
             </button>
+
+            <BreakButton />
 
             <button
                 onClick={handlePopOut}
@@ -239,10 +302,13 @@ export default function GlobalTimerWidget() {
             {showEndDayPopup && (
                 <GlobalEndDayContainer
                     timerSeconds={elapsed}
+                    breakSeconds={totalBreakElapsed}
+                    daySessionMeta={daySessionMeta}
                     onClose={() => setShowEndDayPopup(false)}
-                    onSuccess={() => {
+                    onSuccess={(allocatedMinutes?: number) => {
                         setShowEndDayPopup(false);
-                        stopTimer();
+                        resetBreak();
+                        stopTimer(allocatedMinutes);
                     }}
                 />
             )}

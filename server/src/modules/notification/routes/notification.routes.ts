@@ -28,4 +28,7 @@ router.delete('/:id', notificationController.deleteNotification);
 // POST /api/v1/notifications/ping - Admin pings an employee
 router.post('/ping', notificationController.pingUser);
 
+// POST /api/v1/notifications/break - Employee broadcasts a break notification
+router.post('/break', notificationController.broadcastBreak);
+
 export default router;

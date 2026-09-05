@@ -5,7 +5,8 @@ import type { RootState } from '@/app/store';
 import { useGetIndividualTasksQuery } from '@/features/project';
 import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { useGetUsersQuery } from '@/features/auth/authApi';
-import { hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
+import { useGetLeavesQuery } from '@/features/hrms';
+import { hasModuleAdminAccess, hasModuleViewAccess, getRoleName } from '@/utils/modulePermissions';
 import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer } from 'lucide-react';
 import type { Task } from '@/features/project';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
@@ -344,6 +345,44 @@ export default function DailyOverviewPage() {
     const { data: usersData } = useGetUsersQuery();
     const allUsers = useMemo(() => ((usersData?.data as any)?.users ?? []) as any[], [usersData]);
 
+    // Fetch approved leaves — used to hide employees who are on leave for the selected date
+    const { data: leavesData } = useGetLeavesQuery({ status: 'approved', limit: 500 });
+    const allLeaves = useMemo(() => (leavesData?.data?.leaves ?? []) as any[], [leavesData]);
+
+    // Build a Set of userId strings for employees on leave on the selected date
+    const onLeaveUserIds = useMemo(() => {
+        const ids = new Set<string>();
+        const selDate = new Date(selectedDate + 'T12:00:00');
+        if (selDate.getDay() === 0) return ids; // Sunday is weekly off, not a leave day
+        allLeaves.forEach(leave => {
+            if (leave.status !== 'approved') return;
+            const start = new Date(leave.startDate);
+            const end = new Date(leave.endDate);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(23, 59, 59, 999);
+            if (selDate >= start && selDate <= end) {
+                // employeeId may be a populated Employee object with userId
+                const emp = leave.employeeId;
+                if (emp && typeof emp === 'object' && emp.userId) {
+                    const uid = typeof emp.userId === 'object' ? emp.userId._id : emp.userId;
+                    if (uid) ids.add(String(uid));
+                }
+            }
+        });
+        return ids;
+    }, [allLeaves, selectedDate]);
+
+    // Build a Set of user IDs that are partners (role name = 'partner')
+    const partnerUserIds = useMemo(() => {
+        const ids = new Set<string>();
+        allUsers.forEach(u => {
+            if (getRoleName(u.role) === 'partner') {
+                ids.add(String(u._id));
+            }
+        });
+        return ids;
+    }, [allUsers]);
+
     // Admin ping
     const [pingUser] = usePingUserMutation();
     const [pingingUserId, setPingingUserId] = useState<string | null>(null);
@@ -441,15 +480,34 @@ export default function DailyOverviewPage() {
             });
         }
 
-        // Add all active users so admins can ping them even if they have no tasks/meetings
+        // Add all active, non-partner users so admins can ping them even if they have no tasks/meetings
         allUsers.forEach(user => {
-            if (user.isActive && !map.has(user._id)) {
+            const roleNameStr = getRoleName(user.role);
+            const isPartner = roleNameStr === 'partner';
+            if (user.isActive && !isPartner && !map.has(user._id)) {
                 map.set(user._id, { user, tasks: [], meetings: [] });
             }
         });
 
+        // Remove entries for inactive users, partners, or users on leave
+        for (const [id, _] of map) {
+            // Check against the full allUsers list for isActive / role
+            const fullUser = allUsers.find(u => String(u._id) === id);
+            if (fullUser) {
+                const roleStr = getRoleName(fullUser.role);
+                if (!fullUser.isActive || roleStr === 'partner') {
+                    map.delete(id);
+                    continue;
+                }
+            }
+            // Remove users on approved leave for the selected date
+            if (onLeaveUserIds.has(id)) {
+                map.delete(id);
+            }
+        }
+
         return Array.from(map.values());
-    }, [allTasks, allMeetings, selectedDate, allUsers]);
+    }, [allTasks, allMeetings, selectedDate, allUsers, onLeaveUserIds, partnerUserIds]);
 
     // Apply status filter on tasks within each card
     const grouped = useMemo(() => {

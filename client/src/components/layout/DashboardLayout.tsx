@@ -2,8 +2,8 @@ import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Menu } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Menu, PanelLeftOpen } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
@@ -12,6 +12,7 @@ import { useNotificationSocket } from '@/features/notification/hooks/useNotifica
 import { Toaster } from 'react-hot-toast';
 import TabBar from './TabBar';
 import DashboardRoutes from './DashboardRoutes';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 /**
  * DashboardLayout
  *
@@ -130,6 +131,37 @@ export default function DashboardLayout() {
     const effectivePathname = backgroundLocation?.pathname || location.pathname;
     const pageTitle = resolveTitle(effectivePathname);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        try {
+            return localStorage.getItem('cuos_sidebar_collapsed') === 'true';
+        } catch {
+            return false;
+        }
+    });
+
+    const toggleSidebar = useCallback(() => {
+        setSidebarCollapsed((prev) => {
+            const next = !prev;
+            try {
+                localStorage.setItem('cuos_sidebar_collapsed', String(next));
+            } catch { /* ignore */ }
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check if user is inside an input, textarea or contenteditable element
+            const tag = (e.target as HTMLElement)?.tagName;
+            const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable;
+            if (!isEditing && (e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === '[')) {
+                e.preventDefault();
+                toggleSidebar();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [toggleSidebar]);
 
     const initials = user?.name
         ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -196,7 +228,7 @@ export default function DashboardLayout() {
             />
             {/* ── Desktop Sidebar ─────────────────────────────────── */}
             <div className="hidden lg:block print:hidden">
-                <Sidebar />
+                <Sidebar isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
             </div>
 
             {/* ── Mobile Sidebar — always mounted, shown via CSS transform ────────
@@ -220,7 +252,7 @@ export default function DashboardLayout() {
             </aside>
 
             {/* ── Content area ───────────────────────────────────────── */}
-            <div className="lg:ml-[var(--sidebar-width)] print:ml-0">
+            <div className={`${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-[var(--sidebar-width)]'} print:ml-0 transition-[margin-left] duration-300 ease-in-out`}>
 
                 {/* ── Sticky top bar ─────────────────────────────────── */}
                 <header
@@ -235,7 +267,7 @@ export default function DashboardLayout() {
                     }}
                 >
                     {/* Page title */}
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                         {/* Mobile menu toggle */}
                         <button
                             onClick={() => setMobileSidebarOpen(true)}
@@ -245,6 +277,19 @@ export default function DashboardLayout() {
                         >
                             <Menu size={20} />
                         </button>
+
+                        {/* Desktop sidebar expand toggle (when collapsed) */}
+                        {sidebarCollapsed && (
+                            <button
+                                onClick={toggleSidebar}
+                                className="hidden lg:flex items-center justify-center p-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors shrink-0 -ml-2 mr-1"
+                                title="Open sidebar (Ctrl+B)"
+                                aria-label="Open sidebar"
+                            >
+                                <PanelLeftOpen size={20} />
+                            </button>
+                        )}
+
                         <h1
                             className="text-base font-bold truncate"
                             style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)', letterSpacing: '-0.01em' }}
@@ -253,9 +298,9 @@ export default function DashboardLayout() {
                         </h1>
                     </div>
 
-                    {/* Right: timer + profile + notifications */}
+                    {/* Right: timer (contains break) + profile + notifications */}
                     <div className="flex items-center justify-end gap-4 flex-1">
-                        {/* Timer */}
+                        {/* Timer — BreakButton is rendered inside GlobalTimerWidget */}
                         <div className="shrink-0">
                             <GlobalTimerWidget />
                         </div>
@@ -301,15 +346,17 @@ export default function DashboardLayout() {
                             style={{ minHeight: 'calc(100vh - var(--topbar-height) - 40px)' }}
                         >
                             <div className={isGameRoute ? 'p-0 h-[calc(100vh-var(--topbar-height)-40px)]' : 'px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7'}>
-                                {tabs.length === 0 || !activeTabId ? (
-                                    <DashboardRoutes />
-                                ) : null}
-        
-                                {tabs.map(tab => (
-                                        <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%' }}>
-                                            <DashboardRoutes location={tab.url + tab.search} />
-                                        </div>
-                                ))}
+                                <ErrorBoundary>
+                                    {tabs.length === 0 || !activeTabId ? (
+                                        <DashboardRoutes />
+                                    ) : null}
+            
+                                    {tabs.map(tab => (
+                                            <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%' }}>
+                                                <DashboardRoutes location={tab.url + tab.search} />
+                                            </div>
+                                    ))}
+                                </ErrorBoundary>
                             </div>
                         </main>
                     );

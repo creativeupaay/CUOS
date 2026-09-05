@@ -153,7 +153,7 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
 
     const { days, excludedSundays, excludedHolidays } = computeWorkingDays();
 
-    const checkOverlap = () => {
+    const checkExactDuplicate = () => {
         if (!form.startDate) return false;
         const startStr = form.startDate;
         const endStr = durationTab === 'multiple' && form.endDate ? form.endDate : form.startDate;
@@ -172,13 +172,41 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
 
         return leaves.some((l) => {
             if (l.status === 'rejected' || l.status === 'cancelled') return false;
+            if (l.type !== form.type) return false;
+            const lStart = new Date(l.startDate);
+            const lEnd = new Date(l.endDate);
+            return lStart.getTime() === startUtc.getTime() && lEnd.getTime() === endUtc.getTime();
+        });
+    };
+
+    const getOverlappingLeaves = () => {
+        if (!form.startDate) return [];
+        const startStr = form.startDate;
+        const endStr = durationTab === 'multiple' && form.endDate ? form.endDate : form.startDate;
+
+        const sy = parseInt(startStr.slice(0, 4), 10);
+        const sm = parseInt(startStr.slice(5, 7), 10);
+        const sd = parseInt(startStr.slice(8, 10), 10);
+        const ey = parseInt(endStr.slice(0, 4), 10);
+        const em = parseInt(endStr.slice(5, 7), 10);
+        const ed = parseInt(endStr.slice(8, 10), 10);
+
+        if (isNaN(sy) || isNaN(ey)) return [];
+
+        const startUtc = new Date(Date.UTC(sy, sm - 1, sd));
+        const endUtc = new Date(Date.UTC(ey, em - 1, ed));
+
+        return leaves.filter((l) => {
+            if (l.status === 'rejected' || l.status === 'cancelled') return false;
             const lStart = new Date(l.startDate);
             const lEnd = new Date(l.endDate);
             return lStart <= endUtc && lEnd >= startUtc;
         });
     };
 
-    const isOverlapping = checkOverlap();
+    const isExactDuplicate = checkExactDuplicate();
+    const overlappingLeaves = getOverlappingLeaves();
+    const isChangeRequest = !isExactDuplicate && overlappingLeaves.length > 0;
 
     // Block submission when the user selects Paid Leave but requests more days than remaining balance.
     // We do not silently split paid/unpaid on the client — the user must explicitly choose Unpaid instead.
@@ -188,10 +216,36 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            let finalStart = form.startDate;
+            let finalEnd = durationTab === 'multiple' ? (form.endDate || form.startDate) : form.startDate;
+
+            if (durationTab === 'multiple' && finalStart && finalEnd) {
+                const sDate = new Date(finalStart);
+                const eDate = new Date(finalEnd);
+
+                // If start date is Sunday, advance to next working day
+                const sCur = new Date(sDate);
+                while (sCur.getUTCDay() === 0 && sCur <= eDate) {
+                    sCur.setUTCDate(sCur.getUTCDate() + 1);
+                }
+                if (sCur <= eDate) {
+                    finalStart = sCur.toISOString().split('T')[0];
+                }
+
+                // If end date is Sunday, move back to previous working day
+                const eCur = new Date(eDate);
+                while (eCur.getUTCDay() === 0 && eCur >= new Date(finalStart)) {
+                    eCur.setUTCDate(eCur.getUTCDate() - 1);
+                }
+                if (eCur >= new Date(finalStart)) {
+                    finalEnd = eCur.toISOString().split('T')[0];
+                }
+            }
+
             const payload = {
                 type: form.type,
-                startDate: form.startDate,
-                endDate: durationTab === 'multiple' ? (form.endDate || form.startDate) : form.startDate,
+                startDate: finalStart,
+                endDate: finalEnd,
                 days,
                 reason: form.reason || 'Leave requested',
                 // WFH is treated as a separate category — not paid, not unpaid
@@ -331,6 +385,11 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                                                 color: 'var(--color-text-primary)',
                                             }}
                                         />
+                                        {form.startDate && new Date(form.startDate).getUTCDay() === 0 && (
+                                            <p className="text-xs text-red-500 font-medium mt-1">
+                                                Sunday is a weekly off. Leaves cannot be applied on Sunday.
+                                            </p>
+                                        )}
                                     </div>
                                     <label
                                         className="flex items-center gap-2 cursor-pointer w-fit text-sm"
@@ -589,8 +648,8 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                                         </p>
                                     </div>
 
-                                    {/* Overlap warning */}
-                                    {isOverlapping && (
+                                    {/* Duplicate request warning */}
+                                    {isExactDuplicate && (
                                         <div
                                             className="p-3 rounded-lg border text-sm"
                                             style={{
@@ -599,9 +658,33 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                                                 color: '#991B1B',
                                             }}
                                         >
-                                            <strong className="block mb-1">Error:</strong>
-                                            You already have a pending or approved leave application for the selected
-                                            dates.
+                                            <strong className="block mb-1">Duplicate Request:</strong>
+                                            You already have a {overlappingLeaves[0]?.status || 'pending'} leave request for these dates with the same leave type ({TYPE_CFG[form.type]?.label || form.type}).
+                                        </div>
+                                    )}
+
+                                    {/* Notice when requesting to change leave type */}
+                                    {isChangeRequest && (
+                                        <div
+                                            className="p-3.5 rounded-xl border text-sm space-y-1.5"
+                                            style={{
+                                                backgroundColor: '#EFF6FF',
+                                                borderColor: '#BFDBFE',
+                                                color: '#1E40AF',
+                                            }}
+                                        >
+                                            <div className="font-semibold flex items-center gap-1.5">
+                                                <span>🔄 Request Leave Type Change</span>
+                                            </div>
+                                            <p className="text-xs leading-relaxed opacity-90">
+                                                You have an existing {overlappingLeaves.map((l, idx) => (
+                                                    <span key={l._id}>
+                                                        {idx > 0 && ', '}
+                                                        <strong>{TYPE_CFG[l.type]?.label || l.type}</strong> ({l.status})
+                                                    </span>
+                                                ))} for this date.
+                                                Submitting will request permission to change this day to <strong>{TYPE_CFG[form.type]?.label || form.type}</strong>.
+                                            </p>
                                         </div>
                                     )}
 
@@ -661,12 +744,12 @@ export default function ApplyLeaveModal({ onClose }: ApplyLeaveModalProps) {
                             </button>
                             <button
                                 type="submit"
-                                disabled={isLoading || days === 0 || isOverlapping || isExceedingBalance}
+                                disabled={isLoading || days === 0 || isExactDuplicate || isExceedingBalance}
                                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-95"
-                                style={{ backgroundColor: 'var(--color-primary)' }}
+                                style={{ backgroundColor: isChangeRequest ? '#2563EB' : 'var(--color-primary)' }}
                             >
                                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : null}
-                                Apply Leave
+                                {isChangeRequest ? '🔄 Request Change' : 'Apply Leave'}
                             </button>
                         </div>
                     </div>

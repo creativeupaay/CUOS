@@ -14,6 +14,7 @@ import {
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
     Folder, FolderOpen, Grid2X2, Building2, LogOut, Gamepad2, Trophy,
+    PanelLeftClose,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 
@@ -720,9 +721,13 @@ const ProjectFoldersNav = memo(({
 export default function Sidebar({
     onNavigate,
     mobile = false,
+    isCollapsed = false,
+    onToggleCollapse,
 }: {
     onNavigate?: () => void;
     mobile?: boolean;
+    isCollapsed?: boolean;
+    onToggleCollapse?: () => void;
 }) {
 
     const navigate = useNavigate();
@@ -800,7 +805,11 @@ export default function Sidebar({
 
     return (
         <aside
-            className={mobile ? 'h-full flex flex-col' : 'fixed top-0 left-0 h-screen flex flex-col'}
+            className={
+                mobile 
+                    ? 'h-full flex flex-col' 
+                    : `fixed top-0 left-0 h-screen flex flex-col transition-transform duration-300 ease-in-out ${isCollapsed ? '-translate-x-full' : 'translate-x-0'}`
+            }
             style={{
                 width: mobile ? '100%' : 'var(--sidebar-width)',
                 zIndex: 40,
@@ -812,21 +821,47 @@ export default function Sidebar({
         >
             {/* ── Brand ─────────────────────────────────────────────── */}
             <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                <div className="flex items-center gap-2.5 mb-4">
-                    {isPartner && partnerCompanyLogo ? (
-                        <img
-                            src={partnerCompanyLogo}
-                            alt={partnerCompanyName || 'Company Logo'}
-                            className="h-8 max-w-[120px] object-contain"
-                        />
-                    ) : (
-                        <>
-                            <img src="/company-logo2.png" alt="Company Logo" className="h-8 max-w-[120px] object-contain shrink-0" />
-                            <div>
-                                <div className="font-bold text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
-                                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
-                            </div>
-                        </>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        {isPartner && partnerCompanyLogo ? (
+                            <img
+                                src={partnerCompanyLogo}
+                                alt={partnerCompanyName || 'Company Logo'}
+                                className="h-8 max-w-[120px] object-contain"
+                            />
+                        ) : (
+                            <>
+                                <img src="/company-logo2.png" alt="Company Logo" className="h-8 max-w-[120px] object-contain shrink-0" />
+                                <div>
+                                    <div className="font-bold text-sm truncate" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
+                                    <div className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {!mobile && onToggleCollapse && (
+                        <button
+                            type="button"
+                            onClick={onToggleCollapse}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
+                            title="Close sidebar (Ctrl+B)"
+                            aria-label="Close sidebar"
+                        >
+                            <PanelLeftClose size={18} />
+                        </button>
+                    )}
+
+                    {mobile && onNavigate && (
+                        <button
+                            type="button"
+                            onClick={onNavigate}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
+                            title="Close navigation"
+                            aria-label="Close navigation"
+                        >
+                            <PanelLeftClose size={18} />
+                        </button>
                     )}
                 </div>
 

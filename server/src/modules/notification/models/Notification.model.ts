@@ -17,7 +17,8 @@ export type NotificationType =
     | 'document_access_granted'
     | 'note_mentioned'
     | 'fixed_expense_approval'
-    | 'admin_ping';
+    | 'admin_ping'
+    | 'break_started';
 export interface INotification extends Document {
     _id: Types.ObjectId;
     userId: Types.ObjectId;
@@ -60,6 +61,7 @@ const NotificationSchema = new Schema<INotification>(
                 'note_mentioned',
                 'fixed_expense_approval',
                 'admin_ping',
+                'break_started',
             ],
             index: true,
         },

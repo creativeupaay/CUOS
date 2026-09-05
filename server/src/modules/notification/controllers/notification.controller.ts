@@ -170,3 +170,41 @@ export const pingUser = asyncHandler(async (req: Request, res: Response) => {
         message: `Ping sent to user successfully`,
     });
 });
+
+// Broadcast a break notification — any authenticated employee can call this.
+// Only 'other' breaks emit a notification to all internal users.
+export const broadcastBreak = asyncHandler(async (req: Request, res: Response) => {
+    const userId = requireUserId(req);
+
+    const { breakType, reason } = req.body as {
+        breakType: 'lunch' | 'tea' | 'other';
+        reason?: string;
+    };
+
+    if (!breakType || !['lunch', 'tea', 'other'].includes(breakType)) {
+        throw new AppError('breakType must be one of: lunch, tea, other', 400);
+    }
+
+    if (breakType === 'other') {
+        if (!reason?.trim()) {
+            throw new AppError('A reason is required for "other" breaks', 400);
+        }
+
+        const userRecord = await User.findById(userId).select('name').lean();
+        const userName = (userRecord as any)?.name || 'Someone';
+        const firstName = userName.trim().split(/[\s-]/)[0];
+
+        await notificationService.notifyInternalUsers({
+            type: 'break_started',
+            title: `🛑 ${firstName} is on a break`,
+            message: `${userName} stepped away: ${reason.trim()}`,
+            metadata: { breakType, reason: reason.trim(), userId },
+        });
+    }
+
+    res.json({
+        success: true,
+        message: 'Break logged successfully',
+        data: { breakType },
+    });
+});

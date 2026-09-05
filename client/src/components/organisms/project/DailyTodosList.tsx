@@ -82,8 +82,10 @@ function GroupCollapsible({
                                     let isOverdue = false;
                                     if (task.deadline && task.status !== 'completed') {
                                         const deadlineDate = new Date(task.deadline);
-                                        deadlineDate.setHours(23, 59, 59, 999);
-                                        isOverdue = deadlineDate < new Date();
+                                        if (!isNaN(deadlineDate.getTime())) {
+                                            deadlineDate.setHours(23, 59, 59, 999);
+                                            isOverdue = deadlineDate < new Date();
+                                        }
                                     }
 
                                     return (
@@ -146,7 +148,10 @@ function GroupCollapsible({
                                                         color: isOverdue ? '#EF4444' : '#4B5563',
                                                         padding: '2px 4px'
                                                     }}
-                                                    value={task.deadline ? new Date(task.deadline).toISOString().split('T')[0] : ''}
+                                                    value={task.deadline ? (() => {
+                                                        const d = new Date(task.deadline);
+                                                        return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+                                                    })() : ''}
                                                     onChange={(e) => updateTask(task._projectId, task._id, { deadline: e.target.value })}
                                                 />
                                             </td>

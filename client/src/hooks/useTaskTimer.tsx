@@ -10,17 +10,27 @@ export interface TimerState {
     dateKey?: string;        // YYYY-MM-DD for the work day
 }
 
+export interface DaySessionMeta {
+    lastEndedAccumulated: number;
+    lastEndedBreakAccumulated: number;
+    previouslyLoggedMinutes: number;
+    isEnded: boolean;
+}
+
 export interface TimerContextValue {
     timer: TimerState | null;
     elapsed: number;          // total seconds elapsed (accumulated + current run)
     isRunning: boolean;
+    isHydrated: boolean;      // true once initial server hydration has completed
     startTimer: () => void;
     pauseTimer: () => void;
     resumeTimer: () => void;
-    stopTimer: () => TimerState | null;  // returns snapshot then clears
+    stopTimer: (allocatedMinutes?: number) => TimerState | null;  // returns snapshot then clears
     clearTimer: () => void;
     bypassLimit: () => void;
     isSyncing: boolean;       // true while communicating with server
+    daySessionMeta: DaySessionMeta | null;
+    refreshDaySession: () => Promise<DaySessionMeta | null>;
 }
 
 const STORAGE_KEY = 'cuos_global_timer';
@@ -71,7 +81,7 @@ function saveToStorage(state: TimerState | null) {
 export function calcElapsed(timer: TimerState | null): number {
     if (!timer) return 0;
     if (timer.status === 'paused') return timer.accumulated;
-    const runSeconds = Math.floor((Date.now() - timer.startedAt) / 1000);
+    const runSeconds = Math.max(0, Math.floor((Date.now() - timer.startedAt) / 1000));
     const total = timer.accumulated + runSeconds;
     if (!timer.limitBypassed && total > LIMIT_SECONDS) {
         return LIMIT_SECONDS;
@@ -84,12 +94,16 @@ function sessionToTimer(session: {
     startedAt: number | null;
     status: 'running' | 'paused';
     limitBypassed: boolean;
-}): TimerState {
+    isEnded?: boolean;
+}): TimerState | null {
+    if (session.isEnded) {
+        return null;
+    }
     return {
         startedAt: session.startedAt ?? Date.now(),
-        accumulated: session.accumulated,
+        accumulated: session.accumulated || 0,
         status: session.status,
-        limitBypassed: session.limitBypassed,
+        limitBypassed: session.limitBypassed || false,
         dateKey: getTodayKey(),
     };
 }
@@ -99,12 +113,34 @@ const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhos
 
 async function apiCall(method: string, path: string, body?: any): Promise<any> {
     try {
-        const res = await fetch(`${API_BASE}${path}`, {
+        let res = await fetch(`${API_BASE}${path}`, {
             method,
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: body ? JSON.stringify(body) : undefined,
         });
+
+        // If access token expired (401), attempt a single refresh and retry
+        if (res.status === 401 && !path.includes('/auth/')) {
+            try {
+                const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                if (refreshRes.ok) {
+                    res = await fetch(`${API_BASE}${path}`, {
+                        method,
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body ? JSON.stringify(body) : undefined,
+                    });
+                }
+            } catch {
+                // Ignore refresh failure
+            }
+        }
+
         if (!res.ok) return null;
         const json = await res.json();
         return json?.data ?? null;
@@ -119,12 +155,44 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     const [timer, setTimer] = useState<TimerState | null>(loadFromStorage);
     const [elapsed, setElapsed] = useState<number>(() => calcElapsed(loadFromStorage()));
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isHydrated, setIsHydrated] = useState(false);
+    const [daySessionMeta, setDaySessionMeta] = useState<DaySessionMeta | null>(null);
     const intervalRef = useRef<number | null>(null);
     const syncPollRef = useRef<number | null>(null);
     const broadcastRef = useRef<BroadcastChannel | null>(null);
+    const timerRef = useRef<TimerState | null>(timer);
+    timerRef.current = timer;
     // Track when the user last performed a local timer action (start/pause/resume/bypass)
     // to prevent the server poll from overwriting a fresh local state
     const lastActionRef = useRef<number>(0);
+
+    const applySessionMeta = useCallback((session: any) => {
+        if (!session) return;
+        setDaySessionMeta({
+            lastEndedAccumulated: session.lastEndedAccumulated || 0,
+            lastEndedBreakAccumulated: session.lastEndedBreakAccumulated || 0,
+            previouslyLoggedMinutes: session.previouslyLoggedMinutes || 0,
+            isEnded: session.isEnded || false,
+        });
+    }, []);
+
+    const refreshDaySession = useCallback(async (): Promise<DaySessionMeta | null> => {
+        try {
+            const session = await apiCall('GET', '/projects/day-session');
+            if (session) {
+                applySessionMeta(session);
+                return {
+                    lastEndedAccumulated: session.lastEndedAccumulated || 0,
+                    lastEndedBreakAccumulated: session.lastEndedBreakAccumulated || 0,
+                    previouslyLoggedMinutes: session.previouslyLoggedMinutes || 0,
+                    isEnded: session.isEnded || false,
+                };
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    }, [applySessionMeta]);
 
     // ── BroadcastChannel (cross-tab sync within same browser) ─────────────────
     useEffect(() => {
@@ -162,18 +230,30 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         (async () => {
             try {
                 const session = await apiCall('GET', '/projects/day-session');
-                if (cancelled || !session) return;
-
-                // Server has a session for today
-                const serverTimer = sessionToTimer(session);
-                setTimer(serverTimer);
-                saveToStorage(serverTimer);
+                if (cancelled) return;
+                if (session) {
+                    applySessionMeta(session);
+                    // Server has a session for today
+                    const serverTimer = sessionToTimer(session);
+                    if (serverTimer) {
+                        setTimer(serverTimer);
+                        saveToStorage(serverTimer);
+                    } else if (session.isEnded) {
+                        // User previously ended the day: clear local timer so it doesn't run
+                        setTimer(null);
+                        saveToStorage(null);
+                    }
+                }
             } catch {
                 // Network offline — use localStorage cache (already loaded in useState)
+            } finally {
+                if (!cancelled) {
+                    setIsHydrated(true);
+                }
             }
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [applySessionMeta]);
 
     // ── Keep elapsed in sync ──────────────────────────────────────────────────
     useEffect(() => {
@@ -244,6 +324,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 const serverIsNewer = serverStartedAt > localStartedAt;
 
                 const serverTimer = sessionToTimer(session);
+                if (!serverTimer) return;
 
                 if (session.status === 'running') {
                     // Server is also running — only sync if there's significant accumulated drift
@@ -292,36 +373,37 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         apiCall('POST', '/projects/day-session/start')
             .then((session) => {
                 if (session) {
+                    applySessionMeta(session);
                     // Trust server's accumulated value (may differ if another session ran)
                     const serverTimer = sessionToTimer(session);
-                    setTimer(serverTimer);
-                    saveToStorage(serverTimer);
-                    broadcastState(serverTimer);
+                    if (serverTimer) {
+                        setTimer(serverTimer);
+                        saveToStorage(serverTimer);
+                        broadcastState(serverTimer);
+                    }
                 }
             })
             .catch(() => { /* network offline — local state is fine */ })
             .finally(() => setIsSyncing(false));
-    }, [timer, broadcastState]);
+    }, [timer, broadcastState, applySessionMeta]);
 
     const pauseTimer = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
         lastActionRef.current = Date.now();
-        setTimer(prev => {
-            if (!prev || prev.status !== 'running') return prev;
-            const runSeconds = Math.floor((Date.now() - prev.startedAt) / 1000);
-            let accumulated = prev.accumulated + runSeconds;
-            if (!prev.limitBypassed && accumulated > LIMIT_SECONDS) {
-                accumulated = LIMIT_SECONDS;
-            }
-            const next: TimerState = { ...prev, accumulated, status: 'paused' };
-            saveToStorage(next);
-            broadcastState(next);
+        const prev = timerRef.current;
+        if (!prev || prev.status !== 'running') return;
+        const runSeconds = Math.floor((Date.now() - prev.startedAt) / 1000);
+        let accumulated = prev.accumulated + runSeconds;
+        if (!prev.limitBypassed && accumulated > LIMIT_SECONDS) {
+            accumulated = LIMIT_SECONDS;
+        }
+        const next: TimerState = { ...prev, accumulated, status: 'paused' };
+        setTimer(next);
+        saveToStorage(next);
+        broadcastState(next);
 
-            // Fire-and-forget server sync
-            apiCall('PATCH', '/projects/day-session/pause').catch(() => {});
-
-            return next;
-        });
+        // Fire-and-forget server sync
+        apiCall('PATCH', '/projects/day-session/pause', { accumulated }).catch(() => {});
     }, [broadcastState]);
 
     const resumeTimer = useCallback(() => {
@@ -338,10 +420,13 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             apiCall('POST', '/projects/day-session/start')
                 .then((session) => {
                     if (session) {
+                        applySessionMeta(session);
                         const serverTimer = sessionToTimer(session);
-                        setTimer(serverTimer);
-                        saveToStorage(serverTimer);
-                        broadcastState(serverTimer);
+                        if (serverTimer) {
+                            setTimer(serverTimer);
+                            saveToStorage(serverTimer);
+                            broadcastState(serverTimer);
+                        }
                     }
                 })
                 .catch(() => {})
@@ -349,28 +434,35 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
             return next;
         });
-    }, [broadcastState]);
+    }, [broadcastState, applySessionMeta]);
 
-    const stopTimer = useCallback((): TimerState | null => {
-        let snapshot: TimerState | null = null;
-        setTimer(prev => {
-            if (!prev) return null;
-            const runSeconds = prev.status === 'running'
-                ? Math.floor((Date.now() - prev.startedAt) / 1000)
-                : 0;
-            let accumulated = prev.accumulated + runSeconds;
-            if (!prev.limitBypassed && accumulated > LIMIT_SECONDS) {
-                accumulated = LIMIT_SECONDS;
-            }
-            snapshot = { ...prev, accumulated, status: 'paused' };
-            saveToStorage(null);
-            broadcastState(null);
+    const stopTimer = useCallback((allocatedMinutes?: number): TimerState | null => {
+        const prev = timerRef.current;
+        const runSeconds = (prev && prev.status === 'running')
+            ? Math.floor((Date.now() - prev.startedAt) / 1000)
+            : 0;
+        let accumulated = (prev?.accumulated || 0) + runSeconds;
+        if (prev && !prev.limitBypassed && accumulated > LIMIT_SECONDS) {
+            accumulated = LIMIT_SECONDS;
+        }
+        const snapshot: TimerState | null = prev ? { ...prev, accumulated, status: 'paused' } : null;
 
-            // Send isEnded: true so server marks the session as fully ended (not just paused)
-            apiCall('PATCH', '/projects/day-session/pause', { isEnded: true }).catch(() => {});
+        // 1. Clear timer
+        setTimer(null);
+        saveToStorage(null);
+        broadcastState(null);
 
-            return null;
-        });
+        // 2. Update daySessionMeta cleanly OUTSIDE setTimer updater
+        setDaySessionMeta(prevMeta => ({
+            lastEndedAccumulated: accumulated,
+            lastEndedBreakAccumulated: prevMeta?.lastEndedBreakAccumulated || 0,
+            previouslyLoggedMinutes: (prevMeta?.previouslyLoggedMinutes || 0) + (allocatedMinutes || 0),
+            isEnded: true,
+        }));
+
+        // 3. Send isEnded: true so server marks session as ended
+        apiCall('PATCH', '/projects/day-session/pause', { isEnded: true, allocatedMinutes, accumulated }).catch(() => {});
+
         return snapshot;
     }, [broadcastState]);
 
@@ -406,6 +498,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             timer,
             elapsed,
             isRunning: timer?.status === 'running',
+            isHydrated,
             startTimer,
             pauseTimer,
             resumeTimer,
@@ -413,6 +506,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             clearTimer,
             bypassLimit,
             isSyncing,
+            daySessionMeta,
+            refreshDaySession,
         }}>
             {children}
         </TimerContext.Provider>

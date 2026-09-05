@@ -34,7 +34,9 @@ export interface DailyWorkSummary {
     meetingLoggedMinutes: number;
     /** Other TimeLogs (e.g. unallocated time) */
     otherLoggedMinutes: number;
-    /** UNIQUE working minutes — interval union of all work sources */
+    /** Break minutes logged today (lunch, tea, other breaks) */
+    breakMinutes: number;
+    /** UNIQUE working minutes — interval union of all work sources (breaks excluded) */
     uniqueWorkedMinutes: number;
     /** max(required - unique, 0) */
     remainingMinutes: number;
@@ -79,6 +81,7 @@ export async function calculateDailyWorkSummary(
     let taskLoggedMinutes = 0;
     let meetingLoggedMinutes = 0;
     let otherLoggedMinutes = 0;
+    let breakMinutes = 0;
     const allIntervals: Interval[] = [];
     let nextSyntheticStart = new Date(dayStart);
 
@@ -111,30 +114,40 @@ export async function calculateDailyWorkSummary(
 
     // ── 2.5 Fetch active DaySession (timer) for this day ────────────────────
     // If the user hasn't clicked "End Day" yet, their TimeLogs might be empty.
-    // By including the entire elapsed DaySession as a single interval, we ensure
-    // their ongoing attendance is counted correctly in uniqueWorkedMinutes.
+    // By including the elapsed DaySession (minus break time) as a single interval,
+    // we ensure their ongoing attendance is counted correctly in uniqueWorkedMinutes.
     const daySession = await DaySession.findOne({ userId, dateKey: dateStr }).lean();
     if (daySession) {
         let elapsedSeconds = daySession.accumulated || 0;
         if (daySession.status === 'running' && daySession.startedAt) {
             elapsedSeconds += Math.floor((Date.now() - daySession.startedAt) / 1000);
         }
+
+        // Calculate total break time today
+        let breakSeconds = (daySession as any).breakAccumulated || 0;
+        if ((daySession as any).breakStartedAt) {
+            breakSeconds += Math.floor((Date.now() - (daySession as any).breakStartedAt) / 1000);
+        }
+        breakMinutes = Math.floor(breakSeconds / 60);
+
+        // Effective worked time is continuous timer minus break time
+        let workedSeconds = Math.max(0, elapsedSeconds - breakSeconds);
         
         // Only cap at 12 hours if they didn't manually bypass the limit
         const limitSeconds = 12 * 60 * 60;
-        if (!daySession.limitBypassed && elapsedSeconds > limitSeconds) {
-            elapsedSeconds = limitSeconds;
+        if (!daySession.limitBypassed && workedSeconds > limitSeconds) {
+            workedSeconds = limitSeconds;
         }
         
-        if (elapsedSeconds > 0) {
+        if (workedSeconds > 0) {
             const sessionStart = daySession.dayStart ? new Date(daySession.dayStart) : new Date(dayStart);
-            const sessionEnd = new Date(sessionStart.getTime() + elapsedSeconds * 1000);
+            const sessionEnd = new Date(sessionStart.getTime() + workedSeconds * 1000);
             allIntervals.push({ start: sessionStart, end: sessionEnd });
             
             // Also attribute this to 'other' if we have no TimeLogs yet, 
             // so the dashboard shows the hours before they are categorized on End Day.
             if (timeLogs.length === 0) {
-                otherLoggedMinutes = Math.floor(elapsedSeconds / 60);
+                otherLoggedMinutes = Math.floor(workedSeconds / 60);
             }
         }
     }
@@ -195,6 +208,7 @@ export async function calculateDailyWorkSummary(
         taskLoggedMinutes,
         meetingLoggedMinutes,
         otherLoggedMinutes,
+        breakMinutes,
         uniqueWorkedMinutes,
         remainingMinutes,
         overtimeMinutes,

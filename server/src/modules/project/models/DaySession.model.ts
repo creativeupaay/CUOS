@@ -41,6 +41,27 @@ export interface IDaySession extends Document {
     /** True if the user has officially ended their day */
     isEnded: boolean;
 
+    /** Total break seconds accumulated today */
+    breakAccumulated: number;
+
+    /** Epoch ms when the current break started. null if not on break. */
+    breakStartedAt: number | null;
+
+    /** Type of the current or last break: lunch, tea, or other */
+    breakType: 'lunch' | 'tea' | 'other' | null;
+
+    /** Custom reason provided when breakType is 'other' */
+    breakReason: string | null;
+
+    /** Accumulated seconds at the time the user ended the day */
+    lastEndedAccumulated?: number;
+
+    /** Break accumulated seconds at the time the user ended the day */
+    lastEndedBreakAccumulated?: number;
+
+    /** Total working seconds allocated today across all submissions */
+    allocatedSeconds?: number;
+
     createdAt: Date;
     updatedAt: Date;
 }
@@ -86,6 +107,39 @@ const DaySessionSchema = new Schema<IDaySession>(
         isEnded: {
             type: Boolean,
             default: false,
+        },
+        breakAccumulated: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        breakStartedAt: {
+            type: Number,  // epoch ms
+            default: null,
+        },
+        breakType: {
+            type: String,
+            enum: ['lunch', 'tea', 'other', null],
+            default: null,
+        },
+        breakReason: {
+            type: String,
+            default: null,
+        },
+        lastEndedAccumulated: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        lastEndedBreakAccumulated: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        allocatedSeconds: {
+            type: Number,
+            default: 0,
+            min: 0,
         },
     },
     { timestamps: true }

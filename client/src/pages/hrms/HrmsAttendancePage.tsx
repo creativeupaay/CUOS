@@ -319,7 +319,7 @@ export default function HrmsAttendancePage() {
     // date correctly even in the early-morning window where UTC is still
     // on the previous day.
     const [overviewDate, setOverviewDate] = useState(todayIST);
-    const { data: overviewData, isLoading: overviewLoading, refetch: refetchOverview } =
+    const { data: overviewData, isLoading: overviewLoading } =
         useGetDailyOverviewQuery({ date: overviewDate });
 
     // ── Grid helpers ─────────────────────────────────────────────────
@@ -395,27 +395,25 @@ export default function HrmsAttendancePage() {
         });
     }
 
-    const handleMarkAllPresent = async () => {
-        const employees = grid.map((emp) => ({
-            employeeId: String(emp.employeeId),
-            status: 'present',
-        }));
-
-        if (employees.length === 0) {
-            return;
-        }
-
-        try {
-            await bulkMark({
-                date: todayIST,
-                records: employees,
-                onlyUnmarked: true,
-            }).unwrap();
-            await Promise.all([refetchGrid(), refetchOverview()]);
-        } catch (err: any) {
-            alert(err?.data?.message || 'Failed to mark everyone present');
-        }
-    };
+    // Unused bulk mark helper
+    // const handleMarkAllPresent = async () => {
+    //     const todayDayOfWeek = new Date().getDay();
+    //     if (todayDayOfWeek === 0) {
+    //         alert('Today is Sunday (Weekly Off). Attendance cannot be marked for Sunday.');
+    //         return;
+    //     }
+    //     const employees = grid.map((emp) => ({
+    //         employeeId: String(emp.employeeId),
+    //         status: 'present',
+    //     }));
+    //     if (employees.length === 0) return;
+    //     try {
+    //         await bulkMark({ date: todayIST, records: employees, onlyUnmarked: true }).unwrap();
+    //         await Promise.all([refetchGrid(), refetchOverview()]);
+    //     } catch (err: any) {
+    //         alert(err?.data?.message || 'Failed to mark everyone present');
+    //     }
+    // };
 
     // Day-of-week for day 1 of the month
     const firstDayDow = new Date(gridYear, gridMonth - 1, 1).getDay();
@@ -436,16 +434,6 @@ export default function HrmsAttendancePage() {
                 </div>
 
                 <div className="flex items-center gap-3 self-start lg:self-auto">
-                    <button
-                        onClick={handleMarkAllPresent}
-                        disabled={tab !== 'grid' || isSaving || gridLoading || grid.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer disabled:opacity-50"
-                        style={{ backgroundColor: '#16A34A' }}
-                        title="Mark all unmarked employees present for today"
-                    >
-                        {isSaving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                        Mark Today's Present All
-                    </button>
 
                     {/* Tab switcher */}
                     <div
@@ -685,7 +673,7 @@ export default function HrmsAttendancePage() {
                                 <table className="w-full">
                                     <thead>
                                         <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                            {['Employee', 'Department', 'Status', 'Check In', 'Check Out', 'Hours', 'Notes'].map(h => (
+                                            {['Employee', 'Department', 'Status', 'Check In', 'Check Out', 'Worked Hours', 'Break Time', 'Notes'].map(h => (
                                                 <th
                                                     key={h}
                                                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider"
@@ -753,6 +741,11 @@ export default function HrmsAttendancePage() {
                                                     </td>
                                                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                                                         {emp.totalHours > 0 ? `${emp.totalHours} h` : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm font-medium" style={{ color: (emp as any).breakMinutes && (emp as any).breakMinutes > 0 ? '#D97706' : 'var(--color-text-secondary)' }}>
+                                                        {(emp as any).breakMinutes && (emp as any).breakMinutes > 0
+                                                            ? `${Math.floor((emp as any).breakMinutes / 60) > 0 ? `${Math.floor((emp as any).breakMinutes / 60)}h ` : ''}${(emp as any).breakMinutes % 60}m`
+                                                            : '—'}
                                                     </td>
                                                     <td className="px-4 py-3 text-sm max-w-[180px] truncate" style={{ color: 'var(--color-text-muted)' }}>
                                                         {emp.notes || '—'}

@@ -5,6 +5,7 @@ import { useGetMeQuery } from './features/auth/authApi';
 import { setInitialized, setUser } from './features/auth/slices/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import { TimerProvider } from './hooks/useTaskTimer';
+import { BreakProvider } from './hooks/useBreakTimer';
 import { HydrationProvider } from './features/hydration/HydrationProvider';
 import { HydrationOverlay } from './features/hydration/HydrationOverlay';
 import {
@@ -13,6 +14,7 @@ import {
   type ModuleKey,
 } from './utils/modulePermissions';
 import { useCheckJobManagerStatusQuery } from './features/hiring/hiringApi';
+import ErrorBoundary from './components/common/ErrorBoundary';
 const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout'));
 const ClientPortalLayout = lazy(() => import('./components/layout/ClientPortalLayout'));
 
@@ -234,14 +236,20 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <TimerProvider>
-        <HydrationProvider>
-          <AppRoutes />
-          <HydrationOverlay />
-        </HydrationProvider>
-      </TimerProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <TimerProvider>
+          <BreakProvider>
+            <HydrationProvider>
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+              <HydrationOverlay />
+            </HydrationProvider>
+          </BreakProvider>
+        </TimerProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

@@ -2,7 +2,10 @@ import { Task } from '../models/Task.model';
 import { TimeLog } from '../models/TimeLog.model';
 import { Meeting } from '../models/Meeting.model';
 import { Project } from '../models/Project.model';
+import { DaySession } from '../models/DaySession.model';
 import { Holiday } from '../../hrms/models/Holiday.model';
+import { Attendance } from '../../hrms/models/Attendance.model';
+import { Employee } from '../../hrms/models/Employee.model';
 import mongoose from 'mongoose';
 
 export const getDashboardReports = async (filters: {
@@ -226,10 +229,56 @@ export const getDashboardReports = async (filters: {
         });
         timeInMeetings = scheduledMeetings.reduce((acc, m) => acc + (m.duration || 0), 0);
     }
+
+    // Calculate Break Time in the selected period from DaySessions
+    let timeOnBreak = 0;
+    try {
+        const startDayKey = start.toISOString().split('T')[0];
+        const endDayKey = end.toISOString().split('T')[0];
+
+        const daySessionMatch: any = {
+            $or: [
+                { createdAt: { $gte: start, $lte: end } },
+                { dateKey: { $gte: startDayKey, $lte: endDayKey } }
+            ]
+        };
+        if (userId) {
+            daySessionMatch.userId = new mongoose.Types.ObjectId(userId);
+        }
+
+        const daySessions = await DaySession.find(daySessionMatch).lean();
+        for (const session of daySessions) {
+            let sessionBreakSec = (session as any).breakAccumulated || 0;
+            if ((session as any).breakStartedAt) {
+                sessionBreakSec += Math.max(0, Math.floor((Date.now() - (session as any).breakStartedAt) / 1000));
+            }
+            timeOnBreak += Math.round(sessionBreakSec / 60);
+        }
+
+        // Fallback: If no daySessions break time found, check Attendance records
+        if (timeOnBreak === 0) {
+            const attQuery: any = { date: { $gte: start, $lte: end } };
+            if (userId) {
+                const employee = await Employee.findOne({ userId: new mongoose.Types.ObjectId(userId) }).select('_id').lean();
+                if (employee) {
+                    attQuery.employeeId = employee._id;
+                }
+            }
+            if (!userId || attQuery.employeeId) {
+                const attendances = await Attendance.find(attQuery).select('breakMinutes').lean();
+                for (const att of attendances) {
+                    timeOnBreak += att.breakMinutes || 0;
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[Reports] Error calculating break time:', err);
+    }
     
     const timeDistribution = [
         { category: 'Time on Tasks', minutes: timeOnTasks },
         { category: 'Time in Meetings', minutes: timeInMeetings },
+        { category: 'Break Time', minutes: timeOnBreak },
         { category: 'Others', minutes: timeOnOthers },
     ];
 
@@ -251,7 +300,7 @@ export const getDashboardReports = async (filters: {
         id: t._id,
         name: t.title,
         project: (t.projectId as any)?.name || 'General',
-        completedOn: t.completedAt,
+        completedOn: t.completedAt || (t as any).updatedAt || new Date(),
         priority: t.priority,
         // Calculate time taken from TimeLog
     }));
@@ -270,6 +319,7 @@ export const getDashboardReports = async (filters: {
         timeTracked: {
             thisPeriodMinutes: currentMinutes,
             lastPeriodMinutes: prevMinutes,
+            breakTimeMinutes: timeOnBreak,
         },
         overdueTasks: {
             overdue: overdueCount,

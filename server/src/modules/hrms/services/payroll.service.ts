@@ -108,9 +108,12 @@ class PayrollService {
             const leaveEnd = new Date(Math.min(leave.endDate.getTime(), endDate.getTime()));
             leaveEnd.setHours(0, 0, 0, 0);
             
-            if (leaveStart.getTime() <= leaveEnd.getTime()) {
-                const diffTime = leaveEnd.getTime() - leaveStart.getTime();
-                lwpDays += Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            const cur = new Date(leaveStart);
+            while (cur.getTime() <= leaveEnd.getTime()) {
+                if (cur.getDay() !== 0) { // Skip Sunday
+                    lwpDays++;
+                }
+                cur.setDate(cur.getDate() + 1);
             }
         }
 

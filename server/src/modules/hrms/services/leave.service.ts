@@ -34,23 +34,40 @@ class LeaveService {
         const startDateUtc = new Date(Date.UTC(sy, sm - 1, sd));
         const endDateUtc = new Date(Date.UTC(ey, em - 1, ed));
 
-        // days: use the value sent by the client, or calculate if missing
-        const days = data.days ?? Math.round((endDateUtc.getTime() - startDateUtc.getTime()) / 86400000) + 1;
+        // days: use the value sent by the client, or calculate excluding Sundays if missing
+        let calculatedDays = 0;
+        const cur = new Date(startDateUtc);
+        while (cur.getTime() <= endDateUtc.getTime()) {
+            if (cur.getUTCDay() !== 0) {
+                calculatedDays++;
+            }
+            cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+        const days = data.days ?? Math.max(1, calculatedDays);
 
         // Check for overlapping leaves
-        const overlapping = await Leave.findOne({
+        const overlapping = await Leave.find({
             employeeId: employee._id,
             status: { $in: ['pending', 'approved'] },
-            $or: [
-                {
-                    startDate: { $lte: endDateUtc },
-                    endDate: { $gte: startDateUtc },
-                },
-            ],
+            startDate: { $lte: endDateUtc },
+            endDate: { $gte: startDateUtc },
         });
 
-        if (overlapping) {
-            throw new AppError('Leave dates overlap with an existing leave request', 400);
+        if (overlapping.length > 0) {
+            // Check if there is an exact duplicate request with the same leave type
+            const isExactDuplicate = overlapping.some(
+                (l) => l.type === data.type &&
+                    l.startDate.getTime() === startDateUtc.getTime() &&
+                    l.endDate.getTime() === endDateUtc.getTime()
+            );
+            if (isExactDuplicate) {
+                throw new AppError(`You already have a leave request for these dates with the same leave type (${data.type}).`, 400);
+            }
+
+            // Adjust or carve out dates from each overlapping leave to allow the new leave type
+            for (const oldLeave of overlapping) {
+                await this.adjustOrCancelOverlappingLeave(oldLeave, startDateUtc, endDateUtc, data.type, userId);
+            }
         }
 
         const normalizedIsPaid = (data.type === 'unpaid' || data.type === 'wfh') ? false : data.isPaid;
@@ -64,7 +81,8 @@ class LeaveService {
             days,
         });
 
-        // Notify superadmins about new leave request
+        // Notify superadmins about new leave request or change request
+        const isChangeRequest = overlapping.length > 0;
         const populatedEmployee = await Employee.findById(employee._id)
             .populate('userId', 'name')
             .lean();
@@ -72,14 +90,17 @@ class LeaveService {
 
         notificationService.notifySuperadmins({
             type: 'leave_submitted',
-            title: 'New Leave Application',
-            message: `${employeeName} has applied for ${days} day(s) of ${data.type} leave.`,
+            title: isChangeRequest ? 'Leave Change Request' : 'New Leave Application',
+            message: isChangeRequest
+                ? `${employeeName} has requested to change leave to ${days} day(s) of ${data.type} leave (${data.startDate}${data.startDate !== data.endDate ? ' to ' + data.endDate : ''}).`
+                : `${employeeName} has applied for ${days} day(s) of ${data.type} leave.`,
             link: '/hrms/leaves?status=pending',
             metadata: {
                 leaveId: leave._id.toString(),
                 employeeId: employee._id.toString(),
                 leaveType: data.type,
                 days,
+                isChangeRequest,
             },
         });
 
@@ -190,6 +211,10 @@ class LeaveService {
                     await this.ensureLeaveBalance(leave.employeeId.toString(), year);
                     await this.consumePaidLeaveBalance(leave.employeeId.toString(), year, leave.days);
                 }
+            }
+
+            if (previousStatus === 'approved' && previousType !== nextType) {
+                await this.applyApprovedLeaveAttendance(leave);
             }
 
             if (nextStatus === 'rejected') {
@@ -394,13 +419,20 @@ class LeaveService {
         end.setUTCHours(0, 0, 0, 0);
 
         while (cursor.getTime() <= end.getTime()) {
-            leaveDates.push(new Date(cursor));
+            // Never mark attendance on Sunday (weekly off)
+            if (cursor.getUTCDay() !== 0) {
+                leaveDates.push(new Date(cursor));
+            }
             cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
 
         if (leaveDates.length === 0) {
             return;
         }
+
+        const isWfh = leave.type === 'wfh';
+        const attendanceStatus = isWfh ? 'wfh' : 'on-leave';
+        const attendanceNotes = isWfh ? 'Approved Work From Home' : 'Auto-marked on leave due to approved leave';
 
         const operations = leaveDates.map((date) => ({
             updateOne: {
@@ -410,10 +442,10 @@ class LeaveService {
                 },
                 update: {
                     $set: {
-                        status: 'on-leave',
+                        status: attendanceStatus,
                         source: 'leave',
                         totalHours: 0,
-                        notes: 'Auto-marked on leave due to approved leave',
+                        notes: attendanceNotes,
                     },
                     $unset: {
                         checkIn: '',
@@ -438,7 +470,9 @@ class LeaveService {
         end.setUTCHours(0, 0, 0, 0);
 
         while (cursor.getTime() <= end.getTime()) {
-            leaveDates.push(new Date(cursor));
+            if (cursor.getUTCDay() !== 0) {
+                leaveDates.push(new Date(cursor));
+            }
             cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
 
@@ -449,9 +483,143 @@ class LeaveService {
         return Attendance.find({
             employeeId: leave.employeeId,
             date: { $in: leaveDates },
-            status: 'on-leave',
-            notes: 'Auto-marked on leave due to approved leave',
+            $or: [
+                { status: { $in: ['on-leave', 'wfh'] } },
+                { source: 'leave' },
+            ],
         });
+    }
+
+    private countWorkingDaysExcludingSundays(start: Date, end: Date): number {
+        let count = 0;
+        const cur = new Date(start);
+        cur.setUTCHours(0, 0, 0, 0);
+        const endT = new Date(end);
+        endT.setUTCHours(0, 0, 0, 0);
+        while (cur.getTime() <= endT.getTime()) {
+            if (cur.getUTCDay() !== 0) {
+                count++;
+            }
+            cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+        return count;
+    }
+
+    private getOverlapDates(start1: Date, end1: Date, start2: Date, end2: Date): Date[] {
+        const dates: Date[] = [];
+        const cur = new Date(Math.max(start1.getTime(), start2.getTime()));
+        cur.setUTCHours(0, 0, 0, 0);
+        const end = new Date(Math.min(end1.getTime(), end2.getTime()));
+        end.setUTCHours(0, 0, 0, 0);
+        while (cur.getTime() <= end.getTime()) {
+            if (cur.getUTCDay() !== 0) {
+                dates.push(new Date(cur));
+            }
+            cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+        return dates;
+    }
+
+    private async adjustOrCancelOverlappingLeave(
+        oldLeave: ILeave,
+        newStart: Date,
+        newEnd: Date,
+        newType: string,
+        userId: string
+    ) {
+        const oldStart = new Date(oldLeave.startDate);
+        const oldEnd = new Date(oldLeave.endDate);
+        oldStart.setUTCHours(0, 0, 0, 0);
+        oldEnd.setUTCHours(0, 0, 0, 0);
+
+        const overlapDates = this.getOverlapDates(oldStart, oldEnd, newStart, newEnd);
+
+        // If the old leave was approved, rollback attendance on overlapping dates and restore consumed balance
+        if (oldLeave.status === 'approved' && overlapDates.length > 0) {
+            await Attendance.deleteMany({
+                employeeId: oldLeave.employeeId,
+                date: { $in: overlapDates },
+            });
+
+            if (this.shouldConsumePaidLeaveByValues(oldLeave.type, oldLeave.isPaid)) {
+                const year = oldStart.getUTCFullYear();
+                await this.restorePaidLeaveBalance(oldLeave.employeeId.toString(), year, overlapDates.length);
+            }
+        }
+
+        const newStartTime = newStart.getTime();
+        const newEndTime = newEnd.getTime();
+        const oldStartTime = oldStart.getTime();
+        const oldEndTime = oldEnd.getTime();
+
+        // Case 1: New request completely covers oldLeave
+        if (newStartTime <= oldStartTime && newEndTime >= oldEndTime) {
+            oldLeave.status = 'cancelled';
+            oldLeave.rejectionReason = `Superseded by ${newType} leave change request`;
+            await oldLeave.save();
+            return;
+        }
+
+        // Case 2: New request covers the end of oldLeave (newStart > oldStart && newEnd >= oldEnd)
+        if (newStartTime > oldStartTime && newEndTime >= oldEndTime) {
+            const truncatedEnd = new Date(newStart);
+            truncatedEnd.setUTCDate(truncatedEnd.getUTCDate() - 1);
+            const remainingDays = this.countWorkingDaysExcludingSundays(oldStart, truncatedEnd);
+            if (remainingDays <= 0) {
+                oldLeave.status = 'cancelled';
+                oldLeave.rejectionReason = `Superseded by ${newType} leave change request`;
+            } else {
+                oldLeave.endDate = truncatedEnd;
+                oldLeave.days = remainingDays;
+            }
+            await oldLeave.save();
+            return;
+        }
+
+        // Case 3: New request covers the start of oldLeave (newStart <= oldStart && newEnd < oldEnd)
+        if (newStartTime <= oldStartTime && newEndTime < oldEndTime) {
+            const truncatedStart = new Date(newEnd);
+            truncatedStart.setUTCDate(truncatedStart.getUTCDate() + 1);
+            const remainingDays = this.countWorkingDaysExcludingSundays(truncatedStart, oldEnd);
+            if (remainingDays <= 0) {
+                oldLeave.status = 'cancelled';
+                oldLeave.rejectionReason = `Superseded by ${newType} leave change request`;
+            } else {
+                oldLeave.startDate = truncatedStart;
+                oldLeave.days = remainingDays;
+            }
+            await oldLeave.save();
+            return;
+        }
+
+        // Case 4: New request is in the middle of oldLeave (newStart > oldStart && newEnd < oldEnd)
+        if (newStartTime > oldStartTime && newEndTime < oldEndTime) {
+            const seg1End = new Date(newStart);
+            seg1End.setUTCDate(seg1End.getUTCDate() - 1);
+            const seg1Days = this.countWorkingDaysExcludingSundays(oldStart, seg1End);
+
+            const seg2Start = new Date(newEnd);
+            seg2Start.setUTCDate(seg2Start.getUTCDate() + 1);
+            const seg2Days = this.countWorkingDaysExcludingSundays(seg2Start, oldEnd);
+
+            oldLeave.endDate = seg1End;
+            oldLeave.days = Math.max(1, seg1Days);
+            await oldLeave.save();
+
+            if (seg2Days > 0) {
+                await Leave.create({
+                    employeeId: oldLeave.employeeId,
+                    type: oldLeave.type,
+                    startDate: seg2Start,
+                    endDate: oldEnd,
+                    days: seg2Days,
+                    reason: oldLeave.reason,
+                    status: oldLeave.status,
+                    isPaid: oldLeave.isPaid,
+                    approvedBy: oldLeave.approvedBy,
+                });
+            }
+        }
     }
 
     private async rollbackApprovedLeaveAttendance(leave: ILeave, options: ArchiveDeleteOptions = {}) {

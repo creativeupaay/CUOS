@@ -1,7 +1,7 @@
 import { useGetProjectsQuery, useDeleteProjectMutation, useUpdateProjectMutation } from '@/features/project';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Loader2, AlertCircle, FolderOpen, Users, Calendar, Flame, Trash2, MoreVertical, X, Search } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
@@ -17,6 +17,15 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> =
     'on-hold': { bg: 'var(--color-warning-soft)', text: '#92400E', dot: '#F59E0B' },
     planning: { bg: 'var(--color-bg-subtle)', text: 'var(--color-text-secondary)', dot: '#9CA3AF' },
     cancelled: { bg: 'var(--color-danger-soft)', text: 'var(--color-danger)', dot: '#EF4444' },
+};
+
+/* ── Status display order ────────────────────────────────── */
+const STATUS_ORDER: Record<string, number> = {
+    active: 1,
+    planning: 2,
+    'on-hold': 3,
+    completed: 4,
+    cancelled: 5,
 };
 
 /* ── Priority config ─────────────────────────────────────── */
@@ -66,17 +75,30 @@ export default function ProjectsPage() {
     const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectMutation();
     const [updateProject, { isLoading: isUpdatingStatus }] = useUpdateProjectMutation();
     const allLoadedProjects = data?.data || [];
-    let projects = scopeParam === 'internal'
-        ? allLoadedProjects.filter((project: any) => !project.partnerId)
-        : allLoadedProjects;
+    const projects = useMemo(() => {
+        let list = scopeParam === 'internal'
+            ? allLoadedProjects.filter((project: any) => !project.partnerId)
+            : [...allLoadedProjects];
 
-    if (searchTerm) {
-        const lowerSearch = searchTerm.toLowerCase();
-        projects = projects.filter((p: any) => 
-            p.name?.toLowerCase().includes(lowerSearch) || 
-            p.description?.toLowerCase().includes(lowerSearch)
-        );
-    }
+        if (searchTerm) {
+            const lowerSearch = searchTerm.toLowerCase();
+            list = list.filter((p: any) => 
+                p.name?.toLowerCase().includes(lowerSearch) || 
+                p.description?.toLowerCase().includes(lowerSearch)
+            );
+        }
+
+        return list.sort((a: any, b: any) => {
+            const orderA = STATUS_ORDER[a.status] ?? 99;
+            const orderB = STATUS_ORDER[b.status] ?? 99;
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return dateB - dateA;
+        });
+    }, [allLoadedProjects, scopeParam, searchTerm]);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -211,7 +233,7 @@ export default function ProjectsPage() {
         );
     }
 
-    const statusOptions = ['', 'planning', 'active', 'on-hold', 'completed', 'cancelled'];
+    const statusOptions = ['', 'active', 'planning', 'on-hold', 'completed', 'cancelled'];
     const priorityOptions = ['', 'low', 'medium', 'high', 'critical'];
 
     return (

@@ -194,6 +194,8 @@ router.get('/day-session', authenticate, taskController.getDaySession);
 router.post('/day-session/start', authenticate, taskController.startDaySession);
 router.patch('/day-session/pause', authenticate, taskController.pauseDaySession);
 router.patch('/day-session/bypass-limit', authenticate, taskController.bypassDaySessionLimit);
+router.post('/day-session/break/start', authenticate, taskController.startBreak);
+router.post('/day-session/break/end', authenticate, taskController.endBreak);
 
 // ============================================
 // PROJECT ROUTES

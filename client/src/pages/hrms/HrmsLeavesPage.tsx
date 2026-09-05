@@ -8,7 +8,7 @@ import {
 } from '@/features/hrms/hrmsApi';
 import {
     Plus, X, Check, XCircle, Clock, Calendar, ChevronRight,
-    ArrowLeft, AlertCircle, User, Loader2, FileText, Eye, Pencil, Trash2,
+    ArrowLeft, AlertCircle, User, Loader2, FileText, Eye, Pencil, Trash2, MoreVertical,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 import ApplyLeaveModal from '@/components/organisms/hrms/ApplyLeaveModal';
@@ -651,6 +651,7 @@ export default function HrmsLeavesPage() {
     const [viewingLeave, setViewingLeave] = useState<any>(null);
     const [editingLeave, setEditingLeave] = useState<any>(null);
     const [deletingLeave, setDeletingLeave] = useState<any>(null);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     // Status filter for "All Requests" tab
     const [statusFilter, setStatusFilter] = useState('');
@@ -994,32 +995,45 @@ export default function HrmsLeavesPage() {
                                                                 </button>
                                                             </>
                                                         )}
-                                                        <button
-                                                            onClick={() => setViewingLeave(leave)}
-                                                            className="p-1.5 rounded border cursor-pointer"
-                                                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
-                                                            title="View leave request"
-                                                        >
-                                                            <Eye size={14} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setEditingLeave(leave)}
-                                                            className="p-1.5 rounded border cursor-pointer"
-                                                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-primary)' }}
-                                                            title="Edit leave status"
-                                                        >
-                                                            <Pencil size={14} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setDeletingLeave(leave)}
-                                                            className="p-1.5 rounded border cursor-pointer"
-                                                            style={{ borderColor: '#FECACA', color: '#DC2626' }}
-                                                            title="Delete leave request"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                                            <button
+                                                                onClick={() => setOpenMenuId(openMenuId === leave._id ? null : leave._id)}
+                                                                className="p-1.5 rounded border cursor-pointer transition-colors hover:bg-gray-50"
+                                                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                                title="More actions"
+                                                            >
+                                                                <MoreVertical size={14} />
+                                                            </button>
+                                                            {openMenuId === leave._id && (
+                                                                <div
+                                                                    className="absolute right-0 top-8 w-40 rounded-xl shadow-lg z-50 overflow-hidden"
+                                                                    style={{
+                                                                        backgroundColor: 'var(--color-bg-surface)',
+                                                                        border: '1px solid var(--color-border-default)',
+                                                                    }}
+                                                                >
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); setEditingLeave(leave); }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                        style={{ color: 'var(--color-primary)' }}
+                                                                    >
+                                                                        <Pencil size={14} />
+                                                                        Edit
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); setDeletingLeave(leave); }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-red-50 transition-colors"
+                                                                        style={{ color: '#DC2626' }}
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </td>
+
                                             </tr>
                                         );
                                     })}

@@ -43,8 +43,10 @@ function TaskCard({ task }: { task: GlobalTask }) {
     let isOverdue = false;
     if (task.deadline && task.status !== 'completed') {
         const deadlineDate = new Date(task.deadline);
-        deadlineDate.setHours(23, 59, 59, 999);
-        isOverdue = deadlineDate < new Date();
+        if (!isNaN(deadlineDate.getTime())) {
+            deadlineDate.setHours(23, 59, 59, 999);
+            isOverdue = deadlineDate < new Date();
+        }
     }
 
     return (
@@ -69,7 +71,7 @@ function TaskCard({ task }: { task: GlobalTask }) {
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: pc.color }} />
                         <span style={{ color: 'var(--color-text-secondary)' }}>{pc.label}</span>
                     </div>
-                    {task.deadline ? (
+                    {task.deadline && !isNaN(new Date(task.deadline).getTime()) ? (
                         <span 
                             className="flex items-center gap-1 font-semibold" 
                             style={{ color: isOverdue ? '#EF4444' : 'var(--color-text-secondary)' }}

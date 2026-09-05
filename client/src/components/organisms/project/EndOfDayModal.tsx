@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Clock, CheckCircle2, Search, Loader2, Video, Calendar } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type { GlobalTask } from '@/hooks/useGlobalTasks';
 import type { GlobalMeeting } from '@/hooks/useGlobalMeetings';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
-import { formatElapsed } from '@/hooks/useTaskTimer';
+import { formatElapsed, type DaySessionMeta } from '@/hooks/useTaskTimer';
 import type { Project } from '@/features/project';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +31,8 @@ interface EndOfDayModalProps {
     todayMeetings: GlobalMeeting[];
     projects: Project[];
     timerSeconds: number;
+    breakSeconds?: number;
+    daySessionMeta?: DaySessionMeta | null;
     onClose: () => void;
     onSubmit: (entries: TaskSummaryEntry[], meetingEntries: MeetingSummaryEntry[], unallocatedMinutes: number) => Promise<void>;
     onAddNewTask?: () => void;
@@ -58,6 +61,8 @@ export default function EndOfDayModal({
     todayMeetings,
     projects,
     timerSeconds,
+    breakSeconds = 0,
+    daySessionMeta,
     onClose,
     onSubmit,
     onAddNewTask,
@@ -65,15 +70,21 @@ export default function EndOfDayModal({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const currentUser = useSelector((state: RootState) => state.auth.user);
     const currentUserId = currentUser?._id;
+
+    const lastEndedAccumulated = daySessionMeta?.lastEndedAccumulated || 0;
+    const lastEndedBreakAccumulated = daySessionMeta?.lastEndedBreakAccumulated || 0;
     
     const [entries, setEntries] = useState<TaskSummaryEntry[]>([]);
     
     const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>(() => {
         const prefilled: MeetingSummaryEntry[] = [];
-        for (const meeting of todayMeetings) {
-            const myParticipant = meeting.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
-            if (myParticipant?.actualDuration && myParticipant.actualDuration > 0) {
-                prefilled.push({ meeting, allocatedMinutes: myParticipant.actualDuration });
+        // Only auto-prefill meetings on first session of the day
+        if (!lastEndedAccumulated) {
+            for (const meeting of todayMeetings) {
+                const myParticipant = meeting.participants?.find((p: any) => p.userId && (p.userId === currentUserId || p.userId._id === currentUserId));
+                if (myParticipant?.actualDuration && myParticipant.actualDuration > 0) {
+                    prefilled.push({ meeting, allocatedMinutes: myParticipant.actualDuration });
+                }
             }
         }
         return prefilled;
@@ -82,11 +93,27 @@ export default function EndOfDayModal({
     const [search, setSearch] = useState('');
     const [confirmAction, setConfirmAction] = useState<'perfect' | 'less' | null>(null);
 
+    // Total day logged metrics (shows whole day time)
     const totalTimerMinutes = Math.floor(timerSeconds / 60);
+    const totalBreakMinutes = Math.floor(breakSeconds / 60);
+    const totalWorkingSeconds = Math.max(0, timerSeconds - breakSeconds);
+    const totalWorkingMinutes = Math.floor(totalWorkingSeconds / 60);
+
+    // If day was ended once earlier on same day, only allocate the second time recorded
+    const lastEndedWorkingSeconds = Math.max(0, lastEndedAccumulated - lastEndedBreakAccumulated);
+    const secondTimeRecordedSeconds = lastEndedAccumulated > 0
+        ? Math.max(0, totalWorkingSeconds - lastEndedWorkingSeconds)
+        : totalWorkingSeconds;
+
+    const minutesToAllocate = lastEndedAccumulated > 0
+        ? (secondTimeRecordedSeconds >= 60 ? Math.floor(secondTimeRecordedSeconds / 60) : (secondTimeRecordedSeconds > 0 ? 1 : 0))
+        : totalWorkingMinutes;
+
     const allocatedTaskMinutes = entries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0);
     const allocatedMeetingMinutes = meetingEntries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0);
     const allocatedTotal = allocatedTaskMinutes + allocatedMeetingMinutes;
-    const unallocatedMinutes = totalTimerMinutes - allocatedTotal;
+    // Unallocated time is against the time given to allocate
+    const unallocatedMinutes = minutesToAllocate - allocatedTotal;
 
     const isToday = (dateVal?: string | Date) => {
         if (!dateVal) return false;
@@ -132,7 +159,12 @@ export default function EndOfDayModal({
                     allocatedMinutes: 0,
                     status: task.status === 'todo' ? 'in-progress' : task.status,
                     priority: task.priority || 'medium',
-                    deadline: task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : '',
+                    deadline: task.deadline
+                        ? (() => {
+                            const d = new Date(task.deadline);
+                            return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+                        })()
+                        : '',
                     projectId: task._projectId || '',
                     notes: '',
                 }];
@@ -171,37 +203,39 @@ export default function EndOfDayModal({
 
     const handleSubmit = async () => {
         if (entries.length === 0 && meetingEntries.length === 0) {
-            import('react-hot-toast').then(toast => toast.default.error('Please select at least one task or meeting.'));
+            toast.error('Please select at least one task or meeting.');
             return;
         }
         if (unallocatedMinutes < 0) {
-            import('react-hot-toast').then(toast => {
-                toast.default.error(`Cannot exceed total logged time. Please reduce by ${Math.abs(unallocatedMinutes)} min.`);
-            });
+            toast.error(`Cannot exceed time to allocate (${formatHrsMins(minutesToAllocate)}). Please reduce allocated time by ${Math.abs(unallocatedMinutes)} min.`);
             return;
         }
 
-        // Validate task mandatory fields
+        // Validate task mandatory fields (everything mandatory except due date and notes)
         for (const entry of entries) {
-            if (entry.task._projectId && !entry.projectId) {
-                import('react-hot-toast').then(toast => toast.default.error(`Project is missing for task: "${entry.task.title}"`));
-                return;
-            }
-            if (!entry.deadline) {
-                import('react-hot-toast').then(toast => toast.default.error(`Due Date is missing for task: "${entry.task.title}"`));
-                return;
-            }
             if (!entry.allocatedMinutes || entry.allocatedMinutes <= 0 || isNaN(entry.allocatedMinutes)) {
-                 import('react-hot-toast').then(toast => toast.default.error(`Please allocate at least 1 minute for task: "${entry.task.title}"`));
-                 return;
+                toast.error(`Please allocate at least 1 minute for task: "${entry.task.title}"`);
+                return;
+            }
+            if (!entry.projectId) {
+                toast.error(`Project is missing for task: "${entry.task.title}"`);
+                return;
+            }
+            if (!entry.status) {
+                toast.error(`Status is missing for task: "${entry.task.title}"`);
+                return;
+            }
+            if (!entry.priority) {
+                toast.error(`Priority is missing for task: "${entry.task.title}"`);
+                return;
             }
         }
 
         // Validate meeting mandatory fields
         for (const mEntry of meetingEntries) {
             if (!mEntry.allocatedMinutes || mEntry.allocatedMinutes <= 0 || isNaN(mEntry.allocatedMinutes)) {
-                 import('react-hot-toast').then(toast => toast.default.error(`Please allocate at least 1 minute for meeting: "${mEntry.meeting.title}"`));
-                 return;
+                toast.error(`Please allocate at least 1 minute for meeting: "${mEntry.meeting.title}"`);
+                return;
             }
         }
 
@@ -293,42 +327,61 @@ export default function EndOfDayModal({
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
                     
-                    {/* Top Timer Summary */}
+                    {/* Top Timer Summary — Shows whole logged day time, gives only second time recorded to allocate */}
                     <div
-                        className="rounded-xl p-4 flex items-center justify-between"
+                        className="rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center"
                         style={{ backgroundColor: 'var(--color-bg-subtle)', border: '1px solid var(--color-border-default)' }}
                     >
+                        {/* Total On-Clock */}
                         <div>
-                            <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-primary)' }}>Total Logged Today</p>
-                            <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-text-primary)' }}>
+                            <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Total On-Clock</p>
+                            <p className="text-xl font-bold font-mono" style={{ color: 'var(--color-text-primary)' }}>
                                 {formatElapsed(timerSeconds)}
                             </p>
-                            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                            <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                                 {totalTimerMinutes} total minutes
                             </p>
                         </div>
-                        <div className="text-center flex flex-col gap-1 items-end">
-                            <div>
-                                <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-muted)' }}>Tasks</p>
-                                <p className="text-base font-bold font-mono" style={{ color: 'var(--color-text-primary)' }}>
-                                    {formatHrsMins(allocatedTaskMinutes)}
-                                </p>
+
+                        {/* Break Time */}
+                        <div className="sm:border-l sm:pl-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                <p className="text-xs font-semibold text-amber-600">Break Time</p>
                             </div>
-                            <div>
-                                <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-muted)' }}>Meetings</p>
-                                <p className="text-base font-bold font-mono" style={{ color: 'var(--color-text-primary)' }}>
-                                    {formatHrsMins(allocatedMeetingMinutes)}
-                                </p>
-                            </div>
+                            <p className="text-xl font-bold font-mono text-amber-700">
+                                {formatElapsed(breakSeconds)}
+                            </p>
+                            <p className="text-[11px] mt-0.5 text-amber-600/80">
+                                {totalBreakMinutes} min break
+                            </p>
                         </div>
-                        <div className="text-right">
+
+                        {/* Working Time */}
+                        <div className="lg:border-l lg:pl-4" style={{ borderColor: 'var(--color-border-default)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-primary)' }}></span>
+                                <p className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>Working Time</p>
+                            </div>
+                            <p className="text-xl font-bold font-mono" style={{ color: 'var(--color-text-primary)' }}>
+                                {formatElapsed(totalWorkingSeconds)}
+                            </p>
+                            <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                {minutesToAllocate} min to allocate
+                            </p>
+                        </div>
+
+                        {/* Unallocated Time */}
+                        <div className="text-right sm:border-l sm:pl-4" style={{ borderColor: 'var(--color-border-default)' }}>
                             <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Unallocated Time</p>
                             <p className={`text-xl font-bold font-mono ${unallocatedMinutes < 0 ? 'text-red-500' : ''}`} style={{ color: unallocatedMinutes === 0 ? 'var(--color-success)' : unallocatedMinutes > 0 ? 'var(--color-text-primary)' : undefined }}>
                                 {formatHrsMins(unallocatedMinutes)}
                             </p>
-                            <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                                {unallocatedMinutes < 0 ? 'Please reduce allocated time' : 'Add tasks/meetings to assign time'}
-                            </p>
+                            <div className="flex items-center justify-end gap-1 text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                                <span>Tasks: {formatHrsMins(allocatedTaskMinutes)}</span>
+                                <span>·</span>
+                                <span>Mtgs: {formatHrsMins(allocatedMeetingMinutes)}</span>
+                            </div>
                         </div>
                     </div>
 
@@ -476,8 +529,8 @@ export default function EndOfDayModal({
                             {displayTasks.map(task => {
                                 const entry = entries.find(e => e.task._id === task._id);
                                 const isChecked = !!entry;
-                                const hasNoTime = !entry || !entry.allocatedMinutes || entry.allocatedMinutes <= 0;
-                                const isMissingDetails = (!!task._projectId && (!entry || !entry.projectId)) || (!task.deadline && (!entry || !entry.deadline));
+                                const hasNoTime = isChecked && (!entry.allocatedMinutes || entry.allocatedMinutes <= 0);
+                                const isMissingDetails = isChecked ? !entry.projectId : !task._projectId;
 
                                 return (
                                     <div
@@ -639,7 +692,7 @@ export default function EndOfDayModal({
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                                            Due Date <span className="text-red-500">*</span>
+                                                            Due Date
                                                         </label>
                                                         <input
                                                             type="date"
@@ -700,7 +753,7 @@ export default function EndOfDayModal({
                     </div>
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting || unallocatedMinutes < 0}
+                        disabled={isSubmitting}
                         className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: 'var(--color-primary)' }}
                     >
@@ -720,7 +773,7 @@ export default function EndOfDayModal({
                         <p className="text-sm text-gray-600 mb-6">
                             {confirmAction === 'perfect' 
                                 ? 'You have perfectly allocated your time. Are you ready to save your tasks and submit?' 
-                                : `You have allocated ${formatHrsMins(allocatedTotal)}, which is less than your total logged time of ${formatElapsed(timerSeconds)}. Unallocated time will be saved as "Unallocated". Are you sure you want to proceed?`}
+                                : `You have allocated ${formatHrsMins(allocatedTotal)}, which is less than your working time of ${formatHrsMins(minutesToAllocate)}. Unallocated time will be saved as "Unallocated". Are you sure you want to proceed?`}
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
@@ -732,7 +785,8 @@ export default function EndOfDayModal({
                             <button
                                 onClick={executeSubmit}
                                 disabled={isSubmitting}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50 shadow-sm"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
                             >
                                 {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Confirm & Save'}
                             </button>

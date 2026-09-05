@@ -21,6 +21,7 @@ import {
     EyeOff,
     Key,
     UserPlus,
+    MoreVertical,
 } from 'lucide-react';
 
 export default function PartnerEmployeesPage() {
@@ -33,6 +34,7 @@ export default function PartnerEmployeesPage() {
     const [passwordEmployeeId, setPasswordEmployeeId] = useState<string | null>(null);
     const [newPassword, setNewPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -344,40 +346,60 @@ export default function PartnerEmployeesPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-5">
-                                            <div className="flex items-center justify-end gap-2">
+                                            <div className="relative flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
                                                 <button
-                                                    onClick={() => handleOpenModal(employee)}
+                                                    onClick={() => setOpenMenuId(openMenuId === employee._id ? null : employee._id)}
                                                     className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                                                    title="Edit"
+                                                    style={{ color: '#6B7280' }}
+                                                    title="More actions"
                                                 >
-                                                    <Pencil size={16} style={{ color: '#6B7280' }} />
+                                                    <MoreVertical size={16} />
                                                 </button>
-                                                <button
-                                                    onClick={() => handleOpenPasswordModal(employee._id)}
-                                                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                                                    title="Reset Password"
-                                                >
-                                                    <Key size={16} style={{ color: '#6B7280' }} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleToggleStatus(employee._id)}
-                                                    disabled={isToggling}
-                                                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 transition-colors"
-                                                    title={employee.isActive ? 'Deactivate' : 'Activate'}
-                                                >
-                                                    {employee.isActive ? (
-                                                        <ToggleRight size={18} style={{ color: '#10B981' }} />
-                                                    ) : (
-                                                        <ToggleLeft size={18} style={{ color: '#EF4444' }} />
-                                                    )}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(employee._id, employee.name)}
-                                                    className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 size={16} style={{ color: '#EF4444' }} />
-                                                </button>
+                                                {openMenuId === employee._id && (
+                                                    <div
+                                                        className="absolute right-0 top-9 w-44 rounded-xl shadow-lg z-50 overflow-hidden"
+                                                        style={{
+                                                            backgroundColor: 'var(--color-bg-surface)',
+                                                            border: '1px solid var(--color-border-default)',
+                                                        }}
+                                                    >
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); handleOpenModal(employee); }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                            style={{ color: 'var(--color-text-primary)' }}
+                                                        >
+                                                            <Pencil size={14} />
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); handleOpenPasswordModal(employee._id); }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                            style={{ color: 'var(--color-text-primary)' }}
+                                                        >
+                                                            <Key size={14} />
+                                                            Reset Password
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); handleToggleStatus(employee._id); }}
+                                                            disabled={isToggling}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                                            style={{ color: employee.isActive ? '#F59E0B' : '#10B981' }}
+                                                        >
+                                                            {employee.isActive
+                                                                ? <ToggleLeft size={14} />
+                                                                : <ToggleRight size={14} />}
+                                                            {employee.isActive ? 'Deactivate' : 'Activate'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); handleDelete(employee._id, employee.name); }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-red-50 transition-colors"
+                                                            style={{ color: '#EF4444' }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

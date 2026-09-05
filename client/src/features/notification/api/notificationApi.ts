@@ -96,6 +96,15 @@ const notificationApi = api.injectEndpoints({
                 body,
             }),
         }),
+
+        // Employee broadcasts a break notification to all internal users (only for 'other' type)
+        broadcastBreak: builder.mutation<SuccessResponse, { breakType: 'lunch' | 'tea' | 'other'; reason?: string }>({
+            query: (body) => ({
+                url: '/notifications/break',
+                method: 'POST',
+                body,
+            }),
+        }),
     }),
 });
 
@@ -107,6 +116,7 @@ export const {
     useDeleteNotificationMutation,
     useClearAllNotificationsMutation,
     usePingUserMutation,
+    useBroadcastBreakMutation,
 } = notificationApi;
 
 export default notificationApi;

@@ -75,14 +75,19 @@ const baseQueryWithReauth = async (
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Documents', 'Notes', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Salary', 'Leaves', 'Payroll', 'Holidays', 'Announcements', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Jobs', 'Applications', 'Assignments', 'AssignmentSubmissions', 'Interviews', 'Partners', 'PartnerEmployees', 'Notifications', 'Revenues', 'Expenses', 'FixedExpenses', 'FinanceDashboard', 'BankTransactions', 'Reimbursements', 'GameSessions', 'GameLeaderboard', 'WordleSessions', 'GoogleIntegrations'],
+  tagTypes: ['User', 'Clients', 'Projects', 'Tasks', 'TimeLogs', 'Meetings', 'Credentials', 'Documents', 'Notes', 'Leads', 'Proposals', 'Pipeline', 'Employees', 'Attendance', 'Salary', 'Leaves', 'Payroll', 'Holidays', 'Announcements', 'AdminUsers', 'Roles', 'Permissions', 'AuditLogs', 'OrgSettings', 'Jobs', 'Applications', 'Assignments', 'AssignmentSubmissions', 'Interviews', 'Partners', 'PartnerEmployees', 'Notifications', 'Revenues', 'Expenses', 'FixedExpenses', 'FinanceDashboard', 'BankTransactions', 'Reimbursements', 'GameSessions', 'GameLeaderboard', 'WordleSessions', 'GoogleIntegrations'],
   endpoints: () => ({}),
-  // Keep cached data for 5 minutes after the last component unmounts.
-  // This means navigating back to a page within 5 min uses cached data instantly.
-  keepUnusedDataFor: 300,
-  // Do NOT refetch when the user alt-tabs back to the window â€” reduces unnecessary traffic.
-  refetchOnFocus: false,
-  // DO refetch when the network reconnects â€” ensures fresh data after connectivity loss.
+  // Keep unused cache for 30s — short enough that navigating back to a page
+  // always shows fresh data, but long enough to avoid double-fetches during
+  // quick sequential renders in the same session.
+  keepUnusedDataFor: 30,
+  // Refetch when the user returns to the tab — ensures data is never stale
+  // after coming back from another window or browser tab.
+  refetchOnFocus: true,
+  // Refetch on mount if cached data is older than 30s.
+  // This guarantees every page navigation shows up-to-date data.
+  refetchOnMountOrArgChange: 30,
+  // DO refetch when the network reconnects — ensures fresh data after connectivity loss.
   refetchOnReconnect: true,
 });
 

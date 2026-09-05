@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Play, Pause, Minimize2, Maximize2, Loader2 } from 'lucide-react';
 import { useTimer, formatElapsed } from '@/hooks/useTaskTimer';
+import { useBreak } from '@/hooks/useBreakTimer';
 
 interface PipTimerWidgetProps {
     onClosePiP: () => void;
@@ -10,6 +11,7 @@ interface PipTimerWidgetProps {
 
 export default function PipTimerWidget({ onEndDay, resizePiP }: PipTimerWidgetProps) {
     const { timer, elapsed, isRunning, startTimer, pauseTimer, resumeTimer, isSyncing } = useTimer();
+    const { isOnBreak } = useBreak();
     const [mode, setMode] = useState<'expanded' | 'collapsed'>('expanded');
 
     const handleToggleMode = () => {
@@ -28,6 +30,9 @@ export default function PipTimerWidget({ onEndDay, resizePiP }: PipTimerWidgetPr
             return;
         }
         if (isRunning) {
+            if (isOnBreak) {
+                return;
+            }
             pauseTimer();
         } else {
             resumeTimer();

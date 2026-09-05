@@ -68,12 +68,17 @@ export default function ReportsPage() {
         : (usersResponse?.data?.users || []);
     
     const displayUsers = users.filter((u: any) => {
-        const roleName = u?.role
+        const uRoleName = u?.role
             ? typeof u.role === 'object'
                 ? (u.role as any).name?.toLowerCase()
                 : String(u.role).toLowerCase()
             : '';
-        return !['super-admin', 'super_admin'].includes(roleName) && u._id !== user?._id;
+        // Exclude: super admins, current user, partners, and inactive (removed) users
+        if (['super-admin', 'super_admin'].includes(uRoleName)) return false;
+        if (u._id === user?._id) return false;
+        if (uRoleName === 'partner') return false;
+        if (u.isActive === false) return false;
+        return true;
     });
 
     const { data: response, isLoading } = projectApi.useGetReportsDashboardQuery({
@@ -86,13 +91,55 @@ export default function ReportsPage() {
 
     // Helper functions for formatting
     const formatTime = (mins: number) => {
-        if (!mins) return '0h 0m';
+        if (!mins || isNaN(mins)) return '0h 0m';
         const h = Math.floor(mins / 60);
         const m = mins % 60;
         return `${h}h ${m}m`;
     };
 
-    const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#6B7280']; // Green, Blue, Orange, Gray
+    const formatSafeDateTime = (dateVal: any) => {
+        if (!dateVal) return 'N/A';
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return 'N/A';
+        try {
+            return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        } catch {
+            return 'N/A';
+        }
+    };
+
+    const formatSafeDayDate = (dateVal: any) => {
+        if (!dateVal) return 'N/A';
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return 'N/A';
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return `${days[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
+    };
+
+    const formatSafeShortDate = (dateVal: any) => {
+        if (!dateVal) return '';
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return String(dateVal);
+        return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
+    };
+
+    const safeFormatRangeDate = (dateStr: string) => {
+        try {
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? dateStr : format(d, 'dd MMM yyyy');
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#6B7280']; // Green, Blue, Amber, Purple, Gray
+
+    const CATEGORY_COLORS: Record<string, string> = {
+        'Time on Tasks': '#10B981',
+        'Time in Meetings': '#3B82F6',
+        'Break Time': '#F59E0B',
+        'Others': '#8B5CF6',
+    };
 
     return (
         <div className="flex flex-col min-h-full print:h-auto print:overflow-visible bg-[var(--color-bg-app)]">
@@ -135,7 +182,7 @@ export default function ReportsPage() {
                                 onClick={() => setShowDatePicker(!showDatePicker)}
                                 className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white shadow-sm hover:bg-gray-50 text-gray-700 font-medium transition-colors"
                             >
-                                {format(new Date(startDate), 'dd MMM yyyy')} - {format(new Date(endDate), 'dd MMM yyyy')}
+                                {safeFormatRangeDate(startDate)} - {safeFormatRangeDate(endDate)}
                                 <Calendar size={16} className="text-gray-400" />
                             </button>
                             
@@ -239,7 +286,7 @@ export default function ReportsPage() {
                                         <Clock size={24} />
                                     </div>
                                 </div>
-                                <div className="space-y-3 mt-auto">
+                                <div className="space-y-2.5 mt-auto">
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-gray-500">This Period</span>
                                         <span className="font-medium text-gray-800">{formatTime(data.timeTracked?.thisPeriodMinutes || 0)}</span>
@@ -298,22 +345,23 @@ export default function ReportsPage() {
                                                 dataKey="date" 
                                                 axisLine={false} 
                                                 tickLine={false} 
-                                                tickFormatter={(str) => {
-                                                    const d = new Date(str);
-                                                    return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
-                                                }}
+                                                tickFormatter={formatSafeShortDate}
                                                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                                                 dy={10}
                                             />
                                             <YAxis 
                                                 axisLine={false} 
                                                 tickLine={false}
-                                                tickFormatter={(val) => `${Math.floor(val/60)}h`}
+                                                tickFormatter={(val) => `${Math.floor((Number(val) || 0)/60)}h`}
                                                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                                             />
                                             <RechartsTooltip 
-                                                formatter={(val: any) => formatTime(Number(val))}
-                                                labelFormatter={(lbl) => new Date(lbl).toLocaleDateString()}
+                                                formatter={(val: any) => formatTime(Number(val) || 0)}
+                                                labelFormatter={(lbl) => {
+                                                    if (!lbl) return '';
+                                                    const d = new Date(lbl);
+                                                    return isNaN(d.getTime()) ? String(lbl) : d.toLocaleDateString();
+                                                }}
                                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                                             />
                                             <Area type="linear" dataKey="minutes" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorMinutes)" />
@@ -333,14 +381,15 @@ export default function ReportsPage() {
                                         <div className="flex items-center justify-center h-full text-sm text-gray-400">No data available</div>
                                     ) : (
                                         data.topProjects.map((project: any, index: number) => {
-                                            const maxMinutes = Math.max(...data.topProjects.map((p: any) => p.minutes), 1);
-                                            const percentage = (project.minutes / maxMinutes) * 100;
+                                            const maxMinutes = Math.max(...data.topProjects.map((p: any) => Number(p.minutes) || 0), 1);
+                                            const projMins = Number(project.minutes) || 0;
+                                            const percentage = Math.min(100, Math.max(0, (projMins / maxMinutes) * 100));
                                             const color = COLORS[index % COLORS.length];
                                             return (
                                                 <div key={index} className="flex flex-col gap-2 group">
                                                     <div className="flex justify-between items-center text-sm">
-                                                        <span className="font-semibold text-gray-700 truncate pr-4 group-hover:text-gray-900 transition-colors">{project.projectName}</span>
-                                                        <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{formatTime(project.minutes)}</span>
+                                                        <span className="font-semibold text-gray-700 truncate pr-4 group-hover:text-gray-900 transition-colors">{project.projectName || 'General / Other'}</span>
+                                                        <span className="text-xs font-bold text-gray-500 whitespace-nowrap">{formatTime(projMins)}</span>
                                                     </div>
                                                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                                                         <div 
@@ -366,41 +415,63 @@ export default function ReportsPage() {
                                 <div className="flex justify-between items-center mb-2">
                                     <h3 className="text-sm font-bold text-gray-800">Time Distribution</h3>
                                 </div>
-                                <div className="h-48 flex items-center">
-                                    <div className="w-1/2 h-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie
-                                                    data={data.timeDistribution || []}
-                                                    innerRadius={45}
-                                                    outerRadius={65}
-                                                    paddingAngle={2}
-                                                    dataKey="minutes"
-                                                    stroke="none"
-                                                >
-                                                    {(data.timeDistribution || []).map((_entry: any, index: number) => (
-                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <RechartsTooltip 
-                                                    formatter={(val: any) => formatTime(Number(val))}
-                                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                                />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                    <div className="w-1/2 space-y-3 pl-2">
-                                        {(data.timeDistribution || []).map((entry: any, idx: number) => (
-                                            <div key={idx} className="flex justify-between items-center text-xs">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                                                    <span className="text-gray-600 truncate max-w-[80px]" title={entry.category}>{entry.category}</span>
-                                                </div>
-                                                <span className="font-medium">{formatTime(entry.minutes)}</span>
+                                {(() => {
+                                    const totalDistMinutes = (data.timeDistribution || []).reduce((acc: number, cur: any) => acc + (Number(cur?.minutes) || 0), 0);
+                                    const activeDistribution = (data.timeDistribution || []).filter((entry: any) => (Number(entry?.minutes) || 0) > 0);
+
+                                    return (
+                                        <div className="h-48 flex items-center">
+                                            <div className="w-1/2 h-full">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <PieChart>
+                                                        {totalDistMinutes === 0 ? (
+                                                            <Pie
+                                                                data={[{ category: 'No time logged', minutes: 1 }]}
+                                                                innerRadius={45}
+                                                                outerRadius={65}
+                                                                dataKey="minutes"
+                                                                stroke="none"
+                                                                isAnimationActive={false}
+                                                            >
+                                                                <Cell fill="#E2E8F0" />
+                                                            </Pie>
+                                                        ) : (
+                                                            <Pie
+                                                                data={activeDistribution}
+                                                                innerRadius={45}
+                                                                outerRadius={65}
+                                                                paddingAngle={activeDistribution.length > 1 ? 2 : 0}
+                                                                dataKey="minutes"
+                                                                stroke="none"
+                                                            >
+                                                                {activeDistribution.map((entry: any, index: number) => (
+                                                                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.category] || COLORS[index % COLORS.length]} />
+                                                                ))}
+                                                            </Pie>
+                                                        )}
+                                                        {totalDistMinutes > 0 && (
+                                                            <RechartsTooltip 
+                                                                formatter={(val: any) => formatTime(Number(val))}
+                                                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                                            />
+                                                        )}
+                                                    </PieChart>
+                                                </ResponsiveContainer>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                            <div className="w-1/2 space-y-2.5 pl-2">
+                                                {(data.timeDistribution || []).map((entry: any, idx: number) => (
+                                                    <div key={idx} className="flex justify-between items-center text-xs gap-1.5">
+                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS[entry.category] || COLORS[idx % COLORS.length] }} />
+                                                            <span className="text-gray-600 truncate font-medium" title={entry.category}>{entry.category}</span>
+                                                        </div>
+                                                        <span className="font-semibold text-gray-800 shrink-0 tabular-nums">{formatTime(Number(entry.minutes) || 0)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
 
@@ -418,22 +489,18 @@ export default function ReportsPage() {
                                     <div className="text-right">TIME</div>
                                 </div>
                                 <div className="space-y-0 max-h-[300px] overflow-auto">
-                                    {(data.dailyTimeLog || []).map((log: any, idx: number) => {
-                                        const d = new Date(log.date);
-                                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                                        return (
-                                            <div key={idx} className="grid grid-cols-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors items-center text-sm">
-                                                <div className="text-gray-700">
-                                                    {days[d.getDay()]}, {d.getDate()} {d.toLocaleString('default', { month: 'short' })}
-                                                </div>
-                                                <div className="text-center text-gray-500">{log.tasksCount} Tasks</div>
-                                                <div className="text-right font-medium text-gray-700 flex items-center justify-end gap-1">
-                                                    {formatTime(log.minutes)}
-                                                    <ChevronRight size={14} className="text-gray-400" />
-                                                </div>
+                                    {(data.dailyTimeLog || []).map((log: any, idx: number) => (
+                                        <div key={idx} className="grid grid-cols-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors items-center text-sm">
+                                            <div className="text-gray-700">
+                                                {formatSafeDayDate(log.date)}
                                             </div>
-                                        );
-                                    })}
+                                            <div className="text-center text-gray-500">{Number(log.tasksCount) || 0} Tasks</div>
+                                            <div className="text-right font-medium text-gray-700 flex items-center justify-end gap-1">
+                                                {formatTime(Number(log.minutes) || 0)}
+                                                <ChevronRight size={14} className="text-gray-400" />
+                                            </div>
+                                        </div>
+                                    ))}
                                     {(!data.dailyTimeLog || data.dailyTimeLog.length === 0) && (
                                         <div className="py-8 text-center text-gray-400 text-sm">No time logs found.</div>
                                     )}
@@ -469,22 +536,22 @@ export default function ReportsPage() {
                                         </thead>
                                         <tbody className="divide-y divide-gray-50">
                                             {(data.completedTasks || []).map((task: any) => (
-                                                <tr key={task.id} className="hover:bg-gray-50 transition-colors">
+                                                <tr key={task.id || task._id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="py-3 px-3">
                                                         <div className="flex items-center gap-2">
                                                             <CheckCircle2 size={16} className="text-green-500 shrink-0" />
-                                                            <span className="font-medium text-gray-700 truncate max-w-[150px]">{task.name}</span>
+                                                            <span className="font-medium text-gray-700 truncate max-w-[150px]">{task.name || 'Untitled Task'}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 px-3 text-gray-500">{task.project}</td>
+                                                    <td className="py-3 px-3 text-gray-500">{task.project || 'General'}</td>
                                                     <td className="py-3 px-3 text-gray-500">
-                                                        {new Date(task.completedOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, {new Date(task.completedOn).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                                        {formatSafeDateTime(task.completedOn)}
                                                     </td>
-                                                    <td className="py-3 px-3 text-gray-700 font-medium">{formatTime(task.timeTakenMinutes)}</td>
+                                                    <td className="py-3 px-3 text-gray-700 font-medium">{formatTime(Number(task.timeTakenMinutes) || 0)}</td>
                                                     <td className="py-3 px-3">
                                                         <div className="flex items-center gap-1.5">
                                                             <div className={`w-2 h-2 rounded-full ${task.priority === 'high' || task.priority === 'critical' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-400' : 'bg-green-500'}`} />
-                                                            <span className="capitalize text-gray-600 text-xs font-medium">{task.priority}</span>
+                                                            <span className="capitalize text-gray-600 text-xs font-medium">{task.priority || 'normal'}</span>
                                                         </div>
                                                     </td>
                                                 </tr>

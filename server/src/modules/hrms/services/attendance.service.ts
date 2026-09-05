@@ -226,7 +226,8 @@ export class AttendanceService {
         employeeId: string,
         userId: string,
         dateStr: string,
-        uniqueWorkedMinutes: number
+        uniqueWorkedMinutes: number,
+        breakMinutes: number = 0
     ): Promise<{ marked: boolean; status?: string; reason?: string }> {
         const { dayStart } = getWorkDayBounds(dateStr);
 
@@ -251,9 +252,9 @@ export class AttendanceService {
             if (['on-leave', 'holiday', 'absent'].includes(existing.status)) {
                 return { marked: false, reason: `existing ${existing.status} record — skipped` };
             }
-            // If the record was set manually (e.g. WFH, or admin marked Present/Half-day),
+            // If the record was set manually or via approved leave (e.g. WFH, on-leave),
             // we DO NOT change the status. We just keep it as is.
-            if (existing.source === 'manual') {
+            if (existing.source === 'manual' || existing.source === 'leave') {
                 finalStatus = existing.status;
             } else {
                 // If it was auto, we can upgrade it based on hours
@@ -281,7 +282,7 @@ export class AttendanceService {
         const totalHours = Number((uniqueWorkedMinutes / 60).toFixed(2));
         const notes = existing?.source === 'manual' 
             ? (existing.notes && !existing.notes.includes('Auto-update:') ? `${existing.notes}\nAuto-update: ${uniqueWorkedMinutes} min worked` : `Auto-update: ${uniqueWorkedMinutes} min worked`)
-            : `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}`;
+            : `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}${breakMinutes > 0 ? ` (${breakMinutes}m break)` : ''}`;
 
         await Attendance.findOneAndUpdate(
             { employeeId: new Types.ObjectId(employeeId), date: dayStart },
@@ -290,6 +291,7 @@ export class AttendanceService {
                     status: finalStatus,
                     source: existing?.source === 'manual' ? 'manual' : 'auto',
                     totalHours,
+                    breakMinutes,
                     notes,
                 },
                 $setOnInsert: {
@@ -339,6 +341,7 @@ export class AttendanceService {
                 checkIn: record?.checkIn || null,
                 checkOut: record?.checkOut || null,
                 totalHours: record?.totalHours || 0,
+                breakMinutes: record?.breakMinutes || 0,
                 notes: record?.notes || '',
             };
         });

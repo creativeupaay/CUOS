@@ -3,6 +3,9 @@ import multer from 'multer';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
 import { checkHrmsAccess, hrAdminOnly, hrmsSelfSubmoduleOnly, internalHrmsOnly } from '../middlewares/hrmsAccess.middleware';
+import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
+import { Leave } from '../models/Leave.model';
+import { Employee } from '../models/Employee.model';
 
 // Validators
 import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
@@ -164,9 +167,28 @@ router.get('/leaves/balance', hrmsSelfSubmoduleOnly('leaves'), leaveController.g
 router.get('/leaves/balance/employee/:employeeId', hrAdminOnly, leaveController.getLeaveBalance);
 router.get('/leaves', hrAdminOnly, leaveController.getLeaves);
 router.get('/leaves/:id', leaveController.getLeaveById);
+const allowLeaveStatusUpdate = async (req: any, res: any, next: any) => {
+    if (hasModuleAdminAccess(req.user, 'hrms')) {
+        return next();
+    }
+    // Allow employees to cancel their own pending leaves or approved WFH
+    if (req.body?.status === 'cancelled') {
+        const leave = await Leave.findById(req.params.id);
+        if (leave) {
+            const employee = await Employee.findById(leave.employeeId);
+            if (employee && employee.userId.toString() === req.user?.id) {
+                if (leave.status === 'pending' || (leave.status === 'approved' && leave.type === 'wfh')) {
+                    return next();
+                }
+            }
+        }
+    }
+    return hrAdminOnly(req, res, next);
+};
+
 router.patch(
     '/leaves/:id/status',
-    hrAdminOnly,
+    allowLeaveStatusUpdate,
     validateRequest(updateLeaveStatusSchema),
     leaveController.updateLeaveStatus
 );

@@ -25,6 +25,13 @@ export async function runAutoAttendanceCheck() {
         const now = new Date();
         const dateStr = getWorkDayLabel(now); // Gets the current 6am-6am work day label
 
+        // Skip Sunday (weekly off)
+        const [y, m, d] = dateStr.split('-').map(Number);
+        if (new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0) {
+            logger.info(`[CRON:AutoAttendance] ${dateStr} is Sunday (weekly off) — skipping auto-attendance`);
+            return;
+        }
+
         // Get all active employees
         const employees = await Employee.find({ status: 'active' }).select('_id userId employeeId').lean();
         
@@ -42,7 +49,8 @@ export async function runAutoAttendanceCheck() {
                     emp._id.toString(),
                     emp.userId.toString(),
                     dateStr,
-                    workedMinutes
+                    workedMinutes,
+                    summary.breakMinutes || 0
                 );
 
                 if (result.marked) {
@@ -103,6 +111,13 @@ export const initAutoAttendanceJob = () => {
             const previousWorkDayDate = new Date(Date.now() - 2 * 60 * 60 * 1000); 
             const dateStr = getWorkDayLabel(previousWorkDayDate); 
             
+            // Skip Sunday (weekly off)
+            const [y, m, d] = dateStr.split('-').map(Number);
+            if (new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0) {
+                logger.info(`[CRON:AutoAttendance] Previous work day ${dateStr} was Sunday (weekly off) — skipping cleanup`);
+                return;
+            }
+
             const employees = await Employee.find({ status: 'active' }).select('_id userId employeeId').lean();
             let markedCount = 0;
             
@@ -113,7 +128,8 @@ export const initAutoAttendanceJob = () => {
                         emp._id.toString(),
                         emp.userId.toString(),
                         dateStr,
-                        summary.uniqueWorkedMinutes
+                        summary.uniqueWorkedMinutes,
+                        summary.breakMinutes || 0
                     );
                     if (result.marked) markedCount++;
                 } catch (err) {

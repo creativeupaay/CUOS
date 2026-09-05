@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetEmployeesQuery, useDeleteEmployeeMutation } from '@/features/hrms/hrmsApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import {
-    Plus, Search, Trash2, Edit, Eye, Users, Building2, ChevronLeft, ChevronRight,
+    Plus, Search, Trash2, Edit, Users, Building2, ChevronLeft, ChevronRight, MoreVertical,
 } from 'lucide-react';
 import { dedupeDepartments, formatDepartmentLabel, normalizeDepartmentKey, DEFAULT_DEPARTMENTS } from '@/utils/department';
 import { logger } from '@/utils/logger';
@@ -16,6 +16,8 @@ export default function HrmsEmployeesPage() {
     const [department, setDepartment] = useState('');
     const [status, setStatus] = useState('');
     const [page, setPage] = useState(1);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { data: orgSettingsData } = useGetOrgSettingsQuery();
 
     // Debounce: update `search` 350ms after the user stops typing
@@ -204,16 +206,45 @@ export default function HrmsEmployeesPage() {
                                             {new Date(emp.joiningDate).toLocaleDateString()}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                                                <button onClick={() => navigate(`/hrms/employees/${emp._id}`)} className="p-1.5 rounded hover:bg-gray-100 cursor-pointer" title="View">
-                                                    <Eye size={16} style={{ color: 'var(--color-text-muted)' }} />
+                                            <div
+                                                className="relative flex items-center justify-end"
+                                                ref={(el) => { menuRefs.current[emp._id] = el; }}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <button
+                                                    onClick={() => setOpenMenuId(openMenuId === emp._id ? null : emp._id)}
+                                                    className="p-1.5 rounded hover:bg-gray-100 cursor-pointer transition-colors"
+                                                    style={{ color: 'var(--color-text-muted)' }}
+                                                    title="More actions"
+                                                >
+                                                    <MoreVertical size={16} />
                                                 </button>
-                                                <button onClick={() => navigate(`/hrms/employees/${emp._id}/edit`)} className="p-1.5 rounded hover:bg-gray-100 cursor-pointer" title="Edit">
-                                                    <Edit size={16} style={{ color: 'var(--color-text-muted)' }} />
-                                                </button>
-                                                <button onClick={() => handleDelete(emp._id, (emp.userId as any)?.name)} className="p-1.5 rounded hover:bg-red-50 cursor-pointer" title="Delete">
-                                                    <Trash2 size={16} style={{ color: '#EF4444' }} />
-                                                </button>
+                                                {openMenuId === emp._id && (
+                                                    <div
+                                                        className="absolute right-0 top-8 w-40 rounded-xl shadow-lg z-50 overflow-hidden"
+                                                        style={{
+                                                            backgroundColor: 'var(--color-bg-surface)',
+                                                            border: '1px solid var(--color-border-default)',
+                                                        }}
+                                                    >
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); navigate(`/hrms/employees/${emp._id}/edit`); }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                            style={{ color: 'var(--color-text-primary)' }}
+                                                        >
+                                                            <Edit size={14} />
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setOpenMenuId(null); handleDelete(emp._id, (emp.userId as any)?.name); }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-red-50 transition-colors"
+                                                            style={{ color: '#EF4444' }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

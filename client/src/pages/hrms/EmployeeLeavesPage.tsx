@@ -281,13 +281,13 @@ export default function EmployeeLeavesPage() {
                                             <LeaveStatusBadge status={leave.status} />
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {/* Employee can only cancel their own PENDING leaves */}
-                                            {leave.status === 'pending' && (
+                                            {/* Employee can cancel pending leaves, or approved WFH requests */}
+                                            {(leave.status === 'pending' || (leave.status === 'approved' && leave.type === 'wfh')) && (
                                                 <button
                                                     onClick={() => setCancelLeave(leave)}
                                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition-colors"
                                                     style={{ borderColor: '#FECACA', backgroundColor: '#FEF2F2', color: '#B91C1C' }}
-                                                    title="Cancel leave request"
+                                                    title="Cancel request"
                                                 >
                                                     <XCircle size={13} /> Cancel
                                                 </button>

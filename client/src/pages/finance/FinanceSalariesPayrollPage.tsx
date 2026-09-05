@@ -9,8 +9,9 @@ import {
     Check,
     CreditCard,
     Trash2,
-    Eye,
     X,
+    MoreVertical,
+    Pencil,
 } from 'lucide-react';
 import ModalPortal from '@/components/ui/ModalPortal';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
@@ -64,6 +65,7 @@ export default function FinanceSalariesPayrollPage() {
     const [selectedEmployeeForSalary, setSelectedEmployeeForSalary] = useState<Employee | null>(null);
     const [selectedEmployeeIdForNewSalary, setSelectedEmployeeIdForNewSalary] = useState<string>('');
     const [editingPayroll, setEditingPayroll] = useState<Payroll | null>(null);
+    const [openPayrollMenuId, setOpenPayrollMenuId] = useState<string | null>(null);
 
     const [payrollEditForm, setPayrollEditForm] = useState({
         incentiveAmount: 0,
@@ -347,22 +349,7 @@ export default function FinanceSalariesPayrollPage() {
                                                 <StatusBadge status={payroll.status} />
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <div className="flex justify-end gap-1.5">
-                                                    <button
-                                                        onClick={() => setSelectedPayroll(payroll)}
-                                                        className="rounded-lg border p-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
-                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
-                                                        title="View Details"
-                                                    >
-                                                        <Eye size={13} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openPayrollEditModal(payroll)}
-                                                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50"
-                                                        style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-primary)' }}
-                                                    >
-                                                        Edit
-                                                    </button>
+                                                <div className="flex justify-end items-center gap-1.5">
                                                     {payroll.status === 'draft' && (
                                                         <button
                                                             onClick={() => updateStatus({ id: payroll._id, data: { status: 'approved' } })}
@@ -385,14 +372,42 @@ export default function FinanceSalariesPayrollPage() {
                                                             Mark Paid
                                                         </button>
                                                     )}
-                                                    <button
-                                                        onClick={() => handleDeletePayroll(payroll._id)}
-                                                        className="flex items-center gap-1 p-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors"
-                                                        style={{ backgroundColor: '#FEF2F2', color: '#EF4444' }}
-                                                        title="Delete Payroll"
-                                                    >
-                                                        <Trash2 size={13} />
-                                                    </button>
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={() => setOpenPayrollMenuId(openPayrollMenuId === payroll._id ? null : payroll._id)}
+                                                            className="rounded-lg border p-1.5 text-xs font-semibold cursor-pointer hover:bg-gray-50 transition-colors"
+                                                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                            title="More actions"
+                                                        >
+                                                            <MoreVertical size={13} />
+                                                        </button>
+                                                        {openPayrollMenuId === payroll._id && (
+                                                            <div
+                                                                className="absolute right-0 top-8 w-40 rounded-xl shadow-lg z-50 overflow-hidden"
+                                                                style={{
+                                                                    backgroundColor: 'var(--color-bg-surface)',
+                                                                    border: '1px solid var(--color-border-default)',
+                                                                }}
+                                                            >
+                                                                <button
+                                                                    onClick={() => { setOpenPayrollMenuId(null); openPayrollEditModal(payroll); }}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                    style={{ color: 'var(--color-text-primary)' }}
+                                                                >
+                                                                    <Pencil size={13} />
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setOpenPayrollMenuId(null); handleDeletePayroll(payroll._id); }}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-red-50 transition-colors"
+                                                                    style={{ color: '#EF4444' }}
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>

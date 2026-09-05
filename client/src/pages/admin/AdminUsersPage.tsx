@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil, Eye, EyeOff, MoreVertical } from 'lucide-react';
 import {
     useGetAdminUsersQuery,
     useCreateAdminUserMutation,
@@ -116,6 +116,7 @@ export default function AdminUsersPage() {
     const [newPassword, setNewPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const { data, isLoading } = useGetAdminUsersQuery({ search, isActive: filterStatus, page, limit: 15 });
     const { data: rolesData } = useGetAdminRolesQuery();
@@ -262,23 +263,63 @@ export default function AdminUsersPage() {
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3.5">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button onClick={() => setEditCreds(user)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Edit user details">
-                                                        <Pencil size={15} style={{ color: 'var(--color-text-muted)' }} />
+                                                <div className="relative flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        onClick={() => setOpenMenuId(openMenuId === user._id ? null : user._id)}
+                                                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                                        style={{ color: 'var(--color-text-muted)' }}
+                                                        title="More actions"
+                                                    >
+                                                        <MoreVertical size={16} />
                                                     </button>
-                                                    {!isSuperAdmin && (
-                                                        <>
-                                                            <button onClick={() => handleToggle(user._id, user.isActive)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title={user.isActive ? 'Deactivate' : 'Activate'}>
-                                                                {user.isActive ? <ToggleRight size={16} style={{ color: '#10B981' }} /> : <ToggleLeft size={16} style={{ color: '#EF4444' }} />}
+                                                    {openMenuId === user._id && (
+                                                        <div
+                                                            className="absolute right-0 top-9 w-44 rounded-xl shadow-lg z-50 overflow-hidden"
+                                                            style={{
+                                                                backgroundColor: 'var(--color-bg-surface)',
+                                                                border: '1px solid var(--color-border-default)',
+                                                            }}
+                                                        >
+                                                            <button
+                                                                onClick={() => { setOpenMenuId(null); setEditCreds(user); }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                style={{ color: 'var(--color-text-primary)' }}
+                                                            >
+                                                                <Pencil size={14} />
+                                                                Edit Details
                                                             </button>
-                                                            <button onClick={() => setDeleteConfirm({ id: user._id, name: user.name })} className="p-2 rounded-lg hover:bg-red-50 transition-colors" title="Delete user">
-                                                                <Trash2 size={15} style={{ color: '#EF4444' }} />
+                                                            <button
+                                                                onClick={() => { setOpenMenuId(null); setResetPwdUser(user._id); setShowPassword(false); setNewPassword(''); }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                style={{ color: 'var(--color-text-primary)' }}
+                                                            >
+                                                                <KeyRound size={14} />
+                                                                Reset Password
                                                             </button>
-                                                        </>
+                                                            {!isSuperAdmin && (
+                                                                <button
+                                                                    onClick={() => { setOpenMenuId(null); handleToggle(user._id, user.isActive); }}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                    style={{ color: user.isActive ? '#F59E0B' : '#10B981' }}
+                                                                >
+                                                                    {user.isActive
+                                                                        ? <ToggleLeft size={14} />
+                                                                        : <ToggleRight size={14} />}
+                                                                    {user.isActive ? 'Deactivate' : 'Activate'}
+                                                                </button>
+                                                            )}
+                                                            {!isSuperAdmin && (
+                                                                <button
+                                                                    onClick={() => { setOpenMenuId(null); setDeleteConfirm({ id: user._id, name: user.name }); }}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-red-50 transition-colors"
+                                                                    style={{ color: '#EF4444' }}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                    Delete
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     )}
-                                                    <button onClick={() => { setResetPwdUser(user._id); setShowPassword(false); setNewPassword(''); }} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Reset password">
-                                                        <KeyRound size={16} style={{ color: 'var(--color-text-muted)' }} />
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>

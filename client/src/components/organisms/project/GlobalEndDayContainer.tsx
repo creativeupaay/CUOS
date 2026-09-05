@@ -7,14 +7,17 @@ import GlobalTaskFormPanel, { type NewTaskFormData } from './GlobalTaskFormPanel
 import { toast } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
+import type { DaySessionMeta } from '@/hooks/useTaskTimer';
 
 interface GlobalEndDayContainerProps {
     timerSeconds: number;
+    breakSeconds?: number;
+    daySessionMeta?: DaySessionMeta | null;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (allocatedMinutes?: number) => void;
 }
 
-export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess }: GlobalEndDayContainerProps) {
+export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, daySessionMeta, onClose, onSuccess }: GlobalEndDayContainerProps) {
     const { allTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
     const { allMeetings } = useGlobalMeetings();
     const currentUserId = useSelector((state: RootState) => state.auth.user?._id) || '';
@@ -69,7 +72,13 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
         // Update task statuses and log time for each task
         for (const entry of entries) {
             try {
-                const hasChange = entry.status !== entry.task.status || entry.priority !== entry.task.priority || entry.deadline !== (entry.task.deadline ? new Date(entry.task.deadline).toISOString().slice(0, 10) : '') || entry.projectId !== entry.task._projectId;
+                const currentDeadlineStr = entry.task.deadline
+                    ? (() => {
+                        const d = new Date(entry.task.deadline);
+                        return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+                    })()
+                    : '';
+                const hasChange = entry.status !== entry.task.status || entry.priority !== entry.task.priority || entry.deadline !== currentDeadlineStr || entry.projectId !== entry.task._projectId;
                 if (hasChange) {
                     await updateTask(entry.task._projectId, entry.task._id, { status: entry.status, priority: entry.priority, deadline: entry.deadline || undefined, projectId: entry.projectId || undefined });
                 }
@@ -123,13 +132,17 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
             }
         }
 
+        const totalAllocatedMinutes = entries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0) +
+            meetingEntries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0) +
+            (unallocatedMinutes > 0 ? unallocatedMinutes : 0);
+
         if (hasAnyError) {
             toast.error('Day ended with some errors. Some time may not have been logged. Please check manually.');
         } else {
             toast.success('Day ended successfully!');
         }
         // Always call onSuccess so the timer is stopped even if some logs failed
-        onSuccess();
+        onSuccess(totalAllocatedMinutes);
     }, [updateTask, logTime, createTask, onSuccess, myTasks]);
 
     return (
@@ -139,6 +152,8 @@ export default function GlobalEndDayContainer({ timerSeconds, onClose, onSuccess
                 todayMeetings={todayMeetings}
                 projects={projects}
                 timerSeconds={timerSeconds}
+                breakSeconds={breakSeconds}
+                daySessionMeta={daySessionMeta}
                 onClose={onClose}
                 onSubmit={handleEndDaySubmit}
                 onAddNewTask={() => setShowTaskForm(true)}

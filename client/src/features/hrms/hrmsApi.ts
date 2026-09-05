@@ -468,7 +468,7 @@ export const hrmsApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: ['Employees'], // Refresh dashboard stats/today's attendance
+            invalidatesTags: ['Attendance', 'Employees'],
         }),
 
         checkOut: builder.mutation<ApiResponse<{ attendance: Attendance }>, CheckOutRequest>({
@@ -477,7 +477,7 @@ export const hrmsApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: ['Employees'],
+            invalidatesTags: ['Attendance', 'Employees'],
         }),
 
         getMyAttendance: builder.query<ApiResponse<{ data: Attendance[], results: number }>, { startDate?: string; endDate?: string }>({
@@ -485,6 +485,7 @@ export const hrmsApi = api.injectEndpoints({
                 url: '/hrms/attendance/me',
                 params,
             }),
+            providesTags: ['Attendance'],
         }),
 
         getEmployeeAttendance: builder.query<ApiResponse<{ data: Attendance[], results: number }>, { id: string, startDate?: string; endDate?: string }>({
@@ -492,6 +493,7 @@ export const hrmsApi = api.injectEndpoints({
                 url: `/hrms/attendance/employee/${id}`,
                 params,
             }),
+            providesTags: (_result, _error, { id }) => [{ type: 'Attendance' as const, id }],
         }),
 
         bulkMarkAttendance: builder.mutation<
@@ -503,7 +505,7 @@ export const hrmsApi = api.injectEndpoints({
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: ['Employees'],
+            invalidatesTags: ['Attendance', 'Employees'],
         }),
 
         getDailyOverview: builder.query<
@@ -513,7 +515,7 @@ export const hrmsApi = api.injectEndpoints({
                 employees: Array<{
                     employeeId: string; employeeCode: string; name: string; email: string;
                     department: string; designation: string; status: string;
-                    checkIn: string | null; checkOut: string | null; totalHours: number; notes: string;
+                    checkIn: string | null; checkOut: string | null; totalHours: number; breakMinutes?: number; notes: string;
                 }>;
             }>,
             { date?: string } | void
@@ -522,7 +524,7 @@ export const hrmsApi = api.injectEndpoints({
                 url: '/hrms/attendance/overview',
                 params: params || {},
             }),
-            providesTags: ['Employees'],
+            providesTags: ['Attendance'],
         }),
 
         getMonthlyAttendance: builder.query<
@@ -539,7 +541,7 @@ export const hrmsApi = api.injectEndpoints({
                 url: '/hrms/attendance/monthly',
                 params,
             }),
-            providesTags: ['Employees'],
+            providesTags: ['Attendance'],
         }),
     }),
     overrideExisting: false,
@@ -565,6 +567,7 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
             { year?: number; month?: number; type?: string; upcoming?: boolean }
         >({
             query: (params) => ({ url: '/hrms/holidays', params }),
+            providesTags: ['Holidays'],
         }),
 
         createHoliday: builder.mutation<
@@ -572,6 +575,7 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
             { name: string; date?: string; startDate?: string; endDate?: string; type: string; description?: string; isPaid: boolean }
         >({
             query: (body) => ({ url: '/hrms/holidays', method: 'POST', body }),
+            invalidatesTags: ['Holidays'],
         }),
 
         updateHoliday: builder.mutation<
@@ -579,6 +583,7 @@ const holidayApiExtension = hrmsApi.injectEndpoints({
             { id: string; data: Partial<Holiday> }
         >({
             query: ({ id, data }) => ({ url: `/hrms/holidays/${id}`, method: 'PATCH', body: data }),
+            invalidatesTags: ['Holidays'],
         }),
 
         deleteHoliday: builder.mutation<{ status: string }, string>({
