@@ -10,7 +10,7 @@ import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasHrmsSelfSubmoduleAccess, hasModuleAdminAccess, hasModuleViewAccess } from '@/utils/modulePermissions';
 import {
     ArrowLeft, Users2, ListTodo, BarChart3,
-    FileText, ChevronRight, ChevronDown, ShieldCheck,
+    FileText, ChevronRight, ChevronLeft, ChevronDown, ShieldCheck,
     ScrollText, Settings, DollarSign, Receipt, TrendingUp,
     Clock, CalendarDays, Briefcase, CheckCircle, Megaphone,
     Folder, FolderOpen, Grid2X2, Building2, LogOut, Gamepad2, Trophy,
@@ -717,6 +717,103 @@ const ProjectFoldersNav = memo(({
     );
 });
 
+const CollapsedProjectFoldersNav = memo(({
+    projects,
+    partnerNameById,
+    pathname,
+    search,
+    onNavigate,
+}: {
+    projects: SidebarProject[];
+    partnerNameById?: Record<string, string>;
+    pathname: string;
+    search: string;
+    onNavigate?: () => void;
+}) => {
+    const groups = useMemo(() => buildProjectFolderGroups(projects, partnerNameById), [projects, partnerNameById]);
+    const isAllDashboard = pathname === '/projects' && !search;
+
+    return (
+        <div className="flex flex-col items-center gap-2">
+            <NavLink
+                to="/projects"
+                state={{ newTab: true }}
+                end
+                onClick={() => onNavigate?.()}
+                title="Projects Dashboard"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 shrink-0"
+                style={
+                    isAllDashboard
+                        ? {
+                            backgroundColor: 'var(--color-primary)',
+                            color: '#ffffff',
+                            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                        }
+                        : {
+                            color: 'var(--color-text-secondary)',
+                        }
+                }
+                onMouseEnter={(e) => {
+                    if (!isAllDashboard) {
+                        e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                        e.currentTarget.style.color = 'var(--color-text-primary)';
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    if (!isAllDashboard) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                    }
+                }}
+            >
+                <Grid2X2 size={18} />
+            </NavLink>
+
+            {groups.map((group) => {
+                const isGroupActive = pathname.startsWith('/projects') && (
+                    (group.kind === 'internal' && search.includes('scope=internal')) ||
+                    (group.kind === 'partner' && search.includes(`partnerId=${encodeURIComponent(group.id)}`))
+                );
+                return (
+                    <NavLink
+                        key={group.id}
+                        to={group.path}
+                        state={{ newTab: true }}
+                        onClick={() => onNavigate?.()}
+                        title={group.name}
+                        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 shrink-0"
+                        style={
+                            isGroupActive
+                                ? {
+                                    backgroundColor: 'var(--color-primary)',
+                                    color: '#ffffff',
+                                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                                }
+                                : {
+                                    color: 'var(--color-text-secondary)',
+                                }
+                        }
+                        onMouseEnter={(e) => {
+                            if (!isGroupActive) {
+                                e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                e.currentTarget.style.color = 'var(--color-text-primary)';
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (!isGroupActive) {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = 'var(--color-text-secondary)';
+                            }
+                        }}
+                    >
+                        {group.kind === 'partner' ? <Building2 size={18} /> : <Folder size={18} />}
+                    </NavLink>
+                );
+            })}
+        </div>
+    );
+});
+
 /* ── Sidebar ─────────────────────────────────────────────── */
 export default function Sidebar({
     onNavigate,
@@ -808,139 +905,252 @@ export default function Sidebar({
             className={
                 mobile 
                     ? 'h-full flex flex-col' 
-                    : `fixed top-0 left-0 h-screen flex flex-col transition-transform duration-300 ease-in-out ${isCollapsed ? '-translate-x-full' : 'translate-x-0'}`
+                    : 'fixed top-0 left-0 h-screen flex flex-col transition-[width] duration-300 ease-in-out z-40'
             }
             style={{
-                width: mobile ? '100%' : 'var(--sidebar-width)',
-                zIndex: 40,
+                width: mobile ? '100%' : isCollapsed ? 'var(--sidebar-collapsed-width, 64px)' : 'var(--sidebar-width)',
                 background: 'rgba(255,255,255,0.94)',
                 backdropFilter: 'blur(20px)',
                 borderRight: '1px solid var(--color-border-default)',
-                boxShadow: 'var(--shadow-sm)',
+                boxShadow: 'none',
             }}
         >
-            {/* ── Brand ─────────────────────────────────────────────── */}
-            <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
-                <div className="flex items-center justify-between gap-2 mb-4">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                        {isPartner && partnerCompanyLogo ? (
+            {/* ── Edge Toggle Button (In & Out at the exact same edge position) ── */}
+            {!mobile && onToggleCollapse && (
+                <button
+                    type="button"
+                    onClick={onToggleCollapse}
+                    className="absolute -right-2.5 top-[18px] w-5 h-5 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all z-50 cursor-pointer select-none"
+                    style={{ boxShadow: 'none' }}
+                    title={isCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
+                    aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    {isCollapsed ? <ChevronRight size={11} strokeWidth={2.2} /> : <ChevronLeft size={11} strokeWidth={2.2} />}
+                </button>
+            )}
+
+            {!mobile && isCollapsed ? (
+                <>
+                    {/* ── Collapsed Mini Rail Top (Logo) ── */}
+                    <div
+                        className="relative flex items-center justify-center pt-4 pb-3 border-b shrink-0 px-2"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => {
+                                navigate('/dashboard');
+                                onNavigate?.();
+                            }}
+                            title="CUOS - Back to Dashboard"
+                            aria-label="Back to Dashboard"
+                            className="p-1 hover:opacity-85 transition-opacity rounded-lg"
+                        >
                             <img
-                                src={partnerCompanyLogo}
-                                alt={partnerCompanyName || 'Company Logo'}
-                                className="h-8 max-w-[120px] object-contain"
+                                src={isPartner && partnerCompanyLogo ? partnerCompanyLogo : "/company-logo2.png"}
+                                alt="CUOS"
+                                className="w-8 h-8 object-contain"
                             />
-                        ) : (
-                            <>
-                                <img src="/company-logo2.png" alt="Company Logo" className="h-8 max-w-[120px] object-contain shrink-0" />
-                                <div>
-                                    <div className="font-bold text-sm truncate" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
-                                    <div className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
-                                </div>
-                            </>
-                        )}
+                        </button>
                     </div>
 
-                    {!mobile && onToggleCollapse && (
+                    {/* ── Collapsed Navigation ── */}
+                    <nav className="flex-1 py-3 px-2 flex flex-col items-center gap-2 overflow-y-auto overflow-x-hidden">
+                        {useProjectFoldersNav ? (
+                            <CollapsedProjectFoldersNav
+                                projects={projects}
+                                partnerNameById={partnerNameById}
+                                pathname={effectivePathname}
+                                search={location.search}
+                                onNavigate={onNavigate}
+                            />
+                        ) : (
+                            moduleConfig.items.map((item) => {
+                                const active = isItemActive(item, effectivePathname, moduleConfig.items);
+                                return (
+                                    <NavLink
+                                        key={item.path}
+                                        to={item.path}
+                                        state={{ newTab: true }}
+                                        onClick={() => onNavigate?.()}
+                                        title={item.label}
+                                        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 relative group shrink-0"
+                                        style={
+                                            active
+                                                ? {
+                                                    backgroundColor: 'var(--color-primary)',
+                                                    color: '#ffffff',
+                                                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                                                }
+                                                : {
+                                                    color: 'var(--color-text-secondary)',
+                                                }
+                                        }
+                                        onMouseEnter={(e) => {
+                                            if (!active) {
+                                                e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)';
+                                                e.currentTarget.style.color = 'var(--color-text-primary)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (!active) {
+                                                e.currentTarget.style.backgroundColor = 'transparent';
+                                                e.currentTarget.style.color = 'var(--color-text-secondary)';
+                                            }
+                                        }}
+                                    >
+                                        <span className="flex items-center justify-center">
+                                            {item.icon}
+                                        </span>
+                                    </NavLink>
+                                );
+                            })
+                        )}
+                    </nav>
+
+                    {/* ── Collapsed Footer (Back to Dashboard & Logout) ── */}
+                    <div
+                        className="p-2 border-t flex flex-col items-center gap-1.5 shrink-0"
+                        style={{ borderColor: 'var(--color-border-default)' }}
+                    >
                         <button
                             type="button"
-                            onClick={onToggleCollapse}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
-                            title="Close sidebar (Ctrl+B)"
-                            aria-label="Close sidebar"
+                            onClick={() => {
+                                navigate('/dashboard');
+                                onNavigate?.();
+                            }}
+                            title="Back to Dashboard"
+                            aria-label="Back to Dashboard"
+                            className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                         >
-                            <PanelLeftClose size={18} />
+                            <ArrowLeft size={18} />
                         </button>
-                    )}
 
-                    {mobile && onNavigate && (
                         <button
                             type="button"
-                            onClick={onNavigate}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
-                            title="Close navigation"
-                            aria-label="Close navigation"
+                            onClick={() => setShowLogoutModal(true)}
+                            title="Logout"
+                            aria-label="Logout"
+                            className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                         >
-                            <PanelLeftClose size={18} />
+                            <LogOut size={18} />
                         </button>
-                    )}
-                </div>
+                    </div>
+                </>
+            ) : (
+                <>
+                    {/* ── Brand ─────────────────────────────────────────────── */}
+                    <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <div className="flex items-center justify-between gap-2 mb-4">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                {isPartner && partnerCompanyLogo ? (
+                                    <img
+                                        src={partnerCompanyLogo}
+                                        alt={partnerCompanyName || 'Company Logo'}
+                                        className="h-8 max-w-[120px] object-contain"
+                                    />
+                                ) : (
+                                    <>
+                                        <img src="/company-logo2.png" alt="Company Logo" className="h-8 max-w-[120px] object-contain shrink-0" />
+                                        <div>
+                                            <div className="font-bold text-sm truncate" style={{ fontFamily: 'Outfit, sans-serif', color: 'var(--color-text-primary)' }}>{brandName}</div>
+                                            <div className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{brandSubtitle}</div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
-                {/* Back + Module name */}
-                <button
-                    onClick={() => {
-                        navigate('/dashboard');
-                        onNavigate?.();
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-medium mb-2 transition-colors duration-150"
-                    style={{ color: 'var(--color-text-muted)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-                >
-                    <ArrowLeft size={12} />
-                    Back to Dashboard
-                </button>
-                <div
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
-                    style={{ backgroundColor: 'var(--color-bg-subtle)' }}
-                >
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--color-primary)' }} />
-                    <h2 className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                        {moduleConfig.title}
-                    </h2>
-                </div>
-            </div>
+                            {mobile && onNavigate && (
+                                <button
+                                    type="button"
+                                    onClick={onNavigate}
+                                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
+                                    title="Close navigation"
+                                    aria-label="Close navigation"
+                                >
+                                    <PanelLeftClose size={18} />
+                                </button>
+                            )}
+                        </div>
 
-            {/* ── Navigation ─────────────────────────────────────────── */}
-            <nav className="flex-1 py-3 px-3 overflow-y-auto overflow-x-hidden">
-                <div className="space-y-0.5 pl-3">
-                    {useProjectFoldersNav ? (
-                        <ProjectFoldersNav
-                            projects={projects}
-                            partnerNameById={partnerNameById}
-                            pathname={effectivePathname}
-                            search={location.search}
-                            onNavigate={onNavigate}
-                        />
-                    ) : (
-                        moduleConfig.items.map((item) => {
-                            const active = isItemActive(item, effectivePathname, moduleConfig.items);
-                            return (
-                                <NavItemComponent
-                                    key={item.path}
-                                    item={item}
-                                    active={active}
+                        {/* Back + Module name */}
+                        <button
+                            onClick={() => {
+                                navigate('/dashboard');
+                                onNavigate?.();
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-medium mb-2 transition-colors duration-150"
+                            style={{ color: 'var(--color-text-muted)' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+                        >
+                            <ArrowLeft size={12} />
+                            Back to Dashboard
+                        </button>
+                        <div
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+                            style={{ backgroundColor: 'var(--color-bg-subtle)' }}
+                        >
+                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--color-primary)' }} />
+                            <h2 className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                                {moduleConfig.title}
+                            </h2>
+                        </div>
+                    </div>
+
+                    {/* ── Navigation ─────────────────────────────────────────── */}
+                    <nav className="flex-1 py-3 px-3 overflow-y-auto overflow-x-hidden">
+                        <div className="space-y-0.5 pl-3">
+                            {useProjectFoldersNav ? (
+                                <ProjectFoldersNav
+                                    projects={projects}
+                                    partnerNameById={partnerNameById}
                                     pathname={effectivePathname}
+                                    search={location.search}
                                     onNavigate={onNavigate}
                                 />
-                            );
-                        })
-                    )}
-                </div>
-            </nav>
+                            ) : (
+                                moduleConfig.items.map((item) => {
+                                    const active = isItemActive(item, effectivePathname, moduleConfig.items);
+                                    return (
+                                        <NavItemComponent
+                                            key={item.path}
+                                            item={item}
+                                            active={active}
+                                            pathname={effectivePathname}
+                                            onNavigate={onNavigate}
+                                        />
+                                    );
+                                })
+                            )}
+                        </div>
+                    </nav>
 
-            {/* ── Logout Button ──────────────────────────────────────── */}
-            <div className="p-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
-                <button
-                    onClick={() => setShowLogoutModal(true)}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 group"
-                    style={{
-                        color: 'var(--color-text-secondary)',
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#fee2e2';
-                        e.currentTarget.style.color = '#dc2626';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.color = 'var(--color-text-secondary)';
-                    }}
-                >
-                    <span className="flex-1 text-left pl-1">Logout</span>
-                    <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 text-inherit">
-                        <LogOut size={16} />
-                    </span>
-                </button>
-            </div>
+                    {/* ── Logout Button ──────────────────────────────────────── */}
+                    <div className="p-3 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <button
+                            onClick={() => setShowLogoutModal(true)}
+                            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 group"
+                            style={{
+                                color: 'var(--color-text-secondary)',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#fee2e2';
+                                e.currentTarget.style.color = '#dc2626';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = 'var(--color-text-secondary)';
+                            }}
+                        >
+                            <span className="flex-1 text-left pl-1">Logout</span>
+                            <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 text-inherit">
+                                <LogOut size={16} />
+                            </span>
+                        </button>
+                    </div>
+                </>
+            )}
 
             {/* ── Logout Modal ──────────────────────────────────────── */}
             {showLogoutModal && (

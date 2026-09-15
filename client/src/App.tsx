@@ -6,6 +6,7 @@ import { setInitialized, setUser } from './features/auth/slices/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import { TimerProvider } from './hooks/useTaskTimer';
 import { BreakProvider } from './hooks/useBreakTimer';
+import { LapseProvider } from './hooks/useLapses';
 import { HydrationProvider } from './features/hydration/HydrationProvider';
 import { HydrationOverlay } from './features/hydration/HydrationOverlay';
 import {
@@ -240,12 +241,14 @@ function App() {
       <BrowserRouter>
         <TimerProvider>
           <BreakProvider>
-            <HydrationProvider>
-              <ErrorBoundary>
-                <AppRoutes />
-              </ErrorBoundary>
-              <HydrationOverlay />
-            </HydrationProvider>
+            <LapseProvider>
+              <HydrationProvider>
+                <ErrorBoundary>
+                  <AppRoutes />
+                </ErrorBoundary>
+                <HydrationOverlay />
+              </HydrationProvider>
+            </LapseProvider>
           </BreakProvider>
         </TimerProvider>
       </BrowserRouter>

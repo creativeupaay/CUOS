@@ -168,9 +168,11 @@ export default function BreakButton() {
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    justifyContent: 'center',
+                    width: isOnBreak ? 'auto' : '32px',
                     height: '32px',
-                    padding: '0 12px',
+                    padding: isOnBreak ? '0 10px' : '0',
+                    gap: isOnBreak ? '6px' : '0',
                     borderRadius: '9999px',
                     border: isOnBreak ? '1px solid #FCD34D' : '1px solid #E2E8F0',
                     background: isOnBreak ? '#FFFBEB' : open ? '#F1F5F9' : '#FFFFFF',
@@ -204,26 +206,20 @@ export default function BreakButton() {
                 }}
             >
                 {isEnding ? (
-                    <>
-                        <Loader2 size={13} className="animate-spin text-amber-600" />
-                        <span className="text-xs font-medium">Ending…</span>
-                    </>
+                    <Loader2 size={15} className="animate-spin text-amber-600" />
                 ) : isOnBreak ? (
                     <>
                         <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                         </span>
-                        <span className="text-xs font-medium">On Break</span>
-                        <span className="font-mono text-xs font-semibold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-full">
+                        <Coffee size={13} className="text-amber-700" />
+                        <span className="font-mono text-xs font-semibold text-amber-900 tabular-nums">
                             {formatElapsed(currentBreakElapsed)}
                         </span>
                     </>
                 ) : (
-                    <>
-                        <Coffee size={14} className="text-slate-500" />
-                        <span>Break</span>
-                    </>
+                    <Coffee size={15} className="text-slate-500" />
                 )}
             </button>
 

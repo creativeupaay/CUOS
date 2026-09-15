@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Clock, CheckCircle2, Search, Loader2, Video, Calendar } from 'lucide-react';
+import { LapIcon } from '@/components/atoms/LapIcon';
 import toast from 'react-hot-toast';
 import type { GlobalTask } from '@/hooks/useGlobalTasks';
 import type { GlobalMeeting } from '@/hooks/useGlobalMeetings';
@@ -8,6 +9,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import { formatElapsed, type DaySessionMeta } from '@/hooks/useTaskTimer';
 import type { Project } from '@/features/project';
+import type { LapseRecord } from '@/hooks/useLapses';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +21,8 @@ export interface TaskSummaryEntry {
     deadline: string;
     projectId: string;
     notes: string;
+    /** True when this task's time was already logged via a lapse — do not re-log at EOD submit */
+    lapseLogged?: boolean;
 }
 
 export interface MeetingSummaryEntry {
@@ -33,9 +37,14 @@ interface EndOfDayModalProps {
     timerSeconds: number;
     breakSeconds?: number;
     daySessionMeta?: DaySessionMeta | null;
+    /** All lapse records (assigned + unassigned) accumulated during the day */
+    allLapses?: LapseRecord[];
+    /** Unassigned lapse records accumulated during the day */
+    pendingLapses?: LapseRecord[];
     onClose: () => void;
     onSubmit: (entries: TaskSummaryEntry[], meetingEntries: MeetingSummaryEntry[], unallocatedMinutes: number) => Promise<void>;
     onAddNewTask?: () => void;
+    onAssignLapse?: (id: string, taskId: string, projectId: string, note?: string) => Promise<void> | void;
 }
 
 // ─── Config maps ─────────────────────────────────────────────────────────────
@@ -63,18 +72,80 @@ export default function EndOfDayModal({
     timerSeconds,
     breakSeconds = 0,
     daySessionMeta,
+    allLapses = [],
+    pendingLapses = [],
     onClose,
     onSubmit,
     onAddNewTask,
+    onAssignLapse,
 }: EndOfDayModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const currentUser = useSelector((state: RootState) => state.auth.user);
     const currentUserId = currentUser?._id;
 
-    const lastEndedAccumulated = daySessionMeta?.lastEndedAccumulated || 0;
+const lastEndedAccumulated = daySessionMeta?.lastEndedAccumulated || 0;
     const lastEndedBreakAccumulated = daySessionMeta?.lastEndedBreakAccumulated || 0;
-    
-    const [entries, setEntries] = useState<TaskSummaryEntry[]>([]);
+    const lastEndedWorkingSecondsForSplit = Math.max(0, lastEndedAccumulated - lastEndedBreakAccumulated);
+    const isSecondSession = lastEndedAccumulated > 0;
+
+    // Split lapses into first-session (already covered by the first EOD) and current-session.
+    // Strategy: sort all assigned lapses by capturedAt, accumulate their seconds.
+    // Once the cumulative sum exceeds lastEndedWorkingSeconds, remaining lapses belong to the current session.
+    const assignedLapses = allLapses.filter(l => !!l.assignedTaskId);
+    const { currentSessionAssigned } = useMemo(() => {
+        if (!isSecondSession) {
+            return { currentSessionAssigned: assignedLapses };
+        }
+        const sorted = [...assignedLapses].sort(
+            (a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
+        );
+        let cumSeconds = 0;
+        const curr: typeof assignedLapses = [];
+        for (const l of sorted) {
+            cumSeconds += l.seconds;
+            if (cumSeconds > lastEndedWorkingSecondsForSplit) {
+                curr.push(l);
+            }
+        }
+        return { currentSessionAssigned: curr };
+    }, [assignedLapses, isSecondSession, lastEndedWorkingSecondsForSplit]);
+
+    // Minutes already logged via lapse in the CURRENT session only
+    const alreadyAssignedLapseMinutes = currentSessionAssigned.reduce(
+        (acc, l) => acc + Math.max(1, Math.round(l.seconds / 60)),
+        0
+    );
+    // allAssignedLapseMinutesDisplay: total assigned lapse minutes for the whole day — available for future UI use
+
+    // Pre-populate entries for tasks that had lapse time logged in the CURRENT session only.
+    // lapseLogged: true prevents the EOD submit from re-logging their time.
+    const [entries, setEntries] = useState<TaskSummaryEntry[]>(() => {
+        const prefilled: TaskSummaryEntry[] = [];
+        for (const lapse of currentSessionAssigned) {
+            if (!lapse.assignedTaskId) continue;
+            const task = allTasks.find(t => t._id === lapse.assignedTaskId);
+            if (!task) continue;
+            const lapseMinutes = Math.max(1, Math.round(lapse.seconds / 60));
+            const existing = prefilled.find(e => e.task._id === task._id);
+            if (existing) {
+                existing.allocatedMinutes += lapseMinutes;
+            } else {
+                prefilled.push({
+                    task,
+                    allocatedMinutes: lapseMinutes,
+                    status: 'completed',
+                    priority: task.priority || 'medium',
+                    deadline: task.deadline
+                        ? (() => { const d = new Date(task.deadline); return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10); })()
+                        : '',
+                    projectId: lapse.assignedProjectId || task._projectId || '',
+                    notes: lapse.note || `Lapse — ${formatElapsed(lapse.seconds)}`,
+                    lapseLogged: true,
+                });
+            }
+        }
+        return prefilled;
+    });
     
     const [meetingEntries, setMeetingEntries] = useState<MeetingSummaryEntry[]>(() => {
         const prefilled: MeetingSummaryEntry[] = [];
@@ -92,12 +163,14 @@ export default function EndOfDayModal({
     
     const [search, setSearch] = useState('');
     const [confirmAction, setConfirmAction] = useState<'perfect' | 'less' | null>(null);
+    // lapseId → taskId of local assignments made inside the EOD modal
+    const [lapseAssignments, setLapseAssignments] = useState<Record<string, string>>({});
 
     // Total day logged metrics (shows whole day time)
-    const totalTimerMinutes = Math.floor(timerSeconds / 60);
-    const totalBreakMinutes = Math.floor(breakSeconds / 60);
+    const totalTimerMinutes = Math.round(timerSeconds / 60);
+    const totalBreakMinutes = Math.round(breakSeconds / 60);
     const totalWorkingSeconds = Math.max(0, timerSeconds - breakSeconds);
-    const totalWorkingMinutes = Math.floor(totalWorkingSeconds / 60);
+    const totalWorkingMinutes = Math.round(totalWorkingSeconds / 60);
 
     // If day was ended once earlier on same day, only allocate the second time recorded
     const lastEndedWorkingSeconds = Math.max(0, lastEndedAccumulated - lastEndedBreakAccumulated);
@@ -105,14 +178,41 @@ export default function EndOfDayModal({
         ? Math.max(0, totalWorkingSeconds - lastEndedWorkingSeconds)
         : totalWorkingSeconds;
 
-    const minutesToAllocate = lastEndedAccumulated > 0
-        ? (secondTimeRecordedSeconds >= 60 ? Math.floor(secondTimeRecordedSeconds / 60) : (secondTimeRecordedSeconds > 0 ? 1 : 0))
+    // unassignedLapseMinutes / totalLapseMinutes available for future use:
+    //   unassignedLapseMinutes = pendingLapses.reduce((acc, l) => acc + Math.max(1, Math.round(l.seconds / 60)), 0)
+    //   totalLapseMinutes = alreadyAssignedLapseMinutes + unassignedLapseMinutes
+
+    // Total minutes available for this EOD session (full working time, no lapse deduction from budget).
+    // Lapse-logged minutes are part of the working day — they count as pre-allocated, not removed from budget.
+    const rawMinutesToAllocate = lastEndedAccumulated > 0
+        ? (secondTimeRecordedSeconds >= 30 ? Math.round(secondTimeRecordedSeconds / 60) : (secondTimeRecordedSeconds > 0 ? 1 : 0))
         : totalWorkingMinutes;
 
-    const allocatedTaskMinutes = entries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0);
+    // minutesToAllocate is the actual working time for this EOD session.
+    // Lapse time is counted as pre-allocated WITHIN this budget — not additive to it.
+    // If lapse minutes slightly exceed working minutes due to rounding, unallocatedMinutes
+    // will go negative and be clamped to 0 at submit (effectiveUnallocated = Math.max(0, ...)).
+    const minutesToAllocate = rawMinutesToAllocate;
+
+    // Map of taskId -> total lapse minutes in currentSessionAssigned
+    const taskLapseMinutesMap = useMemo(() => {
+        const map: Record<string, number> = {};
+        for (const lapse of currentSessionAssigned) {
+            if (!lapse.assignedTaskId) continue;
+            const mins = Math.max(1, Math.round(lapse.seconds / 60));
+            map[lapse.assignedTaskId] = (map[lapse.assignedTaskId] || 0) + mins;
+        }
+        return map;
+    }, [currentSessionAssigned]);
+
+    // Count ALL allocated minutes (including lapse-logged tasks — they are pre-allocated portions of the budget).
+    // This ensures the budget always balances: lapse time + manually-allocated time = total working time.
+    const allocatedTaskMinutes = entries.reduce((acc, e) => {
+        return acc + Math.max(0, e.allocatedMinutes || 0);
+    }, 0);
     const allocatedMeetingMinutes = meetingEntries.reduce((acc, e) => acc + (e.allocatedMinutes || 0), 0);
     const allocatedTotal = allocatedTaskMinutes + allocatedMeetingMinutes;
-    // Unallocated time is against the time given to allocate
+    // Unallocated time is against the total working time budget
     const unallocatedMinutes = minutesToAllocate - allocatedTotal;
 
     const isToday = (dateVal?: string | Date) => {
@@ -154,10 +254,11 @@ export default function EndOfDayModal({
             if (exists) {
                 return prev.filter(e => e.task._id !== task._id);
             } else {
+                const taskLapseMins = taskLapseMinutesMap[task._id] || 0;
                 return [...prev, {
                     task,
-                    allocatedMinutes: 0,
-                    status: task.status === 'todo' ? 'in-progress' : task.status,
+                    allocatedMinutes: taskLapseMins,
+                    status: 'completed',
                     priority: task.priority || 'medium',
                     deadline: task.deadline
                         ? (() => {
@@ -166,7 +267,8 @@ export default function EndOfDayModal({
                         })()
                         : '',
                     projectId: task._projectId || '',
-                    notes: '',
+                    notes: taskLapseMins > 0 ? `Lapse — ${formatHrsMins(taskLapseMins)}` : '',
+                    lapseLogged: taskLapseMins > 0,
                 }];
             }
         });
@@ -178,6 +280,64 @@ export default function EndOfDayModal({
                 ? { ...e, [field]: value }
                 : e
         ));
+    };
+
+    const assignLapseToTask = (lapseId: string, lapseSeconds: number, taskId: string) => {
+        const task = allTasks.find(t => t._id === taskId);
+        if (!task) return;
+        const lapseMinutes = Math.max(1, Math.round(lapseSeconds / 60));
+        setLapseAssignments(prev => ({ ...prev, [lapseId]: taskId }));
+        if (onAssignLapse) {
+            onAssignLapse(lapseId, taskId, task._projectId || '', `Lapse — ${formatElapsed(lapseSeconds)}`);
+        }
+        setEntries(prev => {
+            const exists = prev.find(e => e.task._id === taskId);
+            if (exists) {
+                // Keep lapseLogged true and ensure allocated minutes covers the lapse
+                return prev.map(e => e.task._id === taskId
+                    ? {
+                        ...e,
+                        allocatedMinutes: Math.max(e.allocatedMinutes || 0, lapseMinutes),
+                        status: 'completed',
+                        lapseLogged: true,
+                    }
+                    : e
+                );
+            }
+            return [...prev, {
+                task,
+                allocatedMinutes: lapseMinutes,
+                status: 'completed',
+                priority: task.priority || 'medium',
+                deadline: task.deadline
+                    ? (() => { const d = new Date(task.deadline); return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10); })()
+                    : '',
+                projectId: task._projectId || '',
+                notes: `Lapse — ${formatElapsed(lapseSeconds)}`,
+                lapseLogged: true,
+            }];
+        });
+    };
+
+    const unassignLapseFromTask = (lapseId: string, lapseSeconds: number) => {
+        const taskId = lapseAssignments[lapseId];
+        if (!taskId) return;
+        let lapseMinutes = Math.max(1, Math.round(lapseSeconds / 60));
+        const currentRemaining = minutesToAllocate - allocatedTotal;
+        if (currentRemaining > 0 && lapseMinutes === currentRemaining + 1) {
+            lapseMinutes = currentRemaining;
+        }
+        setLapseAssignments(prev => { const n = { ...prev }; delete n[lapseId]; return n; });
+        if (onAssignLapse) {
+            onAssignLapse(lapseId, '', '');
+        }
+        setEntries(prev => prev
+            .map(e => e.task._id === taskId
+                ? { ...e, allocatedMinutes: Math.max(0, (e.allocatedMinutes || 0) - lapseMinutes) }
+                : e
+            )
+            .filter(e => e.task._id !== taskId || e.allocatedMinutes > 0 || prev.find(p => p.task._id === taskId)?.notes !== `Lapse — ${formatElapsed(lapseSeconds)}`)
+        );
     };
 
     const toggleMeeting = (meeting: GlobalMeeting) => {
@@ -206,18 +366,24 @@ export default function EndOfDayModal({
             toast.error('Please select at least one task or meeting.');
             return;
         }
-        if (unallocatedMinutes < 0) {
+        // Allow up to 2 min negative — lapse rounding (Math.max(1, Math.round)) can create small drift
+        const effectiveUnallocated = unallocatedMinutes < 0 && unallocatedMinutes >= -2 ? 0 : unallocatedMinutes;
+        if (effectiveUnallocated < 0) {
             toast.error(`Cannot exceed time to allocate (${formatHrsMins(minutesToAllocate)}). Please reduce allocated time by ${Math.abs(unallocatedMinutes)} min.`);
             return;
         }
 
         // Validate task mandatory fields (everything mandatory except due date and notes)
         for (const entry of entries) {
-            if (!entry.allocatedMinutes || entry.allocatedMinutes <= 0 || isNaN(entry.allocatedMinutes)) {
+            const taskLapseMins = taskLapseMinutesMap[entry.task._id] || 0;
+            const isLapse = entry.lapseLogged || taskLapseMins > 0;
+            // Skip time check for lapse-logged tasks — time was already logged during the day
+            if (!isLapse && (!entry.allocatedMinutes || entry.allocatedMinutes <= 0 || isNaN(entry.allocatedMinutes))) {
                 toast.error(`Please allocate at least 1 minute for task: "${entry.task.title}"`);
                 return;
             }
-            if (!entry.projectId) {
+            // Project is only required for project tasks, not individual tasks
+            if (entry.task._projectId && !entry.projectId) {
                 toast.error(`Project is missing for task: "${entry.task.title}"`);
                 return;
             }
@@ -239,10 +405,10 @@ export default function EndOfDayModal({
             }
         }
 
-        if (unallocatedMinutes === 0) {
+        if (effectiveUnallocated === 0) {
             setConfirmAction('perfect');
             return;
-        } else if (unallocatedMinutes > 0) {
+        } else if (effectiveUnallocated > 0) {
             setConfirmAction('less');
             return;
         }
@@ -253,7 +419,8 @@ export default function EndOfDayModal({
     const executeSubmit = async () => {
         setIsSubmitting(true);
         try {
-            await onSubmit(entries, meetingEntries, unallocatedMinutes);
+            const effectiveUnallocated = Math.max(0, unallocatedMinutes);
+            await onSubmit(entries, meetingEntries, effectiveUnallocated);
             onClose();
         } finally {
             setIsSubmitting(false);
@@ -368,15 +535,25 @@ export default function EndOfDayModal({
                             </p>
                             <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                                 {minutesToAllocate} min to allocate
+                                {alreadyAssignedLapseMinutes > 0 && (
+                                    <span className="ml-1 text-emerald-600 font-semibold">
+                                        ({alreadyAssignedLapseMinutes}m via lapse ✓)
+                                    </span>
+                                )}
                             </p>
                         </div>
 
                         {/* Unallocated Time */}
                         <div className="text-right sm:border-l sm:pl-4" style={{ borderColor: 'var(--color-border-default)' }}>
                             <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Unallocated Time</p>
-                            <p className={`text-xl font-bold font-mono ${unallocatedMinutes < 0 ? 'text-red-500' : ''}`} style={{ color: unallocatedMinutes === 0 ? 'var(--color-success)' : unallocatedMinutes > 0 ? 'var(--color-text-primary)' : undefined }}>
-                                {formatHrsMins(unallocatedMinutes)}
-                            </p>
+                            {(() => {
+                                const displayUnallocated = unallocatedMinutes === -1 ? 0 : unallocatedMinutes;
+                                return (
+                                    <p className={`text-xl font-bold font-mono ${displayUnallocated < 0 ? 'text-red-500' : ''}`} style={{ color: displayUnallocated === 0 ? 'var(--color-success)' : displayUnallocated > 0 ? 'var(--color-text-primary)' : undefined }}>
+                                        {formatHrsMins(displayUnallocated)}
+                                    </p>
+                                );
+                            })()}
                             <div className="flex items-center justify-end gap-1 text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                                 <span>Tasks: {formatHrsMins(allocatedTaskMinutes)}</span>
                                 <span>·</span>
@@ -384,6 +561,186 @@ export default function EndOfDayModal({
                             </div>
                         </div>
                     </div>
+
+                    {/* ── Already-assigned Lapses (logged during the day) ── */}
+                    {assignedLapses.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <CheckCircle2 size={14} style={{ color: '#16A34A' }} />
+                                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Already Logged via Lapse
+                                </label>
+                                <span
+                                    className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                                    style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}
+                                >
+                                    {alreadyAssignedLapseMinutes} min deducted
+                                </span>
+                            </div>
+                            <div
+                                className="rounded-xl overflow-hidden"
+                                style={{ border: '1px solid #BBF7D0' }}
+                            >
+                                {assignedLapses.map((lapse, idx) => {
+                                    const task = allTasks.find(t => t._id === lapse.assignedTaskId);
+                                    const lapseMinutes = Math.max(1, Math.round(lapse.seconds / 60));
+                                    const timeStr = new Date(lapse.capturedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                                    return (
+                                        <div
+                                            key={lapse.id}
+                                            className="px-3 py-2 flex items-center justify-between"
+                                            style={{
+                                                backgroundColor: '#F0FDF4',
+                                                borderBottom: idx < assignedLapses.length - 1 ? '1px solid #BBF7D0' : undefined,
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <CheckCircle2 size={12} style={{ color: '#16A34A', flexShrink: 0 }} />
+                                                <span className="text-xs truncate" style={{ color: '#166534' }}>
+                                                    {task?.title || 'Unknown task'}
+                                                    {task?._projectName ? ` · ${task._projectName}` : ''}
+                                                </span>
+                                                <span className="text-[10px] shrink-0" style={{ color: '#4ADE80' }}>· {timeStr}</span>
+                                            </div>
+                                            <span className="font-mono text-xs font-bold ml-2 shrink-0" style={{ color: '#166534' }}>
+                                                {lapseMinutes}m logged ✓
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Unassigned Lapses Section ── */}
+                    {pendingLapses.length > 0 && (() => {
+                        const stillUnassigned = pendingLapses.filter(l => !lapseAssignments[l.id]);
+                        return (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <LapIcon size={14} style={{ color: 'var(--color-primary)' }} />
+                                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Unassigned Lapses
+                                </label>
+                                {stillUnassigned.length > 0 && (
+                                    <span
+                                        className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                                        style={{ backgroundColor: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}
+                                    >
+                                        {stillUnassigned.length}
+                                    </span>
+                                )}
+                                {stillUnassigned.length === 0 && (
+                                    <span
+                                        className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                                        style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}
+                                    >
+                                        All assigned ✓
+                                    </span>
+                                )}
+                            </div>
+                            <div
+                                className="rounded-xl overflow-hidden"
+                                style={{ border: '1px solid var(--color-border-default)' }}
+                            >
+                                {pendingLapses.map((lapse, idx) => {
+                                    const capturedAt = new Date(lapse.capturedAt);
+                                    const timeStr = capturedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                                    const assignedTaskId = lapseAssignments[lapse.id];
+                                    const assignedTask = assignedTaskId ? allTasks.find(t => t._id === assignedTaskId) : null;
+                                    const lapseMinutes = Math.max(1, Math.round(lapse.seconds / 60));
+                                    return (
+                                        <div
+                                            key={lapse.id}
+                                            className="p-3 space-y-2"
+                                            style={{
+                                                backgroundColor: assignedTask ? '#F0FDF4' : 'var(--color-bg-subtle)',
+                                                borderBottom: idx < pendingLapses.length - 1 ? '1px solid var(--color-border-default)' : undefined,
+                                            }}
+                                        >
+                                            {/* Row header */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    {assignedTask ? (
+                                                        <CheckCircle2 size={13} style={{ color: '#16A34A' }} />
+                                                    ) : (
+                                                        <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: 'var(--color-border-default)' }} />
+                                                    )}
+                                                    <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                        Lapse #{idx + 1} · {timeStr}
+                                                    </span>
+                                                </div>
+                                                <span className="font-mono text-xs font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                                    {formatElapsed(lapse.seconds)}
+                                                    <span className="font-normal text-[10px] ml-1" style={{ color: 'var(--color-text-muted)' }}>≈ {lapseMinutes}m</span>
+                                                </span>
+                                            </div>
+
+                                            {/* Task selector */}
+                                            {assignedTask ? (
+                                                <div className="flex items-center justify-between pl-4">
+                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                        <span className="text-xs truncate" style={{ color: '#16A34A' }}>
+                                                            → {assignedTask.title}
+                                                            {assignedTask._projectName ? ` · ${assignedTask._projectName}` : ''}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => unassignLapseFromTask(lapse.id, lapse.seconds)}
+                                                        className="text-[11px] ml-2 shrink-0 hover:underline"
+                                                        style={{ color: 'var(--color-text-muted)' }}
+                                                    >
+                                                        change
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="pl-4">
+                                                    <select
+                                                        defaultValue=""
+                                                        onChange={e => {
+                                                            if (e.target.value) assignLapseToTask(lapse.id, lapse.seconds, e.target.value);
+                                                        }}
+                                                        className="w-full text-xs rounded-lg border outline-none px-2 py-1.5"
+                                                        style={{
+                                                            borderColor: 'var(--color-border-default)',
+                                                            backgroundColor: 'var(--color-bg-surface)',
+                                                            color: 'var(--color-text-primary)',
+                                                        }}
+                                                    >
+                                                        <option value="">— Assign {lapseMinutes}m to a task…</option>
+                                                        {allTasks
+                                                            .filter(t => t.status !== 'completed')
+                                                            .map(t => (
+                                                                <option key={t._id} value={t._id}>
+                                                                    {t.title}{t._projectName ? ` · ${t._projectName}` : ''}
+                                                                </option>
+                                                            ))
+                                                        }
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Total row */}
+                                <div
+                                    className="px-3 py-2 flex items-center justify-between"
+                                    style={{ backgroundColor: 'var(--color-bg-subtle)', borderTop: '1px solid var(--color-border-default)' }}
+                                >
+                                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                                        {stillUnassigned.length > 0
+                                            ? `${stillUnassigned.length} lapse${stillUnassigned.length > 1 ? 's' : ''} still unassigned`
+                                            : 'All lapses assigned'}
+                                    </span>
+                                    <span className="font-mono text-xs font-bold" style={{ color: 'var(--color-primary)' }}>
+                                        {formatElapsed(pendingLapses.reduce((acc, l) => acc + l.seconds, 0))}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        );
+                    })()}
 
                     {/* ── Today's Meetings Section ── */}
                     {todayMeetings.length > 0 && (
@@ -529,8 +886,14 @@ export default function EndOfDayModal({
                             {displayTasks.map(task => {
                                 const entry = entries.find(e => e.task._id === task._id);
                                 const isChecked = !!entry;
-                                const hasNoTime = isChecked && (!entry.allocatedMinutes || entry.allocatedMinutes <= 0);
-                                const isMissingDetails = isChecked ? !entry.projectId : !task._projectId;
+                                const taskLapseMins = taskLapseMinutesMap[task._id] || 0;
+                                const isLapseLogged = !!entry?.lapseLogged || taskLapseMins > 0;
+                                const extraMinutes = Math.max(0, (entry?.allocatedMinutes || 0) - taskLapseMins);
+                                // Lapse tasks already have time logged — don't show "no time" warning for them
+                                const hasNoTime = isChecked && !isLapseLogged && (!entry.allocatedMinutes || entry.allocatedMinutes <= 0);
+                                // Project is only required for project tasks, not individual tasks
+                                const isIndividualTask = !task._projectId;
+                                const isMissingDetails = isChecked && !isIndividualTask && !entry.projectId;
 
                                 return (
                                     <div
@@ -565,9 +928,14 @@ export default function EndOfDayModal({
                                                             Completed
                                                         </span>
                                                     )}
-                                                    {isChecked && (entry.allocatedMinutes > 0) && (
+                                                    {isLapseLogged && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                            ✓ {taskLapseMins > 0 ? `${taskLapseMins}m lapse logged` : 'Lapse logged'}
+                                                        </span>
+                                                    )}
+                                                    {isChecked && extraMinutes > 0 && (
                                                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0">
-                                                            {formatHrsMins(entry.allocatedMinutes)} assigned
+                                                            {formatHrsMins(extraMinutes)} assigned
                                                         </span>
                                                     )}
                                                     {isChecked && hasNoTime && (
@@ -617,7 +985,11 @@ export default function EndOfDayModal({
                                                                     onChange={e => {
                                                                         const h = parseInt(e.target.value) || 0;
                                                                         const m = (entry.allocatedMinutes || 0) % 60;
-                                                                        updateEntry(entry.task._id, 'allocatedMinutes', h * 60 + m);
+                                                                        const total = h * 60 + m;
+                                                                        updateEntry(entry.task._id, 'allocatedMinutes', total);
+                                                                        if (total > 0 && entry.status !== 'completed') {
+                                                                            updateEntry(entry.task._id, 'status', 'completed');
+                                                                        }
                                                                     }}
                                                                     placeholder="Hrs"
                                                                     className="w-full px-2.5 py-2 rounded-lg border text-xs outline-none"
@@ -634,7 +1006,11 @@ export default function EndOfDayModal({
                                                                     onChange={e => {
                                                                         const h = Math.floor((entry.allocatedMinutes || 0) / 60);
                                                                         const m = parseInt(e.target.value) || 0;
-                                                                        updateEntry(entry.task._id, 'allocatedMinutes', h * 60 + m);
+                                                                        const total = h * 60 + m;
+                                                                        updateEntry(entry.task._id, 'allocatedMinutes', total);
+                                                                        if (total > 0 && entry.status !== 'completed') {
+                                                                            updateEntry(entry.task._id, 'status', 'completed');
+                                                                        }
                                                                     }}
                                                                     placeholder="Min"
                                                                     className="w-full px-2.5 py-2 rounded-lg border text-xs outline-none"
@@ -660,6 +1036,7 @@ export default function EndOfDayModal({
                                                     <div>
                                                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                                                             Project {!!entry.task._projectId && <span className="text-red-500">*</span>}
+                                                            {!entry.task._projectId && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> (optional)</span>}
                                                         </label>
                                                         <select
                                                             value={entry.projectId}

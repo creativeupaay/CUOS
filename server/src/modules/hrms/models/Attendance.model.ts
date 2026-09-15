@@ -9,7 +9,9 @@ export interface IAttendance extends Document {
     totalHours: number;
     breakMinutes?: number;
     status: 'present' | 'wfh' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
-    source: 'manual' | 'auto' | 'leave'; // how was this record created?
+    source: 'manual' | 'auto' | 'leave' | 'admin-override'; // how was this record created?
+    overriddenBy?: Types.ObjectId;   // User._id of the admin who overrode
+    overrideReason?: string;         // optional admin note
     projectId?: Types.ObjectId;
     taskId?: Types.ObjectId;
     notes?: string;
@@ -37,9 +39,14 @@ const AttendanceSchema = new Schema<IAttendance>(
         },
         source: {
             type: String,
-            enum: ['manual', 'auto', 'leave'],
+            enum: ['manual', 'auto', 'leave', 'admin-override'],
             default: 'manual',
         },
+        overriddenBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+        },
+        overrideReason: { type: String, trim: true },
         projectId: {
             type: Schema.Types.ObjectId,
             ref: 'Project',

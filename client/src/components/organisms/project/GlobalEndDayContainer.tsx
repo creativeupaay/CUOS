@@ -8,18 +8,24 @@ import { toast } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/app/store';
 import type { DaySessionMeta } from '@/hooks/useTaskTimer';
+import { useLapses, type LapseRecord } from '@/hooks/useLapses';
 
 interface GlobalEndDayContainerProps {
     timerSeconds: number;
     breakSeconds?: number;
     daySessionMeta?: DaySessionMeta | null;
+    /** All lapse records: assigned ones have assignedTaskId set, unassigned ones don't */
+    allLapses?: LapseRecord[];
+    /** Lapse records that were kept unassigned during the day */
+    pendingLapses?: LapseRecord[];
     onClose: () => void;
     onSuccess: (allocatedMinutes?: number) => void;
 }
 
-export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, daySessionMeta, onClose, onSuccess }: GlobalEndDayContainerProps) {
+export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, daySessionMeta, allLapses = [], pendingLapses = [], onClose, onSuccess }: GlobalEndDayContainerProps) {
     const { allTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
     const { allMeetings } = useGlobalMeetings();
+    const { assignLapse } = useLapses();
     const currentUserId = useSelector((state: RootState) => state.auth.user?._id) || '';
     
     const [showTaskForm, setShowTaskForm] = useState(false);
@@ -72,18 +78,30 @@ export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, 
         // Update task statuses and log time for each task
         for (const entry of entries) {
             try {
+                // Once assigned time, mark it as completed even if it is in progress
+                const isAssignedTime = (entry.allocatedMinutes > 0) || !!entry.lapseLogged;
+                const finalStatus = isAssignedTime ? 'completed' : entry.status;
+
                 const currentDeadlineStr = entry.task.deadline
                     ? (() => {
                         const d = new Date(entry.task.deadline);
                         return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
                     })()
                     : '';
-                const hasChange = entry.status !== entry.task.status || entry.priority !== entry.task.priority || entry.deadline !== currentDeadlineStr || entry.projectId !== entry.task._projectId;
+                const hasChange = finalStatus !== entry.task.status || entry.priority !== entry.task.priority || entry.deadline !== currentDeadlineStr || entry.projectId !== entry.task._projectId;
                 if (hasChange) {
-                    await updateTask(entry.task._projectId, entry.task._id, { status: entry.status, priority: entry.priority, deadline: entry.deadline || undefined, projectId: entry.projectId || undefined });
+                    await updateTask(entry.task._projectId, entry.task._id, { status: finalStatus, priority: entry.priority, deadline: entry.deadline || undefined, projectId: entry.projectId || undefined });
                 }
-                if (entry.allocatedMinutes > 0) {
-                    await logTime(entry.projectId, entry.task._id, entry.allocatedMinutes, entry.notes || `End of day - ${entry.status}`);
+                // Calculate how many minutes were already logged via lapse for this task
+                const alreadyLoggedLapseMins = allLapses
+                    .filter(l => l.assignedTaskId === entry.task._id)
+                    .reduce((acc, l) => acc + Math.max(1, Math.round(l.seconds / 60)), 0);
+
+                // Only log extra minutes that were NOT already logged via lapse
+                const minutesToLog = Math.max(0, (entry.allocatedMinutes || 0) - (entry.lapseLogged ? alreadyLoggedLapseMins : 0));
+
+                if (minutesToLog > 0) {
+                    await logTime(entry.projectId, entry.task._id, minutesToLog, entry.notes || `End of day - ${finalStatus}`);
                 }
             } catch (err) {
                 console.error(`Failed to update/log task "${entry.task.title}":`, err);
@@ -143,7 +161,21 @@ export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, 
         }
         // Always call onSuccess so the timer is stopped even if some logs failed
         onSuccess(totalAllocatedMinutes);
-    }, [updateTask, logTime, createTask, onSuccess, myTasks]);
+    }, [updateTask, logTime, createTask, onSuccess, myTasks, allLapses]);
+
+    const handleAssignLapse = useCallback(async (id: string, taskId: string, projectId: string, note?: string) => {
+        await assignLapse(id, taskId, projectId, note);
+        if (taskId) {
+            const targetLapse = (allLapses || []).find(l => l.id === id) || (pendingLapses || []).find(l => l.id === id);
+            const lapseMins = targetLapse ? Math.max(1, Math.round(targetLapse.seconds / 60)) : 1;
+            try {
+                await logTime(projectId, taskId, lapseMins, note || `Lapse — ${Math.round((targetLapse?.seconds || 60) / 60)}m`);
+                await updateTask(projectId, taskId, { status: 'completed' });
+            } catch (err) {
+                console.error('Failed to log time on lapse assign:', err);
+            }
+        }
+    }, [assignLapse, allLapses, pendingLapses, logTime, updateTask]);
 
     return (
         <>
@@ -154,9 +186,12 @@ export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, 
                 timerSeconds={timerSeconds}
                 breakSeconds={breakSeconds}
                 daySessionMeta={daySessionMeta}
+                allLapses={allLapses}
+                pendingLapses={pendingLapses}
                 onClose={onClose}
                 onSubmit={handleEndDaySubmit}
                 onAddNewTask={() => setShowTaskForm(true)}
+                onAssignLapse={handleAssignLapse}
             />
 
             {showTaskForm && (

@@ -395,21 +395,8 @@ function GlobalTasksInner() {
 
 
 
-    const [showForm, setShowForm] = useState<boolean>(() => {
-        try {
-            return !!sessionStorage.getItem('NEW_TASK_DRAFT');
-        } catch {
-            return false;
-        }
-    });
-    // Auto-reopen modal on refresh if the user had unsaved draft text
-    const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(() => {
-        try {
-            return !!sessionStorage.getItem(BULK_TASK_DRAFT_KEY)?.trim();
-        } catch {
-            return false;
-        }
-    });
+    const [showForm, setShowForm] = useState<boolean>(false);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(false);
     const [showTaskMenu, setShowTaskMenu] = useState(false);
     const taskMenuRef = useRef<HTMLDivElement>(null);
 

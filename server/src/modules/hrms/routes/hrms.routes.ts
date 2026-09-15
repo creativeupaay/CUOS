@@ -131,6 +131,8 @@ router.get('/attendance/employee/:id', checkHrmsAccess(true), attendanceControll
 router.post('/attendance/bulk', hrAdminOnly, attendanceController.bulkMarkAttendance);
 router.get('/attendance/overview', hrAdminOnly, attendanceController.getDailyOverview);
 router.get('/attendance/monthly', hrAdminOnly, attendanceController.getMonthlyAttendance);
+// Admin/SuperAdmin: override a single employee's attendance on any date
+router.patch('/attendance/:id/override', hrAdminOnly, attendanceController.overrideAttendance);
 
 // ══════════════════════════════════════════════════════════════════════
 // SALARY ROUTES

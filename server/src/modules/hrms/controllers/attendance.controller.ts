@@ -85,3 +85,23 @@ export const getMonthlyAttendance = asyncHandler(async (req: Request, res: Respo
     const result = await AttendanceService.getMonthlyAttendance(month, year);
     res.status(200).json({ status: 'success', data: result });
 });
+
+// ── Admin/SuperAdmin: Override a specific employee's attendance ───────
+export const overrideAttendance = asyncHandler(async (req: Request, res: Response) => {
+    const { id: employeeId } = req.params;   // employee (not user) ID
+    const { date, status, reason } = req.body;
+    const adminUserId = req.user!.id;
+
+    const VALID_STATUSES = ['present', 'wfh', 'half-day', 'absent', 'on-leave', 'holiday'];
+    if (!date || !status) {
+        res.status(400).json({ status: 'error', message: 'date and status are required' });
+        return;
+    }
+    if (!VALID_STATUSES.includes(status)) {
+        res.status(400).json({ status: 'error', message: `status must be one of: ${VALID_STATUSES.join(', ')}` });
+        return;
+    }
+
+    const record = await AttendanceService.overrideAttendance(adminUserId, employeeId, date, status, reason);
+    res.status(200).json({ status: 'success', data: record });
+});

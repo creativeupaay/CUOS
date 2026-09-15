@@ -2,7 +2,7 @@ import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
-import { Menu, PanelLeftOpen } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
@@ -252,7 +252,7 @@ export default function DashboardLayout() {
             </aside>
 
             {/* ── Content area ───────────────────────────────────────── */}
-            <div className={`${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-[var(--sidebar-width)]'} print:ml-0 transition-[margin-left] duration-300 ease-in-out`}>
+            <div className={`${sidebarCollapsed ? 'lg:ml-[var(--sidebar-collapsed-width,64px)]' : 'lg:ml-[var(--sidebar-width)]'} print:ml-0 transition-[margin-left] duration-300 ease-in-out`}>
 
                 {/* ── Sticky top bar ─────────────────────────────────── */}
                 <header
@@ -277,18 +277,6 @@ export default function DashboardLayout() {
                         >
                             <Menu size={20} />
                         </button>
-
-                        {/* Desktop sidebar expand toggle (when collapsed) */}
-                        {sidebarCollapsed && (
-                            <button
-                                onClick={toggleSidebar}
-                                className="hidden lg:flex items-center justify-center p-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors shrink-0 -ml-2 mr-1"
-                                title="Open sidebar (Ctrl+B)"
-                                aria-label="Open sidebar"
-                            >
-                                <PanelLeftOpen size={20} />
-                            </button>
-                        )}
 
                         <h1
                             className="text-base font-bold truncate"

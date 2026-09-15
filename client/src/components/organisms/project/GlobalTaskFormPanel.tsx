@@ -93,7 +93,11 @@ export default function GlobalTaskFormPanel({
     useEffect(() => {
         if (!initialData) {
             try {
-                sessionStorage.setItem('NEW_TASK_DRAFT', JSON.stringify(form));
+                if (form.title.trim() || form.description?.trim()) {
+                    sessionStorage.setItem('NEW_TASK_DRAFT', JSON.stringify(form));
+                } else {
+                    sessionStorage.removeItem('NEW_TASK_DRAFT');
+                }
             } catch (e) {}
         }
     }, [form, initialData]);

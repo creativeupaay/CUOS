@@ -34,6 +34,7 @@ export interface TimerContextValue {
 }
 
 const STORAGE_KEY = 'cuos_global_timer';
+const META_STORAGE_KEY = 'cuos_day_session_meta';
 const SYNC_POLL_INTERVAL = 15000; // 15 seconds — polls server for cross-device sync
 export const LIMIT_SECONDS = 12 * 60 * 60;
 const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 mins = 00:30 UTC = 6:00 AM IST
@@ -50,6 +51,35 @@ function getTodayKey(): string {
     const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
     const d = String(shifted.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+}
+
+interface StoredMeta extends DaySessionMeta {
+    dateKey?: string;
+}
+
+function loadMetaFromStorage(): DaySessionMeta | null {
+    try {
+        const raw = localStorage.getItem(META_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as StoredMeta;
+        if (parsed.dateKey && parsed.dateKey !== getTodayKey()) {
+            localStorage.removeItem(META_STORAGE_KEY);
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function saveMetaToStorage(meta: DaySessionMeta | null) {
+    try {
+        if (meta) {
+            localStorage.setItem(META_STORAGE_KEY, JSON.stringify({ ...meta, dateKey: getTodayKey() }));
+        } else {
+            localStorage.removeItem(META_STORAGE_KEY);
+        }
+    } catch { /* storage quota */ }
 }
 
 function loadFromStorage(): TimerState | null {
@@ -156,7 +186,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     const [elapsed, setElapsed] = useState<number>(() => calcElapsed(loadFromStorage()));
     const [isSyncing, setIsSyncing] = useState(false);
     const [isHydrated, setIsHydrated] = useState(false);
-    const [daySessionMeta, setDaySessionMeta] = useState<DaySessionMeta | null>(null);
+    const [daySessionMeta, setDaySessionMeta] = useState<DaySessionMeta | null>(loadMetaFromStorage);
     const intervalRef = useRef<number | null>(null);
     const syncPollRef = useRef<number | null>(null);
     const broadcastRef = useRef<BroadcastChannel | null>(null);
@@ -168,12 +198,14 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
     const applySessionMeta = useCallback((session: any) => {
         if (!session) return;
-        setDaySessionMeta({
+        const meta: DaySessionMeta = {
             lastEndedAccumulated: session.lastEndedAccumulated || 0,
             lastEndedBreakAccumulated: session.lastEndedBreakAccumulated || 0,
             previouslyLoggedMinutes: session.previouslyLoggedMinutes || 0,
             isEnded: session.isEnded || false,
-        });
+        };
+        setDaySessionMeta(meta);
+        saveMetaToStorage(meta);
     }, []);
 
     const refreshDaySession = useCallback(async (): Promise<DaySessionMeta | null> => {
@@ -236,8 +268,21 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                     // Server has a session for today
                     const serverTimer = sessionToTimer(session);
                     if (serverTimer) {
-                        setTimer(serverTimer);
-                        saveToStorage(serverTimer);
+                        const localTimer = timerRef.current;
+                        // If user locally had timer running today, preserve running status across refresh
+                        if (localTimer && localTimer.status === 'running' && serverTimer.status === 'paused' && !session.isEnded) {
+                            const preservedTimer: TimerState = {
+                                ...serverTimer,
+                                status: 'running',
+                                startedAt: localTimer.startedAt || Date.now(),
+                            };
+                            setTimer(preservedTimer);
+                            saveToStorage(preservedTimer);
+                            apiCall('POST', '/projects/day-session/start').catch(() => {});
+                        } else {
+                            setTimer(serverTimer);
+                            saveToStorage(serverTimer);
+                        }
                     } else if (session.isEnded) {
                         // User previously ended the day: clear local timer so it doesn't run
                         setTimer(null);
@@ -357,9 +402,10 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     const startTimer = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
         lastActionRef.current = Date.now();
+        const startingAccumulated = timer?.accumulated ?? daySessionMeta?.lastEndedAccumulated ?? 0;
         const newTimer: TimerState = {
             startedAt: Date.now(),
-            accumulated: timer?.accumulated ?? 0,   // ← preserve any existing progress!
+            accumulated: startingAccumulated,   // ← preserve any existing progress or lastEndedAccumulated!
             status: 'running',
             limitBypassed: timer?.limitBypassed ?? false,
             dateKey: getTodayKey(),
@@ -385,7 +431,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             })
             .catch(() => { /* network offline — local state is fine */ })
             .finally(() => setIsSyncing(false));
-    }, [timer, broadcastState, applySessionMeta]);
+    }, [timer, daySessionMeta, broadcastState, applySessionMeta]);
 
     const pauseTimer = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
@@ -453,12 +499,16 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         broadcastState(null);
 
         // 2. Update daySessionMeta cleanly OUTSIDE setTimer updater
-        setDaySessionMeta(prevMeta => ({
-            lastEndedAccumulated: accumulated,
-            lastEndedBreakAccumulated: prevMeta?.lastEndedBreakAccumulated || 0,
-            previouslyLoggedMinutes: (prevMeta?.previouslyLoggedMinutes || 0) + (allocatedMinutes || 0),
-            isEnded: true,
-        }));
+        setDaySessionMeta(prevMeta => {
+            const nextMeta: DaySessionMeta = {
+                lastEndedAccumulated: accumulated,
+                lastEndedBreakAccumulated: prevMeta?.lastEndedBreakAccumulated || 0,
+                previouslyLoggedMinutes: (prevMeta?.previouslyLoggedMinutes || 0) + (allocatedMinutes || 0),
+                isEnded: true,
+            };
+            saveMetaToStorage(nextMeta);
+            return nextMeta;
+        });
 
         // 3. Send isEnded: true so server marks session as ended
         apiCall('PATCH', '/projects/day-session/pause', { isEnded: true, allocatedMinutes, accumulated }).catch(() => {});

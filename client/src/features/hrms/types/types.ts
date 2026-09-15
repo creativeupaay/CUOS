@@ -281,7 +281,10 @@ export interface Attendance {
     checkIn?: string;
     checkOut?: string;
     totalHours: number;
-    status: 'present' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
+    status: 'present' | 'wfh' | 'half-day' | 'absent' | 'on-leave' | 'holiday';
+    source?: 'manual' | 'auto' | 'leave' | 'admin-override';
+    overriddenBy?: string;   // User._id
+    overrideReason?: string;
     projectId?: string;
     taskId?: string;
     notes?: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, AlertTriangle, X, PictureInPicture2, Loader2 } from 'lucide-react';
 import { useTimer, formatElapsed, LIMIT_SECONDS } from '@/hooks/useTaskTimer';
 import { createPortal } from 'react-dom';
@@ -9,13 +9,38 @@ import PipTimerWidget from './PipTimerWidget';
 import toast from 'react-hot-toast';
 import BreakButton from '@/components/organisms/BreakButton';
 import { useBreak } from '@/hooks/useBreakTimer';
+import { useLapses } from '@/hooks/useLapses';
+import LapseModal from './LapseModal';
+import { useGlobalTasks } from '@/hooks/useGlobalTasks';
+import { LapIcon } from '@/components/atoms/LapIcon';
 
 export default function GlobalTimerWidget() {
     const { timer, elapsed, isRunning, isHydrated, startTimer, pauseTimer, resumeTimer, stopTimer, bypassLimit, isSyncing, daySessionMeta, refreshDaySession } = useTimer();
-    const { totalBreakElapsed, isOnBreak, endBreak, resetBreak } = useBreak();
+    const { totalBreakElapsed, isOnBreak, endBreak } = useBreak();
+    const { lapses, lastLapseElapsed, lastLapseBreak, addLapse, assignLapse, advanceLapseBoundary, unassignedLapses } = useLapses();
+    const { logTime, updateTask } = useGlobalTasks();
+
     const [showLimitPopup, setShowLimitPopup] = useState(false);
     const [showEndDayPopup, setShowEndDayPopup] = useState(false);
+    const [showLapseModal, setShowLapseModal] = useState(false);
     const [setTimerStatus] = useSetTimerStatusMutation();
+    // Brief cooldown after break ends to prevent accidental lapse triggers from mis-clicks
+    const [lapseBlocked, setLapseBlocked] = useState(false);
+    const prevIsOnBreakRef = useRef<boolean>(false);
+
+    // ── Post-break cooldown — prevent accidental lapse clicks ─────────────────
+    useEffect(() => {
+        const wasOnBreak = prevIsOnBreakRef.current;
+        prevIsOnBreakRef.current = isOnBreak;
+        // Break just ended → block Lapse for 1500ms
+        if (wasOnBreak && !isOnBreak) {
+            setLapseBlocked(true);
+            const t = window.setTimeout(() => setLapseBlocked(false), 1500);
+            return () => window.clearTimeout(t);
+        }
+    }, [isOnBreak]);
+    // Capture a snapshot of the pending lapse seconds so LapseModal can read it
+    const [pendingLapseSeconds, setPendingLapseSeconds] = useState<number>(0);
 
     const syncStatus = (status: 'running' | 'paused') => {
         setTimerStatus({ status }).catch(() => {/* silent fail */ });
@@ -39,6 +64,7 @@ export default function GlobalTimerWidget() {
             if (intervalId) clearInterval(intervalId);
         };
     }, [isHydrated, isRunning]);
+
     const { isSupported, isPipOpen, pipContainer, openPiP, closePiP, resizePiP } = useDocumentPiP();
 
     useEffect(() => {
@@ -68,8 +94,6 @@ export default function GlobalTimerWidget() {
         if (isOnBreak) {
             await endBreak();
         }
-        pauseTimer();
-        syncStatus('paused');
         await refreshDaySession();
         setShowEndDayPopup(true);
     };
@@ -93,7 +117,6 @@ export default function GlobalTimerWidget() {
         if (isOnBreak) {
             await endBreak();
         }
-        pauseTimer();
         await refreshDaySession();
         try {
             window.focus();
@@ -101,6 +124,62 @@ export default function GlobalTimerWidget() {
             // Browser window focus ignored
         }
         setShowEndDayPopup(true);
+    };
+
+    // ── Lapse handler ─────────────────────────────────────────────────────────
+    const handleLapse = () => {
+        if (!timer) {
+            toast.error('Start the timer first before recording a lapse.');
+            return;
+        }
+        // Baseline must be at least the boundary from any previously ended session today or timer starting accumulated
+        const effectiveLastElapsed = Math.max(
+            lastLapseElapsed,
+            daySessionMeta?.lastEndedAccumulated || 0,
+            timer.accumulated || 0
+        );
+        const effectiveLastBreak = Math.max(
+            lastLapseBreak,
+            daySessionMeta?.lastEndedBreakAccumulated || 0
+        );
+
+        // Net work seconds since the last lapse boundary (minus break time in that window)
+        const wallDelta = Math.max(0, elapsed - effectiveLastElapsed);
+        const breakDelta = totalBreakElapsed >= effectiveLastBreak
+            ? totalBreakElapsed - effectiveLastBreak
+            : Math.max(0, totalBreakElapsed);
+        const netSeconds = Math.max(0, wallDelta - breakDelta);
+
+        if (netSeconds < 10) {
+            toast('Lapse is too short — keep working!', { icon: '⏱️' });
+            return;
+        }
+
+        setPendingLapseSeconds(netSeconds);
+        setShowLapseModal(true);
+    };
+
+    const handleLapseAssign = async (taskId: string, projectId: string, _markComplete: boolean, note: string) => {
+        const lapseRecord = addLapse(pendingLapseSeconds, elapsed, totalBreakElapsed);
+
+        const lapseMinutes = Math.max(1, Math.round(pendingLapseSeconds / 60));
+        try {
+            await logTime(projectId, taskId, lapseMinutes, note || `Lapse — ${formatElapsed(pendingLapseSeconds)}`);
+            // Once assigned time, mark it as completed even if it was in progress
+            await updateTask(projectId, taskId, { status: 'completed' });
+            // Mark as assigned (keep in lapses state so EOD can subtract this time)
+            await assignLapse(lapseRecord.id, taskId, projectId, note || `Lapse — ${formatElapsed(pendingLapseSeconds)}`);
+            toast.success(`Logged ${lapseMinutes}m & task marked completed ✓`);
+        } catch {
+            toast.error('Failed to log lapse time.');
+        }
+        setShowLapseModal(false);
+    };
+
+    const handleLapseKeepUnassigned = () => {
+        addLapse(pendingLapseSeconds, elapsed, totalBreakElapsed);
+        toast('Lapse kept — assign it at end of day.', { icon: '📌' });
+        setShowLapseModal(false);
     };
 
     // While initial hydration is in flight and there's no cached timer, render a safe loading state
@@ -131,7 +210,16 @@ export default function GlobalTimerWidget() {
         return (
             <div className="flex items-center gap-1.5 p-1 rounded-full" style={{ backgroundColor: '#F8FAFC' }}>
                 <button
-                    onClick={() => { startTimer(); syncStatus('running'); }}
+                    onClick={() => {
+                        startTimer();
+                        syncStatus('running');
+                        if (daySessionMeta?.lastEndedAccumulated) {
+                            advanceLapseBoundary(
+                                daySessionMeta.lastEndedAccumulated,
+                                daySessionMeta.lastEndedBreakAccumulated || 0
+                            );
+                        }
+                    }}
                     title="Start day timer"
                     disabled={isSyncing}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -239,6 +327,49 @@ export default function GlobalTimerWidget() {
                 End day
             </button>
 
+            {/* ── Lapse button — compact icon-only ── */}
+            <div className="relative shrink-0">
+                <button
+                    onClick={handleLapse}
+                    disabled={lapseBlocked}
+                    title={lapseBlocked ? 'Just ended break — wait a moment…' : 'Record a lapse — assign time to a completed task'}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '9999px',
+                        border: '1px solid #E2E8F0',
+                        background: '#FFFFFF',
+                        color: lapseBlocked ? '#94A3B8' : '#334155',
+                        cursor: lapseBlocked ? 'not-allowed' : 'pointer',
+                        opacity: lapseBlocked ? 0.5 : 1,
+                        transition: 'all 0.15s ease',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
+                    }}
+                    onMouseEnter={(e) => {
+                        if (lapseBlocked) return;
+                        (e.currentTarget as HTMLButtonElement).style.background = '#F8FAFC';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#CBD5E1';
+                    }}
+                    onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#FFFFFF';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#E2E8F0';
+                    }}
+                >
+                    <LapIcon size={15} className="text-slate-500" />
+                </button>
+                {unassignedLapses.length > 0 && (
+                    <span
+                        title={`${unassignedLapses.length} unassigned lapse${unassignedLapses.length > 1 ? 's' : ''}`}
+                        className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-mono font-bold flex items-center justify-center bg-slate-800 text-white shadow-sm pointer-events-none"
+                    >
+                        {unassignedLapses.length}
+                    </span>
+                )}
+            </div>
+
             <BreakButton />
 
             <button
@@ -304,15 +435,25 @@ export default function GlobalTimerWidget() {
                     timerSeconds={elapsed}
                     breakSeconds={totalBreakElapsed}
                     daySessionMeta={daySessionMeta}
+                    allLapses={lapses}
+                    pendingLapses={unassignedLapses}
                     onClose={() => setShowEndDayPopup(false)}
                     onSuccess={(allocatedMinutes?: number) => {
                         setShowEndDayPopup(false);
-                        resetBreak();
+                        advanceLapseBoundary(elapsed, totalBreakElapsed);
                         stopTimer(allocatedMinutes);
                     }}
+                />
+            )}
+
+            {showLapseModal && (
+                <LapseModal
+                    lapseSeconds={pendingLapseSeconds}
+                    onAssign={handleLapseAssign}
+                    onKeepUnassigned={handleLapseKeepUnassigned}
+                    onClose={() => setShowLapseModal(false)}
                 />
             )}
         </div>
     );
 }
-

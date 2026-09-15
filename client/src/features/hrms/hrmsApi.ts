@@ -515,6 +515,7 @@ export const hrmsApi = api.injectEndpoints({
                 employees: Array<{
                     employeeId: string; employeeCode: string; name: string; email: string;
                     department: string; designation: string; status: string;
+                    source?: string; overriddenBy?: string; overrideReason?: string;
                     checkIn: string | null; checkOut: string | null; totalHours: number; breakMinutes?: number; notes: string;
                 }>;
             }>,
@@ -532,7 +533,7 @@ export const hrmsApi = api.injectEndpoints({
                 month: number; year: number; daysInMonth: number;
                 grid: Array<{
                     employeeId: string; employeeCode: string; name: string; department: string;
-                    days: Array<{ date: string; status: string | null }>;
+                    days: Array<{ date: string; status: string | null; source?: string | null }>;
                 }>;
             }>,
             { month: number; year: number }
@@ -542,6 +543,18 @@ export const hrmsApi = api.injectEndpoints({
                 params,
             }),
             providesTags: ['Attendance'],
+        }),
+
+        overrideAttendance: builder.mutation<
+            ApiResponse<Attendance>,
+            { employeeId: string; date: string; status: string; reason?: string }
+        >({
+            query: ({ employeeId, ...body }) => ({
+                url: `/hrms/attendance/${employeeId}/override`,
+                method: 'PATCH',
+                body,
+            }),
+            invalidatesTags: ['Attendance', 'Employees'],
         }),
     }),
     overrideExisting: false,
@@ -663,6 +676,7 @@ export const {
     useBulkMarkAttendanceMutation,
     useGetDailyOverviewQuery,
     useGetMonthlyAttendanceQuery,
+    useOverrideAttendanceMutation,
     // Admin leave balance
     useGetEmployeeLeaveBalanceQuery,
 } = hrmsApi;

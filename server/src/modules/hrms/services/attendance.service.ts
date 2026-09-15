@@ -1,4 +1,4 @@
-import { Attendance } from '../models/Attendance.model';
+import { Attendance, IAttendance } from '../models/Attendance.model';
 import { Employee } from '../models/Employee.model';
 import { Holiday } from '../models/Holiday.model';
 import AppError from '../../../utils/appError';
@@ -252,16 +252,28 @@ export class AttendanceService {
             if (['on-leave', 'holiday', 'absent'].includes(existing.status)) {
                 return { marked: false, reason: `existing ${existing.status} record — skipped` };
             }
-            // If the record was set manually or via approved leave (e.g. WFH, on-leave),
-            // we DO NOT change the status. We just keep it as is.
-            if (existing.source === 'manual' || existing.source === 'leave') {
-                finalStatus = existing.status;
-            } else {
-                // If it was auto, we can upgrade it based on hours
-                finalStatus = autoCalculatedStatus || existing.status;
-                if (finalStatus !== existing.status && autoCalculatedStatus) {
+            // Admin-override records are never touched by cron
+            if (existing.source === 'admin-override') {
+                return { marked: false, reason: 'admin-override record — skipped' };
+            }
+            // Manual records (unless WFH) or approved leaves (except WFH) are protected
+            if ((existing.source === 'manual' || existing.source === 'leave') && existing.status !== 'wfh') {
+                return { marked: false, reason: `existing ${existing.source} (${existing.status}) record — skipped` };
+            }
+
+            // For WFH or auto records:
+            // Mark present (>=6h) or half-day (4-6h) only if they actually worked the required hours
+            if (autoCalculatedStatus) {
+                finalStatus = autoCalculatedStatus;
+                if (finalStatus !== existing.status) {
                     isNewStatus = true;
                 }
+            } else {
+                // If employee is on WFH but has not worked >=4 hours, do not mark present
+                if (existing.status === 'wfh') {
+                    return { marked: false, reason: `WFH employee worked ${uniqueWorkedMinutes} min (< 4h) — not marked present` };
+                }
+                finalStatus = existing.status;
             }
         } else {
             finalStatus = autoCalculatedStatus || undefined;
@@ -280,9 +292,11 @@ export class AttendanceService {
         }
 
         const totalHours = Number((uniqueWorkedMinutes / 60).toFixed(2));
-        const notes = existing?.source === 'manual' 
-            ? (existing.notes && !existing.notes.includes('Auto-update:') ? `${existing.notes}\nAuto-update: ${uniqueWorkedMinutes} min worked` : `Auto-update: ${uniqueWorkedMinutes} min worked`)
-            : `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}${breakMinutes > 0 ? ` (${breakMinutes}m break)` : ''}`;
+        const notes = existing?.status === 'wfh'
+            ? `Auto-marked ${finalStatus}: ${uniqueWorkedMinutes} minutes worked (WFH)`
+            : existing?.source === 'manual' 
+                ? (existing.notes && !existing.notes.includes('Auto-update:') ? `${existing.notes}\nAuto-update: ${uniqueWorkedMinutes} min worked` : `Auto-update: ${uniqueWorkedMinutes} min worked`)
+                : `Auto-marked: ${uniqueWorkedMinutes} minutes worked on ${dateStr}${breakMinutes > 0 ? ` (${breakMinutes}m break)` : ''}`;
 
         await Attendance.findOneAndUpdate(
             { employeeId: new Types.ObjectId(employeeId), date: dayStart },
@@ -305,6 +319,46 @@ export class AttendanceService {
         return { marked: isNewStatus, status: finalStatus };
     }
 
+    // ── Admin: Override attendance for a specific employee + date ─────
+    /**
+     * Allows an admin/super-admin to forcefully set the attendance status
+     * for any employee on any date.  The resulting record is tagged
+     * source:'admin-override' and will not be touched by future cron runs.
+     */
+    static async overrideAttendance(
+        adminUserId: string,
+        employeeId: string,
+        date: string,
+        status: IAttendance['status'],
+        reason?: string
+    ): Promise<IAttendance> {
+        const { dayStart } = getWorkDayBounds(date);
+
+        const updated = await Attendance.findOneAndUpdate(
+            {
+                employeeId: new Types.ObjectId(employeeId),
+                date: dayStart,
+            },
+            {
+                $set: {
+                    status,
+                    source: 'admin-override',
+                    overriddenBy: new Types.ObjectId(adminUserId),
+                    overrideReason: reason?.trim() || '',
+                },
+                $setOnInsert: {
+                    employeeId: new Types.ObjectId(employeeId),
+                    date: dayStart,
+                    totalHours: 0,
+                },
+            },
+            { upsert: true, new: true, runValidators: false }
+        );
+
+        if (!updated) throw new AppError('Failed to override attendance', 500);
+        return updated;
+    }
+
     // ── Admin: Today's overview — all employees + their status ────────
     static async getDailyOverview(date?: string) {
         let dateObj: Date;
@@ -321,7 +375,7 @@ export class AttendanceService {
         const departmentCatalog = await getDepartmentCatalog();
         const [employees, attendanceRecords] = await Promise.all([
             Employee.find({ status: { $ne: 'terminated' } }).populate('userId', 'name email').lean(),
-            Attendance.find({ date: { $gte: dateObj, $lte: dateEnd } }).lean(),
+            Attendance.find({ date: { $gte: dateObj, $lte: dateEnd } }).populate('overriddenBy', 'name').lean(),
         ]);
 
         const attendanceMap = new Map(
@@ -329,7 +383,7 @@ export class AttendanceService {
         );
 
         const overview = employees.map((emp) => {
-            const record = attendanceMap.get(emp._id.toString());
+            const record: any = attendanceMap.get(emp._id.toString());
             return {
                 employeeId: emp._id,
                 employeeCode: emp.employeeId,
@@ -338,6 +392,9 @@ export class AttendanceService {
                 department: resolveDepartmentValue(emp.department, departmentCatalog),
                 designation: emp.designation,
                 status: record?.status || 'unmarked',
+                source: record?.source || (record ? 'manual' : undefined),
+                overriddenBy: record?.overriddenBy ? (record.overriddenBy.name || record.overriddenBy) : undefined,
+                overrideReason: record?.overrideReason || '',
                 checkIn: record?.checkIn || null,
                 checkOut: record?.checkOut || null,
                 totalHours: record?.totalHours || 0,
@@ -395,11 +452,11 @@ export class AttendanceService {
 
         const grid = employees.map((emp) => {
             const empRecords = recordMap.get(emp._id.toString()) || new Map();
-            const days: Array<{ date: string; status: string | null }> = [];
+            const days: Array<{ date: string; status: string | null; source?: string }> = [];
             for (let d = 1; d <= daysInMonth; d++) {
                 const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const rec = empRecords.get(dateStr);
-                days.push({ date: dateStr, status: rec?.status || null });
+                days.push({ date: dateStr, status: rec?.status || null, source: rec?.source || null });
             }
             return {
                 employeeId: emp._id,
@@ -411,5 +468,142 @@ export class AttendanceService {
         });
 
         return { month, year, daysInMonth, grid, holidays };
+    }
+
+    // ── Universal Timer Sync: Check-in & Check-out ───────────────────────
+    /**
+     * Called when a user starts or resumes the universal timer.
+     * Sets check-in time for today in the Attendance record if not already set.
+     */
+    static async syncCheckInFromTimer(userId: string, dateKey: string, checkInTime?: Date) {
+        try {
+            if (!userId) return null;
+            const validObjId = Types.ObjectId.isValid(userId);
+            let employee = validObjId ? await Employee.findOne({ userId: new Types.ObjectId(userId) }) : await Employee.findOne({ userId });
+            if (!employee && validObjId) {
+                employee = await Employee.findById(new Types.ObjectId(userId));
+            }
+            if (!employee) return null;
+
+            const [y, m, d] = dateKey.split('-').map(Number);
+            const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+            const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+
+            let attendance = await Attendance.findOne({
+                employeeId: employee._id,
+                date: { $gte: dateStart, $lte: dateEnd },
+            });
+
+            const effectiveCheckIn = checkInTime || new Date();
+
+            if (!attendance) {
+                attendance = new Attendance({
+                    employeeId: employee._id,
+                    date: dateStart,
+                    checkIn: effectiveCheckIn,
+                    status: 'present',
+                    source: 'auto',
+                });
+                await attendance.save();
+                return attendance;
+            }
+
+            let modified = false;
+            // Only set checkIn if not already set, preserving the earliest check-in of the day
+            if (!attendance.checkIn) {
+                attendance.checkIn = effectiveCheckIn;
+                modified = true;
+            }
+
+            // If status is absent, mark as present since employee is now active
+            if (attendance.status === 'absent') {
+                attendance.status = 'present';
+                modified = true;
+            }
+
+            if (modified) {
+                await attendance.save();
+            }
+
+            return attendance;
+        } catch (err) {
+            console.error('[AttendanceService] syncCheckInFromTimer error:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Called when a user ends the day (EOD) from the universal timer.
+     * Sets check-out time, total worked hours, and break time in the Attendance record.
+     */
+    static async syncCheckOutFromTimer(
+        userId: string,
+        dateKey: string,
+        checkOutTime?: Date,
+        accumulatedSeconds: number = 0,
+        breakSeconds: number = 0
+    ) {
+        try {
+            if (!userId) return null;
+            const validObjId = Types.ObjectId.isValid(userId);
+            let employee = validObjId ? await Employee.findOne({ userId: new Types.ObjectId(userId) }) : await Employee.findOne({ userId });
+            if (!employee && validObjId) {
+                employee = await Employee.findById(new Types.ObjectId(userId));
+            }
+            if (!employee) return null;
+
+            const [y, m, d] = dateKey.split('-').map(Number);
+            const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+            const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+
+            let attendance = await Attendance.findOne({
+                employeeId: employee._id,
+                date: { $gte: dateStart, $lte: dateEnd },
+            });
+
+            const effectiveCheckOut = checkOutTime || new Date();
+            const totalHours = Number((Math.max(0, accumulatedSeconds) / 3600).toFixed(2));
+            const breakMinutes = Math.round(Math.max(0, breakSeconds) / 60);
+
+            if (!attendance) {
+                attendance = new Attendance({
+                    employeeId: employee._id,
+                    date: dateStart,
+                    checkIn: effectiveCheckOut, // fallback checkIn if none existed
+                    checkOut: effectiveCheckOut,
+                    totalHours,
+                    breakMinutes,
+                    status: 'present',
+                    source: 'auto',
+                });
+                await attendance.save();
+                return attendance;
+            }
+
+            // Always update checkout time to the latest EOD timestamp
+            attendance.checkOut = effectiveCheckOut;
+            if (totalHours > 0 || !attendance.totalHours) {
+                attendance.totalHours = totalHours;
+            }
+            if (breakMinutes > 0 || !attendance.breakMinutes) {
+                attendance.breakMinutes = breakMinutes;
+            }
+
+            // If checkIn was somehow missing, default it
+            if (!attendance.checkIn) {
+                attendance.checkIn = effectiveCheckOut;
+            }
+
+            // If status was absent, mark as present
+            if (attendance.status === 'absent') {
+                attendance.status = 'present';
+            }
+
+            await attendance.save();
+            return attendance;
+        } catch (err) {
+            console.error('[AttendanceService] syncCheckOutFromTimer error:', err);
+            return null;
+        }
     }
 }

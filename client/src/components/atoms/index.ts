@@ -25,3 +25,5 @@ export type { FileIconProps } from './FileIcon';
 export { TextBlock } from './TextBlock';
 export { ChecklistBlock } from './ChecklistBlock';
 export { NotesEmptyState } from './NotesEmptyState';
+export { LapIcon } from './LapIcon';
+export type { LapIconProps } from './LapIcon';

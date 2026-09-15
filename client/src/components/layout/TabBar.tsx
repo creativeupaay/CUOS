@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useAppSelector } from '@/app/hooks';
 
 import { useWorkspaceTabsManager } from '@/hooks/useWorkspaceTabsManager';
-import { X, Pin, ChevronLeft, ChevronRight, ListX } from 'lucide-react';
+import { X, Pin, ListX } from 'lucide-react';
 
 export default function TabBar() {
     const { tabs, activeTabId } = useAppSelector(state => state.workspace);
@@ -23,13 +23,9 @@ export default function TabBar() {
         closeTab(id);
     };
 
-    const scroll = (direction: 'left' | 'right') => {
-        if (scrollContainerRef.current) {
-            const amount = 200;
-            scrollContainerRef.current.scrollBy({
-                left: direction === 'left' ? -amount : amount,
-                behavior: 'smooth'
-            });
+    const handleWheel = (e: React.WheelEvent) => {
+        if (scrollContainerRef.current && e.deltaY !== 0) {
+            scrollContainerRef.current.scrollLeft += e.deltaY;
         }
     };
 
@@ -41,15 +37,9 @@ export default function TabBar() {
                 WebkitBackdropFilter: 'blur(10px)'
             }}
         >
-            <button 
-                onClick={() => scroll('left')}
-                className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-gray-700 shrink-0"
-            >
-                <ChevronLeft size={16} />
-            </button>
-
             <div 
                 ref={scrollContainerRef}
+                onWheel={handleWheel}
                 className="flex items-end h-full flex-1 overflow-x-auto hide-scrollbar scroll-smooth gap-1 pt-1"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
@@ -95,22 +85,18 @@ export default function TabBar() {
                 })}
             </div>
 
-            <button 
-                onClick={() => scroll('right')}
-                className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-gray-700 shrink-0"
-            >
-                <ChevronRight size={16} />
-            </button>
-
-            <div className="h-4 w-px bg-gray-300 mx-2 shrink-0" />
-
-            <button
-                onClick={clearAll}
-                className="p-1 hover:bg-red-100 rounded text-gray-500 hover:text-red-600 shrink-0 flex items-center gap-1 text-xs font-medium"
-                title="Close All Tabs"
-            >
-                <ListX size={16} />
-            </button>
+            {tabs.length > 0 && (
+                <>
+                    <div className="h-4 w-px bg-gray-300 mx-2 shrink-0" />
+                    <button
+                        onClick={clearAll}
+                        className="p-1 hover:bg-red-100 rounded text-gray-500 hover:text-red-600 shrink-0 flex items-center gap-1 text-xs font-medium"
+                        title="Close All Tabs"
+                    >
+                        <ListX size={16} />
+                    </button>
+                </>
+            )}
         </div>
     );
 }

@@ -3,12 +3,16 @@ import {
     useGetMonthlyAttendanceQuery,
     useGetDailyOverviewQuery,
     useBulkMarkAttendanceMutation,
+    useOverrideAttendanceMutation,
 } from '@/features/hrms/hrmsApi';
 import {
     ChevronLeft, ChevronRight, Save, Calendar,
     Users, Loader2, LayoutGrid, Eye,
     CheckCircle2, Home, Clock3, XCircle, Plane, Sunset,
+    Sliders, X, AlertCircle, Sparkles, Check,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ── Status Config ────────────────────────────────────────────────────
 const STATUS_CYCLE = [null, 'present', 'wfh', 'half-day', 'absent', 'on-leave'] as const;
@@ -124,6 +128,218 @@ function Legend() {
     );
 }
 
+// ── Override Modal ───────────────────────────────────────────────────
+interface OverrideTarget {
+    employeeId: string;
+    employeeName: string;
+    employeeCode: string;
+    currentStatus: string;
+    currentSource?: string;
+    currentReason?: string;
+    date: string; // YYYY-MM-DD
+}
+
+function OverrideAttendanceModal({
+    target,
+    onClose,
+    onSuccess,
+}: {
+    target: OverrideTarget;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [overrideAttendance, { isLoading }] = useOverrideAttendanceMutation();
+    const [selectedStatus, setSelectedStatus] = useState<string>(
+        ['present', 'wfh', 'half-day', 'absent', 'on-leave', 'holiday'].includes(target.currentStatus)
+            ? target.currentStatus
+            : 'present'
+    );
+    const [reason, setReason] = useState<string>(target.currentReason || '');
+    const [error, setError] = useState<string | null>(null);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        try {
+            await overrideAttendance({
+                employeeId: target.employeeId,
+                date: target.date,
+                status: selectedStatus,
+                reason: reason.trim() || undefined,
+            }).unwrap();
+            toast.success(`Attendance updated for ${target.employeeName}`);
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            setError(err?.data?.message || err?.message || 'Failed to update attendance');
+        }
+    };
+
+    const statusOptions = [
+        { id: 'present', label: 'Present', desc: 'Full day (≥ 6 hours)', color: '#15803D', bg: '#DCFCE7', border: '#86EFAC', icon: CheckCircle2 },
+        { id: 'wfh', label: 'Work From Home', desc: 'Remote work approved', color: '#1D4ED8', bg: '#DBEAFE', border: '#93C5FD', icon: Home },
+        { id: 'half-day', label: 'Half Day', desc: '4 to 6 hours', color: '#854D0E', bg: '#FEF9C3', border: '#FDE047', icon: Sunset },
+        { id: 'absent', label: 'Absent', desc: 'Less than 4 hours / Unexcused', color: '#991B1B', bg: '#FEE2E2', border: '#FCA5A5', icon: XCircle },
+        { id: 'on-leave', label: 'On Leave', desc: 'Approved leave request', color: '#6B21A8', bg: '#F3E8FF', border: '#C084FC', icon: Plane },
+        { id: 'holiday', label: 'Holiday', desc: 'Official holiday / weekly off', color: '#9A3412', bg: '#FFEDD5', border: '#FDBA74', icon: Calendar },
+    ];
+
+    return (
+        <ModalPortal>
+            <div
+                className="w-full max-w-lg rounded-2xl border p-6 shadow-2xl relative"
+                style={{
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border-default)',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                }}
+            >
+                {/* Header */}
+                <div className="flex items-start justify-between pb-4 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center text-primary bg-primary/10 border border-primary/20"
+                        >
+                            <Sliders size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                Edit Attendance
+                            </h2>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                Set attendance status for <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{target.employeeName}</span> ({target.employeeCode})
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer text-gray-400 hover:text-gray-600"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                    {/* Date info */}
+                    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gray-50 border text-xs" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>Selected Date:</span>
+                        <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            {new Date(target.date + 'T00:00:00').toLocaleDateString('en-IN', {
+                                weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+                            })}
+                        </span>
+                    </div>
+
+                    {/* Status selection grid */}
+                    <div>
+                        <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                            Select Attendance Status *
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {statusOptions.map((opt) => {
+                                const Icon = opt.icon;
+                                const isSelected = selectedStatus === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => setSelectedStatus(opt.id)}
+                                        className="p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 relative"
+                                        style={{
+                                            borderColor: isSelected ? opt.color : 'var(--color-border-default)',
+                                            backgroundColor: isSelected ? opt.bg : 'var(--color-bg-surface)',
+                                            boxShadow: isSelected ? `0 0 0 1px ${opt.color}` : 'none',
+                                        }}
+                                    >
+                                        <div
+                                            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                                            style={{ backgroundColor: opt.bg, color: opt.color, border: `1px solid ${opt.border}` }}
+                                        >
+                                            <Icon size={14} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-bold" style={{ color: opt.color }}>
+                                                {opt.label}
+                                            </div>
+                                            <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
+                                                {opt.desc}
+                                            </div>
+                                        </div>
+                                        {isSelected && (
+                                            <div
+                                                className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] flex-shrink-0"
+                                                style={{ backgroundColor: opt.color }}
+                                            >
+                                                <Check size={10} strokeWidth={3} />
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Reason input */}
+                    <div>
+                        <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                            Note / Reason <span className="text-[11px] font-normal" style={{ color: 'var(--color-text-muted)' }}>(Optional)</span>
+                        </label>
+                        <textarea
+                            rows={2}
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            placeholder="e.g. Offline work, approved half day, adjustment..."
+                            className="w-full px-3 py-2 text-xs rounded-xl border resize-none focus:outline-none focus:ring-1"
+                            style={{
+                                borderColor: 'var(--color-border-default)',
+                                backgroundColor: 'var(--color-bg-surface)',
+                                color: 'var(--color-text-primary)',
+                            }}
+                        />
+                    </div>
+
+                    {error && (
+                        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                            <AlertCircle size={14} className="flex-shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2.5 pt-2 border-t" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 text-xs font-medium rounded-xl border hover:bg-gray-50 transition-colors cursor-pointer"
+                            style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white rounded-xl cursor-pointer disabled:opacity-50 transition-all shadow-sm"
+                            style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 size={14} className="animate-spin" /> Saving…
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles size={14} /> Save Changes
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </ModalPortal>
+    );
+}
+
 // ── Summary Card ──────────────────────────────────────────────────────
 function SummaryCard({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: React.ElementType }) {
     return (
@@ -155,7 +371,7 @@ interface GridEmployee {
     employeeCode: string;
     name: string;
     department: string;
-    days: Array<{ date: string; status: string | null }>;
+    days: Array<{ date: string; status: string | null; source?: string | null }>;
 }
 
 const AttendanceRow = memo(function AttendanceRow({
@@ -319,8 +535,14 @@ export default function HrmsAttendancePage() {
     // date correctly even in the early-morning window where UTC is still
     // on the previous day.
     const [overviewDate, setOverviewDate] = useState(todayIST);
-    const { data: overviewData, isLoading: overviewLoading } =
-        useGetDailyOverviewQuery({ date: overviewDate });
+    const { data: overviewData, isLoading: overviewLoading, refetch: refetchOverview } =
+        useGetDailyOverviewQuery(
+            { date: overviewDate },
+            { pollingInterval: 15000, refetchOnMountOrArgChange: true }
+        );
+
+    // ── Override Modal State ─────────────────────────────────────────
+    const [overrideTarget, setOverrideTarget] = useState<OverrideTarget | null>(null);
 
     // ── Grid helpers ─────────────────────────────────────────────────
     const prevMonth = () => {
@@ -423,12 +645,9 @@ export default function HrmsAttendancePage() {
 
             {/* ── Header ─────────────────────────────────────────── */}
             <div className="flex flex-col gap-4 mb-7 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <div className="flex items-center gap-2.5 mb-1">
-                        <Clock3 size={21} style={{ color: 'var(--color-primary)' }} />
-                        
-                    </div>
-                    <p className="text-sm ml-8" style={{ color: 'var(--color-text-secondary)' }}>
+                <div className="flex items-center gap-2.5">
+                    <Clock3 size={20} style={{ color: 'var(--color-primary)' }} />
+                    <p className="text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
                         Mark and review employee attendance
                     </p>
                 </div>
@@ -673,7 +892,7 @@ export default function HrmsAttendancePage() {
                                 <table className="w-full">
                                     <thead>
                                         <tr style={{ backgroundColor: 'var(--color-bg-subtle)' }}>
-                                            {['Employee', 'Department', 'Status', 'Check In', 'Check Out', 'Worked Hours', 'Break Time', 'Notes'].map(h => (
+                                            {['Employee', 'Department', 'Status', 'Check In', 'Check Out', 'Worked Hours', 'Break Time', 'Notes', 'Action'].map(h => (
                                                 <th
                                                     key={h}
                                                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider"
@@ -747,8 +966,38 @@ export default function HrmsAttendancePage() {
                                                             ? `${Math.floor((emp as any).breakMinutes / 60) > 0 ? `${Math.floor((emp as any).breakMinutes / 60)}h ` : ''}${(emp as any).breakMinutes % 60}m`
                                                             : '—'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-sm max-w-[180px] truncate" style={{ color: 'var(--color-text-muted)' }}>
-                                                        {emp.notes || '—'}
+                                                    <td className="px-4 py-3 text-sm max-w-[180px]" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {emp.notes && <div className="truncate">{emp.notes}</div>}
+                                                        {(emp as any).overrideReason && (
+                                                            <div className="text-[11px] text-gray-600 font-medium truncate" title={`Note: ${(emp as any).overrideReason}`}>
+                                                                Note: {(emp as any).overrideReason}
+                                                            </div>
+                                                        )}
+                                                        {!emp.notes && !(emp as any).overrideReason && '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setOverrideTarget({
+                                                                employeeId: String(emp.employeeId),
+                                                                employeeName: emp.name,
+                                                                employeeCode: emp.employeeCode,
+                                                                currentStatus: emp.status,
+                                                                currentSource: (emp as any).source,
+                                                                currentReason: (emp as any).overrideReason,
+                                                                date: overviewDate,
+                                                            })}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border hover:bg-gray-50 transition-colors cursor-pointer"
+                                                            style={{
+                                                                borderColor: 'var(--color-border-default)',
+                                                                color: 'var(--color-text-primary)',
+                                                                backgroundColor: 'var(--color-bg-surface)',
+                                                            }}
+                                                            title="Edit attendance status"
+                                                        >
+                                                            <Sliders size={12} style={{ color: 'var(--color-primary)' }} />
+                                                            <span>Edit</span>
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
@@ -764,6 +1013,18 @@ export default function HrmsAttendancePage() {
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Override Attendance Modal */}
+            {overrideTarget && (
+                <OverrideAttendanceModal
+                    target={overrideTarget}
+                    onClose={() => setOverrideTarget(null)}
+                    onSuccess={() => {
+                        refetchOverview();
+                        refetchGrid();
+                    }}
+                />
             )}
         </div>
     );

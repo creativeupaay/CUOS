@@ -196,6 +196,9 @@ router.patch('/day-session/pause', authenticate, taskController.pauseDaySession)
 router.patch('/day-session/bypass-limit', authenticate, taskController.bypassDaySessionLimit);
 router.post('/day-session/break/start', authenticate, taskController.startBreak);
 router.post('/day-session/break/end', authenticate, taskController.endBreak);
+router.post('/day-session/lapse', authenticate, taskController.recordLapse);
+router.post('/day-session/lapse-boundary', authenticate, taskController.updateLapseBoundary);
+router.patch('/day-session/lapse/:id/assign', authenticate, taskController.assignLapseSession);
 
 // ============================================
 // PROJECT ROUTES

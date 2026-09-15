@@ -7,6 +7,7 @@ import { Project } from '../models/Project.model';
 import { Task } from '../models/Task.model';
 import { TimeLog } from '../models/TimeLog.model';
 import { DaySession } from '../models/DaySession.model';
+import { AttendanceService } from '../../hrms/services/attendance.service';
 import mongoose from 'mongoose';
 import { getAccessibleProjectIds } from '../middlewares/projectAccess.middleware';
 import { getWorkDayLabel } from '../../../utils/intervalUtils';
@@ -321,6 +322,21 @@ export const getDaySession = asyncHandler(
 
         const session = await DaySession.findOne({ userId, dateKey }).lean();
 
+        if (session) {
+            if (session.dayStart || session.status === 'running' || (session.accumulated && session.accumulated > 0)) {
+                AttendanceService.syncCheckInFromTimer(userId, dateKey, session.dayStart || new Date()).catch(() => {});
+            }
+            if (session.isEnded) {
+                AttendanceService.syncCheckOutFromTimer(
+                    userId,
+                    dateKey,
+                    session.lastPausedAt || new Date(),
+                    session.accumulated || 0,
+                    session.breakAccumulated || 0
+                ).catch(() => {});
+            }
+        }
+
         let data: any = session ?? null;
         if (data) {
             if (data.isEnded && !data.lastEndedAccumulated) {
@@ -359,6 +375,12 @@ export const startDaySession = asyncHandler(
                 if (!current.lastEndedBreakAccumulated) {
                     current.lastEndedBreakAccumulated = current.breakAccumulated || 0;
                 }
+                if (!current.lastLapseElapsed || current.lastLapseElapsed < current.lastEndedAccumulated) {
+                    current.lastLapseElapsed = current.lastEndedAccumulated;
+                }
+                if (!current.lastLapseBreak || current.lastLapseBreak < current.lastEndedBreakAccumulated) {
+                    current.lastLapseBreak = current.lastEndedBreakAccumulated;
+                }
                 current.isEnded = false;
                 needsSave = true;
             }
@@ -380,6 +402,9 @@ export const startDaySession = asyncHandler(
                 await current.save();
             }
 
+            // Sync check-in to Attendance database
+            await AttendanceService.syncCheckInFromTimer(userId, dateKey, current.dayStart || new Date());
+
             timerStatusMap.set(userId, 'running');
             return res.status(200).json({ success: true, data: current.toObject() });
         }
@@ -396,6 +421,9 @@ export const startDaySession = asyncHandler(
             lastEndedBreakAccumulated: 0,
             allocatedSeconds: 0,
         });
+
+        // Sync check-in to Attendance database
+        await AttendanceService.syncCheckInFromTimer(userId, dateKey, session.dayStart);
 
         timerStatusMap.set(userId, 'running');
         res.status(200).json({ success: true, data: session.toObject() });
@@ -445,12 +473,25 @@ export const pauseDaySession = asyncHandler(
             }
             current.lastEndedAccumulated = current.accumulated;
             current.lastEndedBreakAccumulated = current.breakAccumulated || 0;
+            current.lastLapseElapsed = Math.max(current.lastLapseElapsed || 0, current.accumulated || 0);
+            current.lastLapseBreak = Math.max(current.lastLapseBreak || 0, current.breakAccumulated || 0);
             if (req.body?.allocatedMinutes) {
                 current.allocatedSeconds = (current.allocatedSeconds || 0) + (req.body.allocatedMinutes * 60);
             }
         }
 
         await current.save();
+
+        if (req.body?.isEnded === true) {
+            // Sync check-out to Attendance database
+            await AttendanceService.syncCheckOutFromTimer(
+                userId,
+                dateKey,
+                new Date(),
+                current.accumulated || 0,
+                current.breakAccumulated || 0
+            );
+        }
 
         // Update in-memory status map
         timerStatusMap.delete(userId);
@@ -513,6 +554,7 @@ export const startBreak = asyncHandler(
                 breakReason: reason,
             });
             await session.save();
+            await AttendanceService.syncCheckInFromTimer(userId, dateKey, session.dayStart);
         } else {
             // If already on break, update break type/reason
             if (!session.breakStartedAt) {
@@ -554,10 +596,138 @@ export const endBreak = asyncHandler(
             session.breakStartedAt = null;
             session.breakType = null;
             session.breakReason = null;
+            if (session.status !== 'running' && !session.isEnded) {
+                session.status = 'running';
+                session.startedAt = now;
+            }
             await session.save();
         }
 
         res.status(200).json({ success: true, data: session.toObject() });
     }
 );
+
+/**
+ * POST /projects/day-session/lapse
+ * Records or updates a lapse in today's DaySession, updating the lapse boundary.
+ */
+export const recordLapse = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const { lapse, lastLapseElapsed, lastLapseBreak } = req.body || {};
+
+        if (!lapse || !lapse.id || typeof lapse.seconds !== 'number') {
+            return res.status(400).json({ success: false, message: 'Invalid lapse payload' });
+        }
+
+        let session = await DaySession.findOne({ userId, dateKey });
+        if (!session) {
+            session = new DaySession({
+                userId,
+                dateKey,
+                dayStart: new Date(),
+                status: 'paused',
+                accumulated: 0,
+                breakAccumulated: 0,
+                lapses: [],
+            });
+        }
+
+        if (!Array.isArray(session.lapses)) {
+            session.lapses = [];
+        }
+
+        const existingIdx = session.lapses.findIndex(l => l.id === lapse.id);
+        if (existingIdx >= 0) {
+            session.lapses[existingIdx] = {
+                ...session.lapses[existingIdx],
+                ...lapse,
+            };
+        } else {
+            session.lapses.push({
+                id: lapse.id,
+                seconds: lapse.seconds,
+                capturedAt: lapse.capturedAt || new Date().toISOString(),
+                assignedTaskId: lapse.assignedTaskId || null,
+                assignedProjectId: lapse.assignedProjectId || null,
+                note: lapse.note || null,
+            });
+        }
+
+        if (typeof lastLapseElapsed === 'number') {
+            session.lastLapseElapsed = lastLapseElapsed;
+        }
+        if (typeof lastLapseBreak === 'number') {
+            session.lastLapseBreak = lastLapseBreak;
+        }
+
+        await session.save();
+        res.status(200).json({ success: true, data: session.toObject() });
+    }
+);
+
+/**
+ * PATCH /projects/day-session/lapse/:id/assign
+ * Assigns a previously recorded lapse to a task.
+ */
+export const assignLapseSession = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const { id } = req.params;
+        const { assignedTaskId, assignedProjectId, note } = req.body || {};
+
+        const session = await DaySession.findOne({ userId, dateKey });
+        if (!session) {
+            return res.status(404).json({ success: false, message: 'DaySession not found' });
+        }
+
+        if (!Array.isArray(session.lapses)) {
+            session.lapses = [];
+        }
+
+        const target = session.lapses.find(l => l.id === id);
+        if (!target) {
+            return res.status(404).json({ success: false, message: 'Lapse record not found' });
+        }
+
+        target.assignedTaskId = assignedTaskId || null;
+        target.assignedProjectId = assignedProjectId || null;
+        if (note !== undefined) {
+            target.note = note || null;
+        }
+
+        await session.save();
+        res.status(200).json({ success: true, data: session.toObject() });
+    }
+);
+
+/**
+ * POST /projects/day-session/lapse-boundary
+ * Advances the lapse boundary (lastLapseElapsed, lastLapseBreak) without creating a new lapse.
+ */
+export const updateLapseBoundary = asyncHandler(
+    async (req: Request, res: Response) => {
+        const userId = req.user?.id!;
+        const dateKey = getTodayKey();
+        const { lastLapseElapsed, lastLapseBreak } = req.body || {};
+
+        let session = await DaySession.findOne({ userId, dateKey });
+        if (!session) {
+            return res.status(200).json({ success: true, data: null });
+        }
+
+        if (typeof lastLapseElapsed === 'number') {
+            session.lastLapseElapsed = Math.max(session.lastLapseElapsed || 0, lastLapseElapsed);
+        }
+        if (typeof lastLapseBreak === 'number') {
+            session.lastLapseBreak = Math.max(session.lastLapseBreak || 0, lastLapseBreak);
+        }
+
+        await session.save();
+        res.status(200).json({ success: true, data: session.toObject() });
+    }
+);
+
 

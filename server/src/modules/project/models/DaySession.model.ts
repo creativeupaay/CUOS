@@ -62,6 +62,22 @@ export interface IDaySession extends Document {
     /** Total working seconds allocated today across all submissions */
     allocatedSeconds?: number;
 
+    /** Lapses captured today (both assigned and unassigned) */
+    lapses?: Array<{
+        id: string;
+        seconds: number;
+        capturedAt: string;
+        assignedTaskId?: string | null;
+        assignedProjectId?: string | null;
+        note?: string | null;
+    }>;
+
+    /** Accumulated wall-clock seconds at which the last lapse was captured */
+    lastLapseElapsed?: number;
+
+    /** Break accumulated seconds at which the last lapse was captured */
+    lastLapseBreak?: number;
+
     createdAt: Date;
     updatedAt: Date;
 }
@@ -137,6 +153,26 @@ const DaySessionSchema = new Schema<IDaySession>(
             min: 0,
         },
         allocatedSeconds: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        lapses: [
+            {
+                id: { type: String, required: true },
+                seconds: { type: Number, required: true },
+                capturedAt: { type: String, required: true },
+                assignedTaskId: { type: String, default: null },
+                assignedProjectId: { type: String, default: null },
+                note: { type: String, default: null },
+            },
+        ],
+        lastLapseElapsed: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        lastLapseBreak: {
             type: Number,
             default: 0,
             min: 0,

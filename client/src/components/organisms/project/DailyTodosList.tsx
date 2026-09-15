@@ -249,8 +249,8 @@ export default function DailyTodosList() {
                 </div>
             ) : (
                 <div className="max-w-[1200px] w-full mx-auto">
-                    <GroupCollapsible title="Todo" tasks={todoTasks} updateTask={updateTask} projects={projects} />
                     <GroupCollapsible title="In Progress" tasks={inProgressTasks} updateTask={updateTask} projects={projects} />
+                    <GroupCollapsible title="Todo" tasks={todoTasks} updateTask={updateTask} projects={projects} />
                     <GroupCollapsible title="Paused" tasks={pausedTasks} updateTask={updateTask} projects={projects} />
                     <GroupCollapsible title="Completed" tasks={completedTasks} updateTask={updateTask} projects={projects} />
                 </div>

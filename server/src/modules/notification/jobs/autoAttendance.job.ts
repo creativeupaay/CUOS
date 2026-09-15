@@ -12,7 +12,6 @@ import { Employee } from '../../hrms/models/Employee.model';
 import { AttendanceService } from '../../hrms/services/attendance.service';
 import { calculateDailyWorkSummary } from '../../project/services/dailyWorkSummary.service';
 import { getWorkDayLabel } from '../../../utils/intervalUtils';
-import { notificationService } from '../services/notification.service';
 import { logger } from '../../../utils/logger';
 
 /**
@@ -55,18 +54,6 @@ export async function runAutoAttendanceCheck() {
 
                 if (result.marked) {
                     markedCount++;
-                    // 3. Notify the employee that their attendance was marked
-                    const hoursWorked = Math.floor(workedMinutes / 60);
-                    const minsWorked = workedMinutes % 60;
-                    const timeStr = minsWorked > 0 ? `${hoursWorked}h ${minsWorked}m` : `${hoursWorked} hour${hoursWorked !== 1 ? 's' : ''}`;
-                    const statusLabel = result.status === 'present' ? 'Present' : result.status === 'half-day' ? 'Half Day' : result.status;
-                    await notificationService.createNotification({
-                        userId: emp.userId.toString(),
-                        type: 'auto_attendance_marked',
-                        title: 'Attendance Auto-Marked',
-                        message: `You've logged ${timeStr} of work today. Your attendance has been marked as ${statusLabel}.`,
-                        link: '/my-hrms/attendance',
-                    });
                     logger.debug(`[CRON:AutoAttendance] Marked ${emp.employeeId} as ${result.status} (${workedMinutes}m)`);
                 } else {
                     skipCount++;

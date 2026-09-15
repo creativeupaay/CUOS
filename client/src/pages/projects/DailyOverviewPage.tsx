@@ -31,6 +31,14 @@ function formatTime(dateStr: string): string {
     return new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
+function formatDateTime(dateStr: string): string {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const datePart = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${datePart}, ${timePart}`;
+}
+
 type UserInfo = { _id: string; name: string; email: string; profilePhoto?: string };
 
 function resolveUser(raw: string | UserInfo | undefined): UserInfo | null {
@@ -265,13 +273,21 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing
                 )}
             </div>
 
-            {/* Footer */}
+            {/* Footer - Last updated chip */}
             {latestUpdated && (
-                <div className="mt-auto px-4 pb-3 pt-2 flex items-center gap-1">
-                    <Clock size={11} style={{ color: '#9CA3AF' }} />
-                    <span className="text-[11px]" style={{ color: '#9CA3AF' }}>
-                        Updated {formatTime(latestUpdated)}
-                    </span>
+                <div className="mt-auto px-4 pb-3 pt-2">
+                    <div
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                        style={{
+                            backgroundColor: '#F8FAFC',
+                            color: '#475569',
+                            border: '1px solid #E2E8F0',
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
+                        }}
+                    >
+                        <Clock size={11} className="text-slate-400 shrink-0" />
+                        <span>Updated {formatDateTime(latestUpdated)}</span>
+                    </div>
                 </div>
             )}
 
