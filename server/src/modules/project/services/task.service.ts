@@ -246,12 +246,45 @@ export const getTasks = async (
     return tasks as ITask[];
 };
 
-export const getAllTasksForProjects = async (projectIds: string[]): Promise<ITask[]> => {
-    const tasks = await Task.find({ projectId: { $in: projectIds }, parentTaskId: null })
+export const getAllTasksForProjects = async (
+    projectIds: string[],
+    options?: {
+        /** Maximum number of tasks to return. Default: 300. Pass 0 for no limit. */
+        limit?: number;
+        /** Only return tasks created/updated at or after this date (ISO string). */
+        sinceDate?: string;
+    }
+): Promise<ITask[]> => {
+    const limit = options?.limit === 0 ? 0 : (options?.limit ?? 300);
+
+    const query: any = { projectId: { $in: projectIds }, parentTaskId: null };
+
+    // Optional date filter — exclude very old completed tasks to reduce payload size.
+    // Keeps active/recent tasks always visible regardless of age.
+    if (options?.sinceDate) {
+        const since = new Date(options.sinceDate);
+        if (!isNaN(since.getTime())) {
+            // Include tasks that are:
+            //  • updated/created recently (within the since window), OR
+            //  • currently active (not completed) regardless of age
+            query.$or = [
+                { updatedAt: { $gte: since } },
+                { status: { $ne: 'completed' } },
+            ];
+        }
+    }
+
+    let taskQuery = Task.find(query)
         .populate('assignees', 'name email')
         .populate('createdBy', 'name email')
         .sort({ createdAt: -1 })
         .lean<any[]>();
+
+    if (limit > 0) {
+        taskQuery = taskQuery.limit(limit) as any;
+    }
+
+    const tasks = await taskQuery;
 
     await attachProfilePhotos(tasks);
 

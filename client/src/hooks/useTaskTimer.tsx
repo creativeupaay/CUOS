@@ -35,9 +35,29 @@ export interface TimerContextValue {
 
 const STORAGE_KEY = 'cuos_global_timer';
 const META_STORAGE_KEY = 'cuos_day_session_meta';
-const SYNC_POLL_INTERVAL = 15000; // 15 seconds — polls server for cross-device sync
+// Heartbeat interval — only runs while timer is active AND this tab is the leader.
+// 60s is enough for crash-recovery; all explicit actions (start/pause/stop) save immediately.
+const SYNC_POLL_INTERVAL = 60000; // 60 seconds
 export const LIMIT_SECONDS = 12 * 60 * 60;
 const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 mins = 00:30 UTC = 6:00 AM IST
+
+// ─── Tab Leader Election ──────────────────────────────────────────────────────
+// Only the "leader" tab runs the server heartbeat poll.
+// Leadership is claimed on mount and revoked on unmount/close.
+// If the leader tab closes, another open tab claims leadership within ~2s.
+const TAB_LEADER_KEY = 'cuos_timer_leader_id';
+const TAB_ID = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+function claimLeadership(): void {
+    try { localStorage.setItem(TAB_LEADER_KEY, TAB_ID); } catch { /* quota */ }
+}
+function releaseLeadership(): void {
+    try {
+        if (localStorage.getItem(TAB_LEADER_KEY) === TAB_ID) {
+            localStorage.removeItem(TAB_LEADER_KEY);
+        }
+    } catch { /* quota */ }
+}
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +215,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     // Track when the user last performed a local timer action (start/pause/resume/bypass)
     // to prevent the server poll from overwriting a fresh local state
     const lastActionRef = useRef<number>(0);
+    // Whether this tab currently holds the polling leadership
+    const isTabLeaderRef = useRef<boolean>(false);
 
     const applySessionMeta = useCallback((session: any) => {
         if (!session) return;
@@ -226,8 +248,27 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         }
     }, [applySessionMeta]);
 
-    // ── BroadcastChannel (cross-tab sync within same browser) ─────────────────
+    // ── BroadcastChannel (cross-tab sync + leader election) ──────────────────
     useEffect(() => {
+        // Claim leadership on mount. If no other tab holds it, this tab becomes leader.
+        const currentLeader = localStorage.getItem(TAB_LEADER_KEY);
+        if (!currentLeader) {
+            claimLeadership();
+            isTabLeaderRef.current = true;
+        }
+
+        // Re-check leadership every 2 seconds in case the leader tab closed without cleanup
+        const leaderCheckInterval = window.setInterval(() => {
+            const leader = localStorage.getItem(TAB_LEADER_KEY);
+            if (!leader) {
+                // No leader — claim it
+                claimLeadership();
+                isTabLeaderRef.current = true;
+            } else {
+                isTabLeaderRef.current = leader === TAB_ID;
+            }
+        }, 2000);
+
         try {
             const bc = new BroadcastChannel('cuos_timer');
             broadcastRef.current = bc;
@@ -237,16 +278,49 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                     const newTimer = event.data.timer as TimerState | null;
                     setTimer(newTimer);
                     saveToStorage(newTimer);
+                    // Count incoming broadcasts as a local action so the heartbeat
+                    // grace period prevents overwriting state we just received.
+                    lastActionRef.current = Date.now();
+                } else if (event.data?.type === 'LEADER_CLAIM') {
+                    // Another tab claimed leadership — yield ours
+                    if (event.data.tabId !== TAB_ID) {
+                        isTabLeaderRef.current = false;
+                    }
                 }
             };
-
-            return () => {
-                bc.close();
-                broadcastRef.current = null;
-            };
         } catch {
-            // BroadcastChannel not supported (rare)
+            // BroadcastChannel not supported (rare) — always act as leader
+            isTabLeaderRef.current = true;
         }
+
+        // Save the latest accumulated to localStorage when the tab closes/refreshes,
+        // but keep status='running' so the next load can correctly reconcile with
+        // the server (which is also still 'running'). DO NOT pause the server here —
+        // the timer is designed to keep running while the tab is closed; elapsed is
+        // always computed as accumulated + (Date.now() - startedAt).
+        const handleBeforeUnload = () => {
+            const t = timerRef.current;
+            if (t && t.status === 'running') {
+                const runSeconds = Math.floor((Date.now() - t.startedAt) / 1000);
+                const latestAccumulated = Math.min(
+                    t.accumulated + runSeconds,
+                    t.limitBypassed ? Number.MAX_SAFE_INTEGER : LIMIT_SECONDS
+                );
+                // Keep status 'running' so hydration on next open sees local=running
+                // and trusts the server's running state (with correct startedAt).
+                saveToStorage({ ...t, accumulated: latestAccumulated });
+            }
+            releaseLeadership();
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            clearInterval(leaderCheckInterval);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            releaseLeadership();
+            try { broadcastRef.current?.close(); } catch { /* ignore */ }
+            broadcastRef.current = null;
+        };
     }, []);
 
     /** Broadcasts the new timer state to all other tabs in this browser */
@@ -265,12 +339,29 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 if (cancelled) return;
                 if (session) {
                     applySessionMeta(session);
-                    // Server has a session for today
                     const serverTimer = sessionToTimer(session);
+                    const localTimer = timerRef.current;
+
                     if (serverTimer) {
-                        const localTimer = timerRef.current;
-                        // If user locally had timer running today, preserve running status across refresh
-                        if (localTimer && localTimer.status === 'running' && serverTimer.status === 'paused' && !session.isEnded) {
+                        if (localTimer?.status === 'paused' && serverTimer.status === 'running') {
+                            // ── User explicitly paused, but the server never received it ────
+                            // This happens when the PATCH /pause request fails (network hiccup)
+                            // and the user then navigates away and back. Trust the LOCAL state
+                            // (user's intentional pause) and re-send the pause to the server.
+                            const fixedTimer: TimerState = {
+                                ...serverTimer,
+                                status: 'paused',
+                                accumulated: localTimer.accumulated,
+                            };
+                            setTimer(fixedTimer);
+                            saveToStorage(fixedTimer);
+                            // Re-send the pause so server stays consistent
+                            apiCall('PATCH', '/projects/day-session/pause', {
+                                accumulated: localTimer.accumulated,
+                            }).catch(() => {});
+                        } else if (localTimer?.status === 'running' && serverTimer.status === 'paused' && !session.isEnded) {
+                            // ── User had running timer; server was paused (e.g., another device) ─
+                            // Preserve the running status across a refresh by restarting the run.
                             const preservedTimer: TimerState = {
                                 ...serverTimer,
                                 status: 'running',
@@ -280,6 +371,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                             saveToStorage(preservedTimer);
                             apiCall('POST', '/projects/day-session/start').catch(() => {});
                         } else {
+                            // ── Normal case: trust server state ─────────────────────────────
                             setTimer(serverTimer);
                             saveToStorage(serverTimer);
                         }
@@ -338,7 +430,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [timer]);
 
-    // ── Cross-device polling (every 15s while running) ────────────────────────
+    // ── Cross-device heartbeat (every 60s while running, leader tab only) ──────
     useEffect(() => {
         if (!timer?.status || timer.status !== 'running') {
             if (syncPollRef.current) {
@@ -349,23 +441,28 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         }
 
         syncPollRef.current = window.setInterval(async () => {
+            // Only the leader tab polls the server — prevents N-tab × 60s = N×traffic
+            if (!isTabLeaderRef.current) return;
+
             try {
                 // ── Grace period guard ──────────────────────────────────────
-                // If the user performed a local action in the last 30 seconds,
-                // skip this poll to avoid overwriting the fresh local state with
-                // a stale server response (e.g., server restarted or hasn't
-                // processed our start/pause yet).
+                // If the user (or another tab via BroadcastChannel) performed an
+                // action in the last 90 seconds, skip to avoid overwriting fresh state.
                 const secondsSinceLastAction = (Date.now() - lastActionRef.current) / 1000;
-                if (secondsSinceLastAction < 30) return;
+                if (secondsSinceLastAction < 90) return;
 
                 const session = await apiCall('GET', '/projects/day-session');
                 if (!session) return;
 
-                // Only sync from server if the server's startedAt is NEWER than
-                // what we have locally. This prevents a stale server "paused"
-                // state from overwriting our running local timer.
+                // ── Live state check ─────────────────────────────────────────
+                // The user may have paused WHILE this fetch was in-flight.
+                // Always check the live ref — never trust the closure 'timer' variable
+                // for decisions made after an async boundary.
+                const liveTimer = timerRef.current;
+                if (!liveTimer || liveTimer.status !== 'running') return;
+
                 const serverStartedAt = session.startedAt ?? 0;
-                const localStartedAt = timer.startedAt ?? 0;
+                const localStartedAt = liveTimer.startedAt ?? 0;
                 const serverIsNewer = serverStartedAt > localStartedAt;
 
                 const serverTimer = sessionToTimer(session);
@@ -374,7 +471,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 if (session.status === 'running') {
                     // Server is also running — only sync if there's significant accumulated drift
                     const serverAccumulated = session.accumulated ?? 0;
-                    if (Math.abs(serverAccumulated - timer.accumulated) > 60) {
+                    if (Math.abs(serverAccumulated - liveTimer.accumulated) > 60) {
                         setTimer(serverTimer);
                         saveToStorage(serverTimer);
                         broadcastState(serverTimer);

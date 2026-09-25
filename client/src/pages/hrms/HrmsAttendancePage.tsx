@@ -538,7 +538,11 @@ export default function HrmsAttendancePage() {
     const { data: overviewData, isLoading: overviewLoading, refetch: refetchOverview } =
         useGetDailyOverviewQuery(
             { date: overviewDate },
-            { pollingInterval: 15000, refetchOnMountOrArgChange: true }
+            {
+                skip: tab !== 'overview',
+                pollingInterval: 60000, // 60s — reduced from 15s to limit bandwidth
+                refetchOnMountOrArgChange: 30,
+            }
         );
 
     // ── Override Modal State ─────────────────────────────────────────

@@ -345,18 +345,18 @@ export default function DailyOverviewPage() {
 
     const { data: tasksRes, isLoading } = useGetIndividualTasksQuery(
         { date: selectedDate },
-        { pollingInterval: 5000 }
+        { pollingInterval: 30000 } // 30s — reduced from 5s to limit bandwidth
     );
     const allTasks = useMemo(() => (tasksRes?.data ?? []) as Task[], [tasksRes]);
 
     // Separate query without date filter — needed to detect activeTimers across ALL tasks
     // (a timer may be running on an overdue task from a previous day)
-    const { data: timerStatusRes } = useGetTimerStatusesQuery(undefined, { pollingInterval: 5000 });
+    const { data: timerStatusRes } = useGetTimerStatusesQuery(undefined, { pollingInterval: 30000 }); // 30s — reduced from 5s
     const timerStatuses = timerStatusRes?.data ?? {};
     const runningUserIds = useMemo(() => new Set(Object.entries(timerStatuses).filter(([_, s]) => s.status === 'running').map(([k]) => k)), [timerStatuses]);
     const endedUserIds = useMemo(() => new Set(Object.entries(timerStatuses).filter(([_, s]) => s.isEnded).map(([k]) => k)), [timerStatuses]);
 
-    const { allMeetings } = useGlobalMeetings({ pollingInterval: 5000 });
+    const { allMeetings } = useGlobalMeetings({ pollingInterval: 30000 }); // 30s — reduced from 5s
 
     const { data: usersData } = useGetUsersQuery();
     const allUsers = useMemo(() => ((usersData?.data as any)?.users ?? []) as any[], [usersData]);

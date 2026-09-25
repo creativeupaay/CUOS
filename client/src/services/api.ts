@@ -81,11 +81,13 @@ export const api = createApi({
   // always shows fresh data, but long enough to avoid double-fetches during
   // quick sequential renders in the same session.
   keepUnusedDataFor: 30,
-  // Refetch when the user returns to the tab — ensures data is never stale
-  // after coming back from another window or browser tab.
-  refetchOnFocus: true,
-  // Refetch on mount if cached data is older than 30s.
-  // This guarantees every page navigation shows up-to-date data.
+  // Do NOT refetch on tab focus — firing all mounted queries simultaneously on
+  // every alt-tab or window switch was a major bandwidth driver. Data stays
+  // fresh via mutation invalidation and the 30s mount threshold below.
+  refetchOnFocus: false,
+  // Refetch on mount only if cached data is older than 30 seconds.
+  // This guarantees every page navigation shows up-to-date data without
+  // refetching on every quick re-render.
   refetchOnMountOrArgChange: 30,
   // DO refetch when the network reconnects — ensures fresh data after connectivity loss.
   refetchOnReconnect: true,
