@@ -148,8 +148,6 @@ export default function HrmsEmployeeReimbursementHistoryPage() {
     const selectedPendingClaims = selectedClaims.filter((r) => r.status === 'pending');
     const selectedApprovedClaims = selectedClaims.filter((r) => r.status === 'approved');
 
-    const visiblePendingClaims = filtered.filter((r) => r.status === 'pending');
-    const visibleApprovedClaims = filtered.filter((r) => r.status === 'approved');
 
     const handleQuickApprove = (claim: any) => {
         setBatchModalState({
