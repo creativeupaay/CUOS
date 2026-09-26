@@ -131,17 +131,24 @@ export const updateCredential = async (
     data: UpdateCredentialData,
     userId: string
 ): Promise<ICredential | null> => {
-    const credential = await Credential.findByIdAndUpdate(
-        credentialId,
-        { $set: data },
-        { new: true, runValidators: true }
-    );
+    const credential = await Credential.findById(credentialId);
+    if (!credential) return null;
 
-    if (credential) {
-        credential.lastAccessedAt = new Date();
-        credential.lastAccessedBy = userId as any;
-        await credential.save();
+    if (data.name !== undefined) credential.name = data.name;
+    if (data.description !== undefined) credential.description = data.description;
+    if (data.credentials !== undefined) {
+        const rawCreds = credential.credentials as any;
+        const currentCreds = rawCreds?.toObject ? rawCreds.toObject() : (rawCreds || {});
+        credential.credentials = {
+            ...currentCreds,
+            ...data.credentials,
+        };
+        credential.markModified('credentials');
     }
+
+    credential.lastAccessedAt = new Date();
+    credential.lastAccessedBy = userId as any;
+    await credential.save();
 
     return credential;
 };

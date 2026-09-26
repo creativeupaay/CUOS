@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Search, Clock, CheckCircle, DollarSign,
     Users, ChevronRight, AlertTriangle, User,
-    BarChart2,
+    BarChart2, Receipt,
 } from 'lucide-react';
 import { useGetEmployeesReimbursementOverviewQuery } from '@/features/hrms/hrmsApi';
 
@@ -254,7 +254,7 @@ export default function HrmsEmployeeReimbursementsPage() {
                         <ArrowLeft size={17} />
                     </button>
                     <div>
-                        
+                        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Employee Reimbursements</h1>
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                             Combined totals and claim history per team member
                         </p>
@@ -305,6 +305,28 @@ export default function HrmsEmployeeReimbursementsPage() {
                     />
                 </div>
             )}
+
+            {/* ── View Switcher Tabs ──────────────────────────── */}
+            <div className="flex items-center gap-6 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                <button
+                    onClick={() => navigate('/hrms/reimbursements')}
+                    className="flex items-center gap-2 pb-3 px-1 text-sm font-medium border-b-2 border-transparent transition-all cursor-pointer hover:opacity-80"
+                    style={{
+                        color: 'var(--color-text-muted)',
+                    }}
+                >
+                    <Receipt size={16} /> All Claims
+                </button>
+                <button
+                    className="flex items-center gap-2 pb-3 px-1 text-sm font-bold border-b-2 transition-all cursor-pointer"
+                    style={{
+                        borderColor: 'var(--color-primary)',
+                        color: 'var(--color-primary)',
+                    }}
+                >
+                    <Users size={16} /> By Employee
+                </button>
+            </div>
 
             {/* ── Search + Sort toolbar ──────────────────────────── */}
             <div

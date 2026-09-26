@@ -5,7 +5,7 @@ import { Employee } from '../models/Employee.model';
 import { uploadDocument, deleteDocument } from '../../../utils/cloudinary.util';
 import { ExpenseService } from '../../finance/services/expense.service';
 import { Expense } from '../../finance/models/Expense.model';
-import type { CreateReimbursementInput, UpdateReimbursementInput, UpdateReimbursementStatusInput } from '../validators/reimbursement.validator';
+import type { CreateReimbursementInput, UpdateReimbursementInput, UpdateReimbursementStatusInput, BulkUpdateReimbursementStatusInput } from '../validators/reimbursement.validator';
 
 
 
@@ -340,6 +340,38 @@ export async function updateReimbursementStatus(
     return { reimbursement, prevStatus };
 }
 
+// ── Admin: bulk update status ─────────────────────────────────────────
+export async function bulkUpdateReimbursementStatus(
+    adminUserId: string,
+    adminName: string,
+    data: BulkUpdateReimbursementStatusInput
+) {
+    const results = [];
+    const errors = [];
+
+    for (const id of data.ids) {
+        try {
+            const res = await updateReimbursementStatus(adminUserId, adminName, id, {
+                status: data.status,
+                comment: data.comment,
+                paymentMethod: data.paymentMethod,
+                paymentReference: data.paymentReference,
+                syncToFinance: data.syncToFinance,
+            });
+            results.push({ id, status: res.reimbursement.status });
+        } catch (err: any) {
+            errors.push({ id, error: err.message });
+        }
+    }
+
+    return {
+        successCount: results.length,
+        errorCount: errors.length,
+        results,
+        errors,
+    };
+}
+
 // ── Get my reimbursements (employee) ─────────────────────────────────
 export async function getMyReimbursements(
     userId: string,
@@ -637,7 +669,8 @@ export async function getReimbursementsByEmployee(employeeId: string) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [reimbursements, summaryAgg] = await Promise.all([
+    const [employeeDoc, reimbursements, summaryAgg, paidThisMonthAgg] = await Promise.all([
+        Employee.findById(empObjectId).populate('userId', 'name email avatar').lean(),
         Reimbursement.find({ employeeId: empObjectId })
             .sort({ createdAt: -1 })
             .lean(),
@@ -651,18 +684,16 @@ export async function getReimbursementsByEmployee(employeeId: string) {
                 },
             },
         ]),
-    ]);
-
-    // Also calculate paid this month
-    const paidThisMonthAgg = await Reimbursement.aggregate([
-        {
-            $match: {
-                employeeId: empObjectId,
-                status: 'paid',
-                'paymentInfo.paidAt': { $gte: monthStart },
+        Reimbursement.aggregate([
+            {
+                $match: {
+                    employeeId: empObjectId,
+                    status: 'paid',
+                    'paymentInfo.paidAt': { $gte: monthStart },
+                },
             },
-        },
-        { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+            { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+        ]),
     ]);
 
     const byStatus: Record<string, { amount: number; count: number }> = {};
@@ -686,7 +717,15 @@ export async function getReimbursementsByEmployee(employeeId: string) {
         },
     };
 
-    return { reimbursements, summary };
+    const employee = employeeDoc ? {
+        _id: (employeeDoc as any)._id,
+        employeeId: (employeeDoc as any).employeeId,
+        department: (employeeDoc as any).department,
+        designation: (employeeDoc as any).designation,
+        user: (employeeDoc as any).userId,
+    } : null;
+
+    return { employee, reimbursements, summary };
 }
 
 // ── Delete draft ──────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ export default function ProjectDetailPage() {
     const { id } = useParams<{ id: string }>();
     const location = useLocation();
     const navigate = useNavigate();
-    const { data, isLoading, error } = useGetProjectByIdQuery(id!, { refetchOnMountOrArgChange: 30 });
+    const { data, isLoading, isFetching, error } = useGetProjectByIdQuery(id!, { refetchOnMountOrArgChange: 30 });
     const project = data?.data;
     const [showEditProjectPanel, setShowEditProjectPanel] = useState(false);
     const [isClosingEditProjectPanel, setIsClosingEditProjectPanel] = useState(false);
@@ -105,7 +105,9 @@ export default function ProjectDetailPage() {
         setIsClosingEditProjectPanel(true);
     };
 
-    if (isLoading) {
+    const isProjectLoading = (isLoading || isFetching || !project || project._id !== id) && !error;
+
+    if (isProjectLoading) {
         return (
             <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
                 <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
@@ -188,7 +190,7 @@ export default function ProjectDetailPage() {
     }
 
     return (
-        <div className="px-8 py-6" style={{ maxWidth: '1280px' }}>
+        <div key={id} className="px-8 py-6" style={{ maxWidth: '1280px' }}>
             {/* Header */}
             <div className="flex justify-between items-start mb-6">
                 <div>
@@ -282,7 +284,7 @@ export default function ProjectDetailPage() {
             </div>
 
             {/* Tab Content */}
-            <Outlet context={{ project }} />
+            <Outlet key={id} context={{ project }} />
 
             {showEditProjectPanel && createPortal(
                 <>

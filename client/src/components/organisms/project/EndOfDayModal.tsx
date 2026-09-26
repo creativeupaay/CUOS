@@ -227,6 +227,7 @@ const lastEndedAccumulated = daySessionMeta?.lastEndedAccumulated || 0;
 
     const todayTasks = useMemo(() => {
         return allTasks.filter(t => {
+            if (t.title?.trim().toLowerCase() === 'unallocated time') return false;
             if (t.status !== 'completed') return true;
             return isToday(t.completedAt) || isToday(t.updatedAt);
         });
@@ -235,7 +236,7 @@ const lastEndedAccumulated = daySessionMeta?.lastEndedAccumulated || 0;
     const displayTasks = useMemo(() => {
         if (search.trim()) {
             const q = search.toLowerCase();
-            return allTasks.filter(t => t.title.toLowerCase().includes(q) || (t._projectName || '').toLowerCase().includes(q));
+            return allTasks.filter(t => t.title?.trim().toLowerCase() !== 'unallocated time' && (t.title.toLowerCase().includes(q) || (t._projectName || '').toLowerCase().includes(q)));
         }
 
         const tasks = [...todayTasks];

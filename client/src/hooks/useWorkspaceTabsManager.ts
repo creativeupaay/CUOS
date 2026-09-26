@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
-import { addTab, setActiveTab, updateTabUrl, removeTab, closeAllTabs } from '@/features/workspace/workspaceSlice';
+import { addTab, setActiveTab, updateTabUrl, removeTab, closeAllTabs, sanitizeTabs } from '@/features/workspace/workspaceSlice';
 import { nanoid } from '@reduxjs/toolkit';
 
 // Helper to extract a friendly title from path
@@ -41,6 +41,10 @@ export function resolveTabTitle(pathname: string): string {
         if (segments[1] === 'reports') return 'Hiring Reports';
     }
     
+    if (pathname === '/announcements' || pathname === '/hrms/announcements' || pathname === '/my-hrms/announcements') {
+        return 'Announcements';
+    }
+
     if (segments[0] === 'hrms' && segments[1]) {
         if (segments[1] === 'employees') return 'Employees';
         if (segments[1] === 'attendance') return 'Attendance';
@@ -48,10 +52,15 @@ export function resolveTabTitle(pathname: string): string {
         if (segments[1] === 'holidays') return 'Holidays';
         if (segments[1] === 'payroll') return 'Payroll';
         if (segments[1] === 'announcements') return 'Announcements';
-        if (segments[1] === 'reimbursements') return 'Reimbursements';
+        if (segments[1] === 'reimbursements') {
+            if (segments[2] === 'employees' && segments[3]) return 'Employee Reimbursement';
+            return 'Reimbursements';
+        }
     }
 
     if (segments[0] === 'my-hrms' && segments[1]) {
+        if (segments[1] === 'change-password') return 'Change Password';
+        if (segments[1] === 'announcements') return 'Announcements';
         return 'My ' + (segments[1].charAt(0).toUpperCase() + segments[1].slice(1));
     }
     
@@ -61,20 +70,14 @@ export function resolveTabTitle(pathname: string): string {
 }
 
 /**
- * Resolves a stable "group key" for a URL path.
- * URLs in the same group share a single tab slot — navigating between them
- * updates the existing tab rather than opening a new one.
- *
- * Examples:
- *   /projects/abc123  → "projects-detail"
- *   /projects/xyz456  → "projects-detail"   ← same group, reuse tab
- *   /projects         → null                 ← no group (exact URL dedup)
+ * Resolves a stable "group key" for dynamic detail paths.
+ * Detail pages in the same group share a single tab slot.
  */
 export function resolveTabGroup(pathname: string): string | undefined {
     const segments = pathname.split('/').filter(Boolean);
     if (segments.length === 0) return undefined;
 
-    // /projects/:id  (but not /projects or /projects/new)
+    // /projects/:id (but not /projects or /projects/new)
     if (segments[0] === 'projects' && segments[1] && segments[1] !== 'new') {
         return 'projects-detail-' + segments[1];
     }
@@ -94,14 +97,18 @@ export function resolveTabGroup(pathname: string): string | undefined {
         return 'hrms-employee-detail-' + segments[2];
     }
 
+    // /hrms/reimbursements/employees/:id
+    if (segments[0] === 'hrms' && segments[1] === 'reimbursements' && segments[2] === 'employees' && segments[3]) {
+        return 'hrms-reimbursement-employee-' + segments[3];
+    }
+
     // /hiring/applications/:id
     if (segments[0] === 'hiring' && segments[1] === 'applications' && segments[2]) {
         return 'hiring-application-detail-' + segments[2];
     }
 
-    // Treat all my-hrms tabs as a single group so switching between them reuses the tab
-    if (segments[0] === 'my-hrms') {
-        return 'my-hrms';
+    if (pathname === '/announcements' || pathname === '/hrms/announcements' || pathname === '/my-hrms/announcements') {
+        return 'hrms-announcements';
     }
 
     return undefined;
@@ -112,11 +119,23 @@ export function useWorkspaceTabsManager() {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const { tabs, activeTabId } = useAppSelector(state => state.workspace);
+    const user = useAppSelector(state => state.auth.user);
     
     const isNavigatingRef = useRef(false);
     const processedLocationKeyRef = useRef<string | null>(null);
 
-    const normalizeUrl = (u: string) => u.replace(/\/$/, '').split('#')[0];
+    const normalizeUrl = (u: string) => {
+        const norm = (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
+        if (norm === '/announcements' || norm === '/hrms/announcements' || norm === '/my-hrms/announcements') {
+            return 'canonical-announcements';
+        }
+        return norm;
+    };
+
+    // Sanitize any existing duplicates on load
+    useEffect(() => {
+        dispatch(sanitizeTabs());
+    }, [dispatch]);
 
     useEffect(() => {
         if (isNavigatingRef.current) {
@@ -130,7 +149,11 @@ export function useWorkspaceTabsManager() {
         }
         processedLocationKeyRef.current = location.key;
 
-        const currentUrl = location.pathname;
+        let currentUrl = location.pathname;
+        if (currentUrl === '/announcements') {
+            const isHrAdmin = user?.role === 'admin' || user?.role === 'super-admin' || user?.modulePermissions?.hrms?.adminAccess === true;
+            currentUrl = isHrAdmin ? '/hrms/announcements' : '/my-hrms/announcements';
+        }
         const activeTab = tabs.find(t => t.id === activeTabId);
 
         // If the current browser URL matches the active tab's URL perfectly, do nothing.
@@ -144,58 +167,56 @@ export function useWorkspaceTabsManager() {
             return;
         }
 
-        // Did the user explicitly request a new tab? (e.g. clicked a link in the Sidebar)
+        // 1. Check if ANY tab already matches this exact URL/path
+        const exactTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
+
+        // 2. Check for dynamic route group match (e.g. within same project /crm/leads/:id)
+        const group = resolveTabGroup(currentUrl);
+        const groupTab = !exactTab && group ? tabs.find(t => t.group === group) : null;
+
+        const targetTab = exactTab || groupTab;
         const isNewTabRequest = location.state?.newTab === true;
 
-        // Determine the group for this URL (enables same-slot reuse for dynamic routes)
-        const group = resolveTabGroup(currentUrl);
-
-        if (isNewTabRequest) {
-            // 1. Check for an exact URL match first
-            const exactTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
-
-            // 2. If no exact match but there's a group, check for a tab in the same group
-            const groupTab = !exactTab && group
-                ? tabs.find(t => t.group === group)
-                : null;
-
-            const targetTab = exactTab || groupTab;
-
-            if (targetTab) {
-                // Reuse the existing tab — update its URL and make it active
-                dispatch(updateTabUrl({
-                    id: targetTab.id,
-                    url: currentUrl,
-                    search: location.search,
-                    title: resolveTabTitle(currentUrl),
-                }));
+        if (targetTab) {
+            // Tab already exists! Switch to it and update URL/title
+            if (targetTab.id !== activeTabId) {
                 dispatch(setActiveTab(targetTab.id));
-                isNavigatingRef.current = true;
-                navigate(currentUrl + location.search, { replace: true, state: {} });
-            } else {
-                // Open a genuinely new tab
-                dispatch(addTab({
-                    id: nanoid(),
-                    url: currentUrl,
-                    search: location.search,
-                    title: resolveTabTitle(currentUrl),
-                    isPinned: false,
-                    group,
-                }));
-                // Clear navigation state so refreshing doesn't keep opening new tabs
+            }
+            dispatch(updateTabUrl({
+                id: targetTab.id,
+                url: currentUrl,
+                search: location.search,
+                title: resolveTabTitle(currentUrl),
+            }));
+            if (isNewTabRequest) {
                 isNavigatingRef.current = true;
                 navigate(currentUrl + location.search, { replace: true, state: {} });
             }
+            return;
+        }
+
+        if (isNewTabRequest) {
+            // Open a genuinely new tab
+            dispatch(addTab({
+                id: nanoid(),
+                url: currentUrl,
+                search: location.search,
+                title: resolveTabTitle(currentUrl),
+                isPinned: false,
+                group,
+            }));
+            isNavigatingRef.current = true;
+            navigate(currentUrl + location.search, { replace: true, state: {} });
         } else {
-            // In-page navigation (e.g. navigating within a project page) — no newTab flag.
-            // Detect if the base URL changed significantly (cross-module jump without sidebar).
+            // In-page navigation without newTab flag
             const getBaseModule = (u: string) => {
+                const norm = (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
+                if (norm === 'canonical-announcements' || norm === '/announcements' || norm.includes('/announcements')) return 'hrms';
                 const base = u.split('/')[1];
                 return base === 'my-hrms' ? 'hrms' : base;
             };
             const isBaseUrlChanged = activeTab && getBaseModule(normalizeUrl(activeTab.url)) !== getBaseModule(normalizeUrl(currentUrl));
 
-            // If we have an active tab and the base URL didn't change, just update the active tab.
             if (activeTabId && tabs.length > 0 && !isBaseUrlChanged) {
                 dispatch(updateTabUrl({
                     id: activeTabId,
@@ -204,43 +225,28 @@ export function useWorkspaceTabsManager() {
                     title: resolveTabTitle(currentUrl),
                 }));
             } else {
-                // Coming from dashboard, initial load, or cross-module jump.
-                // Check for exact match first, then group match.
-                const exactTab = tabs.find(t => normalizeUrl(t.url) === normalizeUrl(currentUrl));
-                const groupTab = !exactTab && group
-                    ? tabs.find(t => t.group === group)
-                    : null;
-                const targetTab = exactTab || groupTab;
-
-                if (targetTab) {
-                    dispatch(updateTabUrl({
-                        id: targetTab.id,
-                        url: currentUrl,
-                        search: location.search,
-                        title: resolveTabTitle(currentUrl),
-                    }));
-                    dispatch(setActiveTab(targetTab.id));
-                } else {
-                    dispatch(addTab({
-                        id: nanoid(),
-                        url: currentUrl,
-                        search: location.search,
-                        title: resolveTabTitle(currentUrl),
-                        isPinned: false,
-                        group,
-                    }));
-                }
+                dispatch(addTab({
+                    id: nanoid(),
+                    url: currentUrl,
+                    search: location.search,
+                    title: resolveTabTitle(currentUrl),
+                    isPinned: false,
+                    group,
+                }));
             }
         }
-    }, [location, tabs, activeTabId, dispatch, navigate]);
+    }, [location, tabs, activeTabId, dispatch, navigate, user]);
 
     // Expose a manual switch method for the TabBar
     const switchTab = (tabId: string) => {
         const tab = tabs.find(t => t.id === tabId);
         if (tab && tab.id !== activeTabId) {
             dispatch(setActiveTab(tab.id));
-            isNavigatingRef.current = true;
-            navigate(tab.url + tab.search);
+            const targetUrl = tab.url + tab.search;
+            if (normalizeUrl(tab.url) !== normalizeUrl(location.pathname) || tab.search !== location.search) {
+                isNavigatingRef.current = true;
+                navigate(targetUrl);
+            }
         }
     };
 

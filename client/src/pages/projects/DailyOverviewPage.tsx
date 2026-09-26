@@ -419,6 +419,8 @@ export default function DailyOverviewPage() {
     const groupedAll = useMemo(() => {
         const map = new Map<string, { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[] }>();
         allTasks.forEach(task => {
+            if (task.title?.trim().toLowerCase() === 'unallocated time') return;
+
             // Check if task belongs to the selected day
             if (selectedDate) {
                 const createdDate = task.createdAt ? toLocalDateString(new Date(task.createdAt)) : '';

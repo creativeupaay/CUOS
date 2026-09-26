@@ -209,6 +209,8 @@ export default function DailyTodosList() {
         };
 
         const myTodos = allTasks.filter(t => {
+            if (t.title?.trim().toLowerCase() === 'unallocated time') return false;
+
             const isAssigned = Array.isArray(t.assignees) && t.assignees.some(a => getEntityId(a) === currentUserId);
             if (isAssigned) return true;
 

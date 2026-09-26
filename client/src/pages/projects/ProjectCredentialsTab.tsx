@@ -4,6 +4,7 @@ import type { RootState } from '@/app/store';
 import {
     useGetCredentialsQuery,
     useCreateCredentialMutation,
+    useUpdateCredentialMutation,
     useGetCredentialByIdQuery,
     useLazyGetCredentialByIdQuery,
     useDeleteCredentialMutation,
@@ -17,10 +18,12 @@ import useBodyScrollLock from '@/hooks/useBodyScrollLock';
 import { useState, useRef, useMemo } from 'react';
 import {
     Loader2, Trash2, Shield, Code, TerminalSquare, Lock, Users, FileText,
-    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2, Eye, EyeOff, Filter, FolderPlus, X, UserMinus
+    Plus, Upload, ChevronDown, ChevronUp, Copy, Check, Link, User, KeyRound, StickyNote, Share2, Eye, EyeOff, Filter, FolderPlus, X, UserMinus,
+    AlertTriangle
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { logger } from '@/utils/logger';
+import EnvDuplicateResolutionModal, { type EnvConflictItem } from '@/components/organisms/project/EnvDuplicateResolutionModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type CredentialType = 'env' | 'ssh-key' | 'test-user' | 'account' | 'other';
@@ -145,7 +148,7 @@ export default function ProjectCredentialsTab() {
     const [showShareModal, setShowShareModal] = useState(false);
     const [envGroupFilter, setEnvGroupFilter] = useState<string>('all');
 
-    const { data, isLoading } = useGetCredentialsQuery({ projectId: projectId!, type: activeTab });
+    const { data, isLoading, isFetching } = useGetCredentialsQuery({ projectId: projectId!, type: activeTab });
     const credentials = useMemo(() => data?.data || [], [data?.data]);
 
     // Derive distinct saved ENV group names for filter + form suggestions
@@ -160,7 +163,14 @@ export default function ProjectCredentialsTab() {
     const [_prevTab, _setPrevTab] = useState<CredentialType>('env');
     if (activeTab !== _prevTab) { _setPrevTab(activeTab); setEnvGroupFilter('all'); }
     const [createCredential, { isLoading: isCreating }] = useCreateCredentialMutation();
+    const [updateCredential] = useUpdateCredentialMutation();
     const [deleteCredential] = useDeleteCredentialMutation();
+
+    // Duplicate detection modal state
+    const [conflictModalOpen, setConflictModalOpen] = useState(false);
+    const [pendingConflicts, setPendingConflicts] = useState<EnvConflictItem[]>([]);
+    const [pendingNewItems, setPendingNewItems] = useState<CreateCredentialRequest[]>([]);
+    const [isSavingEnv, setIsSavingEnv] = useState(false);
 
     // Determine if current user is a credential admin
     // NOTE: role can be either a plain string OR a Role object {_id, name, ...}
@@ -193,6 +203,59 @@ export default function ProjectCredentialsTab() {
     const [otherRows, setOtherRows] = useState<OtherRow[]>([newOtherRow()]);
     const [showTestPw, setShowTestPw] = useState<Record<number, boolean>>({});
     const [showAccPw, setShowAccPw] = useState<Record<number, boolean>>({});
+
+    const checkEnvRowConflict = (groupLabel: string, rowKey: string) => {
+        const trimmedKey = rowKey.trim();
+        if (!trimmedKey || activeTab !== 'env') return null;
+        const normKey = trimmedKey.toUpperCase();
+        const effectiveGroup = groupLabel.trim() || 'General';
+
+        // 1. Check internal form duplicates
+        let formCount = 0;
+        envGroups.forEach(g => {
+            g.rows.forEach(r => {
+                if (r.key.trim().toUpperCase() === normKey) {
+                    formCount++;
+                }
+            });
+        });
+        if (formCount > 1) {
+            return { type: 'form_duplicate' as const, message: 'Duplicate in form' };
+        }
+
+        // 2. Check exact group match in database
+        const exactGroupMatch = credentials.find(
+            (c: Credential) =>
+                c.type === 'env' &&
+                c.name?.trim().toUpperCase() === normKey &&
+                (c.description || 'General').trim().toLowerCase() === effectiveGroup.toLowerCase()
+        );
+        if (exactGroupMatch) {
+            return {
+                type: 'db_duplicate_same_group' as const,
+                message: `Exists in "${exactGroupMatch.description || 'General'}"`,
+                credentialId: exactGroupMatch._id,
+                existingGroup: exactGroupMatch.description || 'General',
+            };
+        }
+
+        // 3. Check other group match in database
+        const otherGroupMatch = credentials.find(
+            (c: Credential) =>
+                c.type === 'env' &&
+                c.name?.trim().toUpperCase() === normKey
+        );
+        if (otherGroupMatch) {
+            return {
+                type: 'db_duplicate_other_group' as const,
+                message: `Exists in "${otherGroupMatch.description || 'General'}"`,
+                credentialId: otherGroupMatch._id,
+                existingGroup: otherGroupMatch.description || 'General',
+            };
+        }
+
+        return null;
+    };
 
     const updateRow = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, id: number, patch: Partial<T>) =>
         setter(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -256,17 +319,163 @@ export default function ProjectCredentialsTab() {
         setAccountRows(rows.map(r => ({ ...newAccountRow(), ...r })));
     };
 
+    const executeSaveEnv = async (
+        toCreateList: CreateCredentialRequest[],
+        toUpdateList: { id: string; name: string; description?: string; credentials: Record<string, string> }[]
+    ) => {
+        setIsSavingEnv(true);
+        try {
+            const promises: Promise<unknown>[] = [];
+            if (toCreateList.length > 0) {
+                promises.push(...toCreateList.map(cred => createCredential({ projectId: projectId!, data: cred }).unwrap()));
+            }
+            if (toUpdateList.length > 0) {
+                promises.push(...toUpdateList.map(item => updateCredential({
+                    projectId: projectId!,
+                    id: item.id,
+                    data: {
+                        name: item.name,
+                        description: item.description,
+                        credentials: item.credentials,
+                    }
+                }).unwrap()));
+            }
+
+            await Promise.all(promises);
+
+            if (formRef.current) formRef.current.reset();
+            setEnvGroups([newEnvGroup('')]);
+            setConflictModalOpen(false);
+            setPendingConflicts([]);
+            setPendingNewItems([]);
+
+            const createdCount = toCreateList.length;
+            const updatedCount = toUpdateList.length;
+            const messages: string[] = [];
+            if (createdCount > 0) messages.push(`${createdCount} created`);
+            if (updatedCount > 0) messages.push(`${updatedCount} updated`);
+            alert(`Environment variables saved successfully (${messages.join(', ') || 'No changes'})!`);
+        } catch (err: unknown) {
+            logger.error('Failed to save environment variables:', err);
+            const error = err as { data?: { message?: string }; message?: string };
+            const errorMessage = error?.data?.message || error?.message || 'Unknown error';
+            alert(`Failed to save: ${errorMessage}`);
+        } finally {
+            setIsSavingEnv(false);
+        }
+    };
+
+    const handleConflictModalConfirm = async (decisions: Record<string, 'update' | 'skip'>) => {
+        const toUpdateList: { id: string; name: string; description?: string; credentials: Record<string, string> }[] = [];
+
+        pendingConflicts.forEach(conflict => {
+            if (decisions[conflict.key] === 'update') {
+                toUpdateList.push({
+                    id: conflict.existingCredentialId,
+                    name: conflict.key,
+                    description: conflict.newGroup,
+                    credentials: {
+                        envKey: conflict.key,
+                        envValue: conflict.newValue,
+                        notes: conflict.newNote || '',
+                    },
+                });
+            }
+        });
+
+        if (toUpdateList.length === 0 && pendingNewItems.length === 0) {
+            setConflictModalOpen(false);
+            setPendingConflicts([]);
+            setPendingNewItems([]);
+            return;
+        }
+
+        await executeSaveEnv(pendingNewItems, toUpdateList);
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+
+        if (activeTab === 'env') {
+            const filledRows: { groupLabel: string; row: EnvRow }[] = [];
+            envGroups.forEach(group => {
+                group.rows.forEach(r => {
+                    if (r.key.trim() && r.value.trim()) {
+                        filledRows.push({ groupLabel: group.label.trim() || 'General', row: r });
+                    }
+                });
+            });
+
+            if (!filledRows.length) {
+                alert('Please fill in at least one Key and Value.');
+                return;
+            }
+
+            // 1. Check internal form duplicates
+            const keyCounts = new Map<string, number>();
+            for (const item of filledRows) {
+                const norm = item.row.key.trim().toUpperCase();
+                keyCounts.set(norm, (keyCounts.get(norm) || 0) + 1);
+            }
+            const formDuplicates = Array.from(keyCounts.entries())
+                .filter(([_, count]) => count > 1)
+                .map(([k]) => k);
+
+            if (formDuplicates.length > 0) {
+                alert(`Please resolve duplicate keys in your form before saving: ${formDuplicates.join(', ')}`);
+                return;
+            }
+
+            // 2. Identify database duplicates
+            const conflicts: EnvConflictItem[] = [];
+            const newItems: CreateCredentialRequest[] = [];
+
+            filledRows.forEach(({ groupLabel, row }) => {
+                const normKey = row.key.trim().toUpperCase();
+                const existing = credentials.find(
+                    (c: Credential) => c.type === 'env' && c.name?.trim().toUpperCase() === normKey
+                );
+
+                if (existing) {
+                    conflicts.push({
+                        id: existing._id,
+                        key: row.key.trim(),
+                        newValue: row.value,
+                        newGroup: groupLabel,
+                        newNote: row.note,
+                        existingGroup: existing.description || 'General',
+                        existingCredentialId: existing._id,
+                        existingNote: existing.credentials?.notes,
+                    });
+                } else {
+                    newItems.push({
+                        name: row.key.trim(),
+                        type: 'env',
+                        description: groupLabel,
+                        credentials: {
+                            envKey: row.key.trim(),
+                            envValue: row.value,
+                            notes: row.note,
+                        },
+                    });
+                }
+            });
+
+            if (conflicts.length > 0) {
+                setPendingConflicts(conflicts);
+                setPendingNewItems(newItems);
+                setConflictModalOpen(true);
+                return;
+            }
+
+            // No conflicts - proceed with direct save
+            await executeSaveEnv(newItems, []);
+            return;
+        }
+
         let toCreate: CreateCredentialRequest[] = [];
 
         switch (activeTab) {
-            case 'env':
-                toCreate = envGroups.flatMap(group =>
-                    group.rows.filter(r => r.key && r.value)
-                        .map(r => ({ name: r.key, type: 'env', description: group.label || 'General', credentials: { envKey: r.key, envValue: r.value, note: r.note } }))
-                );
-                break;
             case 'ssh-key':
                 toCreate = sshRows.filter(r => r.name && r.keyContent)
                     .map(r => ({ name: r.name, type: 'ssh-key', credentials: { sshPrivateKey: r.keyContent } }));
@@ -305,6 +514,16 @@ export default function ProjectCredentialsTab() {
         if (!confirm('Delete this credential?')) return;
         try { await deleteCredential({ projectId: projectId!, id }).unwrap(); } catch (e) { logger.error(e); }
     };
+
+    if (isLoading || isFetching) {
+        return (
+            <div className="flex items-center justify-center py-16">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Loader2 size={16} className="animate-spin" /> Loading credentials...
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -448,30 +667,70 @@ export default function ProjectCredentialsTab() {
                                             <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Value</span>
                                             <div className="w-8" />
                                         </div>
-                                        {group.rows.map(row => (
-                                            <div key={row.id} className="space-y-1">
-                                                <div className="flex gap-3 items-center">
-                                                    <input value={row.key}
-                                                        onChange={e => updateEnvRow(group.id, row.id, { key: e.target.value })}
-                                                        onPaste={e => handleEnvPaste(group.id, e)}
-                                                        className={inputCls} style={inputStyle} placeholder="KEY_NAME or paste .env block…" />
-                                                    <input value={row.value}
-                                                        onChange={e => updateEnvRow(group.id, row.id, { value: e.target.value })}
-                                                        className={`${inputCls} font-mono`} style={inputStyle} placeholder="value" />
-                                                    {group.rows.length > 1 && (
-                                                        <button type="button" onClick={() => removeEnvRow(group.id, row.id)}
-                                                            className="p-2 rounded hover:bg-red-500/10 shrink-0" style={{ color: 'var(--color-danger)' }}>
-                                                            <Trash2 size={15} />
-                                                        </button>
-                                                    )}
+                                        {group.rows.map(row => {
+                                            const conflict = checkEnvRowConflict(group.label, row.key);
+                                            const hasConflict = !!conflict;
+                                            const isFormDup = conflict?.type === 'form_duplicate';
+
+                                            return (
+                                                <div key={row.id} className="space-y-1">
+                                                    <div className="flex gap-3 items-center">
+                                                        <input
+                                                            value={row.key}
+                                                            onChange={e => updateEnvRow(group.id, row.id, { key: e.target.value })}
+                                                            onPaste={e => handleEnvPaste(group.id, e)}
+                                                            className={`${inputCls} ${
+                                                                hasConflict
+                                                                    ? isFormDup
+                                                                        ? '!border-red-500 ring-1 ring-red-500/20'
+                                                                        : '!border-amber-500 ring-1 ring-amber-500/20'
+                                                                    : ''
+                                                            }`}
+                                                            style={inputStyle}
+                                                            placeholder="KEY_NAME or paste .env block…"
+                                                        />
+                                                        <input
+                                                            value={row.value}
+                                                            onChange={e => updateEnvRow(group.id, row.id, { value: e.target.value })}
+                                                            className={`${inputCls} font-mono`}
+                                                            style={inputStyle}
+                                                            placeholder="value"
+                                                        />
+                                                        {group.rows.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeEnvRow(group.id, row.id)}
+                                                                className="p-2 rounded hover:bg-red-500/10 shrink-0"
+                                                                style={{ color: 'var(--color-danger)' }}
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-2 px-1">
+                                                        <input
+                                                            value={row.note}
+                                                            onChange={e => updateEnvRow(group.id, row.id, { note: e.target.value })}
+                                                            className="flex-1 bg-transparent text-[12px] outline-none"
+                                                            style={{ color: 'var(--color-text-muted)' }}
+                                                            placeholder="Note (optional)"
+                                                        />
+                                                        {conflict && (
+                                                            <span
+                                                                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded shrink-0 border ${
+                                                                    isFormDup
+                                                                        ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                                                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                                                }`}
+                                                            >
+                                                                <AlertTriangle size={11} />
+                                                                {conflict.message}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <input value={row.note}
-                                                    onChange={e => updateEnvRow(group.id, row.id, { note: e.target.value })}
-                                                    className="w-full bg-transparent text-[12px] outline-none pl-1"
-                                                    style={{ color: 'var(--color-text-muted)' }}
-                                                    placeholder="Note (optional)" />
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                         <button type="button" onClick={() => addEnvRow(group.id)}
                                             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-colors hover:bg-white/5 mt-1"
                                             style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-default)' }}>
@@ -811,6 +1070,22 @@ export default function ProjectCredentialsTab() {
                 />,
                 document.body
             )}
+
+            {/* Duplicate Environment Variables Resolution Modal */}
+            <EnvDuplicateResolutionModal
+                isOpen={conflictModalOpen}
+                onClose={() => {
+                    if (!isSavingEnv) {
+                        setConflictModalOpen(false);
+                        setPendingConflicts([]);
+                        setPendingNewItems([]);
+                    }
+                }}
+                conflicts={pendingConflicts}
+                newItemsCount={pendingNewItems.length}
+                onConfirm={handleConflictModalConfirm}
+                isSaving={isSavingEnv}
+            />
         </div>
     );
 }

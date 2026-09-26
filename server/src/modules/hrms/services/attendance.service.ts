@@ -9,6 +9,8 @@ import { getWorkDayBoundsFromDate, getWorkDayBounds } from '../../../utils/inter
 
 interface BulkMarkAttendanceOptions extends ArchiveDeleteOptions {
     onlyUnmarked?: boolean;
+    /** User._id of the admin performing the bulk mark — stored as overriddenBy */
+    adminUserId?: string;
 }
 
 export class AttendanceService {
@@ -159,8 +161,13 @@ export class AttendanceService {
                         update: {
                             $set: {
                                 status: r.status,
-                                source: 'manual',
+                                // Use 'admin-override' so the cron job will never
+                                // touch this record again (cron skips admin-override).
+                                source: 'admin-override',
                                 notes: r.notes || '',
+                                ...(options.adminUserId && {
+                                    overriddenBy: new Types.ObjectId(options.adminUserId),
+                                }),
                                 ...(['present', 'wfh', 'half-day'].includes(r.status) && {
                                     checkIn: checkInTime,
                                 }),
@@ -256,8 +263,10 @@ export class AttendanceService {
             if (existing.source === 'admin-override') {
                 return { marked: false, reason: 'admin-override record — skipped' };
             }
-            // Manual records (unless WFH) or approved leaves (except WFH) are protected
-            if ((existing.source === 'manual' || existing.source === 'leave') && existing.status !== 'wfh') {
+            // Manual records and approved leaves are fully protected — cron never overwrites them.
+            // (Admin bulk-marks now use 'admin-override', but we keep the 'manual' guard here
+            //  for employee self-check-ins and any legacy records.)
+            if (existing.source === 'manual' || existing.source === 'leave') {
                 return { marked: false, reason: `existing ${existing.source} (${existing.status}) record — skipped` };
             }
 

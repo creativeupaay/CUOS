@@ -47,7 +47,7 @@ export function useProjectDocuments() {
 
     // Queries
     const shouldSkipFolderListingQuery = !projectId || (isPartnerSession && currentFolderId === null);
-    const { data: foldersData, isLoading: foldersLoading } = useGetDocFoldersQuery(
+    const { data: foldersData, isLoading: foldersLoading, isFetching: foldersFetching } = useGetDocFoldersQuery(
         { projectId: projectId!, parentId: currentFolderId },
         { skip: shouldSkipFolderListingQuery }
     );
@@ -55,7 +55,7 @@ export function useProjectDocuments() {
         { projectId: projectId!, parentId: null }, { skip: !projectId }
     );
     const shouldSkipItemsQuery = !projectId || (isPartnerSession && currentFolderId === null);
-    const { data: itemsData, isLoading: itemsLoading } = useGetDocItemsQuery(
+    const { data: itemsData, isLoading: itemsLoading, isFetching: itemsFetching } = useGetDocItemsQuery(
         { projectId: projectId!, folderId: currentFolderId },
         { skip: shouldSkipItemsQuery }
     );
@@ -127,7 +127,7 @@ export function useProjectDocuments() {
 
     const items: DocItem[] = itemsData?.data ?? [];
     const members = useMemo(() => getProjectMembers(project), [project]);
-    const isLoading = foldersLoading || itemsLoading || shouldDeferPartnerRootView;
+    const isLoading = foldersLoading || foldersFetching || itemsLoading || itemsFetching || shouldDeferPartnerRootView;
 
     // Reset auto-open ref when project changes
     useEffect(() => {

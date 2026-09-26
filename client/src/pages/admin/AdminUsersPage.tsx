@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil, Eye, EyeOff, MoreVertical } from 'lucide-react';
+import { Users, Plus, Search, X, ToggleLeft, ToggleRight, KeyRound, Trash2, Pencil, Eye, EyeOff, MoreVertical, AlertTriangle } from 'lucide-react';
 import {
     useGetAdminUsersQuery,
     useCreateAdminUserMutation,
@@ -112,6 +112,7 @@ export default function AdminUsersPage() {
     const [formData, setFormData] = useState<UserFormData>(initialForm);
     const [editCreds, setEditCreds] = useState<any>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+    const [deactivateConfirm, setDeactivateConfirm] = useState<{ id: string; name: string } | null>(null);
     const [resetPwdUser, setResetPwdUser] = useState<string | null>(null);
     const [newPassword, setNewPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -123,7 +124,7 @@ export default function AdminUsersPage() {
     const { data: orgSettingsData } = useGetOrgSettingsQuery();
     const [createUser, { isLoading: isCreating }] = useCreateAdminUserMutation();
     const [updateUser, { isLoading: isUpdating }] = useUpdateAdminUserMutation();
-    const [deactivateUser] = useDeactivateUserMutation();
+    const [deactivateUser, { isLoading: isDeactivating }] = useDeactivateUserMutation();
     const [activateUser] = useActivateUserMutation();
     const [resetPassword, { isLoading: isResetting }] = useResetUserPasswordMutation();
     const [deleteUser, { isLoading: isDeleting }] = useDeleteAdminUserMutation();
@@ -159,6 +160,14 @@ export default function AdminUsersPage() {
             if (isActive) await deactivateUser(userId).unwrap();
             else await activateUser(userId).unwrap();
         } catch (err: any) { alert(err?.data?.message || 'Failed'); }
+    };
+
+    const handleDeactivateConfirm = async () => {
+        if (!deactivateConfirm) return;
+        try {
+            await deactivateUser(deactivateConfirm.id).unwrap();
+            setDeactivateConfirm(null);
+        } catch (err: any) { alert(err?.data?.message || 'Failed to deactivate user'); }
     };
 
     const handleDelete = async () => {
@@ -298,7 +307,14 @@ export default function AdminUsersPage() {
                                                             </button>
                                                             {!isSuperAdmin && (
                                                                 <button
-                                                                    onClick={() => { setOpenMenuId(null); handleToggle(user._id, user.isActive); }}
+                                                                    onClick={() => {
+                                                                        setOpenMenuId(null);
+                                                                        if (user.isActive) {
+                                                                            setDeactivateConfirm({ id: user._id, name: user.name });
+                                                                        } else {
+                                                                            handleToggle(user._id, false);
+                                                                        }
+                                                                    }}
                                                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
                                                                     style={{ color: user.isActive ? '#F59E0B' : '#10B981' }}
                                                                 >
@@ -426,6 +442,44 @@ export default function AdminUsersPage() {
                     onSave={handleSaveCreds}
                     isSaving={isUpdating}
                 />
+            )}
+
+            {/* Deactivate / Inactive Confirmation Modal */}
+            {deactivateConfirm && (
+                <ModalPortal>
+                    <div className="w-full max-w-sm rounded-[1rem] p-6 m-4 shadow-premium" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
+                                <AlertTriangle size={18} style={{ color: '#D97706' }} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Deactivate User</h3>
+                                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Set user status to inactive.</p>
+                            </div>
+                        </div>
+                        <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Are you sure you want to mark <strong>{deactivateConfirm.name}</strong> as Inactive? They will not be able to log in or access the system until reactivated.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setDeactivateConfirm(null)}
+                                disabled={isDeactivating}
+                                className="px-4 py-2 text-sm rounded-lg border disabled:opacity-50"
+                                style={{ borderColor: 'var(--color-border-default)' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeactivateConfirm}
+                                disabled={isDeactivating}
+                                className="px-4 py-2 text-sm font-semibold rounded-lg text-white disabled:opacity-50"
+                                style={{ backgroundColor: '#D97706' }}
+                            >
+                                {isDeactivating ? 'Deactivating...' : 'Mark Inactive'}
+                            </button>
+                        </div>
+                    </div>
+                </ModalPortal>
             )}
 
             {/* Delete Confirmation */}

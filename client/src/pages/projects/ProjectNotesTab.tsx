@@ -24,7 +24,7 @@ export default function ProjectNotesTab() {
 
     const isAdmin = ['super-admin', 'super_admin', 'admin'].includes(getRoleName(currentUser?.role));
 
-    const { data, isLoading } = useGetNotesQuery(projectId!);
+    const { data, isLoading, isFetching } = useGetNotesQuery(projectId!);
     const [deleteNote] = useDeleteNoteMutation();
     const [updateNote] = useUpdateNoteMutation();
 
@@ -91,7 +91,7 @@ export default function ProjectNotesTab() {
     const canModify = (note: Note) =>
         isAdmin || (typeof note.createdBy === 'object' ? (note.createdBy as { _id?: string })?._id : note.createdBy) === currentUser?._id;
 
-    if (isLoading) {
+    if (isLoading || isFetching) {
         return (
             <div className="flex items-center justify-center py-20">
                 <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-primary)' }} />

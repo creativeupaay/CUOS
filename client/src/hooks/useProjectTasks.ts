@@ -130,11 +130,11 @@ export function useProjectTasks(projectId: string): UseProjectTasksReturn {
     });
     const projectMembers: unknown[] = (projectData?.data?.assignees as unknown[]) ?? [];
 
-    const { data, isLoading } = useGetTasksQuery({ projectId });
+    const { data, isLoading, isFetching } = useGetTasksQuery({ projectId });
     const tasks: Task[] = useMemo(() => (data?.data as Task[]) ?? [], [data?.data]);
 
     // Board view fetches subtasks too
-    const { data: boardAllData } = useGetTasksQuery(
+    const { data: boardAllData, isFetching: isBoardFetching } = useGetTasksQuery(
         { projectId, includeSubtasks: true },
         { skip: viewMode !== 'board' }
     );
@@ -277,7 +277,7 @@ export function useProjectTasks(projectId: string): UseProjectTasksReturn {
         estMins,
         setEstMins,
         resetEstTime,
-        isLoading,
+        isLoading: isLoading || isFetching || (viewMode === 'board' && isBoardFetching),
         isCreating,
         handleSubmit,
         handleDelete,

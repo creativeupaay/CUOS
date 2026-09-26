@@ -23,7 +23,7 @@ interface GlobalEndDayContainerProps {
 }
 
 export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, daySessionMeta, allLapses = [], pendingLapses = [], onClose, onSuccess }: GlobalEndDayContainerProps) {
-    const { allTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
+    const { allTasks, rawAllTasks, projects, updateTask, logTime, createTask } = useGlobalTasks();
     const { allMeetings } = useGlobalMeetings();
     const { assignLapse } = useLapses();
     const currentUserId = useSelector((state: RootState) => state.auth.user?._id) || '';
@@ -125,8 +125,16 @@ export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, 
         // Log unallocated time
         if (unallocatedMinutes > 0) {
             try {
-                // myTasks is now correctly defined above this callback — no more closure bug
-                let unallocatedTask = myTasks.find(t => t.title === 'Unallocated Time' && !t._projectId);
+                // Find existing Unallocated Time task belonging to the user from rawAllTasks
+                let unallocatedTask = (rawAllTasks || []).find(t => {
+                    const isAssigned = Array.isArray(t.assignees) && t.assignees.some((a: any) => {
+                        const aId = a && typeof a === 'object' ? (a as any)._id : a;
+                        return aId === currentUserId;
+                    });
+                    const creatorId = t.createdBy && typeof t.createdBy === 'object' ? (t.createdBy as any)._id : t.createdBy;
+                    const isCreator = creatorId === currentUserId;
+                    return t.title?.trim().toLowerCase() === 'unallocated time' && !t._projectId && (isAssigned || isCreator);
+                });
                 let targetTaskId = '000000000000000000000000';
                 
                 if (unallocatedTask) {
@@ -161,7 +169,7 @@ export default function GlobalEndDayContainer({ timerSeconds, breakSeconds = 0, 
         }
         // Always call onSuccess so the timer is stopped even if some logs failed
         onSuccess(totalAllocatedMinutes);
-    }, [updateTask, logTime, createTask, onSuccess, myTasks, allLapses]);
+    }, [updateTask, logTime, createTask, onSuccess, myTasks, rawAllTasks, currentUserId, allLapses]);
 
     const handleAssignLapse = useCallback(async (id: string, taskId: string, projectId: string, note?: string) => {
         await assignLapse(id, taskId, projectId, note);

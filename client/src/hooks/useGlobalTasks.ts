@@ -99,6 +99,7 @@ function useTasksForProjects(projectIds: string[]): {
 
 export interface UseGlobalTasksReturn {
     allTasks: GlobalTask[];
+    rawAllTasks: GlobalTask[];
     filteredTasks: GlobalTask[];
     myTasksCount: number;
     allTasksCount: number;
@@ -222,7 +223,7 @@ export function useGlobalTasks(): UseGlobalTasksReturn {
     }, [tasksByProject, individualTasksFromServer]);
 
     // ── Build global task list ───────────────────────────────────────────────
-    const allTasks = useMemo<GlobalTask[]>(() => {
+    const rawAllTasks = useMemo<GlobalTask[]>(() => {
         const result: GlobalTask[] = [];
         // Track which task IDs have been added so we don't duplicate during moves
         const addedIds = new Set<string>();
@@ -313,6 +314,11 @@ export function useGlobalTasks(): UseGlobalTasksReturn {
         });
         return result;
     }, [tasksByProject, individualTasksFromServer, projects, localOverrides, localNewProjectTasks, localNewIndividualTasks, deletedTaskIds]);
+
+    // Exclude system tasks (such as Unallocated Time) from all task views
+    const allTasks = useMemo<GlobalTask[]>(() => {
+        return rawAllTasks.filter(t => t.title?.trim().toLowerCase() !== 'unallocated time');
+    }, [rawAllTasks]);
 
     const myTasksCount = useMemo(() => {
         return allTasks.filter(task => {
@@ -577,6 +583,7 @@ export function useGlobalTasks(): UseGlobalTasksReturn {
 
     return {
         allTasks,
+        rawAllTasks,
         filteredTasks,
         myTasksCount,
         allTasksCount,

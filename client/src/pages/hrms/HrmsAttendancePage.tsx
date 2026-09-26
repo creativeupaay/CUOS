@@ -76,11 +76,20 @@ function getDeptColor(d: string) {
     return m[d] || '#6B7280';
 }
 
-function StatusCell({ status, onClick }: { status: AttendanceStatus; onClick: () => void }) {
+function StatusCell({
+    status,
+    onClick,
+    onContextMenu,
+}: {
+    status: AttendanceStatus;
+    onClick: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
+}) {
     if (!status) {
         return (
             <button
                 onClick={onClick}
+                onContextMenu={onContextMenu}
                 className="w-8 h-8 rounded-md border-2 border-dashed cursor-pointer hover:bg-gray-100 transition-colors"
                 style={{ borderColor: 'var(--color-border-default)' }}
                 title="Click to mark"
@@ -91,6 +100,7 @@ function StatusCell({ status, onClick }: { status: AttendanceStatus; onClick: ()
     return (
         <button
             onClick={onClick}
+            onContextMenu={onContextMenu}
             className="w-8 h-8 rounded-md text-[10px] font-bold cursor-pointer transition-all hover:scale-110 flex items-center justify-center border"
             style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.border }}
             title={`${cfg.label} — click to change`}
@@ -222,6 +232,17 @@ function OverrideAttendanceModal({
                 </div>
 
                 <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                    {/* Auto-mark notice */}
+                    {target.currentSource === 'auto' && (
+                        <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs"
+                            style={{ backgroundColor: '#F5F3FF', borderColor: '#C4B5FD', color: '#6D28D9' }}>
+                            <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                            <span>
+                                This record was <strong>auto-marked by the system</strong>. Your override will lock
+                                this attendance and prevent future automatic updates by the cron job.
+                            </span>
+                        </div>
+                    )}
                     {/* Date info */}
                     <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gray-50 border text-xs" style={{ borderColor: 'var(--color-border-default)' }}>
                         <span style={{ color: 'var(--color-text-secondary)' }}>Selected Date:</span>
@@ -380,6 +401,7 @@ const AttendanceRow = memo(function AttendanceRow({
     firstDayDow,
     empLocalEdits,
     onCycle,
+    onOverride,
     holidaysMap,
     gridLength,
 }: {
@@ -388,6 +410,7 @@ const AttendanceRow = memo(function AttendanceRow({
     firstDayDow: number;
     empLocalEdits: Record<number, AttendanceStatus> | undefined;
     onCycle: (empId: string, dayIdx: number, current: AttendanceStatus) => void;
+    onOverride: (empId: string, empName: string, empCode: string, date: string, currentStatus: string, currentSource?: string) => void;
     holidaysMap: Record<string, string>;
     gridLength: number;
 }) {
@@ -499,7 +522,20 @@ const AttendanceRow = memo(function AttendanceRow({
                             <div className="flex justify-center">
                                 <StatusCell
                                     status={effectiveStatus}
-                                    onClick={() => onCycle(emp.employeeId, dayIdx, effectiveStatus)}
+                                    onClick={() => {
+                                        onCycle(emp.employeeId, dayIdx, effectiveStatus);
+                                    }}
+                                    onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        onOverride(
+                                            String(emp.employeeId),
+                                            emp.name,
+                                            emp.employeeCode,
+                                            day.date,
+                                            effectiveStatus || 'present',
+                                            day.source || undefined,
+                                        );
+                                    }}
                                 />
                             </div>
                         )}
@@ -563,6 +599,30 @@ export default function HrmsAttendancePage() {
             const empEdits = { ...(prev[empId] || {}) };
             empEdits[dayIdx] = next;
             return { ...prev, [empId]: empEdits };
+        });
+    }, []);
+
+    // ── Grid override handler ─────────────────────────────────────────
+    // Called when an auto-marked cell is clicked in the monthly grid.
+    // Opens the OverrideAttendanceModal so the admin can explicitly
+    // set a status (tagged source:'admin-override') which the cron job
+    // will never touch again.
+    const handleGridOverride = useCallback((
+        empId: string,
+        empName: string,
+        empCode: string,
+        date: string,
+        currentStatus: string,
+        currentSource?: string,
+    ) => {
+        setOverrideTarget({
+            employeeId: empId,
+            employeeName: empName,
+            employeeCode: empCode,
+            currentStatus,
+            currentSource,
+            currentReason: '',
+            date,
         });
     }, []);
 
@@ -827,6 +887,7 @@ export default function HrmsAttendancePage() {
                                             firstDayDow={firstDayDow}
                                             empLocalEdits={localEdits[emp.employeeId]}
                                             onCycle={cycleStatus}
+                                            onOverride={handleGridOverride}
                                             holidaysMap={holidaysMap}
                                             gridLength={grid.length}
                                         />
@@ -940,13 +1001,29 @@ export default function HrmsAttendancePage() {
                                                         </span>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <span
-                                                            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-                                                            style={{ backgroundColor: stCfg.bg, color: stCfg.color }}
-                                                        >
-                                                            <StIcon size={11} />
-                                                            {stCfg.label}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span
+                                                                className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                                                                style={{ backgroundColor: stCfg.bg, color: stCfg.color }}
+                                                            >
+                                                                <StIcon size={11} />
+                                                                {stCfg.label}
+                                                            </span>
+                                                            {(emp as any).source === 'auto' && (
+                                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                                                    style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}
+                                                                    title="Auto-marked by cron job">
+                                                                    auto
+                                                                </span>
+                                                            )}
+                                                            {(emp as any).source === 'admin-override' && (
+                                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                                                    style={{ backgroundColor: '#FFF7ED', color: '#C2410C' }}
+                                                                    title="Overridden by admin">
+                                                                    override
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {emp.checkIn

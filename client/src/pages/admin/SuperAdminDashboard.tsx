@@ -11,7 +11,7 @@ import NotificationPanel from '@/features/notification/components/NotificationPa
 import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
 
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
-import { hasModuleViewAccess } from '@/utils/modulePermissions';
+import { hasModuleViewAccess, hasModuleAdminAccess, hasHrmsSelfSubmoduleAccess } from '@/utils/modulePermissions';
 
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -163,6 +163,11 @@ export default function SuperAdminDashboard() {
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
+    const isHrmsAdmin = hasModuleAdminAccess(user, 'hrms');
+    const accessibleHrmsSub = (['attendance', 'leaves', 'holidays', 'payroll', 'announcements', 'reimbursements'] as const)
+        .find(sub => hasHrmsSelfSubmoduleAccess(user, sub));
+    const hrmsPath = isHrmsAdmin ? '/hrms' : (accessibleHrmsSub ? `/my-hrms/${accessibleHrmsSub}` : '/my-hrms/profile');
+
     const allDepartments = [
         {
             key: 'projectManagement',
@@ -197,7 +202,7 @@ export default function SuperAdminDashboard() {
             title: 'HRMS',
             description: 'Human resource management and employee records',
             icon: <Building2 size={22} />,
-            path: '/hrms',
+            path: hrmsPath,
         },
         {
             key: 'overallAdmin',

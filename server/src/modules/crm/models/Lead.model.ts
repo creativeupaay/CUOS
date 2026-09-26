@@ -96,7 +96,7 @@ export interface ILead extends Document {
     name: string;
     email?: string;
     phone?: string;
-    company: string;
+    company?: string;
 
     source: string;
     stage: 'new' | 'contacted' | 'qualified' | 'proposal-sent' | 'negotiation' | 'closed' | 'pending' | 'lead-lost' | 'follow-up';
@@ -136,7 +136,7 @@ const LeadSchema = new Schema<ILead>(
             lowercase: true,
         },
         phone: { type: String, trim: true },
-        company: { type: String, required: true, trim: true },
+        company: { type: String, required: false, trim: true },
 
         source: {
             type: String,

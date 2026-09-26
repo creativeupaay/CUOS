@@ -23,7 +23,7 @@ const leadSchema = z.object({
     name: z.string().min(1, 'Name is required'),
     email: z.string().email('Invalid email').optional().or(z.literal('')),
     phone: z.string().optional(),
-    company: z.string().min(1, 'Company name is required'),
+    company: z.string().optional(),
     source: z.string().optional(),
     stage: z.enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up']),
     priority: z.enum(['low', 'medium', 'high', 'critical']),
@@ -66,6 +66,7 @@ export default function CrmLeadFormPage() {
     } = useForm<LeadFormData>({
         resolver: zodResolver(leadSchema) as any,
         defaultValues: {
+            company: '',
             source: '',
             stage: 'new',
             priority: 'medium',
@@ -139,7 +140,6 @@ export default function CrmLeadFormPage() {
 
             const payload: any = {
                 name: data.name,
-                company: data.company,
                 tags: tagsArray,
                 stage: data.stage,
                 priority: data.priority,
@@ -147,6 +147,8 @@ export default function CrmLeadFormPage() {
             };
 
             // Only include optional fields if they have values
+            if (data.company?.trim()) payload.company = data.company.trim();
+            else if (isEditMode) payload.company = '';
             if (data.email) payload.email = data.email;
             if (data.phone) payload.phone = data.phone;
             if (data.source) payload.source = data.source;
@@ -241,12 +243,12 @@ export default function CrmLeadFormPage() {
 
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Company <span className="text-red-500">*</span>
+                                                Company
                                             </label>
                                             <input
                                                 {...register('company')}
                                                 className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                                placeholder="Acme Inc."
+                                                placeholder="Acme Inc. (optional)"
                                             />
                                             {errors.company && <p className="text-xs text-red-500 mt-1">{errors.company.message}</p>}
                                         </div>

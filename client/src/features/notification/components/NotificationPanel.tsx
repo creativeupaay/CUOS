@@ -23,11 +23,13 @@ import {
 } from '../api/notificationApi';
 import type { INotification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
+import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 
 export default function NotificationPanel() {
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const panelRef = useRef<HTMLDivElement>(null);
+    const user = useAppSelector((state) => state.auth.user);
 
     const isOpen = useAppSelector((state) => state.notification.isOpen);
     const notifications = useAppSelector((state) => state.notification.notifications);
@@ -90,7 +92,11 @@ export default function NotificationPanel() {
         }
 
         if (notification.link) {
-            navigate(notification.link);
+            let targetLink = notification.link;
+            if (targetLink === '/announcements') {
+                targetLink = hasModuleAdminAccess(user, 'hrms') ? '/hrms/announcements' : '/my-hrms/announcements';
+            }
+            navigate(targetLink);
             dispatch(closeNotificationPanel());
         }
     };

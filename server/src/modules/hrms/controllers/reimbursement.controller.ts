@@ -162,6 +162,24 @@ export const updateReimbursementStatus = asyncHandler(async (req: Request, res: 
     });
 });
 
+// ── Admin: bulk update status ─────────────────────────────────────────
+export const bulkUpdateReimbursementStatus = asyncHandler(async (req: Request, res: Response) => {
+    const adminUserId = req.user!.id;
+    const adminName = (req.user as any)?.name || 'Admin';
+
+    const result = await reimbursementService.bulkUpdateReimbursementStatus(
+        adminUserId,
+        adminName,
+        req.body
+    );
+
+    res.status(200).json({
+        status: 'success',
+        message: `Updated ${result.successCount} claim(s)`,
+        data: result,
+    });
+});
+
 // ── Delete draft ──────────────────────────────────────────────────────
 export const deleteReimbursement = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

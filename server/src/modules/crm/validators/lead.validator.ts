@@ -26,7 +26,7 @@ export const createLeadSchema = z.object({
         name: z.string().min(1, 'Name is required').trim(),
         email: z.string().email('Invalid email').trim().optional().or(z.literal('')),
         phone: z.string().optional(),
-        company: z.string().min(1, 'Company name is required').trim(),
+        company: z.string().trim().optional().or(z.literal('')),
         source: z.string().trim().default('other'),
         stage: z
             .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])
@@ -55,7 +55,7 @@ export const updateLeadSchema = z.object({
         name: z.string().min(1).trim().optional(),
         email: z.string().email().trim().optional().or(z.literal('')),
         phone: z.string().optional(),
-        company: z.string().optional(),
+        company: z.string().trim().optional().or(z.literal('')),
         source: z.string().trim().optional(),
         stage: z
             .enum(['new', 'contacted', 'qualified', 'proposal-sent', 'negotiation', 'closed', 'pending', 'lead-lost', 'follow-up'])

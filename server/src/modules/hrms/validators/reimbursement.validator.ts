@@ -53,8 +53,24 @@ export const updateReimbursementStatusSchema = z.object({
     params: z.object({ id: z.string() }),
 });
 
+// ── Admin: Bulk Update Status ─────────────────────────────────────────
+
+export const bulkUpdateReimbursementStatusSchema = z.object({
+    body: z.object({
+        ids: z.array(z.string()).min(1, 'At least one claim ID is required'),
+        status: z.enum(['approved', 'paid'], {
+            message: 'Invalid status for bulk update',
+        }),
+        comment: z.string().max(1000).optional(),
+        paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+        paymentReference: z.string().max(200).optional(),
+        syncToFinance: z.boolean().optional(),
+    }),
+});
+
 // ── Types ─────────────────────────────────────────────────────────────
 
 export type CreateReimbursementInput = z.infer<typeof createReimbursementSchema>['body'];
 export type UpdateReimbursementInput = z.infer<typeof updateReimbursementSchema>['body'];
 export type UpdateReimbursementStatusInput = z.infer<typeof updateReimbursementStatusSchema>['body'];
+export type BulkUpdateReimbursementStatusInput = z.infer<typeof bulkUpdateReimbursementStatusSchema>['body'];

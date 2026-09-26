@@ -158,23 +158,25 @@ export default function ProjectTimeLogsTab() {
     const isProjectMember = isSuperAdmin || Boolean(projectEntry);
 
     // ── Queries ───────────────────────────────────────────────────────────────
-    const { data: allLogsData, isLoading: allLogsLoading } = useGetProjectTimeLogsQuery(
+    const { data: allLogsData, isLoading: allLogsLoading, isFetching: allLogsFetching } = useGetProjectTimeLogsQuery(
         { projectId: projectId! },
         { skip: !canSeeAll }
     );
 
-    const { data: myLogsData, isLoading: myLogsLoading } = useGetMyTimeLogsQuery(
+    const { data: myLogsData, isLoading: myLogsLoading, isFetching: myLogsFetching } = useGetMyTimeLogsQuery(
         { projectId: projectId! },
         { skip: canSeeAll || !isProjectMember }
     );
 
-    const { data: tasksData } = useGetTasksQuery(
+    const { data: tasksData, isLoading: tasksLoading, isFetching: tasksFetching } = useGetTasksQuery(
         { projectId: projectId! },
         { skip: !isProjectMember }
     );
     const tasks = tasksData?.data || [];
 
-    const isLoading = canSeeAll ? allLogsLoading : myLogsLoading;
+    const isLoading = canSeeAll
+        ? (allLogsLoading || allLogsFetching || tasksLoading || tasksFetching)
+        : (myLogsLoading || myLogsFetching || tasksLoading || tasksFetching);
     const timeLogs = canSeeAll ? (allLogsData?.data || []) : (myLogsData?.data || []);
 
     const openEditTimeLog = (log: TimeLog) => {
@@ -306,6 +308,16 @@ export default function ProjectTimeLogsTab() {
                     <p className="text-sm max-w-sm" style={{ color: 'var(--color-text-muted)' }}>
                         You are not assigned to this project.
                     </p>
+                </div>
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-16">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Loader2 size={16} className="animate-spin" /> Loading time logs...
                 </div>
             </div>
         );

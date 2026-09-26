@@ -65,6 +65,7 @@ export const bulkMarkAttendance = asyncHandler(async (req: Request, res: Respons
     const { date, records, onlyUnmarked } = req.body;
     const result = await AttendanceService.bulkMarkAttendance(date, records, {
         onlyUnmarked,
+        adminUserId: req.user?.id,
         deletedBy: req.user?.id,
         reason: 'HRMS bulk attendance clear requested',
     });

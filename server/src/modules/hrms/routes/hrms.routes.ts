@@ -14,7 +14,7 @@ import { createSalarySchema, updateSalarySchema } from '../validators/salary.val
 import { createLeaveSchema, updateLeaveStatusSchema, deleteLeaveSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollSchema, updatePayrollStatusSchema, deletePayrollSchema } from '../validators/payroll.validator';
 import { checkInSchema, checkOutSchema } from '../validators/attendance.validator';
-import { createReimbursementSchema, updateReimbursementSchema, submitReimbursementSchema, updateReimbursementStatusSchema } from '../validators/reimbursement.validator';
+import { createReimbursementSchema, updateReimbursementSchema, submitReimbursementSchema, updateReimbursementStatusSchema, bulkUpdateReimbursementStatusSchema } from '../validators/reimbursement.validator';
 
 // Controllers
 import * as employeeController from '../controllers/employee.controller';
@@ -272,6 +272,12 @@ router.get('/reimbursements/me/summary', hrmsSelfSubmoduleOnly('reimbursements' 
 router.post('/reimbursements/:id/submit', hrmsSelfSubmoduleOnly('reimbursements' as any), validateRequest(submitReimbursementSchema), reimbursementController.submitReimbursement);
 router.post('/reimbursements/:id/receipt', hrmsSelfSubmoduleOnly('reimbursements' as any), receiptUpload.single('receipt'), reimbursementController.uploadReceipt);
 router.patch(
+    '/reimbursements/bulk-status',
+    hrAdminOnly,
+    validateRequest(bulkUpdateReimbursementStatusSchema),
+    reimbursementController.bulkUpdateReimbursementStatus
+);
+router.patch(
     '/reimbursements/:id',
     hrmsSelfSubmoduleOnly('reimbursements' as any),
     validateRequest(updateReimbursementSchema),
@@ -280,7 +286,7 @@ router.patch(
 router.delete('/reimbursements/:id', hrmsSelfSubmoduleOnly('reimbursements' as any), reimbursementController.deleteReimbursement);
 
 // Admin routes (HR/Admin)
-// IMPORTANT: /summary and /me/* must come BEFORE /:id to avoid Express matching them as the id param
+// IMPORTANT: /summary, /bulk-status and /me/* must come BEFORE /:id to avoid Express matching them as the id param
 router.get('/reimbursements/summary', hrAdminOnly, reimbursementController.getReimbursementSummary);
 router.get('/reimbursements/employees/overview', hrAdminOnly, reimbursementController.getEmployeesReimbursementOverview);
 router.get('/reimbursements/employee/:employeeId', hrAdminOnly, reimbursementController.getReimbursementsByEmployee);

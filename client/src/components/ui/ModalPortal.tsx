@@ -6,9 +6,10 @@ type ModalPortalProps = {
     high?: boolean;
     className?: string;
     style?: CSSProperties;
+    onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
 };
 
-export default function ModalPortal({ children, high = false, className = '', style }: ModalPortalProps) {
+export default function ModalPortal({ children, high = false, className = '', style, onClick }: ModalPortalProps) {
     if (typeof document === 'undefined') {
         return null;
     }
@@ -17,7 +18,7 @@ export default function ModalPortal({ children, high = false, className = '', st
     const mergedClass = className ? `${baseClass} ${className}` : baseClass;
 
     return createPortal(
-        <div className={mergedClass} style={style}>
+        <div className={mergedClass} style={style} onClick={onClick}>
             {children}
         </div>,
         document.body

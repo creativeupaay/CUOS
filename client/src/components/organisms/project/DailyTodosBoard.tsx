@@ -134,6 +134,7 @@ export default function DailyTodosBoard() {
     // Filter logic: Include if user is assigned OR user created it.
     const filterAndSort = (status: GlobalTask['status'], sortNewestFirst = false) => {
         const filtered = allTasks.filter(t => {
+            if (t.title?.trim().toLowerCase() === 'unallocated time') return false;
             if (t.status !== status) return false;
             
             if (status === 'completed') {

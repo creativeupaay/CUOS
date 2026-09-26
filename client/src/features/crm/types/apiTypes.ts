@@ -31,7 +31,7 @@ export interface CreateLeadRequest {
     name: string;
     email?: string;
     phone?: string;
-    company: string;
+    company?: string;
     source?: string;
     stage?: Lead['stage'];
     priority?: Lead['priority'];

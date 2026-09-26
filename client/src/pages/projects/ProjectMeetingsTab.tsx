@@ -19,7 +19,7 @@ export default function ProjectMeetingsTab() {
 
     useBodyScrollLock(showForm);
 
-    const { data, isLoading } = useGetMeetingsQuery({ projectId: projectId! });
+    const { data, isLoading, isFetching } = useGetMeetingsQuery({ projectId: projectId! });
     const meetings = data?.data || [];
 
     const internalCount = meetings.filter((m: Meeting) => m.type === 'internal').length;
@@ -106,6 +106,16 @@ export default function ProjectMeetingsTab() {
             });
         } catch { return iso; }
     };
+
+    if (isLoading || isFetching) {
+        return (
+            <div className="flex items-center justify-center py-16">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Loader2 size={16} className="animate-spin" /> Loading meetings...
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-5">

@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Search, Clock, CheckCircle, Download,
-    RotateCcw, AlertTriangle, User, Plus, Receipt, Edit2, Trash2, Users, RefreshCcw
+    RotateCcw, AlertTriangle, User, Plus, Receipt, Edit2, Trash2, Users, RefreshCcw, ExternalLink,
+    DollarSign, Check
 } from 'lucide-react';
 import { useGetReimbursementsQuery, useGetReimbursementSummaryQuery, useGetMyReimbursementsQuery, useGetMyReimbursementSummaryQuery, useDeleteReimbursementMutation } from '@/features/hrms/hrmsApi';
 import ReimbursementDetailDrawer from '@/components/organisms/hrms/ReimbursementDetailDrawer';
 import NewReimbursementDrawer from '@/components/organisms/hrms/NewReimbursementDrawer';
+import ReimbursementBatchModal from '@/components/organisms/hrms/ReimbursementBatchModal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
 import { hasModuleAdminAccess, getRoleName } from '@/utils/modulePermissions';
@@ -102,8 +104,24 @@ export default function HrmsReimbursementsPage() {
     const debouncedSearch = useDebounce(searchQuery, 400);
     const [policyFilter, setPolicyFilter] = useState('all');
     const [sortOrder, setSortOrder] = useState('created_desc');
+    const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
+    const [batchModalState, setBatchModalState] = useState<{
+        isOpen: boolean;
+        action: 'approve' | 'paid';
+        claimIds: string[];
+        totalAmount: number;
+        title?: string;
+        subtitle?: string;
+        claims?: any[];
+    }>({
+        isOpen: false,
+        action: 'approve',
+        claimIds: [],
+        totalAmount: 0,
+        claims: [],
+    });
 
-    // Reset filters when view changes
+    // Reset filters and selection when view changes
     const prevPath = useRef(location.pathname);
     useEffect(() => {
         if (prevPath.current !== location.pathname) {
@@ -111,6 +129,7 @@ export default function HrmsReimbursementsPage() {
             setSearchQuery('');
             setPolicyFilter('all');
             setSortOrder('created_desc');
+            setSelectedClaimIds([]);
             prevPath.current = location.pathname;
         }
     }, [location.pathname]);
@@ -166,6 +185,81 @@ export default function HrmsReimbursementsPage() {
         ? (orgClaimsData?.data?.reimbursements || [])
         : (myClaimsData?.data?.reimbursements || []);
 
+    const selectedClaims = reimbursements.filter((r: any) => selectedClaimIds.includes(r._id));
+    const selectedTotalAmount = selectedClaims.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
+    const selectedPendingClaims = selectedClaims.filter((r: any) => r.status === 'pending');
+    const selectedApprovedClaims = selectedClaims.filter((r: any) => r.status === 'approved');
+
+    const visiblePendingClaims = reimbursements.filter((r: any) => r.status === 'pending');
+    const visibleApprovedClaims = reimbursements.filter((r: any) => r.status === 'approved');
+
+    const handleQuickApprove = (claim: any) => {
+        setBatchModalState({
+            isOpen: true,
+            action: 'approve',
+            claimIds: [claim._id],
+            totalAmount: claim.amount || 0,
+            title: `Approve Claim ${claim.claimId}`,
+            subtitle: `For ${claim.user?.name || 'employee'} · ₹${(claim.amount || 0).toLocaleString('en-IN')}`,
+            claims: [claim],
+        });
+    };
+
+    const handleQuickPay = (claim: any) => {
+        setBatchModalState({
+            isOpen: true,
+            action: 'paid',
+            claimIds: [claim._id],
+            totalAmount: claim.amount || 0,
+            title: `Mark Claim ${claim.claimId} as Paid`,
+            subtitle: `For ${claim.user?.name || 'employee'} · ₹${(claim.amount || 0).toLocaleString('en-IN')}`,
+            claims: [claim],
+        });
+    };
+
+    const handleApproveAllPending = () => {
+        if (visiblePendingClaims.length === 0) return;
+        const total = visiblePendingClaims.reduce((s: number, r: any) => s + (r.amount || 0), 0);
+        setBatchModalState({
+            isOpen: true,
+            action: 'approve',
+            claimIds: visiblePendingClaims.map((r: any) => r._id),
+            totalAmount: total,
+            title: `Approve All Pending Claims (${visiblePendingClaims.length})`,
+            subtitle: `Approve all ${visiblePendingClaims.length} pending claims currently shown in table`,
+            claims: visiblePendingClaims,
+        });
+    };
+
+    const handlePayAllApproved = () => {
+        if (visibleApprovedClaims.length === 0) return;
+        const total = visibleApprovedClaims.reduce((s: number, r: any) => s + (r.amount || 0), 0);
+        setBatchModalState({
+            isOpen: true,
+            action: 'paid',
+            claimIds: visibleApprovedClaims.map((r: any) => r._id),
+            totalAmount: total,
+            title: `Mark All Approved Claims as Paid (${visibleApprovedClaims.length})`,
+            subtitle: `Payout for ${visibleApprovedClaims.length} approved claims currently shown in table`,
+            claims: visibleApprovedClaims,
+        });
+    };
+
+    const handleOpenBatchModal = (action: 'approve' | 'paid', claims: any[]) => {
+        const total = claims.reduce((s: number, r: any) => s + (r.amount || 0), 0);
+        setBatchModalState({
+            isOpen: true,
+            action,
+            claimIds: claims.map((r: any) => r._id),
+            totalAmount: total,
+            title: action === 'approve'
+                ? `Approve ${claims.length} Selected Claim${claims.length > 1 ? 's' : ''}`
+                : `Mark ${claims.length} Selected Claim${claims.length > 1 ? 's' : ''} as Paid`,
+            subtitle: `Total: ₹${total.toLocaleString('en-IN')}`,
+            claims,
+        });
+    };
+
     // Status filter options per view
     const orgFilters = ['all', 'pending', 'approved', 'paid', 'changes_requested', 'rejected'];
     const myFilters  = ['all', 'draft', 'pending', 'approved', 'paid', 'changes_requested', 'rejected'];
@@ -185,7 +279,7 @@ export default function HrmsReimbursementsPage() {
             {/* ── Header ─────────────────────────────────────────────── */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                    
+                    <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Reimbursements</h1>
                     <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>{pageSubtitle}</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -291,6 +385,30 @@ export default function HrmsReimbursementsPage() {
 
             {/* ── Main Table Card ────────────────────────────────────── */}
             <Card className="flex flex-col" style={{ minHeight: '480px' }}>
+                {/* View Switcher Tabs (Org View only) */}
+                {isOrgView && isAdmin && (
+                    <div className="flex items-center px-4 pt-3 gap-6 border-b" style={{ borderColor: 'var(--color-border-default)' }}>
+                        <button
+                            className="flex items-center gap-2 pb-3 px-1 text-sm font-bold border-b-2 transition-all cursor-pointer"
+                            style={{
+                                borderColor: 'var(--color-primary)',
+                                color: 'var(--color-primary)',
+                            }}
+                        >
+                            <Receipt size={16} /> All Claims
+                        </button>
+                        <button
+                            onClick={() => navigate('/hrms/reimbursements/employees')}
+                            className="flex items-center gap-2 pb-3 px-1 text-sm font-medium border-b-2 border-transparent transition-all cursor-pointer hover:opacity-80"
+                            style={{
+                                color: 'var(--color-text-muted)',
+                            }}
+                        >
+                            <Users size={16} /> By Employee
+                        </button>
+                    </div>
+                )}
+
                 {/* Toolbar */}
                 <div
                     className="flex flex-wrap items-center justify-between p-4 gap-4 border-b"
@@ -365,9 +483,87 @@ export default function HrmsReimbursementsPage() {
                                 <option value="amount_desc">Amount: High to Low</option>
                                 <option value="amount_asc">Amount: Low to High</option>
                             </select>
+
+                            {/* Quick Batch Actions for currently shown claims */}
+                            {visiblePendingClaims.length > 0 && (
+                                <button
+                                    onClick={handleApproveAllPending}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs hover:opacity-90 whitespace-nowrap"
+                                    style={{
+                                        backgroundColor: '#16A34A',
+                                        color: '#fff',
+                                    }}
+                                    title={`Approve all ${visiblePendingClaims.length} pending claims currently shown`}
+                                >
+                                    <CheckCircle size={14} /> Approve All ({visiblePendingClaims.length})
+                                </button>
+                            )}
+                            {visibleApprovedClaims.length > 0 && (
+                                <button
+                                    onClick={handlePayAllApproved}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs hover:opacity-90 whitespace-nowrap"
+                                    style={{
+                                        backgroundColor: '#2563EB',
+                                        color: '#fff',
+                                    }}
+                                    title={`Mark all ${visibleApprovedClaims.length} approved claims currently shown as paid`}
+                                >
+                                    <DollarSign size={14} /> Mark All as Paid ({visibleApprovedClaims.length})
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
+
+                {/* Multi-select Batch Action Bar */}
+                {isOrgView && isAdmin && selectedClaimIds.length > 0 && (
+                    <div
+                        className="flex flex-wrap items-center justify-between px-4 py-2.5 border-b gap-3 animate-in fade-in"
+                        style={{
+                            backgroundColor: 'var(--color-bg-subtle)',
+                            borderColor: 'var(--color-border-default)',
+                        }}
+                    >
+                        <div className="flex items-center gap-2.5">
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                {selectedClaimIds.length} Selected
+                            </span>
+                            <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                                Total: ₹{selectedTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {selectedPendingClaims.length > 0 && (
+                                <button
+                                    onClick={() => handleOpenBatchModal('approve', selectedPendingClaims)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-90 cursor-pointer shadow-2xs"
+                                    style={{ backgroundColor: '#16A34A' }}
+                                >
+                                    <CheckCircle size={13} /> Approve Selected ({selectedPendingClaims.length})
+                                </button>
+                            )}
+                            {selectedApprovedClaims.length > 0 && (
+                                <button
+                                    onClick={() => handleOpenBatchModal('paid', selectedApprovedClaims)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-90 cursor-pointer shadow-2xs"
+                                    style={{ backgroundColor: '#2563EB' }}
+                                >
+                                    <DollarSign size={13} /> Mark Selected Paid ({selectedApprovedClaims.length})
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setSelectedClaimIds([])}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                                style={{
+                                    borderColor: 'var(--color-border-default)',
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
+                                Deselect
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Table */}
                 <div className="flex-1 overflow-auto">
@@ -377,6 +573,25 @@ export default function HrmsReimbursementsPage() {
                             style={{ backgroundColor: 'var(--color-bg-surface)' }}
                         >
                             <tr className="border-b" style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-muted)' }}>
+                                {/* Checkbox column for Org view */}
+                                {isOrgView && isAdmin && (
+                                    <th className="px-4 py-3 w-10 text-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={reimbursements.length > 0 && selectedClaimIds.length === reimbursements.length}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedClaimIds(reimbursements.map((r: any) => r._id));
+                                                } else {
+                                                    setSelectedClaimIds([]);
+                                                }
+                                            }}
+                                            className="w-4 h-4 rounded cursor-pointer"
+                                            style={{ accentColor: 'var(--color-primary)' }}
+                                            title="Select / Deselect all visible claims"
+                                        />
+                                    </th>
+                                )}
                                 {/* Employee column only in Org view */}
                                 {isOrgView && <th className="px-4 py-3 font-semibold">Employee</th>}
                                 <th className="px-4 py-3 font-semibold">Date</th>
@@ -385,15 +600,14 @@ export default function HrmsReimbursementsPage() {
                                 <th className="px-4 py-3 font-semibold">Status</th>
                                 {/* Policy column only in Org view */}
                                 {isOrgView && <th className="px-4 py-3 font-semibold">Policy</th>}
-                                {/* Actions column only in My Claims view */}
-                                {!isOrgView && <th className="px-4 py-3 font-semibold text-right">Actions</th>}
+                                <th className="px-4 py-3 font-semibold text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {isLoading ? (
                                 <tr>
                                     <td
-                                        colSpan={isOrgView ? 6 : 5}
+                                        colSpan={isOrgView ? (isAdmin ? 8 : 7) : 6}
                                         className="py-20 text-center text-sm"
                                         style={{ color: 'var(--color-text-muted)' }}
                                     >
@@ -404,7 +618,7 @@ export default function HrmsReimbursementsPage() {
                             ) : reimbursements.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={isOrgView ? 6 : 5}
+                                        colSpan={isOrgView ? (isAdmin ? 8 : 7) : 6}
                                         className="py-20 text-center"
                                         style={{ color: 'var(--color-text-muted)' }}
                                     >
@@ -431,19 +645,57 @@ export default function HrmsReimbursementsPage() {
                                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-bg-subtle)')}
                                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                     >
+                                        {/* Checkbox — Org view only */}
+                                        {isOrgView && isAdmin && (
+                                            <td className="px-4 py-3 w-10 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedClaimIds.includes(item._id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedClaimIds((prev) => [...prev, item._id]);
+                                                        } else {
+                                                            setSelectedClaimIds((prev) => prev.filter((id) => id !== item._id));
+                                                        }
+                                                    }}
+                                                    className="w-4 h-4 rounded cursor-pointer"
+                                                    style={{ accentColor: 'var(--color-primary)' }}
+                                                />
+                                            </td>
+                                        )}
+
                                         {/* Employee — Org view only */}
                                         {isOrgView && (
                                             <td className="px-4 py-3">
-                                                <div className="flex items-center gap-3">
+                                                <div
+                                                    className="flex items-center gap-3 group/emp cursor-pointer"
+                                                    onClick={(e) => {
+                                                        const empId = item.employee?._id || (typeof item.employeeId === 'object' ? item.employeeId?._id : item.employeeId);
+                                                        if (empId) {
+                                                            e.stopPropagation();
+                                                            navigate(`/hrms/reimbursements/employees/${empId}`, {
+                                                                state: {
+                                                                    emp: {
+                                                                        _id: empId,
+                                                                        employee: item.employee || (typeof item.employeeId === 'object' ? item.employeeId : {}),
+                                                                        user: item.user || (typeof item.employeeId === 'object' ? item.employeeId?.userId : {}),
+                                                                    },
+                                                                },
+                                                            });
+                                                        }
+                                                    }}
+                                                    title={`View combined summary & history for ${item.user?.name || 'this employee'}`}
+                                                >
                                                     <div
-                                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 transition-transform group-hover/emp:scale-105"
                                                         style={{ backgroundColor: 'var(--color-primary)' }}
                                                     >
                                                         {item.user?.name?.charAt(0) || <User size={13} />}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                                        <p className="text-sm font-semibold truncate group-hover/emp:underline flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
                                                             {item.user?.name || 'Unknown'}
+                                                            <ExternalLink size={12} className="opacity-0 group-hover/emp:opacity-70 transition-opacity" style={{ color: 'var(--color-primary)' }} />
                                                         </p>
                                                         <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
                                                             {item.employee?.department || item.user?.email || '—'}
@@ -514,10 +766,47 @@ export default function HrmsReimbursementsPage() {
                                             </td>
                                         )}
 
-                                        {/* Actions — My Claims view only */}
-                                        {!isOrgView && (
-                                            <td className="px-4 py-3 text-right">
-                                                {['draft', 'changes_requested', 'pending'].includes(item.status) ? (
+                                        {/* Actions */}
+                                        <td className="px-4 py-3 text-right">
+                                            {isOrgView && isAdmin ? (
+                                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                    {item.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleQuickApprove(item)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white rounded-lg transition-opacity hover:opacity-90 cursor-pointer shadow-2xs"
+                                                            style={{ backgroundColor: '#16A34A' }}
+                                                            title="Quick Approve claim"
+                                                        >
+                                                            <Check size={13} /> Approve
+                                                        </button>
+                                                    )}
+                                                    {item.status === 'approved' && (
+                                                        <button
+                                                            onClick={() => handleQuickPay(item)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white rounded-lg transition-opacity hover:opacity-90 cursor-pointer shadow-2xs"
+                                                            style={{ backgroundColor: '#2563EB' }}
+                                                            title="Mark claim as paid"
+                                                        >
+                                                            <DollarSign size={13} /> Mark Paid
+                                                        </button>
+                                                    )}
+                                                    {item.status === 'paid' && (
+                                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 px-2 py-0.5 rounded-md bg-blue-50">
+                                                            <CheckCircle size={12} /> Paid
+                                                        </span>
+                                                    )}
+                                                    {['rejected', 'changes_requested'].includes(item.status) && (
+                                                        <button
+                                                            onClick={() => setSelectedId(item._id)}
+                                                            className="text-xs font-semibold hover:underline cursor-pointer"
+                                                            style={{ color: 'var(--color-primary)' }}
+                                                        >
+                                                            Details
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                ['draft', 'changes_requested', 'pending'].includes(item.status) ? (
                                                     <div className="flex items-center justify-end gap-1">
                                                         <button
                                                             onClick={(e) => {
@@ -546,9 +835,9 @@ export default function HrmsReimbursementsPage() {
                                                     </div>
                                                 ) : (
                                                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
-                                                )}
-                                            </td>
-                                        )}
+                                                )
+                                            )}
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -557,7 +846,7 @@ export default function HrmsReimbursementsPage() {
                 </div>
             </Card>
 
-            {/* ── Drawers ────────────────────────────────────────────── */}
+            {/* ── Drawers & Modals ────────────────────────────────────── */}
             {isNewOpen && (
                 <NewReimbursementDrawer
                     onClose={() => { setIsNewOpen(false); setEditClaimData(null); }}
@@ -570,6 +859,22 @@ export default function HrmsReimbursementsPage() {
                     reimbursementId={selectedId}
                     onClose={() => setSelectedId(null)}
                     onUpdated={handleCreatedOrUpdated}
+                />
+            )}
+            {batchModalState.isOpen && (
+                <ReimbursementBatchModal
+                    isOpen={batchModalState.isOpen}
+                    onClose={() => setBatchModalState((prev) => ({ ...prev, isOpen: false }))}
+                    action={batchModalState.action}
+                    claimIds={batchModalState.claimIds}
+                    totalAmount={batchModalState.totalAmount}
+                    title={batchModalState.title}
+                    subtitle={batchModalState.subtitle}
+                    claims={batchModalState.claims}
+                    onSuccess={() => {
+                        setSelectedClaimIds([]);
+                        handleCreatedOrUpdated();
+                    }}
                 />
             )}
         </div>

@@ -838,6 +838,25 @@ export const reimbursementApi = api.injectEndpoints({
             query: () => '/hrms/reimbursements/employees/overview',
             providesTags: ['Reimbursements'],
         }),
+
+        bulkUpdateReimbursementStatus: builder.mutation<
+            ApiResponse<{ successCount: number; errorCount: number; errors: any[] }>,
+            {
+                ids: string[];
+                status: 'approved' | 'paid';
+                comment?: string;
+                paymentMethod?: string;
+                paymentReference?: string;
+                syncToFinance?: boolean;
+            }
+        >({
+            query: (data) => ({
+                url: '/hrms/reimbursements/bulk-status',
+                method: 'PATCH',
+                body: data,
+            }),
+            invalidatesTags: ['Reimbursements', 'FinanceDashboard', 'Expenses'],
+        }),
     }),
     overrideExisting: false,
 });
@@ -854,6 +873,7 @@ export const {
     useGetReimbursementSummaryQuery,
     useGetReimbursementByIdQuery,
     useUpdateReimbursementStatusMutation,
+    useBulkUpdateReimbursementStatusMutation,
     useGetEmployeeReimbursementsQuery,
     useGetEmployeesReimbursementOverviewQuery,
 } = reimbursementApi;
