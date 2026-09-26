@@ -655,6 +655,38 @@ async function serializeProjectAssignees(project: any) {
     };
 }
 
+/**
+ * Batch version of serializeProjectAssignees — fetches raw assignees for ALL projects
+ * in a SINGLE query instead of one query per project (eliminates N+1 pattern).
+ */
+async function serializeAllProjectsAssignees(projects: any[]): Promise<any[]> {
+    if (projects.length === 0) return projects;
+
+    const projectIds = projects.map((p) => p._id);
+
+    // Single batch query to get raw (unpopulated) assignee arrays for all projects
+    const rawProjects = await Project.find(
+        { _id: { $in: projectIds } },
+        { assignees: 1 }
+    ).lean<{ _id: any; assignees: any[] }[]>();
+
+    const rawAssigneesMap = new Map<string, any[]>();
+    for (const rp of rawProjects) {
+        rawAssigneesMap.set(rp._id.toString(), rp.assignees || []);
+    }
+
+    return projects.map((project) => {
+        if (!project?.assignees) return project;
+        const rawAssignees = rawAssigneesMap.get(project._id.toString()) || [];
+        return {
+            ...project,
+            assignees: project.assignees.map((assignee: any, idx: number) =>
+                serializeAssignee(assignee, rawAssignees[idx])
+            ),
+        };
+    });
+}
+
 async function attachComputedOverdueDate(projects: any | any[]): Promise<any> {
     const arr = Array.isArray(projects) ? projects : [projects];
     if (arr.length === 0) return projects;
@@ -957,9 +989,8 @@ export const getProjects = async (
         .sort({ createdAt: -1 })
         .lean();
 
-    const serializedProjects = await Promise.all(
-        projects.map((project: any) => serializeProjectAssignees(project))
-    );
+    // Batch-serialize all project assignees in a single DB round-trip (no N+1)
+    const serializedProjects = await serializeAllProjectsAssignees(projects as any[]);
     return attachComputedOverdueDate(serializedProjects) as any;
 };
 

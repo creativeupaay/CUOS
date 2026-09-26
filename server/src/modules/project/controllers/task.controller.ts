@@ -90,7 +90,16 @@ export const getAllTasks = asyncHandler(
             });
         }
 
-        const tasks = await taskService.getAllTasksForProjects(validProjectIds);
+        // Parse optional pagination/filter params
+        const rawLimit = req.query.limit as string | undefined;
+        const sinceDate = req.query.sinceDate as string | undefined;
+        // limit=0 means no limit (e.g. for export/report pages); otherwise default is 300
+        const limit = rawLimit !== undefined ? parseInt(rawLimit, 10) : undefined;
+
+        const tasks = await taskService.getAllTasksForProjects(validProjectIds, {
+            limit: !isNaN(limit as number) ? (limit as number) : undefined,
+            sinceDate,
+        });
 
         res.status(200).json({
             success: true,
