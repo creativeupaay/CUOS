@@ -34,8 +34,9 @@ interface OnboardingFormData {
 
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '@/config/api.config';
+
+const API_BASE = getApiBaseUrl();
 
 const INPUT = 'w-full px-3 py-2.5 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent bg-white text-neutral-900 placeholder:text-neutral-400';
 const LABEL = 'block text-xs font-medium text-neutral-600 mb-1.5';

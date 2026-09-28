@@ -17,8 +17,9 @@ import type { GamePhase } from '../types/gameZone.types';
 
 // Import the existing socket.io-client from the project
 import { io, Socket } from 'socket.io-client';
+import { getSocketBaseUrl } from '@/config/api.config';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8000';
+const SOCKET_URL = getSocketBaseUrl();
 
 let sharedSocket: Socket | null = null;
 let socketRefCount = 0;

@@ -14,7 +14,9 @@ interface FormInfo {
     formSubmitted: boolean;
 }
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '@/config/api.config';
+
+const API_BASE = getApiBaseUrl();
 
 const STATES = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',

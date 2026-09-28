@@ -9,7 +9,9 @@ import {
     useGenerateFormTokenMutation,
 } from '@/features/hrms/hrmsApi';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '@/config/api.config';
+
+const API_BASE = getApiBaseUrl();
 import {
     ArrowLeft, Edit, User, Briefcase, DollarSign,
     Plus, X, Loader2, Eye, EyeOff, Calendar,

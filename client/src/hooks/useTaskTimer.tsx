@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useAppSelector } from '@/app/hooks';
+import { getApiBaseUrl } from '@/config/api.config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -8,6 +10,7 @@ export interface TimerState {
     status: 'running' | 'paused';
     limitBypassed?: boolean;
     dateKey?: string;        // YYYY-MM-DD for the work day
+    userId?: string;
 }
 
 export interface DaySessionMeta {
@@ -15,6 +18,7 @@ export interface DaySessionMeta {
     lastEndedBreakAccumulated: number;
     previouslyLoggedMinutes: number;
     isEnded: boolean;
+    userId?: string;
 }
 
 export interface TimerContextValue {
@@ -33,8 +37,8 @@ export interface TimerContextValue {
     refreshDaySession: () => Promise<DaySessionMeta | null>;
 }
 
-const STORAGE_KEY = 'cuos_global_timer';
-const META_STORAGE_KEY = 'cuos_day_session_meta';
+const STORAGE_KEY_PREFIX = 'cuos_global_timer';
+const META_STORAGE_KEY_PREFIX = 'cuos_day_session_meta';
 // Heartbeat interval — only runs while timer is active AND this tab is the leader.
 // 60s is enough for crash-recovery; all explicit actions (start/pause/stop) save immediately.
 const SYNC_POLL_INTERVAL = 60000; // 60 seconds
@@ -47,6 +51,14 @@ const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 mins = 00:30 UTC = 6:00 AM IST
 // If the leader tab closes, another open tab claims leadership within ~2s.
 const TAB_LEADER_KEY = 'cuos_timer_leader_id';
 const TAB_ID = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+function getStorageKey(userId?: string): string {
+    return userId ? `${STORAGE_KEY_PREFIX}_${userId}` : STORAGE_KEY_PREFIX;
+}
+
+function getMetaStorageKey(userId?: string): string {
+    return userId ? `${META_STORAGE_KEY_PREFIX}_${userId}` : META_STORAGE_KEY_PREFIX;
+}
 
 function claimLeadership(): void {
     try { localStorage.setItem(TAB_LEADER_KEY, TAB_ID); } catch { /* quota */ }
@@ -77,13 +89,17 @@ interface StoredMeta extends DaySessionMeta {
     dateKey?: string;
 }
 
-function loadMetaFromStorage(): DaySessionMeta | null {
+function loadMetaFromStorage(userId?: string): DaySessionMeta | null {
     try {
-        const raw = localStorage.getItem(META_STORAGE_KEY);
+        const key = getMetaStorageKey(userId);
+        const raw = localStorage.getItem(key);
         if (!raw) return null;
         const parsed = JSON.parse(raw) as StoredMeta;
+        if (userId && parsed.userId && parsed.userId !== userId) {
+            return null;
+        }
         if (parsed.dateKey && parsed.dateKey !== getTodayKey()) {
-            localStorage.removeItem(META_STORAGE_KEY);
+            localStorage.removeItem(key);
             return null;
         }
         return parsed;
@@ -92,25 +108,38 @@ function loadMetaFromStorage(): DaySessionMeta | null {
     }
 }
 
-function saveMetaToStorage(meta: DaySessionMeta | null) {
+function saveMetaToStorage(meta: DaySessionMeta | null, userId?: string) {
     try {
+        const key = getMetaStorageKey(userId);
         if (meta) {
-            localStorage.setItem(META_STORAGE_KEY, JSON.stringify({ ...meta, dateKey: getTodayKey() }));
+            localStorage.setItem(key, JSON.stringify({ ...meta, userId: userId || meta.userId, dateKey: getTodayKey() }));
         } else {
-            localStorage.removeItem(META_STORAGE_KEY);
+            localStorage.removeItem(key);
         }
     } catch { /* storage quota */ }
 }
 
-function loadFromStorage(): TimerState | null {
+function loadFromStorage(userId?: string): TimerState | null {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
+        const key = getStorageKey(userId);
+        const raw = localStorage.getItem(key);
+        if (!raw) {
+            // Clean up un-scoped legacy key if present to prevent cross-user pollution
+            if (userId && localStorage.getItem(STORAGE_KEY_PREFIX)) {
+                try { localStorage.removeItem(STORAGE_KEY_PREFIX); } catch { /* ignore */ }
+            }
+            return null;
+        }
         const parsed = JSON.parse(raw) as TimerState;
         
-        // Stale state check: If the stored timer is from a previous work day, drop it!
+        // Stale user check: If stored timer belongs to another user, ignore
+        if (userId && parsed.userId && parsed.userId !== userId) {
+            return null;
+        }
+
+        // Stale date check: If the stored timer is from a previous work day, drop it!
         if (parsed.dateKey && parsed.dateKey !== getTodayKey()) {
-            localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(key);
             return null;
         }
         
@@ -120,11 +149,16 @@ function loadFromStorage(): TimerState | null {
     }
 }
 
-function saveToStorage(state: TimerState | null) {
+function saveToStorage(state: TimerState | null, userId?: string) {
+    const key = getStorageKey(userId);
     if (state) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(key, JSON.stringify({ ...state, userId: userId || state.userId }));
     } else {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(key);
+    }
+    // Clean up un-scoped legacy key if userId is active
+    if (userId) {
+        try { localStorage.removeItem(STORAGE_KEY_PREFIX); } catch { /* ignore */ }
     }
 }
 
@@ -145,7 +179,7 @@ function sessionToTimer(session: {
     status: 'running' | 'paused';
     limitBypassed: boolean;
     isEnded?: boolean;
-}): TimerState | null {
+}, userId?: string): TimerState | null {
     if (session.isEnded) {
         return null;
     }
@@ -155,11 +189,48 @@ function sessionToTimer(session: {
         status: session.status,
         limitBypassed: session.limitBypassed || false,
         dateKey: getTodayKey(),
+        userId,
     };
 }
 
 /** Call the server API without importing RTK Query (to keep the hook self-contained) */
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE = getApiBaseUrl();
+
+async function fetchDaySession(): Promise<{ ok: boolean; session: any }> {
+    try {
+        let res = await fetch(`${API_BASE}/projects/day-session`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        // If access token expired (401), attempt a single refresh and retry
+        if (res.status === 401) {
+            try {
+                const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                if (refreshRes.ok) {
+                    res = await fetch(`${API_BASE}/projects/day-session`, {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                }
+            } catch {
+                // Ignore refresh failure
+            }
+        }
+
+        if (!res.ok) return { ok: false, session: null };
+        const json = await res.json();
+        return { ok: true, session: json?.data ?? null };
+    } catch {
+        return { ok: false, session: null };
+    }
+}
 
 async function apiCall(method: string, path: string, body?: any): Promise<any> {
     try {
@@ -202,11 +273,16 @@ async function apiCall(method: string, path: string, body?: any): Promise<any> {
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function TimerProvider({ children }: { children: React.ReactNode }) {
-    const [timer, setTimer] = useState<TimerState | null>(loadFromStorage);
-    const [elapsed, setElapsed] = useState<number>(() => calcElapsed(loadFromStorage()));
+    const user = useAppSelector((state) => state.auth.user);
+    const userId = user?._id;
+    const userIdRef = useRef<string | undefined>(userId);
+    userIdRef.current = userId;
+
+    const [timer, setTimer] = useState<TimerState | null>(() => loadFromStorage(userId));
+    const [elapsed, setElapsed] = useState<number>(() => calcElapsed(loadFromStorage(userId)));
     const [isSyncing, setIsSyncing] = useState(false);
     const [isHydrated, setIsHydrated] = useState(false);
-    const [daySessionMeta, setDaySessionMeta] = useState<DaySessionMeta | null>(loadMetaFromStorage);
+    const [daySessionMeta, setDaySessionMeta] = useState<DaySessionMeta | null>(() => loadMetaFromStorage(userId));
     const intervalRef = useRef<number | null>(null);
     const syncPollRef = useRef<number | null>(null);
     const broadcastRef = useRef<BroadcastChannel | null>(null);
@@ -218,6 +294,22 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     // Whether this tab currently holds the polling leadership
     const isTabLeaderRef = useRef<boolean>(false);
 
+    // When the active user changes (e.g. login, logout, switch account):
+    useEffect(() => {
+        if (!userId) {
+            setTimer(null);
+            setElapsed(0);
+            setDaySessionMeta(null);
+            setIsHydrated(false);
+            return;
+        }
+        const cached = loadFromStorage(userId);
+        setTimer(cached);
+        setElapsed(calcElapsed(cached));
+        setDaySessionMeta(loadMetaFromStorage(userId));
+        setIsHydrated(false);
+    }, [userId]);
+
     const applySessionMeta = useCallback((session: any) => {
         if (!session) return;
         const meta: DaySessionMeta = {
@@ -225,21 +317,23 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             lastEndedBreakAccumulated: session.lastEndedBreakAccumulated || 0,
             previouslyLoggedMinutes: session.previouslyLoggedMinutes || 0,
             isEnded: session.isEnded || false,
+            userId: userIdRef.current,
         };
         setDaySessionMeta(meta);
-        saveMetaToStorage(meta);
+        saveMetaToStorage(meta, userIdRef.current);
     }, []);
 
     const refreshDaySession = useCallback(async (): Promise<DaySessionMeta | null> => {
         try {
-            const session = await apiCall('GET', '/projects/day-session');
-            if (session) {
-                applySessionMeta(session);
+            const res = await fetchDaySession();
+            if (res.ok && res.session) {
+                applySessionMeta(res.session);
                 return {
-                    lastEndedAccumulated: session.lastEndedAccumulated || 0,
-                    lastEndedBreakAccumulated: session.lastEndedBreakAccumulated || 0,
-                    previouslyLoggedMinutes: session.previouslyLoggedMinutes || 0,
-                    isEnded: session.isEnded || false,
+                    lastEndedAccumulated: res.session.lastEndedAccumulated || 0,
+                    lastEndedBreakAccumulated: res.session.lastEndedBreakAccumulated || 0,
+                    previouslyLoggedMinutes: res.session.previouslyLoggedMinutes || 0,
+                    isEnded: res.session.isEnded || false,
+                    userId: userIdRef.current,
                 };
             }
             return null;
@@ -275,9 +369,13 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
             bc.onmessage = (event) => {
                 if (event.data?.type === 'TIMER_STATE_UPDATE') {
+                    // Ignore broadcast if it belongs to a different user session
+                    if (event.data.userId && userIdRef.current && event.data.userId !== userIdRef.current) {
+                        return;
+                    }
                     const newTimer = event.data.timer as TimerState | null;
                     setTimer(newTimer);
-                    saveToStorage(newTimer);
+                    saveToStorage(newTimer, userIdRef.current);
                     // Count incoming broadcasts as a local action so the heartbeat
                     // grace period prevents overwriting state we just received.
                     lastActionRef.current = Date.now();
@@ -293,23 +391,11 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             isTabLeaderRef.current = true;
         }
 
-        // Save the latest accumulated to localStorage when the tab closes/refreshes,
-        // but keep status='running' so the next load can correctly reconcile with
-        // the server (which is also still 'running'). DO NOT pause the server here —
-        // the timer is designed to keep running while the tab is closed; elapsed is
-        // always computed as accumulated + (Date.now() - startedAt).
+        // On tab close or refresh: release leader lock.
+        // DO NOT mutate or add runSeconds to accumulated here — elapsed is calculated
+        // dynamically from accumulated + (Date.now() - startedAt). Double-accumulating
+        // in beforeunload caused the inflated 7-hour timer on page refresh!
         const handleBeforeUnload = () => {
-            const t = timerRef.current;
-            if (t && t.status === 'running') {
-                const runSeconds = Math.floor((Date.now() - t.startedAt) / 1000);
-                const latestAccumulated = Math.min(
-                    t.accumulated + runSeconds,
-                    t.limitBypassed ? Number.MAX_SAFE_INTEGER : LIMIT_SECONDS
-                );
-                // Keep status 'running' so hydration on next open sees local=running
-                // and trusts the server's running state (with correct startedAt).
-                saveToStorage({ ...t, accumulated: latestAccumulated });
-            }
             releaseLeadership();
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
@@ -326,59 +412,72 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     /** Broadcasts the new timer state to all other tabs in this browser */
     const broadcastState = useCallback((newTimer: TimerState | null) => {
         try {
-            broadcastRef.current?.postMessage({ type: 'TIMER_STATE_UPDATE', timer: newTimer });
+            broadcastRef.current?.postMessage({
+                type: 'TIMER_STATE_UPDATE',
+                timer: newTimer,
+                userId: userIdRef.current,
+            });
         } catch { /* ignore */ }
     }, []);
 
-    // ── Hydrate from server on mount ──────────────────────────────────────────
+    // ── Hydrate from server on mount or when user changes ─────────────────────
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const session = await apiCall('GET', '/projects/day-session');
+                const res = await fetchDaySession();
                 if (cancelled) return;
-                if (session) {
-                    applySessionMeta(session);
-                    const serverTimer = sessionToTimer(session);
-                    const localTimer = timerRef.current;
 
-                    if (serverTimer) {
-                        if (localTimer?.status === 'paused' && serverTimer.status === 'running') {
-                            // ── User explicitly paused, but the server never received it ────
-                            // This happens when the PATCH /pause request fails (network hiccup)
-                            // and the user then navigates away and back. Trust the LOCAL state
-                            // (user's intentional pause) and re-send the pause to the server.
-                            const fixedTimer: TimerState = {
-                                ...serverTimer,
-                                status: 'paused',
-                                accumulated: localTimer.accumulated,
-                            };
-                            setTimer(fixedTimer);
-                            saveToStorage(fixedTimer);
-                            // Re-send the pause so server stays consistent
-                            apiCall('PATCH', '/projects/day-session/pause', {
-                                accumulated: localTimer.accumulated,
-                            }).catch(() => {});
-                        } else if (localTimer?.status === 'running' && serverTimer.status === 'paused' && !session.isEnded) {
-                            // ── User had running timer; server was paused (e.g., another device) ─
-                            // Preserve the running status across a refresh by restarting the run.
-                            const preservedTimer: TimerState = {
-                                ...serverTimer,
-                                status: 'running',
-                                startedAt: localTimer.startedAt || Date.now(),
-                            };
-                            setTimer(preservedTimer);
-                            saveToStorage(preservedTimer);
-                            apiCall('POST', '/projects/day-session/start').catch(() => {});
-                        } else {
-                            // ── Normal case: trust server state ─────────────────────────────
-                            setTimer(serverTimer);
-                            saveToStorage(serverTimer);
+                if (res.ok) {
+                    const session = res.session;
+                    if (session) {
+                        applySessionMeta(session);
+                        const serverTimer = sessionToTimer(session, userId);
+                        const localTimer = timerRef.current;
+
+                        if (serverTimer) {
+                            if (localTimer?.status === 'paused' && serverTimer.status === 'running') {
+                                // ── User explicitly paused, but the server never received it ────
+                                // Trust local paused state and re-send the pause to the server.
+                                const fixedTimer: TimerState = {
+                                    ...serverTimer,
+                                    status: 'paused',
+                                    accumulated: localTimer.accumulated,
+                                    userId,
+                                };
+                                setTimer(fixedTimer);
+                                saveToStorage(fixedTimer, userId);
+                                apiCall('PATCH', '/projects/day-session/pause', {
+                                    accumulated: localTimer.accumulated,
+                                }).catch(() => {});
+                            } else if (localTimer?.status === 'running' && serverTimer.status === 'paused' && !session.isEnded) {
+                                // ── User had running timer; server was paused (e.g., another device) ─
+                                const preservedTimer: TimerState = {
+                                    ...serverTimer,
+                                    status: 'running',
+                                    startedAt: localTimer.startedAt || Date.now(),
+                                    userId,
+                                };
+                                setTimer(preservedTimer);
+                                saveToStorage(preservedTimer, userId);
+                                apiCall('POST', '/projects/day-session/start').catch(() => {});
+                            } else {
+                                // ── Normal case: trust server state ─────────────────────────────
+                                setTimer(serverTimer);
+                                saveToStorage(serverTimer, userId);
+                            }
+                        } else if (session.isEnded) {
+                            // User previously ended the day: clear local timer so it doesn't run
+                            setTimer(null);
+                            saveToStorage(null, userId);
                         }
-                    } else if (session.isEnded) {
-                        // User previously ended the day: clear local timer so it doesn't run
+                    } else {
+                        // ── Server confirmed NO DaySession exists today for this user ──────
+                        // Clear any stale local timer so a new user or new day starts fresh at 00:00:00.
                         setTimer(null);
-                        saveToStorage(null);
+                        saveToStorage(null, userId);
+                        setDaySessionMeta(null);
+                        saveMetaToStorage(null, userId);
                     }
                 }
             } catch {
@@ -390,7 +489,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             }
         })();
         return () => { cancelled = true; };
-    }, [applySessionMeta]);
+    }, [userId, applySessionMeta]);
 
     // ── Keep elapsed in sync ──────────────────────────────────────────────────
     useEffect(() => {
@@ -415,8 +514,8 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
     // Sync to localStorage whenever state changes
     useEffect(() => {
-        saveToStorage(timer);
-    }, [timer]);
+        saveToStorage(timer, userId);
+    }, [timer, userId]);
 
     // ── Recalculate elapsed when user returns to tab ──────────────────────────
     useEffect(() => {
@@ -451,13 +550,12 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 const secondsSinceLastAction = (Date.now() - lastActionRef.current) / 1000;
                 if (secondsSinceLastAction < 90) return;
 
-                const session = await apiCall('GET', '/projects/day-session');
-                if (!session) return;
+                const res = await fetchDaySession();
+                if (!res.ok || !res.session) return;
+                const session = res.session;
 
                 // ── Live state check ─────────────────────────────────────────
                 // The user may have paused WHILE this fetch was in-flight.
-                // Always check the live ref — never trust the closure 'timer' variable
-                // for decisions made after an async boundary.
                 const liveTimer = timerRef.current;
                 if (!liveTimer || liveTimer.status !== 'running') return;
 
@@ -465,7 +563,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 const localStartedAt = liveTimer.startedAt ?? 0;
                 const serverIsNewer = serverStartedAt > localStartedAt;
 
-                const serverTimer = sessionToTimer(session);
+                const serverTimer = sessionToTimer(session, userId);
                 if (!serverTimer) return;
 
                 if (session.status === 'running') {
@@ -473,16 +571,15 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                     const serverAccumulated = session.accumulated ?? 0;
                     if (Math.abs(serverAccumulated - liveTimer.accumulated) > 60) {
                         setTimer(serverTimer);
-                        saveToStorage(serverTimer);
+                        saveToStorage(serverTimer, userId);
                         broadcastState(serverTimer);
                     }
                 } else if (session.status === 'paused' && serverIsNewer) {
                     // Server paused AFTER our local start — trust server (e.g., another device paused)
                     setTimer(serverTimer);
-                    saveToStorage(serverTimer);
+                    saveToStorage(serverTimer, userId);
                     broadcastState(serverTimer);
                 }
-                // If server is paused but local startedAt is newer: ignore — our start is more recent
             } catch { /* ignore network errors */ }
         }, SYNC_POLL_INTERVAL);
 
@@ -492,7 +589,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 syncPollRef.current = null;
             }
         };
-    }, [timer?.status, timer?.startedAt, timer?.accumulated, broadcastState]);
+    }, [timer?.status, timer?.startedAt, timer?.accumulated, broadcastState, userId]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -502,13 +599,14 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         const startingAccumulated = timer?.accumulated ?? daySessionMeta?.lastEndedAccumulated ?? 0;
         const newTimer: TimerState = {
             startedAt: Date.now(),
-            accumulated: startingAccumulated,   // ← preserve any existing progress or lastEndedAccumulated!
+            accumulated: startingAccumulated,
             status: 'running',
             limitBypassed: timer?.limitBypassed ?? false,
             dateKey: getTodayKey(),
+            userId,
         };
         setTimer(newTimer);
-        saveToStorage(newTimer);
+        saveToStorage(newTimer, userId);
         broadcastState(newTimer);
 
         // Fire-and-forget server sync
@@ -517,18 +615,17 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             .then((session) => {
                 if (session) {
                     applySessionMeta(session);
-                    // Trust server's accumulated value (may differ if another session ran)
-                    const serverTimer = sessionToTimer(session);
+                    const serverTimer = sessionToTimer(session, userId);
                     if (serverTimer) {
                         setTimer(serverTimer);
-                        saveToStorage(serverTimer);
+                        saveToStorage(serverTimer, userId);
                         broadcastState(serverTimer);
                     }
                 }
             })
             .catch(() => { /* network offline — local state is fine */ })
             .finally(() => setIsSyncing(false));
-    }, [timer, daySessionMeta, broadcastState, applySessionMeta]);
+    }, [timer, daySessionMeta, broadcastState, applySessionMeta, userId]);
 
     const pauseTimer = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
@@ -540,22 +637,22 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         if (!prev.limitBypassed && accumulated > LIMIT_SECONDS) {
             accumulated = LIMIT_SECONDS;
         }
-        const next: TimerState = { ...prev, accumulated, status: 'paused' };
+        const next: TimerState = { ...prev, accumulated, status: 'paused', userId };
         setTimer(next);
-        saveToStorage(next);
+        saveToStorage(next, userId);
         broadcastState(next);
 
         // Fire-and-forget server sync
         apiCall('PATCH', '/projects/day-session/pause', { accumulated }).catch(() => {});
-    }, [broadcastState]);
+    }, [broadcastState, userId]);
 
     const resumeTimer = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
         lastActionRef.current = Date.now();
         setTimer(prev => {
             if (!prev || prev.status !== 'paused') return prev;
-            const next: TimerState = { ...prev, startedAt: Date.now(), status: 'running', dateKey: getTodayKey() };
-            saveToStorage(next);
+            const next: TimerState = { ...prev, startedAt: Date.now(), status: 'running', dateKey: getTodayKey(), userId };
+            saveToStorage(next, userId);
             broadcastState(next);
 
             // Sync with server and adopt server state (which corrects accumulated drift across days)
@@ -564,10 +661,10 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 .then((session) => {
                     if (session) {
                         applySessionMeta(session);
-                        const serverTimer = sessionToTimer(session);
+                        const serverTimer = sessionToTimer(session, userId);
                         if (serverTimer) {
                             setTimer(serverTimer);
-                            saveToStorage(serverTimer);
+                            saveToStorage(serverTimer, userId);
                             broadcastState(serverTimer);
                         }
                     }
@@ -577,7 +674,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
             return next;
         });
-    }, [broadcastState, applySessionMeta]);
+    }, [broadcastState, applySessionMeta, userId]);
 
     const stopTimer = useCallback((allocatedMinutes?: number): TimerState | null => {
         const prev = timerRef.current;
@@ -588,11 +685,11 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         if (prev && !prev.limitBypassed && accumulated > LIMIT_SECONDS) {
             accumulated = LIMIT_SECONDS;
         }
-        const snapshot: TimerState | null = prev ? { ...prev, accumulated, status: 'paused' } : null;
+        const snapshot: TimerState | null = prev ? { ...prev, accumulated, status: 'paused', userId } : null;
 
         // 1. Clear timer
         setTimer(null);
-        saveToStorage(null);
+        saveToStorage(null, userId);
         broadcastState(null);
 
         // 2. Update daySessionMeta cleanly OUTSIDE setTimer updater
@@ -602,8 +699,9 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 lastEndedBreakAccumulated: prevMeta?.lastEndedBreakAccumulated || 0,
                 previouslyLoggedMinutes: (prevMeta?.previouslyLoggedMinutes || 0) + (allocatedMinutes || 0),
                 isEnded: true,
+                userId,
             };
-            saveMetaToStorage(nextMeta);
+            saveMetaToStorage(nextMeta, userId);
             return nextMeta;
         });
 
@@ -611,13 +709,13 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         apiCall('PATCH', '/projects/day-session/pause', { isEnded: true, allocatedMinutes, accumulated }).catch(() => {});
 
         return snapshot;
-    }, [broadcastState]);
+    }, [broadcastState, userId]);
 
     const clearTimer = useCallback(() => {
         setTimer(null);
-        saveToStorage(null);
+        saveToStorage(null, userId);
         broadcastState(null);
-    }, [broadcastState]);
+    }, [broadcastState, userId]);
 
     const bypassLimit = useCallback(() => {
         // Mark that user just acted — grace period prevents poll from overwriting this
@@ -629,8 +727,9 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
                 limitBypassed: true,
                 status: 'running',
                 startedAt: prev.status === 'paused' ? Date.now() : prev.startedAt,
+                userId,
             };
-            saveToStorage(next);
+            saveToStorage(next, userId);
             broadcastState(next);
 
             // Sync with server
@@ -638,7 +737,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
             return next;
         });
-    }, [broadcastState]);
+    }, [broadcastState, userId]);
 
     return (
         <TimerContext.Provider value={{

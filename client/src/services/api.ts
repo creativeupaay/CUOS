@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { Mutex } from 'async-mutex';
+import { getApiBaseUrl } from '../config/api.config';
 
 /**
  * Base API configuration for RTK Query
@@ -9,7 +10,7 @@ import { Mutex } from 'async-mutex';
  */
 
 // Configure your base URL here
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const BASE_URL = getApiBaseUrl();
 
 // Create a new mutex
 const mutex = new Mutex();

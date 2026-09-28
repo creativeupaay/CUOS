@@ -1,20 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { logger } from '../utils/logger';
+import { getSocketBaseUrl } from '../config/api.config';
 
-// Determine base URL for Socket.io connection
-const getBaseURL = (): string => {
-  const apiBaseURL = import.meta.env.VITE_API_BASE_URL;
-
-  if (apiBaseURL) {
-    // Remove /api/v1 suffix if present
-    return apiBaseURL.replace(/\/api\/v1$/, '');
-  }
-
-  // Default to localhost for development
-  return 'http://localhost:8000';
-};
-
-const BASE_URL = getBaseURL();
+const BASE_URL = getSocketBaseUrl();
 
 // Optional non-cookie token fallback (some environments may store tokens in localStorage).
 const getFallbackToken = (): string | null => {

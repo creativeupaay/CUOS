@@ -13,7 +13,9 @@ import {
   setToast,
 } from '../store/wordleSlice';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8000';
+import { getSocketBaseUrl } from '@/config/api.config';
+
+const SOCKET_URL = getSocketBaseUrl();
 
 // Share the same socket instance across hooks to avoid duplicate connections
 let sharedSocket: Socket | null = null;

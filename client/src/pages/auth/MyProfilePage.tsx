@@ -22,7 +22,9 @@ import {
 } from '@/features/integration/integrationApi';
 
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { getApiBaseUrl } from '@/config/api.config';
+
+const API_BASE = getApiBaseUrl();
 
 // ── Small helpers ────────────────────────────────────────────────────
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -1018,7 +1020,6 @@ function GoogleIntegrationSection() {
     const isConnected = status?.connected && status?.status === 'active';
     const requiresReauth = status?.status === 'requires_reauth';
 
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
     const connectUrl = `${API_BASE}/integrations/google/connect`;
 
     const handleDisconnect = async () => {

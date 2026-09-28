@@ -1,26 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useAppSelector } from '@/app/hooks';
+import { getApiBaseUrl } from '@/config/api.config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LapseRecord {
     id: string;
-    /** Net work seconds (wall-clock − break delta) captured at the moment of lapse */
     seconds: number;
-    /** ISO timestamp when the lapse was taken */
-    capturedAt: string;
-    /** Task id that this lapse was assigned to (undefined or null = unassigned) */
+    capturedAt: string;          // ISO string
     assignedTaskId?: string | null;
-    /** Project id for the assigned task ('' = individual task) */
     assignedProjectId?: string | null;
-    /** Optional note recorded at the time of assignment */
     note?: string | null;
 }
 
 export interface StoredLapseState {
     dateKey: string;
     lapses: LapseRecord[];
-    lastLapseElapsed: number;
-    lastLapseBreak: number;
+    lastLapseElapsed: number;    // Accumulated elapsed seconds at the time of the last lapse
+    lastLapseBreak: number;      // Accumulated break seconds at the time of the last lapse
+    userId?: string;
 }
 
 export interface LapseContextValue {
@@ -39,9 +37,9 @@ export interface LapseContextValue {
 
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'cuos_lapses';
+const STORAGE_KEY_PREFIX = 'cuos_lapses';
 const WORK_DAY_START_UTC_MS = 30 * 60_000; // 30 mins = 00:30 UTC = 6:00 AM IST
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE = getApiBaseUrl();
 
 function getTodayKey(): string {
     const shifted = new Date(Date.now() - WORK_DAY_START_UTC_MS);
@@ -51,48 +49,56 @@ function getTodayKey(): string {
     return `${y}-${m}-${d}`;
 }
 
-function loadFromStorage(): StoredLapseState {
+function getLapseStorageKey(userId?: string): string {
+    return userId ? `${STORAGE_KEY_PREFIX}_${userId}` : STORAGE_KEY_PREFIX;
+}
+
+function loadFromStorage(userId?: string): StoredLapseState {
+    const defaultState: StoredLapseState = {
+        dateKey: getTodayKey(),
+        lapses: [],
+        lastLapseElapsed: 0,
+        lastLapseBreak: 0,
+        userId,
+    };
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const key = getLapseStorageKey(userId);
+        const raw = localStorage.getItem(key);
         if (!raw) {
-            return {
-                dateKey: getTodayKey(),
-                lapses: [],
-                lastLapseElapsed: 0,
-                lastLapseBreak: 0,
-            };
+            if (userId && localStorage.getItem(STORAGE_KEY_PREFIX)) {
+                try { localStorage.removeItem(STORAGE_KEY_PREFIX); } catch { /* ignore */ }
+            }
+            return defaultState;
         }
         const parsed = JSON.parse(raw) as StoredLapseState;
+        if (userId && parsed.userId && parsed.userId !== userId) {
+            return defaultState;
+        }
         if (parsed.dateKey && parsed.dateKey !== getTodayKey()) {
-            localStorage.removeItem(STORAGE_KEY);
-            return {
-                dateKey: getTodayKey(),
-                lapses: [],
-                lastLapseElapsed: 0,
-                lastLapseBreak: 0,
-            };
+            localStorage.removeItem(key);
+            return defaultState;
         }
         return {
             dateKey: parsed.dateKey || getTodayKey(),
             lapses: Array.isArray(parsed.lapses) ? parsed.lapses : [],
             lastLapseElapsed: typeof parsed.lastLapseElapsed === 'number' ? parsed.lastLapseElapsed : 0,
             lastLapseBreak: typeof parsed.lastLapseBreak === 'number' ? parsed.lastLapseBreak : 0,
+            userId,
         };
     } catch {
-        return {
-            dateKey: getTodayKey(),
-            lapses: [],
-            lastLapseElapsed: 0,
-            lastLapseBreak: 0,
-        };
+        return defaultState;
     }
 }
 
-function saveToStorage(state: StoredLapseState) {
+function saveToStorage(state: StoredLapseState, userId?: string) {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        const key = getLapseStorageKey(userId);
+        localStorage.setItem(key, JSON.stringify({ ...state, userId: userId || state.userId }));
+        if (userId) {
+            try { localStorage.removeItem(STORAGE_KEY_PREFIX); } catch { /* ignore */ }
+        }
     } catch {
-        // localStorage write error (e.g. quota exceeded)
+        // localStorage write error
     }
 }
 
@@ -140,10 +146,31 @@ const LapseContext = createContext<LapseContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function LapseProvider({ children }: { children: React.ReactNode }) {
-    const [storedState, setStoredState] = useState<StoredLapseState>(loadFromStorage);
+    const user = useAppSelector((state) => state.auth.user);
+    const userId = user?._id;
+    const userIdRef = useRef<string | undefined>(userId);
+    userIdRef.current = userId;
+
+    const [storedState, setStoredState] = useState<StoredLapseState>(() => loadFromStorage(userId));
     const broadcastRef = useRef<BroadcastChannel | null>(null);
     const stateRef = useRef<StoredLapseState>(storedState);
     stateRef.current = storedState;
+
+    // Reset when switching active user
+    useEffect(() => {
+        if (!userId) {
+            const clean: StoredLapseState = {
+                dateKey: getTodayKey(),
+                lapses: [],
+                lastLapseElapsed: 0,
+                lastLapseBreak: 0,
+            };
+            setStoredState(clean);
+            return;
+        }
+        const cached = loadFromStorage(userId);
+        setStoredState(cached);
+    }, [userId]);
 
     // Cross-tab synchronization via BroadcastChannel
     useEffect(() => {
@@ -153,10 +180,13 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
 
             bc.onmessage = (event) => {
                 if (event.data?.type === 'LAPSE_STATE_UPDATE' && event.data.state) {
+                    if (event.data.userId && userIdRef.current && event.data.userId !== userIdRef.current) {
+                        return;
+                    }
                     const incoming = event.data.state as StoredLapseState;
                     if (incoming.dateKey === getTodayKey()) {
                         setStoredState(incoming);
-                        saveToStorage(incoming);
+                        saveToStorage(incoming, userIdRef.current);
                     }
                 }
             };
@@ -172,14 +202,18 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
 
     const broadcastState = useCallback((newState: StoredLapseState) => {
         try {
-            broadcastRef.current?.postMessage({ type: 'LAPSE_STATE_UPDATE', state: newState });
+            broadcastRef.current?.postMessage({
+                type: 'LAPSE_STATE_UPDATE',
+                state: newState,
+                userId: userIdRef.current,
+            });
         } catch { /* ignore */ }
     }, []);
 
     const updateAndPersist = useCallback((updater: (prev: StoredLapseState) => StoredLapseState) => {
         setStoredState(prev => {
             const next = updater(prev);
-            saveToStorage(next);
+            saveToStorage(next, userIdRef.current);
             broadcastState(next);
             return next;
         });
@@ -222,8 +256,20 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
                         lapses: mergedLapses,
                         lastLapseElapsed,
                         lastLapseBreak,
+                        userId: userIdRef.current,
                     };
                 });
+            } else if (session === null) {
+                // Server confirmed no session today: reset lapses to clean empty state
+                const clean: StoredLapseState = {
+                    dateKey: getTodayKey(),
+                    lapses: [],
+                    lastLapseElapsed: 0,
+                    lastLapseBreak: 0,
+                    userId: userIdRef.current,
+                };
+                setStoredState(clean);
+                saveToStorage(clean, userIdRef.current);
             }
         } catch (err) {
             console.error('[LapseProvider] Failed to hydrate lapses from server:', err);
@@ -232,7 +278,7 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         refreshLapses();
-    }, [refreshLapses]);
+    }, [refreshLapses, userId]);
 
     const addLapse = useCallback((seconds: number, currentElapsed?: number, currentBreak?: number): LapseRecord => {
         const record: LapseRecord = {
@@ -249,6 +295,7 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
             lapses: [...prev.lapses, record],
             lastLapseElapsed: typeof currentElapsed === 'number' ? currentElapsed : prev.lastLapseElapsed,
             lastLapseBreak: typeof currentBreak === 'number' ? currentBreak : prev.lastLapseBreak,
+            userId: userIdRef.current,
         }));
 
         // Persist to server DaySession in background
@@ -268,6 +315,7 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
             ...prev,
             lastLapseElapsed: Math.max(prev.lastLapseElapsed, currentElapsed),
             lastLapseBreak: Math.max(prev.lastLapseBreak, currentBreak),
+            userId: userIdRef.current,
         }));
 
         apiCall('POST', '/projects/day-session/lapse-boundary', {
@@ -286,6 +334,7 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
                     ? { ...l, assignedTaskId: taskId, assignedProjectId: projectId, note }
                     : l
             ),
+            userId: userIdRef.current,
         }));
 
         // Persist assignment to server in background
@@ -304,6 +353,7 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
         updateAndPersist(prev => ({
             ...prev,
             lapses: prev.lapses.filter(l => l.id !== id),
+            userId: userIdRef.current,
         }));
     }, [updateAndPersist]);
 
@@ -314,8 +364,9 @@ export function LapseProvider({ children }: { children: React.ReactNode }) {
                 lapses: [],
                 lastLapseElapsed: prev.lastLapseElapsed,
                 lastLapseBreak: prev.lastLapseBreak,
+                userId: userIdRef.current,
             };
-            saveToStorage(resetState);
+            saveToStorage(resetState, userIdRef.current);
             broadcastState(resetState);
             return resetState;
         });

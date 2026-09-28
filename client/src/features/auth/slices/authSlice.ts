@@ -45,6 +45,13 @@ const authSlice = createSlice({
             state.isAuthenticated = false;
             state.error = null;
             persistPartnerSlug(null);
+            try {
+                localStorage.removeItem('cuos_global_timer');
+                localStorage.removeItem('cuos_day_session_meta');
+                localStorage.removeItem('cuos_break_session');
+                localStorage.removeItem('cuos_lapses');
+                localStorage.removeItem('cuos_timer_leader_id');
+            } catch { /* ignore */ }
         },
         setError: (state, action: PayloadAction<string>) => {
             state.error = action.payload;

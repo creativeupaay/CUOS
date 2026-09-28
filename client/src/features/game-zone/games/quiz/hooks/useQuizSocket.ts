@@ -25,7 +25,9 @@ import type {
   QuizPublicState,
 } from '../types/quiz.types';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:8000';
+import { getSocketBaseUrl } from '@/config/api.config';
+
+const SOCKET_URL = getSocketBaseUrl();
 
 // Shared socket singleton — same as other game hooks
 let sharedSocket: Socket | null = null;
