@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
 import { useGetUsersQuery } from '@/features/auth/authApi';
@@ -8,9 +8,11 @@ import {
     ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis 
 } from 'recharts';
 import { 
-    CheckCircle2, Clock, Calendar, Download, ChevronRight
+    CheckCircle2, Clock, Calendar, ChevronRight, ChevronDown, Home, Briefcase, Video, Sparkles
 } from 'lucide-react';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
+import { AiWorkReportModal } from './components/AiWorkReportModal';
 
 export default function ReportsPage() {
     const navigate = useNavigate();
@@ -28,6 +30,55 @@ export default function ReportsPage() {
     const [customEndDate, setCustomEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const datePickerRef = useRef<HTMLDivElement>(null);
+    const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [generateAiReport, { data: aiReportResponse, isLoading: isGeneratingAiReport, error: aiReportError }] = 
+        projectApi.useGenerateAiReportMutation();
+
+    const toggleDateExpand = (dateKey: string) => {
+        setExpandedDates(prev => ({
+            ...prev,
+            [dateKey]: !prev[dateKey]
+        }));
+    };
+
+    const handleOpenAiReport = async () => {
+        if (viewBy === 'everyone') {
+            toast.error('AI Report requires an individual employee. Please select a specific team member from the dropdown.', {
+                duration: 4000,
+                icon: '💡'
+            });
+            return;
+        }
+
+        const targetUserId = viewBy === 'me' ? user?._id : viewBy;
+        if (!targetUserId) {
+            toast.error('User information is not available. Please try again.');
+            return;
+        }
+
+        setIsAiModalOpen(true);
+        try {
+            await generateAiReport({
+                targetUserId,
+                startDate,
+                endDate
+            }).unwrap();
+        } catch (err: any) {
+            console.error('Failed to generate AI report:', err);
+        }
+    };
+
+    const handleRetryAiReport = () => {
+        const targetUserId = viewBy === 'me' ? user?._id : viewBy;
+        if (targetUserId) {
+            generateAiReport({
+                targetUserId,
+                startDate,
+                endDate
+            });
+        }
+    };
 
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
@@ -89,6 +140,17 @@ export default function ReportsPage() {
 
     const data = response?.data;
 
+    const displayDailyLogs = useMemo(() => {
+        return (data?.dailyTimeLog || []).filter((log: any) => {
+            const totalMins = Number(log.workMinutes || log.minutes || 0) + Number(log.meetingMinutes || 0);
+            // Do not show Sunday if no work was logged
+            if (log.day === 'Sun' && totalMins === 0) return false;
+            // Do not show declared company holidays if no work was logged
+            if (log.attendanceStatus === 'holiday' && totalMins === 0) return false;
+            return true;
+        });
+    }, [data?.dailyTimeLog]);
+
     // Helper functions for formatting
     const formatTime = (mins: number) => {
         if (!mins || isNaN(mins)) return '0h 0m';
@@ -108,13 +170,6 @@ export default function ReportsPage() {
         }
     };
 
-    const formatSafeDayDate = (dateVal: any) => {
-        if (!dateVal) return 'N/A';
-        const d = new Date(dateVal);
-        if (isNaN(d.getTime())) return 'N/A';
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        return `${days[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
-    };
 
     const formatSafeShortDate = (dateVal: any) => {
         if (!dateVal) return '';
@@ -130,6 +185,95 @@ export default function ReportsPage() {
         } catch {
             return dateStr;
         }
+    };
+
+    const formatTableDate = (dateVal: any) => {
+        if (!dateVal) return '—';
+        try {
+            const d = new Date(typeof dateVal === 'string' && !dateVal.includes('T') ? `${dateVal}T00:00:00` : dateVal);
+            if (isNaN(d.getTime())) return String(dateVal);
+            return format(d, 'dd MMM yyyy');
+        } catch {
+            return String(dateVal);
+        }
+    };
+
+    const formatDurationDisplay = (mins: number | undefined | null) => {
+        if (!mins || isNaN(mins) || mins <= 0) return '—';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (h === 0) return `${m}m`;
+        if (m === 0) return `${h}h`;
+        return `${h}h ${m}m`;
+    };
+
+    const renderAttendanceBadge = (status: string | undefined, day: string, workMins: number, holidayName?: string | null) => {
+        const s = (status || '').toLowerCase();
+        if (s === 'present') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    Present
+                </span>
+            );
+        }
+        if (s === 'wfh') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/60 shadow-xs">
+                    <Home size={13} className="text-blue-600 shrink-0" />
+                    WFH
+                </span>
+            );
+        }
+        if (s === 'weekend' || day === 'Sun' || (day === 'Sat' && workMins === 0)) {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shadow-xs">
+                    <Home size={13} className="text-slate-400 shrink-0" />
+                    Weekend
+                </span>
+            );
+        }
+        if (s === 'half-day' || s === 'half_day') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60 shadow-xs">
+                    <Clock size={13} className="text-amber-600 shrink-0" />
+                    Half Day
+                </span>
+            );
+        }
+        if (s === 'absent') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/60 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                    Absent
+                </span>
+            );
+        }
+        if (s === 'leave' || s === 'on-leave' || s === 'on_leave') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/60 shadow-xs">
+                    <Calendar size={13} className="text-purple-600 shrink-0" />
+                    On Leave
+                </span>
+            );
+        }
+        if (s === 'holiday') {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60 shadow-xs" title={holidayName ? `Holiday: ${holidayName}` : 'Company Holiday'}>
+                    <Calendar size={13} className="text-indigo-600 shrink-0" />
+                    {holidayName ? `Holiday: ${holidayName}` : 'Holiday'}
+                </span>
+            );
+        }
+        if (workMins > 0) {
+            return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    Present
+                </span>
+            );
+        }
+        return <span className="text-gray-400 font-normal text-sm">—</span>;
     };
 
     const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#6B7280']; // Green, Blue, Amber, Purple, Gray
@@ -220,9 +364,13 @@ export default function ReportsPage() {
                         </div>
                     </div>
                     
-                    <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors">
-                        <Download size={16} />
-                        Export Report
+                    <button 
+                        onClick={handleOpenAiReport} 
+                        disabled={isGeneratingAiReport}
+                        className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-[0.98] transition-colors disabled:opacity-60"
+                    >
+                        <Sparkles size={15} className={isGeneratingAiReport ? "animate-spin" : ""} />
+                        <span>AI Report</span>
                     </button>
                 </div>
 
@@ -475,42 +623,202 @@ export default function ReportsPage() {
                             </div>
                         </div>
 
-                        {/* Tables Row */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {/* Daily Time Log */}
-                            <div className="bg-white rounded-xl border p-4 shadow-sm col-span-1 print:break-inside-avoid" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-sm font-bold text-gray-800">Daily Time Log</h3>
-                                    <Calendar size={16} className="text-green-500" />
-                                </div>
-                                <div className="text-xs font-semibold text-gray-400 grid grid-cols-3 pb-2 border-b">
-                                    <div>DATE</div>
-                                    <div className="text-center">TASKS</div>
-                                    <div className="text-right">TIME</div>
-                                </div>
-                                <div className="space-y-0 max-h-[300px] overflow-auto">
-                                    {(data.dailyTimeLog || []).map((log: any, idx: number) => (
-                                        <div key={idx} className="grid grid-cols-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors items-center text-sm">
-                                            <div className="text-gray-700">
-                                                {formatSafeDayDate(log.date)}
-                                            </div>
-                                            <div className="text-center text-gray-500">{Number(log.tasksCount) || 0} Tasks</div>
-                                            <div className="text-right font-medium text-gray-700 flex items-center justify-end gap-1">
-                                                {formatTime(Number(log.minutes) || 0)}
-                                                <ChevronRight size={14} className="text-gray-400" />
-                                            </div>
+                        {/* Tables Section - Stacked Vertically */}
+                        <div className="space-y-6">
+                            {/* 1. Daily Time Log (Full Width) */}
+                            <div className="bg-white rounded-xl border shadow-sm print:break-inside-avoid overflow-hidden" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+                                    <div>
+                                        <h3 className="text-base font-bold text-gray-800">Daily Time Log</h3>
+                                        <p className="text-xs text-gray-400 mt-0.5">Daily breakdown of attendance, working hours, meetings, and completed tasks</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-400 font-medium">{displayDailyLogs.length} Days</span>
+                                        <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
+                                            <Calendar size={16} />
                                         </div>
-                                    ))}
-                                    {(!data.dailyTimeLog || data.dailyTimeLog.length === 0) && (
-                                        <div className="py-8 text-center text-gray-400 text-sm">No time logs found.</div>
-                                    )}
+                                    </div>
+                                </div>
+                                
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-500">
+                                                <th className="py-3.5 px-6 font-bold text-gray-700">Date</th>
+                                                <th className="py-3.5 px-4 font-semibold">Day</th>
+                                                <th className="py-3.5 px-4 font-semibold">Attendance</th>
+                                                <th className="py-3.5 px-4 font-semibold">Work Time</th>
+                                                <th className="py-3.5 px-4 font-semibold">Meetings</th>
+                                                <th className="py-3.5 px-4 font-semibold text-center">Tasks Worked</th>
+                                                <th className="py-3.5 px-4 font-semibold text-center">Completed</th>
+                                                <th className="py-3.5 px-6 text-right w-12"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {displayDailyLogs.map((log: any, idx: number) => {
+                                                const hasDetails = (log.tasks && log.tasks.length > 0) || (log.meetings && log.meetings.length > 0) || (Number(log.workMinutes || log.minutes) > 0);
+                                                const isExpanded = !!expandedDates[log.date];
+                                                return (
+                                                    <Fragment key={log.date || idx}>
+                                                        <tr 
+                                                            onClick={() => hasDetails && toggleDateExpand(log.date)}
+                                                            className={`transition-colors ${hasDetails ? 'cursor-pointer hover:bg-gray-50/80' : 'hover:bg-gray-50/40'} ${isExpanded ? 'bg-gray-50/60' : ''}`}
+                                                        >
+                                                            <td className="py-4 px-6 font-semibold text-gray-800 whitespace-nowrap">
+                                                                {formatTableDate(log.date)}
+                                                            </td>
+                                                            <td className="py-4 px-4 font-medium text-gray-600 whitespace-nowrap">
+                                                                {log.day || (log.date ? format(new Date(log.date), 'EEE') : '—')}
+                                                            </td>
+                                                            <td className="py-4 px-4 whitespace-nowrap">
+                                                                {renderAttendanceBadge(log.attendanceStatus, log.day, Number(log.workMinutes || log.minutes) || 0, log.holidayName)}
+                                                            </td>
+                                                            <td className="py-4 px-4 font-medium text-gray-800 whitespace-nowrap">
+                                                                {Number(log.workMinutes) > 0 ? (
+                                                                    formatDurationDisplay(Number(log.workMinutes))
+                                                                ) : (
+                                                                    <span className="text-gray-400 font-normal">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="py-4 px-4 font-medium text-gray-800 whitespace-nowrap">
+                                                                {Number(log.meetingMinutes) > 0 ? (
+                                                                    formatDurationDisplay(Number(log.meetingMinutes))
+                                                                ) : (
+                                                                    <span className="text-gray-400 font-normal">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="py-4 px-4 font-bold text-gray-800 text-center whitespace-nowrap">
+                                                                {log.tasksWorkedCount ?? log.tasksCount ?? 0}
+                                                            </td>
+                                                            <td className="py-4 px-4 font-bold text-gray-800 text-center whitespace-nowrap">
+                                                                {log.completedCount ?? 0}
+                                                            </td>
+                                                            <td className="py-4 px-6 text-right whitespace-nowrap">
+                                                                {hasDetails ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            toggleDateExpand(log.date);
+                                                                        }}
+                                                                        className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 transition-colors"
+                                                                        title={isExpanded ? "Collapse details" : "Expand details"}
+                                                                    >
+                                                                        <ChevronDown size={18} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180 text-gray-700' : ''}`} />
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="w-5 inline-block" />
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                        {isExpanded && (
+                                                            <tr className="bg-slate-50/70 border-b border-gray-100">
+                                                                <td colSpan={8} className="p-4 sm:px-8">
+                                                                    <div className="bg-white rounded-xl border border-gray-200/90 p-5 shadow-xs space-y-4">
+                                                                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                                                                    Activity Breakdown for {formatTableDate(log.date)}
+                                                                                </span>
+                                                                                <span className="text-xs text-gray-400">({log.day})</span>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-3 text-xs text-gray-500">
+                                                                                <span>Work Time: <strong className="text-gray-800">{formatDurationDisplay(log.workMinutes)}</strong></span>
+                                                                                <span>•</span>
+                                                                                <span>Meetings: <strong className="text-gray-800">{formatDurationDisplay(log.meetingMinutes)}</strong></span>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Tasks List */}
+                                                                        {log.tasks && log.tasks.length > 0 ? (
+                                                                            <div>
+                                                                                <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+                                                                                    <Briefcase size={14} className="text-gray-500" />
+                                                                                    Tasks Worked ({log.tasks.length})
+                                                                                </div>
+                                                                                <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden bg-gray-50/30">
+                                                                                    {log.tasks.map((taskItem: any, tIdx: number) => (
+                                                                                        <div key={tIdx} className="flex items-center justify-between p-3 text-xs hover:bg-white transition-colors">
+                                                                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                                                                <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                                                                                    taskItem.priority === 'high' || taskItem.priority === 'critical' ? 'bg-red-500' :
+                                                                                                    taskItem.priority === 'medium' ? 'bg-orange-400' : 'bg-green-500'
+                                                                                                }`} />
+                                                                                                <span className="font-semibold text-gray-800 truncate max-w-[280px] sm:max-w-md" title={taskItem.title}>
+                                                                                                    {taskItem.title}
+                                                                                                </span>
+                                                                                                <span className="px-2 py-0.5 rounded text-[11px] bg-gray-100 text-gray-600 border border-gray-200/60 shrink-0 font-medium">
+                                                                                                    {taskItem.project}
+                                                                                                </span>
+                                                                                                {taskItem.status === 'completed' && (
+                                                                                                    <span className="px-2 py-0.5 rounded text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0 font-semibold flex items-center gap-1">
+                                                                                                        <CheckCircle2 size={11} /> Completed
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <div className="font-semibold text-gray-700 shrink-0 ml-4 tabular-nums text-sm">
+                                                                                                {formatDurationDisplay(Number(taskItem.minutes) || 0)}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : null}
+
+                                                                        {/* Meetings List */}
+                                                                        {log.meetings && log.meetings.length > 0 ? (
+                                                                            <div>
+                                                                                <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+                                                                                    <Video size={14} className="text-gray-500" />
+                                                                                    Meetings Attended ({log.meetings.length})
+                                                                                </div>
+                                                                                <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden bg-gray-50/30">
+                                                                                    {log.meetings.map((meetItem: any, mIdx: number) => (
+                                                                                        <div key={mIdx} className="flex items-center justify-between p-3 text-xs hover:bg-white transition-colors">
+                                                                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                                                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                                                                                                <span className="font-medium text-gray-800 truncate">{meetItem.title}</span>
+                                                                                            </div>
+                                                                                            <div className="font-semibold text-gray-700 shrink-0 ml-4 tabular-nums text-sm">
+                                                                                                {formatDurationDisplay(Number(meetItem.durationMinutes) || 0)}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : null}
+
+                                                                        {(!log.tasks || log.tasks.length === 0) && (!log.meetings || log.meetings.length === 0) && (
+                                                                            <div className="text-xs text-gray-400 py-3 text-center italic">
+                                                                                No individual task or meeting logs recorded for this day.
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
+                                                );
+                                            })}
+                                            {(!displayDailyLogs || displayDailyLogs.length === 0) && (
+                                                <tr>
+                                                    <td colSpan={8} className="py-12 text-center text-gray-400 text-sm">
+                                                        No daily time logs recorded in this period.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
 
-                            {/* All Tasks Completed */}
-                            <div className="bg-white rounded-xl border p-4 shadow-sm col-span-2 print:break-inside-avoid" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-sm font-bold text-gray-800">All Tasks Completed</h3>
+                            {/* 2. All Tasks Completed (Full Width) */}
+                            <div className="bg-white rounded-xl border shadow-sm print:break-inside-avoid overflow-hidden" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+                                    <div>
+                                        <h3 className="text-base font-bold text-gray-800">All Tasks Completed</h3>
+                                        <p className="text-xs text-gray-400 mt-0.5">Tasks completed during the selected time period</p>
+                                    </div>
                                     <button 
                                         onClick={() => {
                                             if (viewBy === 'me') {
@@ -519,46 +827,46 @@ export default function ReportsPage() {
                                                 navigate(`/tasks?activeTab=all&userId=${viewBy}`);
                                             }
                                         }}
-                                        className="text-xs text-[var(--color-primary)] font-medium flex items-center gap-1 hover:underline">
+                                        className="text-xs text-[var(--color-primary)] font-semibold flex items-center gap-1 hover:underline transition-all">
                                         View all <ChevronRight size={14} />
                                     </button>
                                 </div>
-                                <div className="overflow-auto max-h-[300px]">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="text-xs text-gray-400 font-semibold bg-gray-50 sticky top-0">
-                                            <tr>
-                                                <th className="py-2.5 px-3 rounded-l-md font-medium">TASK NAME</th>
-                                                <th className="py-2.5 px-3 font-medium">PROJECT</th>
-                                                <th className="py-2.5 px-3 font-medium">COMPLETED ON</th>
-                                                <th className="py-2.5 px-3 font-medium">TIME TAKEN</th>
-                                                <th className="py-2.5 px-3 rounded-r-md font-medium">PRIORITY</th>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-400">
+                                                <th className="py-3 px-6 font-medium">TASK NAME</th>
+                                                <th className="py-3 px-4 font-medium">PROJECT</th>
+                                                <th className="py-3 px-4 font-medium">COMPLETED ON</th>
+                                                <th className="py-3 px-4 font-medium">TIME TAKEN</th>
+                                                <th className="py-3 px-6 font-medium">PRIORITY</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-50">
+                                        <tbody className="divide-y divide-gray-100">
                                             {(data.completedTasks || []).map((task: any) => (
-                                                <tr key={task.id || task._id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="py-3 px-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <CheckCircle2 size={16} className="text-green-500 shrink-0" />
-                                                            <span className="font-medium text-gray-700 truncate max-w-[150px]">{task.name || 'Untitled Task'}</span>
+                                                <tr key={task.id || task._id} className="hover:bg-gray-50/70 transition-colors">
+                                                    <td className="py-3.5 px-6">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                                            <span className="font-semibold text-gray-800 truncate max-w-sm" title={task.name}>{task.name || 'Untitled Task'}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 px-3 text-gray-500">{task.project || 'General'}</td>
-                                                    <td className="py-3 px-3 text-gray-500">
+                                                    <td className="py-3.5 px-4 text-gray-600 font-medium">{task.project || 'General'}</td>
+                                                    <td className="py-3.5 px-4 text-gray-500">
                                                         {formatSafeDateTime(task.completedOn)}
                                                     </td>
-                                                    <td className="py-3 px-3 text-gray-700 font-medium">{formatTime(Number(task.timeTakenMinutes) || 0)}</td>
-                                                    <td className="py-3 px-3">
+                                                    <td className="py-3.5 px-4 text-gray-700 font-semibold">{formatTime(Number(task.timeTakenMinutes) || 0)}</td>
+                                                    <td className="py-3.5 px-6">
                                                         <div className="flex items-center gap-1.5">
-                                                            <div className={`w-2 h-2 rounded-full ${task.priority === 'high' || task.priority === 'critical' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-400' : 'bg-green-500'}`} />
-                                                            <span className="capitalize text-gray-600 text-xs font-medium">{task.priority || 'normal'}</span>
+                                                            <div className={`w-2 h-2 rounded-full ${task.priority === 'high' || task.priority === 'critical' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-400' : 'bg-emerald-500'}`} />
+                                                            <span className="capitalize text-gray-700 text-xs font-medium">{task.priority || 'normal'}</span>
                                                         </div>
                                                     </td>
                                                 </tr>
                                             ))}
                                             {(!data.completedTasks || data.completedTasks.length === 0) && (
                                                 <tr>
-                                                    <td colSpan={5} className="py-8 text-center text-gray-400 text-sm">
+                                                    <td colSpan={5} className="py-12 text-center text-gray-400 text-sm">
                                                         No completed tasks found in this period.
                                                     </td>
                                                 </tr>
@@ -571,6 +879,22 @@ export default function ReportsPage() {
                     </>
                 )}
             </div>
+
+            {/* AI Weekly Work Report Modal */}
+            <AiWorkReportModal
+                isOpen={isAiModalOpen}
+                onClose={() => setIsAiModalOpen(false)}
+                report={aiReportResponse?.data || null}
+                isLoading={isGeneratingAiReport}
+                error={
+                    aiReportError 
+                        ? (typeof aiReportError === 'object' && 'data' in aiReportError && (aiReportError as any).data?.message)
+                            ? (aiReportError as any).data.message
+                            : 'Failed to generate AI report. Please try again.'
+                        : null
+                }
+                onRetry={handleRetryAiReport}
+            />
         </div>
     );
 }

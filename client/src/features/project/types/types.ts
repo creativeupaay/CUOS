@@ -372,3 +372,119 @@ export interface Note {
     createdAt: string;
     updatedAt: string;
 }
+
+// ─── AI Work Report Types ─────────────────────────────────────────────────────
+
+export interface AiWorkstream {
+    name: string;
+    summary: string;
+    relatedTaskIds: string[];
+    relatedTaskNames: string[];
+    activeDates: string[];
+    activeDays: number;
+    totalTime: string;
+    observation: string;
+}
+
+export interface AiMultiDayWork {
+    title: string;
+    description: string;
+    dates: string[];
+    totalTime: string;
+}
+
+export interface AiOverlappingTasks {
+    tasks: string[];
+    description: string;
+    confidence: 'high' | 'medium' | 'low';
+}
+
+export interface AiOverdueWork {
+    title: string;
+    description: string;
+    relatedWorkstream?: string;
+}
+
+export interface AiWorkProgression {
+    title: string;
+    description: string;
+}
+
+export interface AiInsightItem {
+    title: string;
+    description: string;
+}
+
+export interface AiSuggestion {
+    title: string;
+    description: string;
+}
+
+export interface AiPeriodComparison {
+    periodLabel: string;
+    previousPeriodRange: string;
+    currentTimeFormatted: string;
+    previousTimeFormatted: string;
+    currentMinutes: number;
+    previousMinutes: number;
+    timeChangePercentage: number;
+    timeChangeDirection: 'increase' | 'decrease' | 'steady';
+    currentCompletedTasks: number;
+    previousCompletedTasks: number;
+    completedTasksChange: number;
+    currentActiveDays: number;
+    previousActiveDays: number;
+    velocitySummary: string;
+}
+
+export interface AiWorkAuditSignal {
+    severity: 'positive' | 'warning' | 'flag' | 'info';
+    category: 'repetitive_tasks' | 'output_ratio' | 'attendance_match' | 'task_clarity' | 'positive_signal';
+    title: string;
+    description: string;
+    impact?: string;
+    relatedTasks?: string[];
+}
+
+export interface AiWorkAudit {
+    overallHealth: 'healthy' | 'needs_review' | 'flagged';
+    healthScoreLabel: string;
+    summary: string;
+    signals: AiWorkAuditSignal[];
+}
+
+export interface AiWorkProgressionStep {
+    dateRange: string;
+    stageTitle: string;
+    description: string;
+    status: 'completed' | 'in-progress' | 'ongoing';
+    tasksInvolved: string[];
+    timeSpent?: string;
+}
+
+export interface AiWorkReport {
+    executiveSummary?: string;
+    overview: string;
+    managerSummary: string;
+    workAudit?: AiWorkAudit;
+    periodComparison?: AiPeriodComparison;
+    workstreams: AiWorkstream[];
+    workProgression: AiWorkProgressionStep[] | AiWorkProgression[];
+    multiDayWork: AiMultiDayWork[];
+    overlappingTasks: AiOverlappingTasks[];
+    overdueWork: AiOverdueWork[];
+    timePatterns: AiInsightItem[];
+    attendanceInsights: AiInsightItem[];
+    taskOrganizationInsights: AiInsightItem[];
+    suggestions: AiSuggestion[];
+    meta: {
+        employeeName: string;
+        designation?: string;
+        startDate: string;
+        endDate: string;
+        totalTrackedTime: string;
+        generatedAt: string;
+        source: 'gemini' | 'cache' | 'analytics';
+    };
+}
+

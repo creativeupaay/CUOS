@@ -134,13 +134,18 @@ export const getDashboardReports = async (filters: {
     const holidaysRaw = await Holiday.find({
         date: { $gte: loopStart, $lte: loopEnd },
         type: 'holiday'
-    }).select('date').lean();
+    }).select('name date').lean();
     
-    // Create a Set of holiday dates (as YYYY-MM-DD strings for easy lookup)
-    const holidayDates = new Set(holidaysRaw.map(h => {
-        const d = new Date(h.date);
-        return d.toISOString().split('T')[0];
-    }));
+    // Create a Set of holiday dates (as YYYY-MM-DD strings for easy lookup) and holiday map
+    const holidayDates = new Set<string>();
+    const holidayMap = new Map<string, any>();
+    for (const h of holidaysRaw) {
+        if (h.date) {
+            const dateStr = new Date(h.date).toISOString().split('T')[0];
+            holidayDates.add(dateStr);
+            holidayMap.set(dateStr, h);
+        }
+    }
     
     for (let d = new Date(loopStart); d <= loopEnd; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
@@ -282,12 +287,183 @@ export const getDashboardReports = async (filters: {
         { category: 'Others', minutes: timeOnOthers },
     ];
 
-    // 7. Daily Time Log (last 10 days or within period)
-    const dailyTimeLog = [...timeSpentTrend].reverse().map(t => ({
-        date: t.date,
-        tasksCount: t.tasksCount,
-        minutes: t.minutes
-    }));
+    // 7. Enhanced Daily Time Log (Detailed for each day in period matching the new UI)
+    let reportEmployee: any = null;
+    if (userId) {
+        reportEmployee = await Employee.findOne({ userId: new mongoose.Types.ObjectId(userId) }).select('_id').lean();
+    }
+    const attendanceRecords = reportEmployee
+        ? await Attendance.find({
+            employeeId: reportEmployee._id,
+            date: { $gte: loopStart, $lte: loopEnd },
+        }).lean()
+        : [];
+    const attendanceMap = new Map<string, any>();
+    for (const att of attendanceRecords) {
+        if (att.date) {
+            const isoKey = new Date(att.date).toISOString().split('T')[0];
+            attendanceMap.set(isoKey, att);
+            if ((att as any).dateStr) {
+                attendanceMap.set((att as any).dateStr, att);
+            }
+        }
+    }
+
+    // Fetch tasks completed on each day in the period
+    const completedInPeriod = await Task.find({
+        ...taskUserMatch,
+        status: 'completed',
+        completedAt: { $gte: start, $lte: end },
+    }).select('_id completedAt').lean();
+
+    const completedCountByDate = new Map<string, number>();
+    for (const ct of completedInPeriod) {
+        if (ct.completedAt) {
+            const dKey = ct.completedAt.toISOString().split('T')[0];
+            completedCountByDate.set(dKey, (completedCountByDate.get(dKey) || 0) + 1);
+        }
+    }
+
+    // Fetch all TimeLogs in the period populated with Task and Project
+    const timeLogsWithDetails = await TimeLog.find({
+        ...userMatch,
+        date: { $gte: start, $lte: end },
+    })
+        .populate({ path: 'taskId', select: 'title status priority' })
+        .populate({ path: 'projectId', select: 'name' })
+        .lean();
+
+    const logsByDate = new Map<string, any[]>();
+    for (const log of timeLogsWithDetails) {
+        const dKey = log.date.toISOString().split('T')[0];
+        if (!logsByDate.has(dKey)) logsByDate.set(dKey, []);
+        logsByDate.get(dKey)!.push(log);
+    }
+
+    // Fetch meetings in the period
+    const meetingUserMatch = userId
+        ? { $or: [{ createdBy: new mongoose.Types.ObjectId(userId) }, { 'participants.userId': new mongoose.Types.ObjectId(userId) }] }
+        : {};
+    const meetingsForPeriod = await Meeting.find({
+        ...meetingUserMatch,
+        scheduledAt: { $gte: start, $lte: end }
+    }).select('title scheduledAt duration').lean();
+
+    const meetingsByDate = new Map<string, any[]>();
+    for (const m of meetingsForPeriod) {
+        if (m.scheduledAt) {
+            const dKey = m.scheduledAt.toISOString().split('T')[0];
+            if (!meetingsByDate.has(dKey)) meetingsByDate.set(dKey, []);
+            meetingsByDate.get(dKey)!.push(m);
+        }
+    }
+
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Preserve chronological order (earliest -> latest) as requested in the design
+    const dailyTimeLog: any[] = [];
+    for (const t of timeSpentTrend) {
+        const dateStr = t.date;
+        const dObj = new Date(dateStr + 'T00:00:00Z');
+        const dayName = daysOfWeek[dObj.getUTCDay()];
+        const isSunday = dObj.getUTCDay() === 0;
+        const isSaturday = dObj.getUTCDay() === 6;
+        const isHoliday = holidayDates.has(dateStr);
+
+        const dayLogs = logsByDate.get(dateStr) || [];
+        let workMinutes = 0;
+        let meetingMinutes = 0;
+        const taskMap = new Map<string, any>();
+
+        for (const l of dayLogs) {
+            const dur = l.duration || 0;
+            const isMeet = l.description?.startsWith('Meeting:') || l.source === 'google_meet';
+            if (isMeet) {
+                meetingMinutes += dur;
+            } else {
+                workMinutes += dur;
+            }
+            if (l.taskId && typeof l.taskId === 'object') {
+                const tid = (l.taskId as any)._id?.toString();
+                if (tid && tid !== '000000000000000000000000') {
+                    if (!taskMap.has(tid)) {
+                        taskMap.set(tid, {
+                            id: tid,
+                            title: (l.taskId as any).title || 'Untitled Task',
+                            project: (l.projectId as any)?.name || 'General',
+                            status: (l.taskId as any).status || 'in-progress',
+                            priority: (l.taskId as any).priority || 'medium',
+                            minutes: 0,
+                        });
+                    }
+                    taskMap.get(tid)!.minutes += dur;
+                }
+            }
+        }
+
+        // Include scheduled meetings if meeting minutes from time logs was 0
+        const dayMeetings = meetingsByDate.get(dateStr) || [];
+        if (meetingMinutes === 0 && dayMeetings.length > 0) {
+            meetingMinutes = dayMeetings.reduce((acc, m) => acc + (m.duration || 0), 0);
+        }
+
+        const totalMinutes = workMinutes + meetingMinutes;
+
+        // User requirement: Do not show Sunday because Sunday is a holiday (unless time was explicitly logged)
+        if (isSunday && totalMinutes === 0) {
+            continue;
+        }
+
+        // Do not show declared company holidays from platform's holiday calendar if no time was logged
+        if (isHoliday && totalMinutes === 0) {
+            continue;
+        }
+
+        // Attendance determination
+        const attRecord = attendanceMap.get(dateStr);
+        let attendanceStatus = attRecord?.status;
+
+        if (!attendanceStatus) {
+            if (isSunday || (isSaturday && workMinutes === 0)) {
+                attendanceStatus = 'weekend';
+            } else if (isHoliday) {
+                attendanceStatus = 'holiday';
+            } else if (totalMinutes >= 360) {
+                attendanceStatus = 'present';
+            } else if (totalMinutes >= 240) {
+                attendanceStatus = 'half-day';
+            } else if (dObj < todayMidnight) {
+                attendanceStatus = (totalMinutes > 0) ? 'half-day' : 'absent';
+            } else {
+                attendanceStatus = (totalMinutes > 0) ? 'present' : 'unmarked';
+            }
+        }
+
+        const completedCount = completedCountByDate.get(dateStr) || 0;
+        const tasksWorked = Array.from(taskMap.values());
+        const tasksWorkedCount = tasksWorked.length || (workMinutes > 0 ? 1 : 0);
+
+        dailyTimeLog.push({
+            date: dateStr,
+            day: dayName,
+            attendanceStatus,
+            holidayName: holidayMap.get(dateStr)?.name || null,
+            workMinutes,
+            meetingMinutes,
+            minutes: totalMinutes, // backwards compatible
+            tasksCount: tasksWorkedCount,          // backwards compatible
+            tasksWorkedCount,
+            completedCount,
+            tasks: tasksWorked,
+            meetings: dayMeetings.map(m => ({
+                id: m._id,
+                title: m.title || 'Meeting',
+                durationMinutes: m.duration || 0,
+            })),
+        });
+    }
 
     // 8. Completed Tasks
     const completedTasksRaw = await Task.find({

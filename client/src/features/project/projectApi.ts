@@ -11,6 +11,7 @@ import type {
     DocAdminUser,
     ProjectAssignee,
     Note,
+    AiWorkReport,
 } from './types/types';
 import type {
     CreateProjectRequest,
@@ -173,6 +174,15 @@ export const projectApi = api.injectEndpoints({
             }),
             providesTags: ['Tasks', 'TimeLogs'],
         }),
+
+        generateAiReport: builder.mutation<ApiResponse<AiWorkReport>, { targetUserId?: string; startDate?: string; endDate?: string }>({
+            query: (body) => ({
+                url: '/projects/reports/ai',
+                method: 'POST',
+                body,
+            }),
+        }),
+
         
         getIndividualTasks: builder.query<ApiResponse<Task[]>, { date?: string } | void>({
             query: (params) => ({
@@ -1010,4 +1020,7 @@ export const {
     useStartDaySessionMutation,
     usePauseDaySessionMutation,
     useBypassDaySessionLimitMutation,
+
+    // AI Report
+    useGenerateAiReportMutation,
 } = projectApi;

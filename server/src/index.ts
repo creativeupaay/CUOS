@@ -22,6 +22,15 @@ import { initGoogleMeetSyncJob } from "./modules/integration/jobs/googleMeetSync
 
 // Register models
 import "./modules/auth/models/Permission.model";
+import "./modules/auth/models/User.model";
+import "./modules/auth/models/Role.model";
+import "./modules/project/models/Project.model";
+import "./modules/project/models/Task.model";
+import "./modules/project/models/TimeLog.model";
+import "./modules/project/models/Meeting.model";
+import "./modules/hrms/models/Employee.model";
+import "./modules/hrms/models/Attendance.model";
+import "./modules/hrms/models/Holiday.model";
 
 dotenv.config();
 connectDB();

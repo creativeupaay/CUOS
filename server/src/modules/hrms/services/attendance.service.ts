@@ -120,22 +120,24 @@ export class AttendanceService {
         // Always use Date.UTC so the date is stored as UTC midnight,
         // regardless of the server's local timezone (e.g. IST = UTC+5:30)
         const [y, m, d] = date.split('-').map(Number);
-        const dateObj = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-        // 9 AM IST = 03:30 UTC
+        const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+        const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+        const { dayStart } = getWorkDayBounds(date);
         const checkInTime = new Date(Date.UTC(y, m - 1, d, 3, 30, 0, 0));
 
         // Separate clear vs upsert operations
         const clearIds: Types.ObjectId[] = [];
         const upsertOps: any[] = [];
 
+        const employeeIds = records.map((r) => new Types.ObjectId(r.employeeId));
+        const existingRecords = await Attendance.find({
+            employeeId: { $in: employeeIds },
+            date: { $gte: dateStart, $lte: dateEnd },
+        });
+        const existingMap = new Map(existingRecords.map((rec) => [rec.employeeId.toString(), rec]));
+
         const existingEmployeeIds = new Set<string>();
         if (options.onlyUnmarked && records.length > 0) {
-            const employeeIds = records.map((r) => new Types.ObjectId(r.employeeId));
-            const existingRecords = await Attendance.find({
-                employeeId: { $in: employeeIds },
-                date: dateObj,
-            }).select('employeeId').lean();
-
             existingRecords.forEach((record) => {
                 existingEmployeeIds.add(record.employeeId.toString());
             });
@@ -152,19 +154,37 @@ export class AttendanceService {
             if (r.status === 'clear') {
                 clearIds.push(new Types.ObjectId(r.employeeId));
             } else {
-                upsertOps.push({
-                    updateOne: {
-                        filter: {
-                            employeeId: new Types.ObjectId(r.employeeId),
-                            date: dateObj,
+                const existingRec = existingMap.get(r.employeeId);
+                if (existingRec) {
+                    upsertOps.push({
+                        updateOne: {
+                            filter: { _id: existingRec._id },
+                            update: {
+                                $set: {
+                                    status: r.status,
+                                    source: 'admin-override',
+                                    notes: r.notes || '',
+                                    date: dayStart,
+                                    ...(options.adminUserId && {
+                                        overriddenBy: new Types.ObjectId(options.adminUserId),
+                                    }),
+                                    ...(['present', 'wfh', 'half-day'].includes(r.status) && {
+                                        checkIn: existingRec.checkIn || checkInTime,
+                                    }),
+                                },
+                            },
                         },
-                        update: {
-                            $set: {
+                    });
+                } else {
+                    upsertOps.push({
+                        insertOne: {
+                            document: {
+                                employeeId: new Types.ObjectId(r.employeeId),
+                                date: dayStart,
                                 status: r.status,
-                                // Use 'admin-override' so the cron job will never
-                                // touch this record again (cron skips admin-override).
                                 source: 'admin-override',
                                 notes: r.notes || '',
+                                totalHours: 0,
                                 ...(options.adminUserId && {
                                     overriddenBy: new Types.ObjectId(options.adminUserId),
                                 }),
@@ -173,9 +193,8 @@ export class AttendanceService {
                                 }),
                             },
                         },
-                        upsert: true,
-                    },
-                });
+                    });
+                }
             }
         }
 
@@ -183,7 +202,7 @@ export class AttendanceService {
         if (clearIds.length > 0) {
             const clearFilter = {
                 employeeId: { $in: clearIds },
-                date: dateObj,
+                date: { $gte: dateStart, $lte: dateEnd },
             };
             const recordsToClear = await Attendance.find(clearFilter);
 
@@ -238,11 +257,15 @@ export class AttendanceService {
     ): Promise<{ marked: boolean; status?: string; reason?: string }> {
         const { dayStart } = getWorkDayBounds(dateStr);
 
-        // Check for existing non-auto record
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+        const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+
+        // Check for existing record across day window
         const existing = await Attendance.findOne({
             employeeId: new Types.ObjectId(employeeId),
-            date: dayStart,
-        }).lean();
+            date: { $gte: dateStart, $lte: dateEnd },
+        }).sort({ updatedAt: -1 }).lean();
 
         let autoCalculatedStatus: 'present' | 'half-day' | null = null;
         if (uniqueWorkedMinutes >= 360) {       // >= 6 hours
@@ -260,7 +283,7 @@ export class AttendanceService {
                 return { marked: false, reason: `existing ${existing.status} record — skipped` };
             }
             // Admin-override records are never touched by cron
-            if (existing.source === 'admin-override') {
+            if (existing.source === 'admin-override' || existing.overriddenBy) {
                 return { marked: false, reason: 'admin-override record — skipped' };
             }
             // Manual records and approved leaves are fully protected — cron never overwrites them.
@@ -342,27 +365,41 @@ export class AttendanceService {
         reason?: string
     ): Promise<IAttendance> {
         const { dayStart } = getWorkDayBounds(date);
+        const [y, m, d] = date.split('-').map(Number);
+        const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+        const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 
-        const updated = await Attendance.findOneAndUpdate(
-            {
+        const existing = await Attendance.findOne({
+            employeeId: new Types.ObjectId(employeeId),
+            date: { $gte: dateStart, $lte: dateEnd },
+        }).sort({ updatedAt: -1 });
+
+        let updated: IAttendance | null;
+        if (existing) {
+            existing.status = status;
+            existing.source = 'admin-override';
+            existing.overriddenBy = new Types.ObjectId(adminUserId);
+            existing.overrideReason = reason?.trim() || '';
+            existing.date = dayStart;
+            updated = await existing.save();
+
+            // Clean up any remaining duplicate records for this employee on this date
+            await Attendance.deleteMany({
+                employeeId: new Types.ObjectId(employeeId),
+                date: { $gte: dateStart, $lte: dateEnd },
+                _id: { $ne: existing._id },
+            });
+        } else {
+            updated = await Attendance.create({
                 employeeId: new Types.ObjectId(employeeId),
                 date: dayStart,
-            },
-            {
-                $set: {
-                    status,
-                    source: 'admin-override',
-                    overriddenBy: new Types.ObjectId(adminUserId),
-                    overrideReason: reason?.trim() || '',
-                },
-                $setOnInsert: {
-                    employeeId: new Types.ObjectId(employeeId),
-                    date: dayStart,
-                    totalHours: 0,
-                },
-            },
-            { upsert: true, new: true, runValidators: false }
-        );
+                status,
+                source: 'admin-override',
+                overriddenBy: new Types.ObjectId(adminUserId),
+                overrideReason: reason?.trim() || '',
+                totalHours: 0,
+            });
+        }
 
         if (!updated) throw new AppError('Failed to override attendance', 500);
         return updated;
@@ -483,6 +520,11 @@ export class AttendanceService {
     /**
      * Called when a user starts or resumes the universal timer.
      * Sets check-in time for today in the Attendance record if not already set.
+     *
+     * IMPORTANT: Admin manual overrides (source:'admin-override', overriddenBy)
+     * as well as approved leaves (source:'leave') and manual records (source:'manual')
+     * are strictly PROTECTED and take absolute priority. Their status and source will
+     * NEVER be changed by the timer.
      */
     static async syncCheckInFromTimer(userId: string, dateKey: string, checkInTime?: Date) {
         try {
@@ -497,18 +539,19 @@ export class AttendanceService {
             const [y, m, d] = dateKey.split('-').map(Number);
             const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
             const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+            const { dayStart } = getWorkDayBounds(dateKey);
 
             let attendance = await Attendance.findOne({
                 employeeId: employee._id,
                 date: { $gte: dateStart, $lte: dateEnd },
-            });
+            }).sort({ updatedAt: -1 });
 
             const effectiveCheckIn = checkInTime || new Date();
 
             if (!attendance) {
                 attendance = new Attendance({
                     employeeId: employee._id,
-                    date: dateStart,
+                    date: dayStart,
                     checkIn: effectiveCheckIn,
                     status: 'present',
                     source: 'auto',
@@ -517,18 +560,32 @@ export class AttendanceService {
                 return attendance;
             }
 
+            // CRITICAL: Protect admin overrides, approved leaves, and manual records.
+            // Admin manual actions have absolute priority and can NEVER be overwritten by the timer.
+            const isProtected =
+                attendance.source === 'admin-override' ||
+                attendance.source === 'leave' ||
+                attendance.source === 'manual' ||
+                !!attendance.overriddenBy;
+
             let modified = false;
+
             // Only set checkIn if not already set, preserving the earliest check-in of the day
             if (!attendance.checkIn) {
                 attendance.checkIn = effectiveCheckIn;
                 modified = true;
             }
 
-            // If status is absent, mark as present since employee is now active
-            if (attendance.status === 'absent') {
-                attendance.status = 'present';
-                modified = true;
+            // If protected by admin, leave, or manual: do NOT touch status or source under any condition!
+            if (isProtected) {
+                if (modified) {
+                    await attendance.save();
+                }
+                return attendance;
             }
+
+            // If not protected and status was absent, we do NOT blindly promote to present.
+            // Status promotion is earned by reaching the 6-hour threshold (evaluated via cron and EOD checkout).
 
             if (modified) {
                 await attendance.save();
@@ -544,6 +601,11 @@ export class AttendanceService {
     /**
      * Called when a user ends the day (EOD) from the universal timer.
      * Sets check-out time, total worked hours, and break time in the Attendance record.
+     *
+     * IMPORTANT: Admin manual overrides (source:'admin-override', overriddenBy)
+     * as well as approved leaves (source:'leave') and manual records (source:'manual')
+     * are strictly PROTECTED and take absolute priority. Their status and source will
+     * NEVER be changed by the timer.
      */
     static async syncCheckOutFromTimer(
         userId: string,
@@ -564,30 +626,47 @@ export class AttendanceService {
             const [y, m, d] = dateKey.split('-').map(Number);
             const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
             const dateEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+            const { dayStart } = getWorkDayBounds(dateKey);
 
             let attendance = await Attendance.findOne({
                 employeeId: employee._id,
                 date: { $gte: dateStart, $lte: dateEnd },
-            });
+            }).sort({ updatedAt: -1 });
 
             const effectiveCheckOut = checkOutTime || new Date();
             const totalHours = Number((Math.max(0, accumulatedSeconds) / 3600).toFixed(2));
             const breakMinutes = Math.round(Math.max(0, breakSeconds) / 60);
 
             if (!attendance) {
+                // If ending day and no record exists, evaluate status based on 6h/4h rule
+                let status: IAttendance['status'] = 'absent';
+                if (accumulatedSeconds >= 21600) {       // >= 6 hours
+                    status = 'present';
+                } else if (accumulatedSeconds >= 14400) { // >= 4 hours
+                    status = 'half-day';
+                }
+
                 attendance = new Attendance({
                     employeeId: employee._id,
-                    date: dateStart,
+                    date: dayStart,
                     checkIn: effectiveCheckOut, // fallback checkIn if none existed
                     checkOut: effectiveCheckOut,
                     totalHours,
                     breakMinutes,
-                    status: 'present',
+                    status,
                     source: 'auto',
                 });
                 await attendance.save();
                 return attendance;
             }
+
+            // CRITICAL: Protect admin overrides, approved leaves, and manual records.
+            // Admin manual actions have absolute priority and can NEVER have their status changed by the timer.
+            const isProtected =
+                attendance.source === 'admin-override' ||
+                attendance.source === 'leave' ||
+                attendance.source === 'manual' ||
+                !!attendance.overriddenBy;
 
             // Always update checkout time to the latest EOD timestamp
             attendance.checkOut = effectiveCheckOut;
@@ -603,9 +682,16 @@ export class AttendanceService {
                 attendance.checkIn = effectiveCheckOut;
             }
 
-            // If status was absent, mark as present
-            if (attendance.status === 'absent') {
-                attendance.status = 'present';
+            // ONLY adjust status if record is NOT protected by admin or approved leave
+            if (!isProtected) {
+                if (accumulatedSeconds >= 21600) {       // >= 6 hours
+                    attendance.status = 'present';
+                } else if (accumulatedSeconds >= 14400) { // >= 4 hours
+                    attendance.status = 'half-day';
+                } else if (attendance.source === 'auto') {
+                    // Worked < 4 hours and day ended: mark absent
+                    attendance.status = 'absent';
+                }
             }
 
             await attendance.save();

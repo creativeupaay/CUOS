@@ -73,6 +73,13 @@ router.get(
     reportController.getReportsDashboard
 );
 
+// Generate AI weekly work report
+router.post(
+    '/reports/ai',
+    reportController.generateAiReport
+);
+
+
 // Get individual tasks
 router.get(
     '/tasks/individual',
