@@ -15,13 +15,14 @@ export const createEmployee = asyncHandler(async (req: Request, res: Response, n
 
 // ── Get All Employees ───────────────────────────────────────────────
 export const getEmployees = asyncHandler(async (req: Request, res: Response) => {
-    const { department, status, search, page, limit } = req.query;
+    const { department, status, search, page, limit, includeInactive } = req.query;
     const result = await employeeService.getEmployees({
         department: department as string,
         status: status as string,
         search: search as string,
         page: page ? parseInt(page as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
+        includeInactive: includeInactive === 'true',
     });
 
     res.json({

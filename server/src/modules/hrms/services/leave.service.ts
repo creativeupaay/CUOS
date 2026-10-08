@@ -3,6 +3,7 @@ import { LeaveBalance } from '../models/LeaveBalance.model';
 import { Types } from 'mongoose';
 import { CreateLeaveInput, UpdateLeaveStatusInput } from '../validators/leave.validator';
 import { Employee } from '../models/Employee.model';
+import { User } from '../../auth/models/User.model';
 import { Attendance } from '../models/Attendance.model';
 import AppError from '../../../utils/appError';
 import { notificationService } from '../../notification/services/notification.service';
@@ -24,8 +25,13 @@ class LeaveService {
     async createLeave(data: CreateLeaveInput, userId: string): Promise<ILeave> {
         // Find the employee by userId
         const employee = await Employee.findOne({ userId });
-        if (!employee) {
-            throw new AppError('Employee record not found', 404);
+        if (!employee || ['terminated', 'relieved'].includes(employee.status)) {
+            throw new AppError('Employee record not found or inactive', 404);
+        }
+
+        const user = await User.findById(userId).select('isActive').lean();
+        if (user && user.isActive === false) {
+            throw new AppError('Inactive users cannot submit leave requests', 403);
         }
 
         // Parse dates as UTC midnight to avoid server IST timezone shift

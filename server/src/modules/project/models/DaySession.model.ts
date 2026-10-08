@@ -53,6 +53,9 @@ export interface IDaySession extends Document {
     /** Custom reason provided when breakType is 'other' */
     breakReason: string | null;
 
+    /** Optional duration limit in seconds chosen by user (e.g. 1800, 2700, 3600 for tea break) */
+    breakDurationLimit?: number | null;
+
     /** Accumulated seconds at the time the user ended the day */
     lastEndedAccumulated?: number;
 
@@ -140,6 +143,10 @@ const DaySessionSchema = new Schema<IDaySession>(
         },
         breakReason: {
             type: String,
+            default: null,
+        },
+        breakDurationLimit: {
+            type: Number,
             default: null,
         },
         lastEndedAccumulated: {

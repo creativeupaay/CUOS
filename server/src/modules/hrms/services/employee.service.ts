@@ -62,8 +62,9 @@ class EmployeeService {
         search?: string;
         page?: number;
         limit?: number;
+        includeInactive?: boolean;
     }) {
-        const { department, status, search, page = 1, limit = 20 } = filters;
+        const { department, status, search, page = 1, limit = 20, includeInactive } = filters;
         const skip = (page - 1) * limit;
 
         // Build pre-lookup match (fast indexed fields)
@@ -85,6 +86,16 @@ class EmployeeService {
             },
             { $unwind: { path: '$_user', preserveNullAndEmptyArrays: true } },
         ];
+
+        // Filter out inactive users unless explicitly requested or querying terminated/relieved status
+        if (!includeInactive && status !== 'terminated' && status !== 'relieved') {
+            pipeline.push({
+                $match: {
+                    '_user': { $exists: true, $ne: null },
+                    '_user.isActive': { $ne: false },
+                },
+            });
+        }
 
         // Post-lookup search filter across name, email, employeeId, designation
         if (search && search.trim()) {
@@ -147,7 +158,7 @@ class EmployeeService {
 
     async getEmployeeById(id: string): Promise<IEmployee> {
         const employee = await Employee.findById(id)
-            .populate('userId', 'name email')
+            .populate('userId', 'name email isActive')
             .populate('reportingTo', 'employeeId designation');
 
         if (!employee) {
@@ -161,7 +172,7 @@ class EmployeeService {
 
     async getEmployeeByUserId(userId: string): Promise<IEmployee | null> {
         const employee = await Employee.findOne({ userId })
-            .populate('userId', 'name email')
+            .populate('userId', 'name email isActive')
             .populate('reportingTo', 'employeeId designation');
         if (!employee) return null;
         const departmentCatalog = await getDepartmentCatalog();

@@ -126,6 +126,15 @@ export default function GlobalTimerWidget() {
         setShowEndDayPopup(true);
     };
 
+    const handleLapseFromPip = () => {
+        try {
+            window.focus();
+        } catch {
+            // Browser window focus ignored
+        }
+        handleLapse();
+    };
+
     // ── Lapse handler ─────────────────────────────────────────────────────────
     const handleLapse = () => {
         if (!timer) {
@@ -259,6 +268,9 @@ export default function GlobalTimerWidget() {
                     <PipTimerWidget
                         onClosePiP={closePiP}
                         onEndDay={handleEndDayFromPip}
+                        onLapse={handleLapseFromPip}
+                        unassignedLapsesCount={unassignedLapses.length}
+                        lapseBlocked={lapseBlocked}
                         resizePiP={resizePiP}
                     />,
                     pipContainer
@@ -388,6 +400,9 @@ export default function GlobalTimerWidget() {
                 <PipTimerWidget
                     onClosePiP={closePiP}
                     onEndDay={handleEndDayFromPip}
+                    onLapse={handleLapseFromPip}
+                    unassignedLapsesCount={unassignedLapses.length}
+                    lapseBlocked={lapseBlocked}
                     resizePiP={resizePiP}
                 />,
                 pipContainer

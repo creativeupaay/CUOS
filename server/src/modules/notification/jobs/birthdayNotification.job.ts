@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { Employee } from '../../hrms/models/Employee.model';
+import { User } from '../../auth/models/User.model';
 import { Notification } from '../models/Notification.model';
 import { notificationService } from '../services/notification.service';
 import { logger } from "../../../utils/logger";
@@ -21,11 +22,15 @@ export const initBirthdayNotificationJob = () => {
                 const todayKey = getMonthAndDateKey(today);
                 const notificationDate = today.toISOString().split('T')[0];
 
+                const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+                const activeUserIds = activeUsers.map((u) => u._id);
+
                 const birthdayEmployees = await Employee.find({
                     status: 'active',
+                    userId: { $in: activeUserIds },
                     'personalInfo.dob': { $exists: true, $ne: null },
                 })
-                    .populate('userId', 'name')
+                    .populate('userId', 'name isActive')
                     .select('userId personalInfo.dob')
                     .lean();
 
@@ -35,7 +40,10 @@ export const initBirthdayNotificationJob = () => {
                         continue;
                     }
 
-                    const employeeUser = employee.userId as unknown as { _id?: string; name?: string };
+                    const employeeUser = employee.userId as unknown as { _id?: string; name?: string; isActive?: boolean };
+                    if (!employeeUser || employeeUser.isActive === false) {
+                        continue;
+                    }
                     const birthdayPersonName = employeeUser?.name?.trim();
                     if (!birthdayPersonName) {
                         continue;

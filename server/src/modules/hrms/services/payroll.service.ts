@@ -220,8 +220,9 @@ class PayrollService {
         generatedBy: string,
         payDate?: string | Date
     ): Promise<{ generated: number; skipped: number; failed: number; errors: string[] }> {
-        // Fetch all active employees
-        const employees = await Employee.find({ status: { $in: ['active', 'probation'] } }).populate('userId', 'name');
+        // Fetch all active employees whose linked user is active
+        const rawEmployees = await Employee.find({ status: { $in: ['active', 'probation'] } }).populate('userId', 'name isActive');
+        const employees = rawEmployees.filter((emp) => emp.userId && (emp.userId as any).isActive !== false);
 
         let generated = 0;
         let skipped = 0;

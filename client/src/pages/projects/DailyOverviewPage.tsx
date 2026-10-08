@@ -7,11 +7,12 @@ import { useGetTimerStatusesQuery } from '@/features/project/projectApi';
 import { useGetUsersQuery } from '@/features/auth/authApi';
 import { useGetLeavesQuery } from '@/features/hrms';
 import { hasModuleAdminAccess, hasModuleViewAccess, getRoleName } from '@/utils/modulePermissions';
-import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer } from 'lucide-react';
+import { Search, Calendar, CheckCircle2, Circle, Clock, ChevronDown, Pause, Video, Bell, Timer, Eye, EyeOff, X, SlidersHorizontal } from 'lucide-react';
 import type { Task } from '@/features/project';
 import { useGlobalMeetings, type GlobalMeeting } from '@/hooks/useGlobalMeetings';
 import { usePingUserMutation } from '@/features/notification/api/notificationApi';
 import toast from 'react-hot-toast';
+import ModalPortal from '@/components/ui/ModalPortal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,18 @@ function getInitials(name: string): string {
 
 // ─── Employee Card ─────────────────────────────────────────────────────────────
 
-type EmployeeCardProps = { user: UserInfo; tasks: Task[]; meetings: GlobalMeeting[]; index: number; isWorking: boolean; isEnded: boolean; onPing: (userId: string, type: 'todo' | 'timer') => void; isPinging: boolean };
+type EmployeeCardProps = {
+    user: UserInfo;
+    tasks: Task[];
+    meetings: GlobalMeeting[];
+    index: number;
+    isWorking: boolean;
+    isEnded: boolean;
+    onPing: (userId: string, type: 'todo' | 'timer') => void;
+    isPinging: boolean;
+    isHidden?: boolean;
+    onToggleHide?: () => void;
+};
 
 const STATUS_CFG: Record<string, { icon: React.ReactNode; color: string }> = {
     todo:          { icon: <Circle size={14} />,       color: '#3B82F6' },
@@ -91,7 +103,18 @@ const getFoldedCornerStyle = (color: string) => ({
     borderBottomRightRadius: '0px',
 });
 
-function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing, isPinging }: EmployeeCardProps) {
+function EmployeeCard({
+    user,
+    tasks,
+    meetings,
+    index,
+    isWorking,
+    isEnded,
+    onPing,
+    isPinging,
+    isHidden,
+    onToggleHide,
+}: EmployeeCardProps) {
     const aColor = avatarColor(user.name);
     const cardBgColor = CARD_COLORS[index % CARD_COLORS.length];
 
@@ -104,8 +127,12 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing
 
     return (
         <div
-            className="relative flex flex-col folded-corner-card"
-            style={getFoldedCornerStyle(cardBgColor)}
+            className="relative flex flex-col folded-corner-card transition-all"
+            style={{
+                ...getFoldedCornerStyle(cardBgColor),
+                opacity: isHidden ? 0.6 : 1,
+                border: isHidden ? '2px dashed #FDA4AF' : undefined,
+            }}
         >
             {/* The folded corner fold effect */}
             <div 
@@ -117,57 +144,89 @@ function EmployeeCard({ user, tasks, meetings, index, isWorking, isEnded, onPing
                 }}
             />
 
-
             {/* Card content */}
             <div className="pt-5 px-4 pb-2">
                 {/* Employee header */}
-                <div className="flex items-center gap-3 mb-3">
-                    {user.profilePhoto ? (
-                        <img src={user.profilePhoto} alt={user.name} className="w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm" />
-                    ) : (
-                        <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white shadow-sm"
-                            style={{ backgroundColor: aColor }}
-                        >
-                            {getInitials(user.name)}
-                        </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
-                                {user.name}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {user.profilePhoto ? (
+                            <img src={user.profilePhoto} alt={user.name} className="w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm" />
+                        ) : (
+                            <div
+                                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ring-2 ring-white shadow-sm"
+                                style={{ backgroundColor: aColor }}
+                            >
+                                {getInitials(user.name)}
                             </div>
-                            {/* Timer-only status chip */}
-                            {isWorking ? (
-                                <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                                    style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
-                                >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-                                    Working
-                                </span>
-                            ) : isEnded ? (
-                                <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                                    style={{ backgroundColor: '#F1F5F9', color: '#475569' }}
-                                >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
-                                    Checked out
-                                </span>
-                            ) : (
-                                <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                                    style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}
-                                >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                                    Away
-                                </span>
-                            )}
-                        </div>
-                        <div className="text-xs truncate" style={{ color: '#6B7280' }}>
-                            {user.email}
+                        )}
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="text-sm font-bold truncate" style={{ color: '#1a1a2e', fontFamily: 'Outfit, sans-serif' }}>
+                                    {user.name}
+                                </div>
+                                {/* Timer-only status chip */}
+                                {isWorking ? (
+                                    <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                        style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                                        Working
+                                    </span>
+                                ) : isEnded ? (
+                                    <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                        style={{ backgroundColor: '#F1F5F9', color: '#475569' }}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+                                        Checked out
+                                    </span>
+                                ) : (
+                                    <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                        style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                                        Away
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-xs truncate" style={{ color: '#6B7280' }}>
+                                {user.email}
+                            </div>
                         </div>
                     </div>
+
+                    {/* Hide / Unhide card button */}
+                    {onToggleHide && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleHide();
+                            }}
+                            title={isHidden ? `Unhide ${user.name}` : `Hide ${user.name}'s card`}
+                            className="p-1.5 rounded-lg transition-all cursor-pointer shrink-0 ml-1 hover:scale-105"
+                            style={{
+                                backgroundColor: isHidden ? '#FFE4E6' : 'transparent',
+                                color: isHidden ? '#E11D48' : '#9CA3AF',
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!isHidden) {
+                                    e.currentTarget.style.backgroundColor = '#F3F4F6';
+                                    e.currentTarget.style.color = '#374151';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!isHidden) {
+                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                    e.currentTarget.style.color = '#9CA3AF';
+                                }
+                            }}
+                        >
+                            {isHidden ? <Eye size={15} /> : <EyeOff size={15} />}
+                        </button>
+                    )}
                 </div>
 
                 {/* Divider */}
@@ -342,6 +401,56 @@ export default function DailyOverviewPage() {
     const [statusFilter, setStatusFilter] = useState<Filter>('all');
     const [search, setSearch] = useState('');
     const dateInputRef = useRef<HTMLInputElement>(null);
+
+    // ─── Hidden Employee Cards State (Stored in localStorage) ───
+    const STORAGE_KEY = 'cuos_daily_overview_hidden_users';
+    const [hiddenUserIds, setHiddenUserIds] = useState<Set<string>>(() => {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                const arr = JSON.parse(stored);
+                if (Array.isArray(arr)) return new Set(arr);
+            }
+        } catch {
+            // ignore parse errors
+        }
+        return new Set<string>();
+    });
+    const [showHiddenInGrid, setShowHiddenInGrid] = useState(false);
+    const [showManageModal, setShowManageModal] = useState(false);
+    const [manageSearch, setManageSearch] = useState('');
+
+    const saveHiddenUserIds = (next: Set<string>) => {
+        setHiddenUserIds(next);
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+        } catch {
+            // ignore storage errors
+        }
+    };
+
+    const handleToggleHide = (targetUserId: string, targetName?: string) => {
+        const next = new Set(hiddenUserIds);
+        if (next.has(targetUserId)) {
+            next.delete(targetUserId);
+            saveHiddenUserIds(next);
+            toast.success(`Unhid ${targetName || 'employee'}`);
+        } else {
+            next.add(targetUserId);
+            saveHiddenUserIds(next);
+            toast.success(`Hidden ${targetName || 'employee'}. Manage anytime from "Manage Cards"`);
+        }
+    };
+
+    const handleUnhideAll = () => {
+        saveHiddenUserIds(new Set());
+        toast.success('All employee cards unhidden');
+    };
+
+    const handleHideAll = (allIds: string[]) => {
+        saveHiddenUserIds(new Set(allIds));
+        toast.success('All employee cards hidden');
+    };
 
     const { data: tasksRes, isLoading } = useGetIndividualTasksQuery(
         { date: selectedDate },
@@ -535,12 +644,36 @@ export default function DailyOverviewPage() {
             .filter(g => g.tasks.length > 0 || g.meetings.length > 0 || runningUserIds.has(g.user._id));
     }, [groupedAll, statusFilter, runningUserIds]);
 
+    // Apply hide filter (unless showHiddenInGrid is true)
+    const visibleGrouped = useMemo(() => {
+        if (showHiddenInGrid) return grouped;
+        return grouped.filter(g => !hiddenUserIds.has(g.user._id));
+    }, [grouped, hiddenUserIds, showHiddenInGrid]);
+
     // Search filter
     const filtered = useMemo(() => {
-        if (!search.trim()) return grouped;
+        if (!search.trim()) return visibleGrouped;
         const q = search.toLowerCase();
-        return grouped.filter(g => g.user.name.toLowerCase().includes(q) || g.user.email.toLowerCase().includes(q));
-    }, [grouped, search]);
+        return visibleGrouped.filter(g => g.user.name.toLowerCase().includes(q) || g.user.email.toLowerCase().includes(q));
+    }, [visibleGrouped, search]);
+
+    // All unique card users for the management modal
+    const allCardUsers = useMemo(() => {
+        const map = new Map<string, UserInfo>();
+        groupedAll.forEach(g => {
+            if (!map.has(g.user._id)) {
+                map.set(g.user._id, g.user);
+            }
+        });
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }, [groupedAll]);
+
+    // Filtered manage users in modal
+    const filteredManageUsers = useMemo(() => {
+        if (!manageSearch.trim()) return allCardUsers;
+        const q = manageSearch.toLowerCase();
+        return allCardUsers.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+    }, [allCardUsers, manageSearch]);
 
     // Status counts (across all tasks, not per-person)
     const counts = useMemo(() => {
@@ -619,36 +752,83 @@ export default function DailyOverviewPage() {
                                 onBlur={e => { e.target.style.borderColor = '#D1D5DB'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
+
+                        {/* Manage Cards Button */}
+                        <button
+                            type="button"
+                            onClick={() => setShowManageModal(true)}
+                            className="relative flex items-center gap-2 px-3.5 py-2.5 rounded-lg border text-sm font-medium transition-all cursor-pointer hover:bg-gray-50 active:scale-95"
+                            style={{
+                                borderColor: hiddenUserIds.size > 0 ? '#FECDD3' : '#D1D5DB',
+                                backgroundColor: hiddenUserIds.size > 0 ? '#FFF1F2' : '#FFFFFF',
+                                color: hiddenUserIds.size > 0 ? '#BE123C' : '#374151',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            }}
+                            title="Manage visible and hidden employee cards"
+                        >
+                            {hiddenUserIds.size > 0 ? (
+                                <>
+                                    <EyeOff size={15} style={{ color: '#E11D48' }} />
+                                    <span>{hiddenUserIds.size} Hidden</span>
+                                </>
+                            ) : (
+                                <>
+                                    <SlidersHorizontal size={15} style={{ color: 'var(--color-primary)' }} />
+                                    <span>Manage Cards</span>
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
 
-                {/* Filters */}
-                <div className="mt-5 flex items-center gap-3 overflow-x-auto pb-1 hide-scrollbar">
-                    {[
-                        { value: 'all', label: `All (${counts.all})`, activeColor: '#10B981', activeBg: '#F0FDF4' },
-                        { value: 'todo', label: `To Do (${counts.todo})`, activeColor: '#3B82F6', activeBg: '#EFF6FF' },
-                        { value: 'in-progress', label: `In Progress (${counts['in-progress']})`, activeColor: '#F59E0B', activeBg: '#FFFBEB' },
-                        { value: 'completed', label: `Completed (${counts.completed})`, activeColor: '#10B981', activeBg: '#F0FDF4' },
-                    ].map(f => {
-                        const isActive = statusFilter === f.value;
-                        return (
+                {/* Filters & Hidden Cards Bar */}
+                <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-1 hide-scrollbar">
+                        {[
+                            { value: 'all', label: `All (${counts.all})`, activeColor: '#10B981', activeBg: '#F0FDF4' },
+                            { value: 'todo', label: `To Do (${counts.todo})`, activeColor: '#3B82F6', activeBg: '#EFF6FF' },
+                            { value: 'in-progress', label: `In Progress (${counts['in-progress']})`, activeColor: '#F59E0B', activeBg: '#FFFBEB' },
+                            { value: 'completed', label: `Completed (${counts.completed})`, activeColor: '#10B981', activeBg: '#F0FDF4' },
+                        ].map(f => {
+                            const isActive = statusFilter === f.value;
+                            return (
+                                <button
+                                    key={f.value}
+                                    onClick={() => setStatusFilter(f.value as Filter)}
+                                    className="px-5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer"
+                                    style={{
+                                        backgroundColor: f.activeBg,
+                                        color: f.activeColor,
+                                        borderColor: isActive ? f.activeColor : `${f.activeColor}40`,
+                                        opacity: isActive ? 1 : 0.6,
+                                        boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
+                                        transform: isActive ? 'scale(1.02)' : 'scale(1)',
+                                    }}
+                                >
+                                    {f.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Hidden cards indicator */}
+                    {hiddenUserIds.size > 0 && (
+                        <div
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs border shrink-0 transition-all"
+                            style={{ backgroundColor: '#FFF1F2', borderColor: '#FECDD3', color: '#BE123C' }}
+                        >
+                            <EyeOff size={13} />
+                            <span>{hiddenUserIds.size} employee{hiddenUserIds.size !== 1 ? 's' : ''} hidden</span>
+                            <span className="text-gray-300">•</span>
                             <button
-                                key={f.value}
-                                onClick={() => setStatusFilter(f.value as Filter)}
-                                className="px-5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border"
-                                style={{
-                                    backgroundColor: f.activeBg,
-                                    color: f.activeColor,
-                                    borderColor: isActive ? f.activeColor : `${f.activeColor}40`,
-                                    opacity: isActive ? 1 : 0.6,
-                                    boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
-                                    transform: isActive ? 'scale(1.02)' : 'scale(1)',
-                                }}
+                                type="button"
+                                onClick={handleUnhideAll}
+                                className="font-semibold underline hover:text-rose-900 cursor-pointer"
                             >
-                                {f.label}
+                                Unhide All
                             </button>
-                        );
-                    })}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -667,13 +847,38 @@ export default function DailyOverviewPage() {
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-4">
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F3F4F6' }}>
-                            <Calendar size={28} style={{ color: '#9CA3AF' }} />
+                            {hiddenUserIds.size > 0 && grouped.length > 0 && !search ? (
+                                <EyeOff size={28} style={{ color: '#E11D48' }} />
+                            ) : (
+                                <Calendar size={28} style={{ color: '#9CA3AF' }} />
+                            )}
                         </div>
                         <div className="text-center">
-                            <p className="text-base font-semibold" style={{ color: '#374151' }}>No todos found</p>
-                            <p className="text-sm mt-1" style={{ color: '#9CA3AF' }}>
-                                {search ? 'No employees match your search.' : 'No tasks were created on this day.'}
-                            </p>
+                            {hiddenUserIds.size > 0 && grouped.length > 0 && !search ? (
+                                <>
+                                    <p className="text-base font-semibold" style={{ color: '#374151' }}>
+                                        All cards are currently hidden
+                                    </p>
+                                    <p className="text-sm mt-1 mb-3" style={{ color: '#9CA3AF' }}>
+                                        You have hidden {hiddenUserIds.size} employee card{hiddenUserIds.size !== 1 ? 's' : ''}.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleUnhideAll}
+                                        className="px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all cursor-pointer shadow-sm hover:opacity-90"
+                                        style={{ backgroundColor: 'var(--color-primary)' }}
+                                    >
+                                        Unhide All Cards
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-base font-semibold" style={{ color: '#374151' }}>No todos found</p>
+                                    <p className="text-sm mt-1" style={{ color: '#9CA3AF' }}>
+                                        {search ? 'No employees match your search.' : 'No tasks were created on this day.'}
+                                    </p>
+                                </>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -692,11 +897,190 @@ export default function DailyOverviewPage() {
                                 isEnded={endedUserIds.has(u._id)}
                                 onPing={handlePing}
                                 isPinging={pingingUserId === u._id}
+                                isHidden={hiddenUserIds.has(u._id)}
+                                onToggleHide={() => handleToggleHide(u._id, u.name)}
                             />
                         ))}
                     </div>
                 )}
             </div>
+
+            {/* ── Manage Cards Modal ── */}
+            {showManageModal && (
+                <ModalPortal onClick={() => setShowManageModal(false)}>
+                    <div
+                        className="w-full max-w-lg rounded-2xl border p-6 shadow-2xl relative"
+                        style={{
+                            backgroundColor: '#FFFFFF',
+                            borderColor: '#E5E7EB',
+                            maxHeight: '90vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-start justify-between pb-4 border-b" style={{ borderColor: '#F3F4F6' }}>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-emerald-50 text-emerald-600">
+                                        <SlidersHorizontal size={17} />
+                                    </div>
+                                    <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        Manage Employee Cards
+                                    </h2>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Show or hide employee cards to customize your Daily Overview.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowManageModal(false)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Quick action bar */}
+                        <div className="py-3 flex items-center justify-between gap-3 border-b" style={{ borderColor: '#F3F4F6' }}>
+                            <div className="text-xs font-medium text-gray-600">
+                                <span className="font-bold text-gray-900">
+                                    {Math.max(0, allCardUsers.length - hiddenUserIds.size)}
+                                </span> of {allCardUsers.length} cards visible
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleUnhideAll}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer border border-emerald-200"
+                                >
+                                    <Eye size={12} />
+                                    Unhide All
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleHideAll(allCardUsers.map(u => u._id))}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer border border-rose-200"
+                                >
+                                    <EyeOff size={12} />
+                                    Hide All
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search */}
+                        <div className="pt-3 pb-2">
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search employee..."
+                                    value={manageSearch}
+                                    onChange={(e) => setManageSearch(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border outline-none transition-all"
+                                    style={{ borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Scrollable employee list */}
+                        <div className="flex-1 overflow-y-auto space-y-2 py-2 pr-1 hide-scrollbar" style={{ minHeight: '220px', maxHeight: '340px' }}>
+                            {filteredManageUsers.length === 0 ? (
+                                <div className="text-center py-8 text-xs text-gray-400">
+                                    No employees found matching &quot;{manageSearch}&quot;
+                                </div>
+                            ) : (
+                                filteredManageUsers.map((u) => {
+                                    const isHidden = hiddenUserIds.has(u._id);
+                                    const aColor = avatarColor(u.name);
+                                    return (
+                                        <div
+                                            key={u._id}
+                                            onClick={() => handleToggleHide(u._id, u.name)}
+                                            className="flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer hover:border-gray-300"
+                                            style={{
+                                                backgroundColor: isHidden ? '#FFF1F2' : '#F9FAFB',
+                                                borderColor: isHidden ? '#FECDD3' : '#F3F4F6',
+                                                opacity: isHidden ? 0.75 : 1,
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                {u.profilePhoto ? (
+                                                    <img src={u.profilePhoto} alt={u.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                                                ) : (
+                                                    <div
+                                                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                                                        style={{ backgroundColor: aColor }}
+                                                    >
+                                                        {getInitials(u.name)}
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-semibold text-gray-900 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                        {u.name}
+                                                    </div>
+                                                    <div className="text-[11px] text-gray-500 truncate">
+                                                        {u.email}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggleHide(u._id, u.name);
+                                                }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                                                style={{
+                                                    backgroundColor: isHidden ? '#FFE4E6' : '#DCFCE7',
+                                                    color: isHidden ? '#BE123C' : '#15803D',
+                                                    border: `1px solid ${isHidden ? '#FDA4AF' : '#86EFAC'}`,
+                                                }}
+                                            >
+                                                {isHidden ? (
+                                                    <>
+                                                        <EyeOff size={13} />
+                                                        <span>Hidden</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Eye size={13} />
+                                                        <span>Visible</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="pt-3 border-t mt-2 flex items-center justify-between" style={{ borderColor: '#F3F4F6' }}>
+                            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={showHiddenInGrid}
+                                    onChange={(e) => setShowHiddenInGrid(e.target.checked)}
+                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                />
+                                <span>Show hidden cards dimmed in grid</span>
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setShowManageModal(false)}
+                                className="px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all cursor-pointer shadow-sm hover:opacity-95"
+                                style={{ backgroundColor: 'var(--color-primary)' }}
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </ModalPortal>
+            )}
         </div>
     );
 }

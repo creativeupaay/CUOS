@@ -3,6 +3,7 @@ import { Leave } from '../models/Leave.model';
 import { Payroll } from '../models/Payroll.model';
 import { Incentive } from '../models/Incentive.model';
 import { TimeLog } from '../../project/models/TimeLog.model';
+import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { getDepartmentCatalog, mergeDepartmentCounts } from '../../../utils/department.util';
 
@@ -12,6 +13,9 @@ class AnalyticsService {
      */
     async getDashboardStats() {
         const departmentCatalog = await getDepartmentCatalog();
+        const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+        const activeUserIds = activeUsers.map((u) => u._id);
+
         const [
             totalEmployees,
             activeEmployees,
@@ -20,16 +24,19 @@ class AnalyticsService {
             pendingLeaves,
             onboardingCount,
         ] = await Promise.all([
-            Employee.countDocuments(),
-            Employee.countDocuments({ status: 'active' }),
-            Employee.countDocuments({ status: 'on-notice' }),
+            Employee.countDocuments({ userId: { $in: activeUserIds }, status: { $nin: ['terminated', 'relieved'] } }),
+            Employee.countDocuments({ status: 'active', userId: { $in: activeUserIds } }),
+            Employee.countDocuments({ status: 'on-notice', userId: { $in: activeUserIds } }),
             Employee.aggregate([
-                { $match: { status: 'active' } },
+                { $match: { status: 'active', userId: { $in: activeUserIds } } },
                 { $group: { _id: '$department', count: { $sum: 1 } } },
                 { $sort: { count: -1 } },
             ]),
             Leave.countDocuments({ status: 'pending' }),
-            Employee.countDocuments({ 'onboarding.status': { $in: ['not-started', 'in-progress'] } }),
+            Employee.countDocuments({
+                userId: { $in: activeUserIds },
+                'onboarding.status': { $in: ['not-started', 'in-progress'] },
+            }),
         ]);
 
         return {
@@ -174,9 +181,16 @@ class AnalyticsService {
         const currentMonth = today.getMonth() + 1;
         const currentYear = today.getFullYear();
 
-        // All active employees with personal info
-        const employees = await Employee.find({ status: 'active' })
-            .populate('userId', 'name email')
+        // Only include active users (exclude deactivated employees)
+        const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+        const activeUserIds = activeUsers.map((u) => u._id);
+
+        // All active employees with personal info that belong to active users
+        const employees = await Employee.find({
+            status: 'active',
+            userId: { $in: activeUserIds },
+        })
+            .populate('userId', 'name email isActive')
             .lean();
 
         const events: Array<{
@@ -189,7 +203,9 @@ class AnalyticsService {
         }> = [];
 
         for (const emp of employees) {
-            const name = (emp.userId as any)?.name || emp.employeeId;
+            const user = emp.userId as any;
+            if (!user || user.isActive === false) continue;
+            const name = user?.name || emp.employeeId;
 
             // ── Birthdays ──────────────────────────────────
             if (emp.personalInfo?.dob) {

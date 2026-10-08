@@ -148,6 +148,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
 
     const { data: usersData } = useGetUsersQuery();
     const users = (usersData?.data as any)?.users || [];
+    const activeUsers = useMemo(() => (Array.isArray(users) ? users.filter((u: any) => u.isActive !== false) : []), [users]);
 
     const upcomingMeetings = useMemo(() => upcomingResponse?.data || [], [upcomingResponse]);
 
@@ -1087,7 +1088,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                 onChange={(e) => {
                                                     const empId = e.target.value;
                                                     if (!empId) return;
-                                                    const emp = users.find((em: any) => em._id === empId);
+                                                    const emp = activeUsers.find((em: any) => em._id === empId);
                                                     if (emp) {
                                                         if (!form.participants.some(p => p.userId === emp._id)) {
                                                             setField('participants', [...form.participants, { userId: emp._id, name: emp.name, email: emp.email }]);
@@ -1097,7 +1098,7 @@ export default function GlobalMeetingsView({ owner = 'my' }: { owner?: 'my' | 'a
                                                 }}
                                             >
                                                 <option value="">+ Add Employee</option>
-                                                {users.map((emp: any) => (
+                                                {activeUsers.map((emp: any) => (
                                                     <option key={emp._id} value={emp._id}>{emp.name || 'Unknown'} ({emp.email || ''})</option>
                                                 ))}
                                             </select>

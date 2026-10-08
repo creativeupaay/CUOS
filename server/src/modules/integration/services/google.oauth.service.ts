@@ -43,10 +43,17 @@ export function getOAuth2Client() {
         );
     }
 
+    let redirectUri = env.GOOGLE_REDIRECT_URI;
+    // Google OAuth policy strictly enforces HTTPS for all public/non-localhost domains.
+    // If the server environment has http:// for a public domain, auto-upgrade to https://
+    if (redirectUri && !redirectUri.includes('localhost') && redirectUri.startsWith('http://')) {
+        redirectUri = redirectUri.replace(/^http:\/\//, 'https://');
+    }
+
     return new google.auth.OAuth2(
         env.GOOGLE_CLIENT_ID,
         env.GOOGLE_CLIENT_SECRET,
-        env.GOOGLE_REDIRECT_URI
+        redirectUri
     );
 }
 

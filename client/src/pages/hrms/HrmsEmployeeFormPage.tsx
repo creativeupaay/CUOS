@@ -31,10 +31,11 @@ export default function HrmsEmployeeFormPage() {
 
     const users = usersData?.data?.users || usersData?.data || [];
     const existingEmployees = employeesData?.data?.employees || [];
+    const activeManagers = existingEmployees.filter((emp: any) => emp.status === 'active' && emp.userId?.isActive !== false);
     const internalUsers = Array.isArray(users)
         ? users.filter((u: any) => {
             const roleName = typeof u?.role === 'object' ? String(u.role?.name || '') : String(u?.role || '');
-            return roleName.toLowerCase() !== 'partner';
+            return roleName.toLowerCase() !== 'partner' && u.isActive !== false;
         })
         : [];
     // Users that don't already have an employee record
@@ -243,7 +244,7 @@ export default function HrmsEmployeeFormPage() {
                             <select value={form.reportingTo} onChange={(e) => setForm({ ...form, reportingTo: e.target.value })}
                                 className="w-full px-3 py-2.5 text-sm rounded-lg border cursor-pointer" style={inputStyle}>
                                 <option value="">— None —</option>
-                                {existingEmployees.map((emp: any) => (
+                                {activeManagers.map((emp: any) => (
                                     <option key={emp._id} value={emp._id}>
                                         {emp.userId?.name || emp.employeeId} — {emp.designation}
                                     </option>

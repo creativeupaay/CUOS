@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { useAppSelector } from '@/app/hooks';
 import { getApiBaseUrl } from '@/config/api.config';
+import { useTimer } from './useTaskTimer';
 
 export type BreakType = 'lunch' | 'tea' | 'other';
+
+export const DEFAULT_BREAK_LIMITS: Record<BreakType, number | null> = {
+    lunch: 60 * 60, // 3600 seconds = 1 hour
+    tea: 30 * 60,   // 1800 seconds = 30 minutes
+    other: null,    // Custom reason, no automatic limit
+};
 
 export interface BreakState {
     dateKey: string;
@@ -10,6 +18,7 @@ export interface BreakState {
     breakStartedAt: number | null;     // Epoch ms when current break started, null if not on break
     breakType: BreakType | null;
     breakReason: string | null;
+    breakDurationLimit?: number | null; // Limit in seconds (e.g. 1800 for 30m, 2700 for 45m, 3600 for 60m)
     userId?: string;
 }
 
@@ -19,10 +28,13 @@ export interface BreakContextValue {
     breakReason: string | null;
     breakAccumulated: number;
     breakStartedAt: number | null;
+    breakDurationLimit?: number | null;
     currentBreakElapsed: number;       // Seconds spent in current active break
     totalBreakElapsed: number;         // Total seconds spent on break today
-    startBreak: (type: BreakType, reason?: string) => Promise<void>;
-    endBreak: () => Promise<void>;
+    maxBreakDuration: number | null;   // Max seconds for current break type
+    remainingBreakSeconds: number | null; // Seconds remaining in current break before auto-resume
+    startBreak: (type: BreakType, reason?: string, durationLimitSeconds?: number) => Promise<void>;
+    endBreak: (isAuto?: boolean) => Promise<void>;
     resetBreak: () => void;
 }
 
@@ -49,6 +61,7 @@ function loadFromStorage(userId?: string): BreakState {
         breakStartedAt: null,
         breakType: null,
         breakReason: null,
+        breakDurationLimit: null,
         userId,
     };
     try {
@@ -69,6 +82,23 @@ function loadFromStorage(userId?: string): BreakState {
             localStorage.removeItem(key);
             return defaultState;
         }
+
+        // Auto-expire break if it exceeded limit while offline / browser was closed
+        if (parsed.breakStartedAt && parsed.breakType) {
+            const limit = parsed.breakDurationLimit ?? DEFAULT_BREAK_LIMITS[parsed.breakType];
+            if (limit) {
+                const elapsed = Math.max(0, Math.floor((Date.now() - parsed.breakStartedAt) / 1000));
+                if (elapsed >= limit) {
+                    parsed.breakAccumulated = (parsed.breakAccumulated || 0) + limit;
+                    parsed.breakStartedAt = null;
+                    parsed.breakType = null;
+                    parsed.breakReason = null;
+                    parsed.breakDurationLimit = null;
+                    saveToStorage(parsed, userId);
+                }
+            }
+        }
+
         return parsed;
     } catch {
         return defaultState;
@@ -133,6 +163,8 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
     const userIdRef = useRef<string | undefined>(userId);
     userIdRef.current = userId;
 
+    const { isRunning, timer, startTimer, resumeTimer } = useTimer();
+
     const [state, setState] = useState<BreakState>(() => loadFromStorage(userId));
     const [currentBreakElapsed, setCurrentBreakElapsed] = useState<number>(() => {
         const s = loadFromStorage(userId);
@@ -156,6 +188,7 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
                 breakStartedAt: null,
                 breakType: null,
                 breakReason: null,
+                breakDurationLimit: null,
             };
             setState(clean);
             setCurrentBreakElapsed(0);
@@ -219,13 +252,35 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
                     const serverDateKey = session.dateKey || getTodayKey();
                     if (serverDateKey !== getTodayKey()) return;
 
+                    let sBreakStartedAt: number | null = session.breakStartedAt || null;
+                    let sBreakType: BreakType | null = session.breakType || null;
+                    let sBreakAccumulated: number = session.breakAccumulated || 0;
+                    let sBreakReason: string | null = session.breakReason || null;
+                    let sBreakDurationLimit: number | null = session.breakDurationLimit || null;
+
+                    // If server session break exceeded limit, resolve locally
+                    if (sBreakStartedAt && sBreakType) {
+                        const limit = sBreakDurationLimit ?? DEFAULT_BREAK_LIMITS[sBreakType];
+                        if (limit) {
+                            const elapsed = Math.max(0, Math.floor((Date.now() - sBreakStartedAt) / 1000));
+                            if (elapsed >= limit) {
+                                sBreakAccumulated += limit;
+                                sBreakStartedAt = null;
+                                sBreakType = null;
+                                sBreakReason = null;
+                                sBreakDurationLimit = null;
+                            }
+                        }
+                    }
+
                     setState(() => {
                         const serverState: BreakState = {
                             dateKey: serverDateKey,
-                            breakAccumulated: session.breakAccumulated || 0,
-                            breakStartedAt: session.breakStartedAt || null,
-                            breakType: session.breakType || null,
-                            breakReason: session.breakReason || null,
+                            breakAccumulated: sBreakAccumulated,
+                            breakStartedAt: sBreakStartedAt,
+                            breakType: sBreakType,
+                            breakReason: sBreakReason,
+                            breakDurationLimit: sBreakDurationLimit,
                             userId,
                         };
                         saveToStorage(serverState, userId);
@@ -239,6 +294,7 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
                         breakStartedAt: null,
                         breakType: null,
                         breakReason: null,
+                        breakDurationLimit: null,
                         userId,
                     };
                     setState(cleanState);
@@ -251,11 +307,114 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
         return () => { cancelled = true; };
     }, [userId]);
 
+    // ── Actions ──
+    const startBreak = useCallback(async (type: BreakType, reason?: string, durationLimitSeconds?: number) => {
+        const now = Date.now();
+        const finalLimit = typeof durationLimitSeconds === 'number' && durationLimitSeconds > 0
+            ? durationLimitSeconds
+            : (DEFAULT_BREAK_LIMITS[type] || null);
+
+        const newState: BreakState = {
+            ...state,
+            dateKey: getTodayKey(),
+            breakStartedAt: now,
+            breakType: type,
+            breakReason: reason || null,
+            breakDurationLimit: finalLimit,
+            userId,
+        };
+        setState(newState);
+        saveToStorage(newState, userId);
+        broadcastState(newState);
+
+        // Fire-and-forget server sync
+        apiCall('POST', '/projects/day-session/break/start', {
+            breakType: type,
+            reason: reason || null,
+            durationLimitSeconds: finalLimit,
+        }).catch(() => {});
+    }, [state, broadcastState, userId]);
+
+    const endBreak = useCallback(async (isAuto = false) => {
+        const now = Date.now();
+        const limit = state.breakDurationLimit ?? (state.breakType ? DEFAULT_BREAK_LIMITS[state.breakType] : null);
+        let additionalSec = state.breakStartedAt ? Math.max(0, Math.floor((now - state.breakStartedAt) / 1000)) : 0;
+        if (limit && additionalSec > limit) {
+            additionalSec = limit;
+        }
+        const newAccumulated = (state.breakAccumulated || 0) + additionalSec;
+        const previousType = state.breakType;
+        const prevLimit = limit;
+
+        const newState: BreakState = {
+            dateKey: getTodayKey(),
+            breakAccumulated: newAccumulated,
+            breakStartedAt: null,
+            breakType: null,
+            breakReason: null,
+            breakDurationLimit: null,
+            userId,
+        };
+        setState(newState);
+        saveToStorage(newState, userId);
+        broadcastState(newState);
+
+        // Ensure working timer resumes/runs when break ends
+        if (!isRunning) {
+            if (!timer) startTimer();
+            else resumeTimer();
+        }
+
+        if (isAuto) {
+            const mins = prevLimit ? Math.round(prevLimit / 60) : (previousType === 'lunch' ? 60 : 30);
+            const breakTitle = previousType === 'lunch'
+                ? 'Lunch break (1 hr)'
+                : previousType === 'tea'
+                    ? `Tea break (${mins} min)`
+                    : 'Break';
+            toast.success(`⏰ ${breakTitle} time is up! Working timer resumed.`, {
+                duration: 6000,
+                style: {
+                    background: '#ECFDF5',
+                    color: '#065F46',
+                    border: '1px solid #A7F3D0',
+                    fontWeight: 600,
+                },
+            });
+        }
+
+        // Fire-and-forget server sync
+        apiCall('POST', '/projects/day-session/break/end').catch(() => {});
+    }, [state, broadcastState, userId, isRunning, timer, startTimer, resumeTimer]);
+
+    const resetBreak = useCallback(() => {
+        const emptyState: BreakState = {
+            dateKey: getTodayKey(),
+            breakAccumulated: 0,
+            breakStartedAt: null,
+            breakType: null,
+            breakReason: null,
+            breakDurationLimit: null,
+            userId,
+        };
+        setState(emptyState);
+        saveToStorage(emptyState, userId);
+        broadcastState(emptyState);
+    }, [broadcastState, userId]);
+
     // ── Timer tick for break duration ──
     useEffect(() => {
         const updateElapsed = () => {
             if (state.breakStartedAt) {
                 const currentSec = Math.max(0, Math.floor((Date.now() - state.breakStartedAt) / 1000));
+                const limit = state.breakDurationLimit ?? (state.breakType ? DEFAULT_BREAK_LIMITS[state.breakType] : null);
+
+                if (limit && currentSec >= limit) {
+                    // Break duration reached limit -> Auto-end break and resume working timer!
+                    endBreak(true);
+                    return;
+                }
+
                 setCurrentBreakElapsed(currentSec);
                 setTotalBreakElapsed((state.breakAccumulated || 0) + currentSec);
             } else {
@@ -281,64 +440,12 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
                 intervalRef.current = null;
             }
         };
-    }, [state.breakStartedAt, state.breakAccumulated]);
+    }, [state.breakStartedAt, state.breakAccumulated, state.breakType, state.breakDurationLimit, endBreak]);
 
-    // ── Actions ──
-    const startBreak = useCallback(async (type: BreakType, reason?: string) => {
-        const now = Date.now();
-        const newState: BreakState = {
-            ...state,
-            dateKey: getTodayKey(),
-            breakStartedAt: now,
-            breakType: type,
-            breakReason: reason || null,
-            userId,
-        };
-        setState(newState);
-        saveToStorage(newState, userId);
-        broadcastState(newState);
-
-        // Fire-and-forget server sync
-        apiCall('POST', '/projects/day-session/break/start', {
-            breakType: type,
-            reason: reason || null,
-        }).catch(() => {});
-    }, [state, broadcastState, userId]);
-
-    const endBreak = useCallback(async () => {
-        const now = Date.now();
-        const additionalSec = state.breakStartedAt ? Math.max(0, Math.floor((now - state.breakStartedAt) / 1000)) : 0;
-        const newAccumulated = (state.breakAccumulated || 0) + additionalSec;
-
-        const newState: BreakState = {
-            dateKey: getTodayKey(),
-            breakAccumulated: newAccumulated,
-            breakStartedAt: null,
-            breakType: null,
-            breakReason: null,
-            userId,
-        };
-        setState(newState);
-        saveToStorage(newState, userId);
-        broadcastState(newState);
-
-        // Fire-and-forget server sync
-        apiCall('POST', '/projects/day-session/break/end').catch(() => {});
-    }, [state, broadcastState, userId]);
-
-    const resetBreak = useCallback(() => {
-        const emptyState: BreakState = {
-            dateKey: getTodayKey(),
-            breakAccumulated: 0,
-            breakStartedAt: null,
-            breakType: null,
-            breakReason: null,
-            userId,
-        };
-        setState(emptyState);
-        saveToStorage(emptyState, userId);
-        broadcastState(emptyState);
-    }, [broadcastState, userId]);
+    const maxBreakDuration = state.breakDurationLimit ?? (state.breakType ? DEFAULT_BREAK_LIMITS[state.breakType] : null);
+    const remainingBreakSeconds = maxBreakDuration
+        ? Math.max(0, maxBreakDuration - currentBreakElapsed)
+        : null;
 
     const value: BreakContextValue = {
         isOnBreak: !!state.breakStartedAt,
@@ -346,8 +453,11 @@ export function BreakProvider({ children }: { children: React.ReactNode }) {
         breakReason: state.breakReason,
         breakAccumulated: state.breakAccumulated || 0,
         breakStartedAt: state.breakStartedAt,
+        breakDurationLimit: state.breakDurationLimit,
         currentBreakElapsed,
         totalBreakElapsed,
+        maxBreakDuration,
+        remainingBreakSeconds,
         startBreak,
         endBreak,
         resetBreak,
@@ -365,3 +475,4 @@ export function useBreak(): BreakContextValue {
 }
 
 export const useBreakTimer = useBreak;
+

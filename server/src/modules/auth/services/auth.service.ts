@@ -476,11 +476,16 @@ export const getCurrentUser = async (userId: string): Promise<IUser> => {
 /**
  * Get all users
  */
-export const getAllUsers = async (requester?: UserListRequester): Promise<IUser[]> => {
+export const getAllUsers = async (
+    requester?: UserListRequester,
+    options?: { includeInactive?: boolean }
+): Promise<IUser[]> => {
     const requesterRole = String(requester?.role || '').toLowerCase();
+    const includeInactive = options?.includeInactive === true;
 
     if (requesterRole !== 'partner') {
-        const users = await User.find()
+        const query = includeInactive ? {} : { isActive: true };
+        const users = await User.find(query)
             .select('name email role department isActive')
             .populate('role', 'name');
         return users;
@@ -504,7 +509,7 @@ export const getAllUsers = async (requester?: UserListRequester): Promise<IUser[
 
     const superAdmins = await User.find({
         role: { $in: superAdminRoleIds },
-        isActive: true,
+        ...(includeInactive ? {} : { isActive: true }),
     })
         .select('name email role department isActive')
         .populate('role', 'name')
@@ -528,13 +533,13 @@ export const getAllUsers = async (requester?: UserListRequester): Promise<IUser[
 
         const partnerWithUser = partner as typeof partner & { userId?: PartialUserView };
         const partnerUser = partnerWithUser?.userId;
-        if (partnerUser?._id) {
+        if (partnerUser?._id && (includeInactive || partnerUser.isActive !== false)) {
             partnerMainUser.push(partnerUser);
         }
 
         const partnerEmployees = await PartnerEmployee.find({
             partnerId,
-            isActive: true,
+            ...(includeInactive ? {} : { isActive: true }),
         })
             .select('_id name email isActive')
             .lean();

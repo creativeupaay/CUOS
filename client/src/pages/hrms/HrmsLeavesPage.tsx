@@ -106,6 +106,27 @@ function formatLeaveDateRange(startDate: string, endDate: string, includeYear = 
     return `${formatShortLeaveDate(startDate)} → ${formatShortLeaveDate(endDate)}`;
 }
 
+function formatRequestDateTime(dateStr?: string | Date) {
+    if (!dateStr) return '—';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '—';
+        const datePart = d.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
+        const timePart = d.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+        return `${datePart}, ${timePart}`;
+    } catch {
+        return '—';
+    }
+}
+
 function getLeaveEmployee(leave: any) {
     return leave.employeeId as any;
 }
@@ -465,6 +486,10 @@ function ViewLeaveModal({ leave, onClose }: { leave: any; onClose: () => void })
                         <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Processed By</p>
                         <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{leave.approvedBy?.name || '—'}</p>
                     </div>
+                    <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Requested On</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{formatRequestDateTime(leave.createdAt)}</p>
+                    </div>
                 </div>
 
                 <div className="mt-4">
@@ -602,8 +627,15 @@ function EmployeeLeaveDetail({ emp, onBack }: { emp: any; onBack: () => void }) 
                             {leaves.map((leave: any) => (
                                 <tr key={leave._id} className="border-t" style={{ borderColor: 'var(--color-border-default)' }}>
                                     <td className="px-4 py-3"><LeaveBadge type={leave.type} /></td>
-                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                                        {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
+                                    <td className="px-4 py-3 text-sm">
+                                        <div style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                                            {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
+                                        </div>
+                                        {leave.createdAt && (
+                                            <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }} title={`Requested: ${formatRequestDateTime(leave.createdAt)}`}>
+                                                Req: {formatRequestDateTime(leave.createdAt)}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                     <td className="px-4 py-3">
@@ -842,11 +874,25 @@ export default function HrmsLeavesPage() {
                                                         {leave.days} day{leave.days !== 1 ? 's' : ''}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-4 flex-wrap">
+                                                <div className="flex items-center gap-3.5 flex-wrap">
                                                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                                         📅&nbsp;
                                                         {formatLeaveDateRange(leave.startDate, leave.endDate)}
                                                     </span>
+                                                    {leave.createdAt && (
+                                                        <span
+                                                            className="text-xs inline-flex items-center gap-1.5 font-medium px-2 py-0.5 rounded-md"
+                                                            style={{
+                                                                backgroundColor: 'var(--color-bg-subtle)',
+                                                                color: 'var(--color-text-secondary)',
+                                                                border: '1px solid var(--color-border-default)',
+                                                            }}
+                                                            title={`Requested on ${formatRequestDateTime(leave.createdAt)}`}
+                                                        >
+                                                            <Clock size={12} className="shrink-0" style={{ color: 'var(--color-primary)' }} />
+                                                            Requested:&nbsp;{formatRequestDateTime(leave.createdAt)}
+                                                        </span>
+                                                    )}
                                                     <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         📝&nbsp;{leave.reason}
                                                     </span>
@@ -855,7 +901,15 @@ export default function HrmsLeavesPage() {
                                         </div>
 
                                         {/* Right: action buttons */}
-                                        <div className="flex gap-2 flex-shrink-0">
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            <button
+                                                onClick={() => setViewingLeave(leave)}
+                                                className="p-2 text-sm font-medium rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors"
+                                                style={{ borderColor: 'var(--color-border-default)', color: 'var(--color-text-secondary)' }}
+                                                title="View Details"
+                                            >
+                                                <Eye size={15} />
+                                            </button>
                                             <button
                                                 onClick={() => handleApprove(leave._id)}
                                                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
@@ -967,8 +1021,15 @@ export default function HrmsLeavesPage() {
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                                    {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
+                                                <td className="px-4 py-3 text-xs">
+                                                    <div style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                                                        {formatLeaveDateRange(leave.startDate, leave.endDate, false)}
+                                                    </div>
+                                                    {leave.createdAt && (
+                                                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }} title={`Requested: ${formatRequestDateTime(leave.createdAt)}`}>
+                                                            Req: {formatRequestDateTime(leave.createdAt)}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{leave.days}</td>
                                                 <td className="px-4 py-3 text-xs max-w-[160px] truncate" style={{ color: 'var(--color-text-muted)' }}>
@@ -1012,6 +1073,14 @@ export default function HrmsLeavesPage() {
                                                                         border: '1px solid var(--color-border-default)',
                                                                     }}
                                                                 >
+                                                                    <button
+                                                                        onClick={() => { setOpenMenuId(null); setViewingLeave(leave); }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                                                                        style={{ color: 'var(--color-text-primary)' }}
+                                                                    >
+                                                                        <Eye size={14} />
+                                                                        View Details
+                                                                    </button>
                                                                     <button
                                                                         onClick={() => { setOpenMenuId(null); setEditingLeave(leave); }}
                                                                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"

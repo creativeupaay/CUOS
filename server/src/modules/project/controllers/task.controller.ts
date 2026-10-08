@@ -329,9 +329,30 @@ export const getDaySession = asyncHandler(
         const userId = req.user?.id!;
         const dateKey = getTodayKey();
 
-        const session = await DaySession.findOne({ userId, dateKey }).lean();
+        const session = await DaySession.findOne({ userId, dateKey });
 
         if (session) {
+            // Auto-resolve active break if it exceeded duration limit
+            if (session.breakStartedAt && session.breakType) {
+                const BREAK_LIMITS: Record<string, number> = { lunch: 3600, tea: 1800 };
+                const limit = session.breakDurationLimit || BREAK_LIMITS[session.breakType];
+                if (limit) {
+                    const elapsedBreak = Math.max(0, Math.floor((Date.now() - session.breakStartedAt) / 1000));
+                    if (elapsedBreak >= limit) {
+                        session.breakAccumulated = (session.breakAccumulated || 0) + limit;
+                        session.breakStartedAt = null;
+                        session.breakType = null;
+                        session.breakReason = null;
+                        session.breakDurationLimit = null;
+                        if (session.status !== 'running' && !session.isEnded) {
+                            session.status = 'running';
+                            session.startedAt = Date.now();
+                        }
+                        await session.save();
+                    }
+                }
+            }
+
             if (session.dayStart || session.status === 'running' || (session.accumulated && session.accumulated > 0)) {
                 AttendanceService.syncCheckInFromTimer(userId, dateKey, session.dayStart || new Date()).catch(() => {});
             }
@@ -346,7 +367,7 @@ export const getDaySession = asyncHandler(
             }
         }
 
-        let data: any = session ?? null;
+        let data: any = session ? session.toObject() : null;
         if (data) {
             if (data.isEnded && !data.lastEndedAccumulated) {
                 data.lastEndedAccumulated = data.accumulated || 0;
@@ -472,13 +493,19 @@ export const pauseDaySession = asyncHandler(
 
         if (req.body?.isEnded === true) {
             current.isEnded = true;
-            // If on break while ending day, end the break as well
+            // If on break while ending day, end the break as well (capped by duration limit)
             if (current.breakStartedAt) {
-                const breakSec = Math.max(0, Math.floor((now - current.breakStartedAt) / 1000));
+                const BREAK_LIMITS: Record<string, number> = { lunch: 3600, tea: 1800 };
+                const limit = current.breakDurationLimit || (current.breakType ? BREAK_LIMITS[current.breakType] : undefined);
+                let breakSec = Math.max(0, Math.floor((now - current.breakStartedAt) / 1000));
+                if (limit && breakSec > limit) {
+                    breakSec = limit;
+                }
                 current.breakAccumulated = (current.breakAccumulated || 0) + breakSec;
                 current.breakStartedAt = null;
                 current.breakType = null;
                 current.breakReason = null;
+                current.breakDurationLimit = null;
             }
             current.lastEndedAccumulated = current.accumulated;
             current.lastEndedBreakAccumulated = current.breakAccumulated || 0;
@@ -545,7 +572,10 @@ export const startBreak = asyncHandler(
         const userId = req.user?.id!;
         const dateKey = getTodayKey();
         const now = Date.now();
-        const { breakType = 'lunch', reason = null } = req.body || {};
+        const { breakType = 'lunch', reason = null, durationLimitSeconds = null } = req.body || {};
+        const parsedLimit = typeof durationLimitSeconds === 'number' && durationLimitSeconds > 0
+            ? durationLimitSeconds
+            : (breakType === 'lunch' ? 3600 : breakType === 'tea' ? 1800 : null);
 
         // Find or create day session
         let session = await DaySession.findOne({ userId, dateKey });
@@ -561,6 +591,7 @@ export const startBreak = asyncHandler(
                 breakStartedAt: now,
                 breakType,
                 breakReason: reason,
+                breakDurationLimit: parsedLimit,
             });
             await session.save();
             await AttendanceService.syncCheckInFromTimer(userId, dateKey, session.dayStart);
@@ -571,6 +602,7 @@ export const startBreak = asyncHandler(
             }
             session.breakType = breakType;
             session.breakReason = reason;
+            session.breakDurationLimit = parsedLimit;
 
             // Timer must always stay running on break
             if (session.status !== 'running') {
@@ -600,11 +632,17 @@ export const endBreak = asyncHandler(
         }
 
         if (session.breakStartedAt) {
-            const breakSec = Math.max(0, Math.floor((now - session.breakStartedAt) / 1000));
+            const BREAK_LIMITS: Record<string, number> = { lunch: 3600, tea: 1800 };
+            const limit = session.breakDurationLimit || (session.breakType ? BREAK_LIMITS[session.breakType] : undefined);
+            let breakSec = Math.max(0, Math.floor((now - session.breakStartedAt) / 1000));
+            if (limit && breakSec > limit) {
+                breakSec = limit;
+            }
             session.breakAccumulated = (session.breakAccumulated || 0) + breakSec;
             session.breakStartedAt = null;
             session.breakType = null;
             session.breakReason = null;
+            session.breakDurationLimit = null;
             if (session.status !== 'running' && !session.isEnded) {
                 session.status = 'running';
                 session.startedAt = now;

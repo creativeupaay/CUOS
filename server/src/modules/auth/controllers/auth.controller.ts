@@ -156,7 +156,8 @@ export const getMe = asyncHandler(
 
 export const getUsers = asyncHandler(
     async (req: Request, res: Response, next: NextFunction) => {
-        const users = await authService.getAllUsers(req.user);
+        const includeInactive = req.query.includeInactive === 'true';
+        const users = await authService.getAllUsers(req.user, { includeInactive });
 
         res.status(200).json({
             success: true,

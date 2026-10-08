@@ -401,6 +401,7 @@ export const updateUser = async (id: string, data: UpdateUserData, adminId: stri
 
     if (shouldToggleActive) {
         const partner = await Partner.findOne({ userId: id }).select('_id').lean();
+        const employee = await Employee.findOne({ userId: id }).select('_id').lean();
 
         if (partner) {
             const partnerService = new PartnerService();
@@ -411,6 +412,10 @@ export const updateUser = async (id: string, data: UpdateUserData, adminId: stri
             }
         } else {
             await User.findByIdAndUpdate(id, { $set: { isActive: data.isActive } });
+        }
+
+        if (data.isActive === false) {
+            await cleanupUserMemberships(id, employee?._id?.toString());
         }
     }
 

@@ -31,8 +31,12 @@ export async function runAutoAttendanceCheck() {
             return;
         }
 
-        // Get all active employees
-        const employees = await Employee.find({ status: 'active' }).select('_id userId employeeId').lean();
+        // Get all active employees with active users
+        const rawEmployees = await Employee.find({ status: 'active' })
+            .select('_id userId employeeId')
+            .populate('userId', 'isActive')
+            .lean();
+        const employees = rawEmployees.filter((emp) => emp.userId && (emp.userId as any).isActive !== false);
         
         let markedCount = 0;
         let skipCount = 0;
@@ -105,7 +109,11 @@ export const initAutoAttendanceJob = () => {
                 return;
             }
 
-            const employees = await Employee.find({ status: 'active' }).select('_id userId employeeId').lean();
+            const rawEmployees = await Employee.find({ status: 'active' })
+                .select('_id userId employeeId')
+                .populate('userId', 'isActive')
+                .lean();
+            const employees = rawEmployees.filter((emp) => emp.userId && (emp.userId as any).isActive !== false);
             let markedCount = 0;
             
             for (const emp of employees) {

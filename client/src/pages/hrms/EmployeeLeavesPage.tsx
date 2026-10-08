@@ -87,6 +87,27 @@ function formatDateRange(startDate: string, endDate: string, includeYear = true)
     return `${formatShortDate(startDate)} → ${formatShortDate(endDate)}`;
 }
 
+function formatRequestDateTime(dateStr?: string | Date) {
+    if (!dateStr) return '—';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '—';
+        const datePart = d.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
+        const timePart = d.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+        return `${datePart}, ${timePart}`;
+    } catch {
+        return '—';
+    }
+}
+
 // ── Cancel Leave Modal ─────────────────────────────────────────────────
 function CancelLeaveModal({ leave, onClose, onConfirm, isLoading }: {
     leave: Leave;
@@ -268,8 +289,15 @@ export default function EmployeeLeavesPage() {
                                                 isPaid={(leave as any).isPaid}
                                             />
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                                            {formatDateRange(leave.startDate, leave.endDate)}
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                                {formatDateRange(leave.startDate, leave.endDate)}
+                                            </div>
+                                            {(leave as any).createdAt && (
+                                                <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }} title={`Requested: ${formatRequestDateTime((leave as any).createdAt)}`}>
+                                                    Req: {formatRequestDateTime((leave as any).createdAt)}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap font-bold" style={{ color: 'var(--color-text-primary)' }}>
                                             {(leave as any).days ?? 1}

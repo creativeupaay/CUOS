@@ -1,6 +1,7 @@
 import { Attendance, IAttendance } from '../models/Attendance.model';
 import { Employee } from '../models/Employee.model';
 import { Holiday } from '../models/Holiday.model';
+import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { Types } from 'mongoose';
 import { getDepartmentCatalog, resolveDepartmentValue } from '../../../utils/department.util';
@@ -16,7 +17,9 @@ interface BulkMarkAttendanceOptions extends ArchiveDeleteOptions {
 export class AttendanceService {
     static async checkIn(userId: string, data: any) {
         const employee = await Employee.findOne({ userId });
-        if (!employee) throw new AppError('Employee not found for this user', 404);
+        if (!employee || ['terminated', 'relieved'].includes(employee.status)) {
+            throw new AppError('Employee not found or inactive', 404);
+        }
 
         // Use 6am-IST work day boundary (00:30 UTC) to determine "today"
         // This avoids the bug where setHours(0,0,0,0) uses server local time (IST)
@@ -46,7 +49,9 @@ export class AttendanceService {
 
     static async checkOut(userId: string, data: any) {
         const employee = await Employee.findOne({ userId });
-        if (!employee) throw new AppError('Employee not found for this user', 404);
+        if (!employee || ['terminated', 'relieved'].includes(employee.status)) {
+            throw new AppError('Employee not found or inactive', 404);
+        }
 
         // Use 6am-IST work day boundary (00:30 UTC) to determine "today"
         const { dayStart } = getWorkDayBoundsFromDate(new Date());
@@ -145,7 +150,23 @@ export class AttendanceService {
 
         let skipped = 0;
 
+        // Only allow marking attendance for active employees whose linked user is active
+        const activeEmployees = await Employee.find({
+            _id: { $in: employeeIds },
+            status: { $nin: ['terminated', 'relieved'] },
+        }).populate('userId', 'isActive').lean();
+        const activeEmpIdSet = new Set(
+            activeEmployees
+                .filter((emp) => emp.userId && (emp.userId as any).isActive !== false)
+                .map((emp) => emp._id.toString())
+        );
+
         for (const r of records) {
+            if (!activeEmpIdSet.has(r.employeeId)) {
+                skipped += 1;
+                continue;
+            }
+
             if (options.onlyUnmarked && existingEmployeeIds.has(r.employeeId)) {
                 skipped += 1;
                 continue;
@@ -255,6 +276,11 @@ export class AttendanceService {
         uniqueWorkedMinutes: number,
         breakMinutes: number = 0
     ): Promise<{ marked: boolean; status?: string; reason?: string }> {
+        const emp = await Employee.findById(employeeId).populate('userId', 'isActive').lean();
+        if (!emp || ['terminated', 'relieved'].includes(emp.status) || !emp.userId || (emp.userId as any).isActive === false) {
+            return { marked: false, reason: 'Employee is inactive' };
+        }
+
         const { dayStart } = getWorkDayBounds(dateStr);
 
         const [y, m, d] = dateStr.split('-').map(Number);
@@ -364,6 +390,11 @@ export class AttendanceService {
         status: IAttendance['status'],
         reason?: string
     ): Promise<IAttendance> {
+        const emp = await Employee.findById(employeeId).populate('userId', 'isActive').lean();
+        if (!emp || ['terminated', 'relieved'].includes(emp.status) || !emp.userId || (emp.userId as any).isActive === false) {
+            throw new AppError('Cannot override attendance for an inactive employee', 400);
+        }
+
         const { dayStart } = getWorkDayBounds(date);
         const [y, m, d] = date.split('-').map(Number);
         const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
@@ -419,10 +450,14 @@ export class AttendanceService {
         const dateEnd = new Date(dateObj.getTime() + 24 * 60 * 60 * 1000 - 1);
 
         const departmentCatalog = await getDepartmentCatalog();
-        const [employees, attendanceRecords] = await Promise.all([
-            Employee.find({ status: { $ne: 'terminated' } }).populate('userId', 'name email').lean(),
+        const [rawEmployees, attendanceRecords] = await Promise.all([
+            Employee.find({ status: { $nin: ['terminated', 'relieved'] } }).populate('userId', 'name email isActive').lean(),
             Attendance.find({ date: { $gte: dateObj, $lte: dateEnd } }).populate('overriddenBy', 'name').lean(),
         ]);
+
+        const employees = rawEmployees.filter(
+            (emp) => emp.userId && (emp.userId as any).isActive !== false
+        );
 
         const attendanceMap = new Map(
             attendanceRecords.map((a) => [a.employeeId.toString(), a])
@@ -473,14 +508,18 @@ export class AttendanceService {
         const daysInMonth = endDate.getUTCDate();
 
         const departmentCatalog = await getDepartmentCatalog();
-        const [employees, records, holidays] = await Promise.all([
-            Employee.find({}).populate('userId', 'name email').lean(),
+        const [rawEmployees, records, holidays] = await Promise.all([
+            Employee.find({ status: { $nin: ['terminated', 'relieved'] } }).populate('userId', 'name email isActive').lean(),
             Attendance.find({ date: { $gte: startDate, $lte: endDate } }).lean(),
             Holiday.find({ 
                 date: { $gte: startDate, $lte: endDate },
                 type: 'holiday' 
             }).lean(),
         ]);
+
+        const employees = rawEmployees.filter(
+            (emp) => emp.userId && (emp.userId as any).isActive !== false
+        );
 
         // Build lookup: employeeId → { dateStr → record }
         const recordMap = new Map<string, Map<string, any>>();
@@ -535,6 +574,11 @@ export class AttendanceService {
                 employee = await Employee.findById(new Types.ObjectId(userId));
             }
             if (!employee) return null;
+            if (['terminated', 'relieved'].includes(employee.status)) return null;
+            if (employee.userId) {
+                const user = await User.findById(employee.userId).select('isActive').lean();
+                if (user && user.isActive === false) return null;
+            }
 
             const [y, m, d] = dateKey.split('-').map(Number);
             const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
@@ -622,6 +666,11 @@ export class AttendanceService {
                 employee = await Employee.findById(new Types.ObjectId(userId));
             }
             if (!employee) return null;
+            if (['terminated', 'relieved'].includes(employee.status)) return null;
+            if (employee.userId) {
+                const user = await User.findById(employee.userId).select('isActive').lean();
+                if (user && user.isActive === false) return null;
+            }
 
             const [y, m, d] = dateKey.split('-').map(Number);
             const dateStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));

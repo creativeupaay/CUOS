@@ -1,10 +1,27 @@
 import { Meeting, IMeeting } from '../models/Meeting.model';
 import { Project } from '../models/Project.model';
+import { User } from '../../auth/models/User.model';
 import AppError from '../../../utils/appError';
 import { Employee } from '../../hrms/models/Employee.model';
 import { Partner } from '../../partners/models/Partner.model';
 import { PartnerEmployee } from '../../partners/models/PartnerEmployee.model';
 import { addDays, isBefore, isSameDay, getDay } from 'date-fns';
+
+const filterActiveParticipants = async (
+    participants?: Array<{
+        userId?: string;
+        externalEmail?: string;
+        name?: string;
+        role?: 'organizer' | 'required' | 'optional';
+    }>
+) => {
+    if (!participants || participants.length === 0) return participants;
+    const internalUserIds = participants.filter((p) => p.userId).map((p) => p.userId);
+    if (internalUserIds.length === 0) return participants;
+    const activeUsers = await User.find({ _id: { $in: internalUserIds }, isActive: true }).select('_id').lean();
+    const activeUserSet = new Set(activeUsers.map((u) => u._id.toString()));
+    return participants.filter((p) => !p.userId || activeUserSet.has(p.userId.toString()));
+};
 
 export interface CreateMeetingData {
     title: string;
@@ -68,6 +85,10 @@ export interface UpdateMeetingData {
 export const createMeeting = async (
     data: CreateMeetingData
 ): Promise<IMeeting | IMeeting[]> => {
+    if (data.participants) {
+        data.participants = (await filterActiveParticipants(data.participants)) || [];
+    }
+
     if (data.recurrence) {
         const { frequency, endDate, daysOfWeek } = data.recurrence;
         const end = new Date(endDate);
@@ -233,6 +254,10 @@ export const updateMeeting = async (
     meetingId: string,
     data: UpdateMeetingData
 ): Promise<IMeeting | null> => {
+    if (data.participants) {
+        data.participants = (await filterActiveParticipants(data.participants)) || [];
+    }
+
     const meeting = await Meeting.findByIdAndUpdate(
         meetingId,
         { $set: data },

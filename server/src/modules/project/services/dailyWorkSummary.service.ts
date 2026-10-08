@@ -123,10 +123,15 @@ export async function calculateDailyWorkSummary(
             elapsedSeconds += Math.floor((Date.now() - daySession.startedAt) / 1000);
         }
 
-        // Calculate total break time today
+        // Calculate total break time today (capping active breaks by duration limits)
         let breakSeconds = (daySession as any).breakAccumulated || 0;
         if ((daySession as any).breakStartedAt) {
-            breakSeconds += Math.floor((Date.now() - (daySession as any).breakStartedAt) / 1000);
+            let activeBreakSec = Math.floor((Date.now() - (daySession as any).breakStartedAt) / 1000);
+            const bType = (daySession as any).breakType;
+            const customLimit = (daySession as any).breakDurationLimit;
+            const limit = customLimit || (bType === 'lunch' ? 3600 : bType === 'tea' ? 1800 : null);
+            if (limit && activeBreakSec > limit) activeBreakSec = limit;
+            breakSeconds += activeBreakSec;
         }
         breakMinutes = Math.floor(breakSeconds / 60);
 

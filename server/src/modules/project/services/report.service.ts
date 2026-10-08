@@ -255,7 +255,12 @@ export const getDashboardReports = async (filters: {
         for (const session of daySessions) {
             let sessionBreakSec = (session as any).breakAccumulated || 0;
             if ((session as any).breakStartedAt) {
-                sessionBreakSec += Math.max(0, Math.floor((Date.now() - (session as any).breakStartedAt) / 1000));
+                let activeBreakSec = Math.max(0, Math.floor((Date.now() - (session as any).breakStartedAt) / 1000));
+                const bType = (session as any).breakType;
+                const customLimit = (session as any).breakDurationLimit;
+                const limit = customLimit || (bType === 'lunch' ? 3600 : bType === 'tea' ? 1800 : null);
+                if (limit && activeBreakSec > limit) activeBreakSec = limit;
+                sessionBreakSec += activeBreakSec;
             }
             timeOnBreak += Math.round(sessionBreakSec / 60);
         }
