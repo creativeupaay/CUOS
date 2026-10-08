@@ -22,6 +22,8 @@ import {
 } from '@/features/integration/integrationApi';
 
 
+import { useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { getApiBaseUrl } from '@/config/api.config';
 
 const API_BASE = getApiBaseUrl();
@@ -1013,7 +1015,8 @@ export default function MyProfilePage() {
 // ─── Google Integration Section ───────────────────────────────────────────────
 
 function GoogleIntegrationSection() {
-    const { data, isLoading, isFetching } = useGetGoogleIntegrationStatusQuery();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { data, isLoading, isFetching, refetch } = useGetGoogleIntegrationStatusQuery();
     const [disconnect, { isLoading: isDisconnecting }] = useDisconnectGoogleMutation();
 
     const status = data?.data;
@@ -1021,6 +1024,28 @@ function GoogleIntegrationSection() {
     const requiresReauth = status?.status === 'requires_reauth';
 
     const connectUrl = `${API_BASE}/integrations/google/connect`;
+
+    // Handle OAuth callback status from redirect query params
+    useEffect(() => {
+        const googleParam = searchParams.get('google');
+        if (!googleParam) return;
+
+        if (googleParam === 'connected') {
+            toast.success('Google account connected successfully! Meet tracking is active.');
+            refetch();
+        } else if (googleParam === 'denied') {
+            toast.error('Google authorization was cancelled.');
+        } else if (googleParam === 'error') {
+            const reason = searchParams.get('reason');
+            toast.error(reason ? `Failed to connect Google account (${reason})` : 'Failed to connect Google account. Please try again.');
+        }
+
+        // Clean up query param from URL without re-rendering
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('google');
+        newParams.delete('reason');
+        setSearchParams(newParams, { replace: true });
+    }, [searchParams, setSearchParams, refetch]);
 
     const handleDisconnect = async () => {
         if (!window.confirm('Disconnect your Google account? Meeting tracking will stop and existing records will remain.')) return;

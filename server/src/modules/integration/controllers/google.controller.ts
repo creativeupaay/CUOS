@@ -10,6 +10,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import {
     getAuthUrl,
     exchangeCodeForTokens,
@@ -31,7 +32,8 @@ import { fetchCalendarEventsWithMeet } from '../services/google.calendar.service
 /**
  * GET /api/v1/integrations/google/connect
  * Redirects the authenticated user to Google's OAuth consent screen.
- * A random CSRF state value is stored in a short-lived cookie.
+ * The state parameter is a cryptographically signed JWT containing the user's ID
+ * and a CSRF nonce, ensuring secure return without relying on SameSite cookies.
  */
 export const initiateGoogleOAuth = async (
     req: Request,
@@ -43,14 +45,22 @@ export const initiateGoogleOAuth = async (
             return next(new AppError('Google OAuth is not configured on this server.', 503));
         }
 
-        // Generate a random CSRF state value
-        const state = crypto.randomBytes(16).toString('hex');
+        if (!req.user?.id) {
+            return next(new AppError('Authentication required. Please log in first.', 401));
+        }
 
-        // Store state in a short-lived httpOnly cookie (5 min)
+        // Generate cryptographically signed state containing userId & random CSRF nonce
+        const state = jwt.sign(
+            { userId: req.user.id, nonce: crypto.randomBytes(16).toString('hex') },
+            env.JWT_ACCESS_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        // Also set a backup cookie for local same-site testing
         res.cookie('google_oauth_state', state, {
             httpOnly: true,
             secure: env.NODE_ENV === 'production',
-            maxAge: 5 * 60 * 1000,
+            maxAge: 15 * 60 * 1000,
             sameSite: 'lax',
         });
 
@@ -67,6 +77,7 @@ export const initiateGoogleOAuth = async (
  * GET /api/v1/integrations/google/callback
  * Handles the OAuth redirect from Google. Exchanges the code for tokens,
  * stores them encrypted, and redirects to the frontend settings page.
+ * Security: Verifies the signed JWT state to authenticate the user and prevent CSRF.
  */
 export const handleGoogleCallback = async (
     req: Request,
@@ -78,31 +89,46 @@ export const handleGoogleCallback = async (
 
         // Handle user-denied consent
         if (error || !code) {
-            logger.warn({ error, userId: req.user?.id }, '[Google OAuth] User denied consent or error returned');
+            logger.warn({ error }, '[Google OAuth] User denied consent or error returned');
             return res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=denied`) as any;
         }
 
-        // CSRF state validation
-        const storedState = req.cookies?.google_oauth_state;
-        if (!storedState || storedState !== state) {
-            logger.warn({ userId: req.user?.id }, '[Google OAuth] CSRF state mismatch');
-            return res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=error&reason=csrf`) as any;
+        if (!state) {
+            logger.warn('[Google OAuth] Missing state parameter in callback');
+            return res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=error&reason=missing_state`) as any;
         }
 
-        // Clear state cookie
+        // Validate cryptographically signed state token
+        let userId: string | null = null;
+        try {
+            const decoded = jwt.verify(state, env.JWT_ACCESS_SECRET) as { userId: string; nonce?: string };
+            userId = decoded.userId;
+        } catch (stateErr) {
+            // Check legacy cookie fallback if available
+            const storedState = req.cookies?.google_oauth_state;
+            if (storedState && storedState === state && req.user?.id) {
+                userId = req.user.id;
+            } else {
+                logger.warn({ stateErr }, '[Google OAuth] Invalid or expired state token');
+                return res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=error&reason=invalid_state`) as any;
+            }
+        }
+
+        if (!userId) {
+            logger.warn('[Google OAuth] No userId resolved from state token');
+            return res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=error&reason=no_user`) as any;
+        }
+
+        // Clear backup state cookie
         res.clearCookie('google_oauth_state');
-
-        if (!req.user?.id) {
-            return next(new AppError('Authentication required', 401));
-        }
 
         // Exchange auth code for tokens
         const tokenInfo = await exchangeCodeForTokens(code);
 
         // Store encrypted integration
-        await upsertGoogleIntegration(req.user.id, tokenInfo);
+        await upsertGoogleIntegration(userId, tokenInfo);
 
-        logger.info({ userId: req.user.id, googleEmail: tokenInfo.googleEmail }, '[Google OAuth] Integration connected');
+        logger.info({ userId, googleEmail: tokenInfo.googleEmail }, '[Google OAuth] Integration connected successfully');
 
         // Redirect to frontend settings page with success indicator
         res.redirect(`${env.FRONTEND_URL}/my-hrms/profile?google=connected`);

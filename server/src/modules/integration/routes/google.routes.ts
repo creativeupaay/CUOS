@@ -21,10 +21,11 @@ router.get('/connect', authenticate, initiateGoogleOAuth);
 /**
  * GET /api/v1/integrations/google/callback
  * OAuth callback from Google — exchanges code for tokens.
- * Note: authenticate middleware is applied here too because the CUOS session
- * cookie will be present from the browser redirect.
+ * Security: Protected via cryptographically signed state JWT (contains userId & CSRF nonce).
+ * Does not use authenticate middleware because the browser redirect from Google is cross-origin
+ * and SameSite=Strict cookies are stripped by the browser during external redirects.
  */
-router.get('/callback', authenticate, handleGoogleCallback);
+router.get('/callback', handleGoogleCallback);
 
 /**
  * GET /api/v1/integrations/google/status
