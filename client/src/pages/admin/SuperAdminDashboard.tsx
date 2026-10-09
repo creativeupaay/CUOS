@@ -4,7 +4,8 @@ import { useAppSelector } from '@/app/hooks';
 import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
-    ArrowRight, Clock, Sparkles, Briefcase, Handshake, ListTodo, Gamepad2
+    ArrowRight, Clock, Sparkles, Briefcase, Handshake, ListTodo, Gamepad2,
+    Database, ExternalLink
 } from 'lucide-react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
@@ -12,6 +13,7 @@ import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget'
 
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasModuleViewAccess, hasModuleAdminAccess, hasHrmsSelfSubmoduleAccess } from '@/utils/modulePermissions';
+import { hasAdminRole } from '@/lib/utils/roles';
 
 
 /* ── Module definitions ──────────────────────────────────── */
@@ -24,6 +26,7 @@ interface Department {
     accentFrom: string;
     accentTo: string;
     isActive: boolean;
+    isExternal?: boolean;
 }
 
 const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
@@ -33,6 +36,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     crm: { from: '#EA580C', to: '#F59E0B' },
     hrms: { from: '#0369A1', to: '#06B6D4' },
     overallAdmin: { from: '#374151', to: '#6B7280' },
+    dbBackup: { from: '#2563EB', to: '#7C3AED' },
     hiring: { from: '#0F766E', to: '#0EA5E9' },
     partners: { from: '#0E7490', to: '#06B6D4' },
     teamManagement: { from: '#6366F1', to: '#8B5CF6' },
@@ -40,32 +44,12 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
 };
 
 /* ── Department Card ─────────────────────────────────────── */
-function DepartmentCard({ title, description, icon, path, isActive, accentFrom, accentTo }: Department) {
+function DepartmentCard({ title, description, icon, path, isActive, accentFrom, accentTo, isExternal }: Department) {
     const navigate = useNavigate();
+    const isLinkExternal = isExternal || path.startsWith('http://') || path.startsWith('https://');
 
-    return (
-        <div
-            onClick={() => isActive && navigate(path, { state: { newTab: true } })}
-            className="relative rounded-2xl border overflow-hidden transition-all duration-200 group"
-            style={{
-                backgroundColor: 'var(--color-bg-surface)',
-                borderColor: 'var(--color-border-default)',
-                cursor: isActive ? 'pointer' : 'not-allowed',
-                opacity: isActive ? 1 : 0.55,
-                boxShadow: 'var(--shadow-xs)',
-            }}
-            onMouseEnter={(e) => {
-                if (!isActive) return;
-                e.currentTarget.style.transform = 'translateY(-3px)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
-                e.currentTarget.style.borderColor = accentFrom + '50';
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
-                e.currentTarget.style.borderColor = 'var(--color-border-default)';
-            }}
-        >
+    const cardContent = (
+        <>
             {/* Gradient accent strip */}
             <div
                 className="absolute top-0 left-0 right-0 h-1"
@@ -119,11 +103,65 @@ function DepartmentCard({ title, description, icon, path, isActive, accentFrom, 
                             className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 opacity-0 group-hover:opacity-100"
                             style={{ background: accentFrom + '15', color: accentFrom }}
                         >
-                            <ArrowRight size={14} />
+                            {isLinkExternal ? <ExternalLink size={14} /> : <ArrowRight size={14} />}
                         </div>
                     )}
                 </div>
             </div>
+        </>
+    );
+
+    const commonProps = {
+        className: "relative rounded-2xl border overflow-hidden transition-all duration-200 group block no-underline",
+        style: {
+            backgroundColor: 'var(--color-bg-surface)',
+            borderColor: 'var(--color-border-default)',
+            cursor: isActive ? 'pointer' : 'not-allowed',
+            opacity: isActive ? 1 : 0.55,
+            boxShadow: 'var(--shadow-xs)',
+            textDecoration: 'none',
+        },
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+            if (!isActive) return;
+            e.currentTarget.style.transform = 'translateY(-3px)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
+            e.currentTarget.style.borderColor = accentFrom + '50';
+        },
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
+            e.currentTarget.style.borderColor = 'var(--color-border-default)';
+        },
+    };
+
+    if (isLinkExternal) {
+        return (
+            <a
+                href={isActive ? path : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${title}`}
+                {...commonProps}
+            >
+                {cardContent}
+            </a>
+        );
+    }
+
+    return (
+        <div
+            onClick={() => isActive && navigate(path, { state: { newTab: true } })}
+            role="button"
+            tabIndex={isActive ? 0 : -1}
+            onKeyDown={(e) => {
+                if (isActive && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    navigate(path, { state: { newTab: true } });
+                }
+            }}
+            {...commonProps}
+        >
+            {cardContent}
         </div>
     );
 }
@@ -212,6 +250,14 @@ export default function SuperAdminDashboard() {
             path: '/admin',
         },
         {
+            key: 'dbBackup',
+            title: 'DB_Backup',
+            description: 'Automated database backups, snapshots and restore management',
+            icon: <Database size={22} />,
+            path: 'https://database-backup-automation-594820472264.asia-southeast1.run.app/',
+            isExternal: true,
+        },
+        {
             key: 'partners',
             title: 'Partners',
             description: 'Manage partner onboarding, attribution and performance',
@@ -263,10 +309,18 @@ export default function SuperAdminDashboard() {
             })),
     ];
 
+    const isAdmin = !isPartner && (
+        hasAdminRole(user?.role) ||
+        ['super-admin', 'super_admin', 'admin'].includes(roleName) ||
+        hasModuleAdminAccess(user, 'overallAdmin') ||
+        user?.modulePermissions?.overallAdmin?.enabled === true
+    );
+
     const nonAdminDepartments = allDepartments
         .filter(d => {
-            if (!['projectManagement', 'tasks', 'finance', 'crm', 'hrms', 'overallAdmin', 'partners', 'hiring', 'gameZone'].includes(d.key)) return false;
+            if (!['projectManagement', 'tasks', 'finance', 'crm', 'hrms', 'overallAdmin', 'dbBackup', 'partners', 'hiring', 'gameZone'].includes(d.key)) return false;
             if (d.key === 'gameZone') return true; // Game zone is visible to all non-partner users
+            if (d.key === 'dbBackup') return isAdmin; // DB_Backup is only visible to admin IDs
             
             // Tasks module reuses projectManagement access
             const permKey = d.key === 'tasks' ? 'projectManagement' : d.key;
@@ -276,8 +330,8 @@ export default function SuperAdminDashboard() {
         .map(d => ({
             ...d,
             isActive: true,
-            accentFrom: MODULE_ACCENTS[d.key].from,
-            accentTo: MODULE_ACCENTS[d.key].to,
+            accentFrom: MODULE_ACCENTS[d.key]?.from || '#2563EB',
+            accentTo: MODULE_ACCENTS[d.key]?.to || '#7C3AED',
         }));
 
     const departments: Department[] = isPartner

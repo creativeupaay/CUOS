@@ -11,6 +11,8 @@ import {
     BarChart3,
     Handshake,
     Briefcase,
+    Database,
+    ExternalLink,
 } from 'lucide-react';
 import { useGetAdminDashboardStatsQuery } from '@/features/overall-admin/api/adminApi';
 import { useGetPartnersQuery } from '@/features/partners/partnersApi';
@@ -84,30 +86,42 @@ export default function AdminDashboardPage() {
             description: 'Create, edit, and manage user accounts',
             icon: <Users size={22} />,
             path: '/admin/users',
+            isExternal: false,
         },
         {
             label: 'Roles & Permissions',
             description: 'Configure roles and access controls',
             icon: <Shield size={22} />,
             path: '/admin/roles',
+            isExternal: false,
+        },
+        {
+            label: 'DB_Backup',
+            description: 'Automated database backups & restore',
+            icon: <Database size={22} />,
+            path: 'https://database-backup-automation-594820472264.asia-southeast1.run.app/',
+            isExternal: true,
         },
         {
             label: 'Organization Settings',
             description: 'Company info, departments, policies',
             icon: <Settings size={22} />,
             path: '/admin/settings',
+            isExternal: false,
         },
         {
             label: 'Audit Logs',
             description: 'View system activity and changes',
             icon: <ScrollText size={22} />,
             path: '/admin/audit-logs',
+            isExternal: false,
         },
         {
             label: 'Manage Partners',
             description: 'Track partner performance and ownership',
             icon: <Handshake size={22} />,
             path: '/admin/partners/dashboard',
+            isExternal: false,
         },
     ];
 
@@ -239,8 +253,14 @@ export default function AdminDashboardPage() {
                         {quickActions.map((action) => (
                             <button
                                 key={action.label}
-                                onClick={() => navigate(action.path)}
-                                className="flex items-center gap-4 p-4 rounded-lg border text-left group transition-all"
+                                onClick={() => {
+                                    if (action.isExternal || action.path.startsWith('http')) {
+                                        window.open(action.path, '_blank', 'noopener,noreferrer');
+                                    } else {
+                                        navigate(action.path);
+                                    }
+                                }}
+                                className="flex items-center gap-4 p-4 rounded-lg border text-left group transition-all cursor-pointer"
                                 style={{
                                     borderColor: 'var(--color-border-default)',
                                     backgroundColor: 'var(--color-bg-surface)',
@@ -277,11 +297,19 @@ export default function AdminDashboardPage() {
                                         {action.description}
                                     </div>
                                 </div>
-                                <ArrowRight
-                                    size={16}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                    style={{ color: 'var(--color-primary)' }}
-                                />
+                                {action.isExternal ? (
+                                    <ExternalLink
+                                        size={16}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                        style={{ color: 'var(--color-primary)' }}
+                                    />
+                                ) : (
+                                    <ArrowRight
+                                        size={16}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                        style={{ color: 'var(--color-primary)' }}
+                                    />
+                                )}
                             </button>
                         ))}
                     </div>

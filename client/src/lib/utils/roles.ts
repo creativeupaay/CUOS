@@ -4,7 +4,7 @@
  * duplications scattered across page components.
  */
 
-type RoleValue = string | { name?: string; [key: string]: unknown } | null | undefined;
+type RoleValue = string | { name?: string } | null | undefined | any;
 
 /**
  * Normalizes any role shape to a lowercase string.
