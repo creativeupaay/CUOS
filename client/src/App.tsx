@@ -16,6 +16,7 @@ import {
 } from './utils/modulePermissions';
 import { useCheckJobManagerStatusQuery } from './features/hiring/hiringApi';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import AnnouncementPopupModal from './components/organisms/AnnouncementPopupModal';
 const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout'));
 const ClientPortalLayout = lazy(() => import('./components/layout/ClientPortalLayout'));
 
@@ -247,6 +248,7 @@ function App() {
                   <AppRoutes />
                 </ErrorBoundary>
                 <HydrationOverlay />
+                <AnnouncementPopupModal />
               </HydrationProvider>
             </LapseProvider>
           </BreakProvider>

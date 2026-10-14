@@ -207,14 +207,27 @@ export interface FormattedPollOption {
     hasVoted: boolean;
 }
 
+export interface PollTextResponseDetail {
+    _id: string;
+    user: AnnouncementReceiptUser;
+    text: string;
+    optionId?: string;
+    optionText?: string;
+    submittedAt: string;
+}
+
 export interface FormattedPoll {
     question: string;
+    pollType?: 'choice' | 'text';
     options: FormattedPollOption[];
     allowMultiple: boolean;
+    allowTextResponse?: boolean;
     isClosed: boolean;
     totalVotes: number;
     userVotedOptionIds: string[];
+    userTextResponse?: string;
     hasVoted: boolean;
+    textResponsesCount?: number;
 }
 
 export interface PollVoterDetail {
@@ -232,10 +245,13 @@ export interface PollOptionResult {
 
 export interface PollResultsDetail {
     question: string;
+    pollType?: 'choice' | 'text';
     totalVotes: number;
     allowMultiple: boolean;
+    allowTextResponse?: boolean;
     isClosed: boolean;
     options: PollOptionResult[];
+    textResponses?: PollTextResponseDetail[];
 }
 
 export interface AnnouncementReceiptsResponse {

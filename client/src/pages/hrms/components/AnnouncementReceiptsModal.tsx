@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
     X,
     Eye,
@@ -10,6 +10,8 @@ import {
     Loader2,
     Users,
     BarChart3,
+    MessageSquare,
+    HelpCircle,
 } from 'lucide-react';
 import {
     useGetAnnouncementReceiptsQuery,
@@ -19,6 +21,7 @@ import {
 interface AnnouncementReceiptsModalProps {
     announcementId: string | null;
     announcementTitle?: string;
+    initialTab?: 'unseen' | 'seen' | 'poll';
     onClose: () => void;
 }
 
@@ -34,10 +37,17 @@ function formatSeenAt(timestamp: string): string {
 export default function AnnouncementReceiptsModal({
     announcementId,
     announcementTitle,
+    initialTab = 'unseen',
     onClose,
 }: AnnouncementReceiptsModalProps) {
-    const [activeTab, setActiveTab] = useState<'unseen' | 'seen' | 'poll'>('unseen');
+    const [activeTab, setActiveTab] = useState<'unseen' | 'seen' | 'poll'>(initialTab);
     const [searchTerm, setSearchTerm] = useState('');
+
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab, announcementId]);
 
     const { data, isLoading, isFetching } = useGetAnnouncementReceiptsQuery(
         announcementId || '',
@@ -79,6 +89,20 @@ export default function AnnouncementReceiptsModal({
         );
     }, [receipts?.unseen, searchTerm]);
 
+    const filteredTextResponses = useMemo(() => {
+        if (!pollResults?.textResponses) return [];
+        if (!searchTerm.trim()) return pollResults.textResponses;
+        const q = searchTerm.toLowerCase();
+        return pollResults.textResponses.filter(
+            (tr) =>
+                tr.user.name.toLowerCase().includes(q) ||
+                tr.user.email.toLowerCase().includes(q) ||
+                tr.user.department.toLowerCase().includes(q) ||
+                (tr.text && tr.text.toLowerCase().includes(q)) ||
+                (tr.optionText && tr.optionText.toLowerCase().includes(q))
+        );
+    }, [pollResults?.textResponses, searchTerm]);
+
     if (!announcementId) return null;
 
     const handleNudgeAll = async () => {
@@ -116,7 +140,7 @@ export default function AnnouncementReceiptsModal({
                         <div
                             className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                             style={{
-                                background: 'linear-gradient(135deg, #3B82F6, #10B981)',
+                                background: 'linear-gradient(135deg, #059669, #10B981)',
                                 color: '#ffffff',
                             }}
                         >
@@ -129,9 +153,7 @@ export default function AnnouncementReceiptsModal({
                             >
                                 Read Receipts & Stats
                             </h2>
-                            <p
-                                className="text-xs truncate text-slate-500"
-                            >
+                            <p className="text-xs truncate text-slate-500">
                                 {announcementTitle || 'Announcement Read History'}
                             </p>
                         </div>
@@ -156,30 +178,24 @@ export default function AnnouncementReceiptsModal({
                     }}
                 >
                     <div className={`grid ${pollResults ? 'grid-cols-4' : 'grid-cols-3'} gap-3 mb-3 text-center`}>
-                        <div
-                            className="p-3 rounded-xl border bg-white border-slate-200"
-                        >
+                        <div className="p-3 rounded-xl border bg-white border-slate-200">
                             <p className="text-xs font-medium text-slate-500">Targeted</p>
                             <p className="text-lg font-bold text-slate-900 mt-0.5">{totalTargeted}</p>
                         </div>
-                        <div
-                            className="p-3 rounded-xl border border-emerald-100 bg-emerald-50"
-                        >
+                        <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50">
                             <p className="text-xs font-semibold text-emerald-700">Acknowledged</p>
                             <p className="text-lg font-bold text-emerald-800 mt-0.5">{seenCount}</p>
                         </div>
-                        <div
-                            className="p-3 rounded-xl border border-amber-100 bg-amber-50"
-                        >
+                        <div className="p-3 rounded-xl border border-amber-100 bg-amber-50">
                             <p className="text-xs font-semibold text-amber-700">Pending</p>
                             <p className="text-lg font-bold text-amber-800 mt-0.5">{unseenCount}</p>
                         </div>
                         {pollResults && (
-                            <div
-                                className="p-3 rounded-xl border border-indigo-100 bg-indigo-50"
-                            >
-                                <p className="text-xs font-semibold text-indigo-700">Votes Cast</p>
-                                <p className="text-lg font-bold text-indigo-800 mt-0.5">
+                            <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50">
+                                <p className="text-xs font-semibold text-emerald-700 truncate">
+                                    {pollResults.pollType === 'text' ? 'Responses' : 'Votes Cast'}
+                                </p>
+                                <p className="text-lg font-bold text-emerald-800 mt-0.5">
                                     {pollResults.totalVotes}
                                 </p>
                             </div>
@@ -262,9 +278,9 @@ export default function AnnouncementReceiptsModal({
                                 style={
                                     activeTab === 'poll'
                                         ? {
-                                              backgroundColor: '#EEF2FF',
-                                              borderColor: '#6366F1',
-                                              color: '#4338CA',
+                                              backgroundColor: '#D1FAE5',
+                                              borderColor: '#10B981',
+                                              color: '#065F46',
                                           }
                                         : {
                                               backgroundColor: 'transparent',
@@ -274,140 +290,247 @@ export default function AnnouncementReceiptsModal({
                                 }
                             >
                                 <BarChart3 size={14} />
-                                Poll Results ({pollResults.totalVotes})
+                                {pollResults.pollType === 'text' ? 'Responses' : 'Poll Breakdown'} (
+                                {pollResults.totalVotes})
                             </button>
                         )}
                     </div>
 
-                    {activeTab !== 'poll' && (
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1 sm:w-48">
-                                <Search
-                                    size={14}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="Filter team members..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 outline-none"
-                                />
-                            </div>
-
-                            {activeTab === 'unseen' && unseenCount > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={handleNudgeAll}
-                                    disabled={isNudging}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-70 shadow-sm shrink-0"
-                                    style={{
-                                        background: 'linear-gradient(135deg, #F59E0B, #EA580C)',
-                                    }}
-                                    title="Send push notification reminder to all pending members"
-                                >
-                                    {isNudging ? (
-                                        <Loader2 size={13} className="animate-spin" />
-                                    ) : (
-                                        <Bell size={13} />
-                                    )}
-                                    Nudge All ({unseenCount})
-                                </button>
-                            )}
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-1 sm:w-48">
+                            <Search
+                                size={14}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                            />
+                            <input
+                                type="text"
+                                placeholder={activeTab === 'poll' ? 'Search voters or responses...' : 'Filter team members...'}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 outline-none"
+                            />
                         </div>
-                    )}
+
+                        {activeTab === 'unseen' && unseenCount > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleNudgeAll}
+                                disabled={isNudging}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-70 shadow-sm shrink-0"
+                                style={{
+                                    background: 'linear-gradient(135deg, #F59E0B, #EA580C)',
+                                }}
+                                title="Send push notification reminder to all pending members"
+                            >
+                                {isNudging ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                ) : (
+                                    <Bell size={13} />
+                                )}
+                                Nudge All ({unseenCount})
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Content List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-[240px]">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[240px]">
                     {isLoading || isFetching ? (
                         <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
-                            <Loader2 size={24} className="animate-spin text-blue-500" />
-                            <p className="text-xs">Loading receipt records...</p>
+                            <Loader2 size={24} className="animate-spin text-emerald-500" />
+                            <p className="text-xs">Loading records...</p>
                         </div>
                     ) : activeTab === 'poll' && pollResults ? (
                         /* Poll Results Breakdown */
                         <div className="space-y-4">
-                            <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                                <h4 className="text-sm font-bold text-slate-900 mb-1">
-                                    {pollResults.question}
-                                </h4>
-                                <p className="text-xs text-slate-500">
-                                    Total votes cast:{' '}
-                                    <strong className="text-indigo-700">
-                                        {pollResults.totalVotes}
-                                    </strong>{' '}
-                                    · {pollResults.allowMultiple ? 'Multiple choices allowed' : 'Single choice'}
-                                </p>
-                            </div>
-
-                            {pollResults.options.map((opt) => (
-                                <div
-                                    key={opt._id}
-                                    className="p-4 rounded-xl border border-slate-200 bg-white space-y-3"
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-xs font-bold text-slate-900">
-                                            {opt.text}
-                                        </span>
-                                        <div className="text-right">
-                                            <span className="text-xs font-extrabold text-indigo-600">
-                                                {opt.percentage}%
-                                            </span>
-                                            <span className="text-xs text-slate-400 ml-1">
-                                                ({opt.voteCount} {opt.voteCount === 1 ? 'vote' : 'votes'})
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Progress Bar */}
-                                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full bg-indigo-600 transition-all duration-500"
-                                            style={{ width: `${opt.percentage}%` }}
-                                        />
-                                    </div>
-
-                                    {/* Voters Chips */}
-                                    {opt.voters.length > 0 ? (
-                                        <div className="pt-2 border-t border-slate-100">
-                                            <p className="text-[11px] font-semibold text-slate-500 mb-2">
-                                                Voted by:
-                                            </p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {opt.voters.map((v) => (
-                                                    <div
-                                                        key={v.user._id}
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px]"
-                                                    >
-                                                        {v.user.profilePhotoUrl ? (
-                                                            <img
-                                                                src={v.user.profilePhotoUrl}
-                                                                alt={v.user.name}
-                                                                className="w-4 h-4 rounded-full object-cover"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] flex items-center justify-center font-bold">
-                                                                {v.user.name.charAt(0)}
-                                                            </div>
-                                                        )}
-                                                        <span className="font-semibold text-slate-800">
-                                                            {v.user.name}
-                                                        </span>
-                                                        <span className="text-slate-400">
-                                                            · {v.user.department}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                            {/* Poll Header Box */}
+                            <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-100 flex items-start gap-3">
+                                <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
+                                    {pollResults.pollType === 'text' ? (
+                                        <HelpCircle size={16} />
                                     ) : (
-                                        <p className="text-[11px] text-slate-400 italic">
-                                            No votes yet for this option
-                                        </p>
+                                        <BarChart3 size={16} />
                                     )}
                                 </div>
-                            ))}
+                                <div className="min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-900 leading-snug">
+                                        {pollResults.question}
+                                    </h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        {pollResults.pollType === 'text'
+                                            ? `Open-ended question · ${pollResults.totalVotes} responses received`
+                                            : `Total votes: ${pollResults.totalVotes} · ${
+                                                  pollResults.allowMultiple
+                                                      ? 'Multiple choices allowed'
+                                                      : 'Single choice'
+                                              }${pollResults.allowTextResponse ? ' · Feedback comments enabled' : ''}`}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Options Breakdown for Choice Polls */}
+                            {pollResults.pollType !== 'text' && pollResults.options.length > 0 && (
+                                <div className="space-y-3">
+                                    {pollResults.options.map((opt) => {
+                                        const matchingVoters = searchTerm.trim()
+                                            ? opt.voters.filter(
+                                                  (v) =>
+                                                      v.user.name
+                                                          .toLowerCase()
+                                                          .includes(searchTerm.toLowerCase()) ||
+                                                      v.user.department
+                                                          .toLowerCase()
+                                                          .includes(searchTerm.toLowerCase())
+                                              )
+                                            : opt.voters;
+
+                                        return (
+                                            <div
+                                                key={opt._id}
+                                                className="p-4 rounded-xl border border-slate-200 bg-white space-y-3"
+                                            >
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-xs font-bold text-slate-900">
+                                                        {opt.text}
+                                                    </span>
+                                                    <div className="text-right">
+                                                        <span className="text-xs font-extrabold text-emerald-700">
+                                                            {opt.percentage}%
+                                                        </span>
+                                                        <span className="text-xs text-slate-400 ml-1">
+                                                            ({opt.voteCount}{' '}
+                                                            {opt.voteCount === 1 ? 'vote' : 'votes'})
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Progress Bar */}
+                                                <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-emerald-600 transition-all duration-500"
+                                                        style={{ width: `${opt.percentage}%` }}
+                                                    />
+                                                </div>
+
+                                                {/* Voters Chips */}
+                                                {matchingVoters.length > 0 ? (
+                                                    <div className="pt-2 border-t border-slate-100">
+                                                        <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                                                            Voted by ({matchingVoters.length}):
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {matchingVoters.map((v) => (
+                                                                <div
+                                                                    key={v.user._id}
+                                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px]"
+                                                                >
+                                                                    {v.user.profilePhotoUrl ? (
+                                                                        <img
+                                                                            src={v.user.profilePhotoUrl}
+                                                                            alt={v.user.name}
+                                                                            className="w-4 h-4 rounded-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] flex items-center justify-center font-bold">
+                                                                            {v.user.name.charAt(0)}
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="font-semibold text-slate-800">
+                                                                        {v.user.name}
+                                                                    </span>
+                                                                    <span className="text-slate-400">
+                                                                        · {v.user.department}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[11px] text-slate-400 italic">
+                                                        {searchTerm.trim()
+                                                            ? 'No matching voters for this option'
+                                                            : 'No votes yet for this option'}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* User Feedback & Text Responses Section */}
+                            {(pollResults.pollType === 'text' ||
+                                (pollResults.textResponses && pollResults.textResponses.length > 0)) && (
+                                <div className="pt-2 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <MessageSquare size={15} className="text-emerald-600" />
+                                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                                            {pollResults.pollType === 'text'
+                                                ? 'Team Responses'
+                                                : 'Feedback & Comments'}{' '}
+                                            ({filteredTextResponses.length})
+                                        </h4>
+                                    </div>
+
+                                    {filteredTextResponses.length === 0 ? (
+                                        <div className="py-8 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                                            <p className="text-xs">
+                                                {searchTerm.trim()
+                                                    ? 'No responses match the search filter.'
+                                                    : 'No text responses submitted yet.'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2.5">
+                                            {filteredTextResponses.map((tr) => (
+                                                <div
+                                                    key={tr._id}
+                                                    className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 shadow-2xs"
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            {tr.user.profilePhotoUrl ? (
+                                                                <img
+                                                                    src={tr.user.profilePhotoUrl}
+                                                                    alt={tr.user.name}
+                                                                    className="w-6 h-6 rounded-full object-cover shrink-0"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                                                    {tr.user.name.charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <div className="min-w-0">
+                                                                <span className="text-xs font-bold text-slate-800 truncate mr-2">
+                                                                    {tr.user.name}
+                                                                </span>
+                                                                <span className="text-[11px] text-slate-400 truncate">
+                                                                    {tr.user.department}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            {tr.optionText && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                                                    Voted: {tr.optionText}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-[10px] text-slate-400">
+                                                                {formatSeenAt(tr.submittedAt)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <p className="text-xs text-slate-700 bg-slate-50 rounded-lg p-2.5 border border-slate-100 whitespace-pre-wrap leading-relaxed">
+                                                        {tr.text}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ) : activeTab === 'unseen' ? (
                         filteredUnseen.length === 0 ? (
@@ -540,3 +663,4 @@ export default function AnnouncementReceiptsModal({
         </div>
     );
 }
+

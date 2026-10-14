@@ -8,6 +8,7 @@ export interface IAnnouncementAcknowledgment {
 export interface IPollVote {
     userId: Types.ObjectId;
     votedAt: Date;
+    textResponse?: string;
 }
 
 export interface IPollOption {
@@ -16,10 +17,21 @@ export interface IPollOption {
     votes: IPollVote[];
 }
 
+export interface IPollTextResponse {
+    _id?: Types.ObjectId;
+    userId: Types.ObjectId;
+    text: string;
+    optionId?: Types.ObjectId | null;
+    submittedAt: Date;
+}
+
 export interface IAnnouncementPoll {
     question: string;
+    pollType?: 'choice' | 'text';
     options: IPollOption[];
     allowMultiple: boolean;
+    allowTextResponse?: boolean;
+    textResponses?: IPollTextResponse[];
     isClosed?: boolean;
 }
 
@@ -66,6 +78,10 @@ const PollVoteSchema = new Schema<IPollVote>(
             type: Date,
             default: Date.now,
         },
+        textResponse: {
+            type: String,
+            trim: true,
+        },
     },
     { _id: false }
 );
@@ -85,12 +101,42 @@ const PollOptionSchema = new Schema<IPollOption>(
     { _id: true }
 );
 
+const PollTextResponseSchema = new Schema<IPollTextResponse>(
+    {
+        userId: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+        },
+        text: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+        optionId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Announcement.poll.options',
+            default: null,
+        },
+        submittedAt: {
+            type: Date,
+            default: Date.now,
+        },
+    },
+    { _id: true }
+);
+
 const AnnouncementPollSchema = new Schema<IAnnouncementPoll>(
     {
         question: {
             type: String,
             required: true,
             trim: true,
+        },
+        pollType: {
+            type: String,
+            enum: ['choice', 'text'],
+            default: 'choice',
         },
         options: {
             type: [PollOptionSchema],
@@ -99,6 +145,14 @@ const AnnouncementPollSchema = new Schema<IAnnouncementPoll>(
         allowMultiple: {
             type: Boolean,
             default: false,
+        },
+        allowTextResponse: {
+            type: Boolean,
+            default: false,
+        },
+        textResponses: {
+            type: [PollTextResponseSchema],
+            default: [],
         },
         isClosed: {
             type: Boolean,

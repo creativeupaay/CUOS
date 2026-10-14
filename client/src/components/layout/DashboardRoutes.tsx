@@ -165,15 +165,7 @@ function hasPartnerEmployeeModuleAccess(
     if (!hasModuleAdminAccess(user, 'hrms')) return <Navigate to={getHrmsSelfHome(user)} replace />;
     return <>{children}</>;
   }
-  
-  function AnnouncementRedirect() {
-    const user = useAppSelector((state) => state.auth.user);
-    const roleName = getRoleNameFromUser(user);
-    if (roleName === 'partner' || user?.isPartnerEmployee) return <Navigate to="/dashboard" replace />;
-    if (hasModuleAdminAccess(user, 'hrms')) return <Navigate to="/hrms/announcements" replace />;
-    return <Navigate to={hasHrmsSelfSubmoduleAccess(user, 'announcements') ? '/my-hrms/announcements' : '/my-hrms/profile'} replace />;
-  }
-  
+
   function HrmsSelfRoute({ submodule, children }: { submodule: HrmsSelfSubmodule; children: React.ReactNode; }) {
     const user = useAppSelector((state) => state.auth.user);
     if (!hasHrmsSelfSubmoduleAccess(user, submodule)) return <Navigate to={getHrmsSelfHome(user)} replace />;
@@ -235,7 +227,7 @@ export default function DashboardRoutes({ location }: { location?: Partial<Locat
           <Route path="/hrms/leaves" element={<HrmsRedirect>{loadable(<HrmsLeavesPage />)}</HrmsRedirect>} />
           <Route path="/hrms/holidays" element={<HrmsRedirect>{loadable(<HrmsHolidaysPage />)}</HrmsRedirect>} />
           <Route path="/hrms/payroll" element={<HrmsRedirect>{loadable(<HrmsPayrollPage />)}</HrmsRedirect>} />
-          <Route path="/hrms/announcements" element={<HrmsRedirect>{loadable(<HrmsAnnouncementsPage />)}</HrmsRedirect>} />
+          <Route path="/hrms/announcements" element={<PartnerRestrictedRoute>{loadable(<HrmsAnnouncementsPage />)}</PartnerRestrictedRoute>} />
           <Route path="/hrms/reimbursements/employees/:id" element={<HrmsRedirect>{loadable(<HrmsEmployeeReimbursementHistoryPage />)}</HrmsRedirect>} />
           <Route path="/hrms/reimbursements/employees" element={<HrmsRedirect>{loadable(<HrmsEmployeeReimbursementsPage />)}</HrmsRedirect>} />
           <Route path="/hrms/reimbursements" element={<HrmsRedirect>{loadable(<HrmsReimbursementsPage />)}</HrmsRedirect>} />
@@ -247,9 +239,9 @@ export default function DashboardRoutes({ location }: { location?: Partial<Locat
           <Route path="/my-hrms/leaves" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="leaves">{loadable(<EmployeeLeavesPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
           <Route path="/my-hrms/holidays" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="holidays">{loadable(<EmployeeHolidaysPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
           <Route path="/my-hrms/payroll" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="payroll">{loadable(<EmployeePayrollPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
-          <Route path="/my-hrms/announcements" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="announcements">{loadable(<HrmsAnnouncementsPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
+          <Route path="/my-hrms/announcements" element={<PartnerRestrictedRoute>{loadable(<HrmsAnnouncementsPage />)}</PartnerRestrictedRoute>} />
           <Route path="/my-hrms/reimbursements" element={<ModuleAccessRoute moduleKey="hrms"><HrmsSelfRoute submodule="reimbursements">{loadable(<HrmsReimbursementsPage />)}</HrmsSelfRoute></ModuleAccessRoute>} />
-          <Route path="/announcements" element={<AnnouncementRedirect />} />
+          <Route path="/announcements" element={<PartnerRestrictedRoute>{loadable(<HrmsAnnouncementsPage />)}</PartnerRestrictedRoute>} />
 
           {/* Admin Module */}
           <Route path="/admin" element={<ModuleAccessRoute moduleKey="overallAdmin"><PartnerRestrictedRoute>{loadable(<AdminDashboardPage />)}</PartnerRestrictedRoute></ModuleAccessRoute>} />

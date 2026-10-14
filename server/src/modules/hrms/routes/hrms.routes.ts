@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../../auth/middlewares/authenticate.middleware';
 import { validateRequest } from '../../../middlewares/validateRequest';
-import { checkHrmsAccess, hrAdminOnly, hrmsSelfSubmoduleOnly, internalHrmsOnly } from '../middlewares/hrmsAccess.middleware';
+import { checkHrmsAccess, hrAdminOnly, hrmsSelfSubmoduleOnly, internalHrmsOnly, internalUserOnly } from '../middlewares/hrmsAccess.middleware';
 import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
 import { Leave } from '../models/Leave.model';
 import { Employee } from '../models/Employee.model';
@@ -90,18 +90,18 @@ router.patch(
     employeeController.updateOnboardingChecklist
 );
 
-// Company announcements
-router.get('/announcements', internalHrmsOnly, hrmsSelfSubmoduleOnly('announcements'), announcementController.getAnnouncements);
-router.get('/announcements/unread', internalHrmsOnly, announcementController.getUnreadAnnouncements);
+// Company announcements (Overall / Company-wide for all internal users)
+router.get('/announcements', internalUserOnly, announcementController.getAnnouncements);
+router.get('/announcements/unread', internalUserOnly, announcementController.getUnreadAnnouncements);
 router.post(
     '/announcements/:id/acknowledge',
-    internalHrmsOnly,
+    internalUserOnly,
     validateRequest(acknowledgeAnnouncementSchema),
     announcementController.acknowledgeAnnouncement
 );
 router.post(
     '/announcements/:id/vote',
-    internalHrmsOnly,
+    internalUserOnly,
     validateRequest(votePollSchema),
     announcementController.votePoll
 );

@@ -16,8 +16,10 @@ export interface CreateAnnouncementInput {
     targetUsers?: string[];
     poll?: {
         question: string;
-        options: string[];
+        pollType?: 'choice' | 'text';
+        options?: string[];
         allowMultiple?: boolean;
+        allowTextResponse?: boolean;
     };
 }
 
@@ -38,14 +40,27 @@ export interface FormattedPollOption {
     hasVoted: boolean;
 }
 
+export interface FormattedTextResponse {
+    _id: string;
+    user: AnnouncementReceiptUser;
+    text: string;
+    optionId?: string;
+    optionText?: string;
+    submittedAt: Date;
+}
+
 export interface FormattedPoll {
     question: string;
+    pollType: 'choice' | 'text';
     options: FormattedPollOption[];
     allowMultiple: boolean;
+    allowTextResponse: boolean;
     isClosed: boolean;
     totalVotes: number;
     userVotedOptionIds: string[];
+    userTextResponse?: string;
     hasVoted: boolean;
+    textResponsesCount: number;
 }
 
 export interface PollVoterDetail {
@@ -63,10 +78,13 @@ export interface PollOptionResult {
 
 export interface PollResultsDetail {
     question: string;
+    pollType: 'choice' | 'text';
     totalVotes: number;
     allowMultiple: boolean;
+    allowTextResponse: boolean;
     isClosed: boolean;
     options: PollOptionResult[];
+    textResponses?: FormattedTextResponse[];
 }
 
 export interface AnnouncementReceiptsResponse {
@@ -80,15 +98,27 @@ export interface AnnouncementReceiptsResponse {
 }
 
 function formatPoll(poll: any, userId?: string): FormattedPoll | undefined {
-    if (!poll || !poll.question || !Array.isArray(poll.options)) return undefined;
+    if (!poll || !poll.question) return undefined;
 
-    const totalVotes = poll.options.reduce(
+    const pollType: 'choice' | 'text' =
+        poll.pollType === 'text' || (!Array.isArray(poll.options) || poll.options.length === 0)
+            ? 'text'
+            : 'choice';
+
+    const rawOptions = Array.isArray(poll.options) ? poll.options : [];
+    const totalOptionVotes = rawOptions.reduce(
         (sum: number, opt: any) => sum + (Array.isArray(opt.votes) ? opt.votes.length : 0),
         0
     );
-    const userVotedOptionIds: string[] = [];
+    const textResponses = Array.isArray(poll.textResponses) ? poll.textResponses : [];
+    const totalVotes = pollType === 'text' ? textResponses.length : totalOptionVotes;
 
-    const options = poll.options.map((opt: any) => {
+    const userVotedOptionIds: string[] = [];
+    const myTextResponseObj = userId
+        ? textResponses.find((tr: any) => tr.userId?.toString() === userId)
+        : undefined;
+
+    const options = rawOptions.map((opt: any) => {
         const votes = Array.isArray(opt.votes) ? opt.votes : [];
         const optIdStr = opt._id?.toString() || '';
         const hasVoted = userId ? votes.some((v: any) => v.userId?.toString() === userId) : false;
@@ -96,7 +126,7 @@ function formatPoll(poll: any, userId?: string): FormattedPoll | undefined {
             userVotedOptionIds.push(optIdStr);
         }
         const voteCount = votes.length;
-        const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+        const percentage = totalOptionVotes > 0 ? Math.round((voteCount / totalOptionVotes) * 100) : 0;
         return {
             _id: optIdStr,
             text: opt.text,
@@ -106,14 +136,20 @@ function formatPoll(poll: any, userId?: string): FormattedPoll | undefined {
         };
     });
 
+    const hasVoted = userVotedOptionIds.length > 0 || Boolean(myTextResponseObj);
+
     return {
         question: poll.question,
+        pollType,
         options,
         allowMultiple: Boolean(poll.allowMultiple),
+        allowTextResponse: Boolean(poll.allowTextResponse),
         isClosed: Boolean(poll.isClosed),
         totalVotes,
         userVotedOptionIds,
-        hasVoted: userVotedOptionIds.length > 0,
+        userTextResponse: myTextResponseObj?.text || '',
+        hasVoted,
+        textResponsesCount: textResponses.length,
     };
 }
 
@@ -160,17 +196,24 @@ class AnnouncementService {
         if (
             data.poll &&
             typeof data.poll.question === 'string' &&
-            data.poll.question.trim() &&
-            Array.isArray(data.poll.options) &&
-            data.poll.options.length >= 2
+            data.poll.question.trim()
         ) {
+            const isTextPoll = data.poll.pollType === 'text';
+            const rawOptions = Array.isArray(data.poll.options) ? data.poll.options : [];
+            const options = isTextPoll
+                ? []
+                : rawOptions.map((opt) => ({
+                      text: String(opt).trim(),
+                      votes: [],
+                  }));
+
             pollData = {
                 question: data.poll.question.trim(),
-                options: data.poll.options.map((opt) => ({
-                    text: String(opt).trim(),
-                    votes: [],
-                })),
+                pollType: isTextPoll ? 'text' : 'choice',
+                options,
                 allowMultiple: Boolean(data.poll.allowMultiple),
+                allowTextResponse: Boolean(data.poll.allowTextResponse),
+                textResponses: [],
                 isClosed: false,
             };
         }
@@ -198,7 +241,7 @@ class AnnouncementService {
                 type: 'company_announcement',
                 title: priority === 'urgent' ? `🚨 URGENT: ${title}` : title,
                 message: content.length > 140 ? `${content.slice(0, 137)}...` : content,
-                link: '/my-hrms/announcements',
+                link: '/announcements',
                 metadata: {
                     announcementId: announcement._id.toString(),
                     priority,
@@ -221,7 +264,7 @@ class AnnouncementService {
                     type: 'company_announcement',
                     title: priority === 'urgent' ? `🚨 URGENT: ${title}` : title,
                     message: content.length > 140 ? `${content.slice(0, 137)}...` : content,
-                    link: '/my-hrms/announcements',
+                    link: '/announcements',
                     metadata: {
                         announcementId: announcement._id.toString(),
                         priority,
@@ -235,7 +278,7 @@ class AnnouncementService {
                     type: 'company_announcement',
                     title: priority === 'urgent' ? `🚨 URGENT: ${title}` : title,
                     message: content.length > 140 ? `${content.slice(0, 137)}...` : content,
-                    link: '/my-hrms/announcements',
+                    link: '/announcements',
                     metadata: {
                         announcementId: announcement._id.toString(),
                         priority,
@@ -472,15 +515,25 @@ class AnnouncementService {
 
         // Compute detailed poll results if announcement has a poll
         let pollResults: PollResultsDetail | undefined;
-        if (announcement.poll && Array.isArray(announcement.poll.options)) {
+        if (announcement.poll) {
             const allVoterUserIds: Types.ObjectId[] = [];
-            for (const opt of announcement.poll.options) {
+            const rawOptions = Array.isArray(announcement.poll.options) ? announcement.poll.options : [];
+            for (const opt of rawOptions) {
                 if (Array.isArray(opt.votes)) {
                     for (const v of opt.votes) {
                         if (v?.userId) {
                             allVoterUserIds.push(new Types.ObjectId(v.userId.toString()));
                         }
                     }
+                }
+            }
+
+            const rawTextResponses = Array.isArray(announcement.poll.textResponses)
+                ? announcement.poll.textResponses
+                : [];
+            for (const tr of rawTextResponses) {
+                if (tr?.userId) {
+                    allVoterUserIds.push(new Types.ObjectId(tr.userId.toString()));
                 }
             }
 
@@ -503,12 +556,12 @@ class AnnouncementService {
                 });
             }
 
-            const totalVotes = announcement.poll.options.reduce(
+            const totalOptionVotes = rawOptions.reduce(
                 (sum, opt) => sum + (Array.isArray(opt.votes) ? opt.votes.length : 0),
                 0
             );
 
-            const options: PollOptionResult[] = announcement.poll.options.map((opt: any) => {
+            const options: PollOptionResult[] = rawOptions.map((opt: any) => {
                 const votes = Array.isArray(opt.votes) ? opt.votes : [];
                 const voters: PollVoterDetail[] = votes.map((v: any) => {
                     const uidStr = v.userId?.toString();
@@ -529,17 +582,44 @@ class AnnouncementService {
                     _id: opt._id.toString(),
                     text: opt.text,
                     voteCount: votes.length,
-                    percentage: totalVotes > 0 ? Math.round((votes.length / totalVotes) * 100) : 0,
+                    percentage: totalOptionVotes > 0 ? Math.round((votes.length / totalOptionVotes) * 100) : 0,
                     voters,
                 };
             });
 
+            const textResponses: FormattedTextResponse[] = rawTextResponses.map((tr: any) => {
+                const uidStr = tr.userId?.toString();
+                const userObj = voterUserMap.get(uidStr) || {
+                    _id: uidStr,
+                    name: 'Team Member',
+                    email: '',
+                    department: 'General',
+                    designation: 'Employee',
+                };
+                const optIdStr = tr.optionId?.toString();
+                const matchedOpt = rawOptions.find((o: any) => o._id.toString() === optIdStr);
+                return {
+                    _id: tr._id?.toString() || '',
+                    user: userObj,
+                    text: tr.text,
+                    optionId: optIdStr,
+                    optionText: matchedOpt?.text,
+                    submittedAt: new Date(tr.submittedAt),
+                };
+            });
+
+            const pollType: 'choice' | 'text' =
+                announcement.poll.pollType === 'text' || options.length === 0 ? 'text' : 'choice';
+
             pollResults = {
                 question: announcement.poll.question,
-                totalVotes,
+                pollType,
+                totalVotes: pollType === 'text' ? textResponses.length : totalOptionVotes,
                 allowMultiple: Boolean(announcement.poll.allowMultiple),
+                allowTextResponse: Boolean(announcement.poll.allowTextResponse),
                 isClosed: Boolean(announcement.poll.isClosed),
                 options,
+                textResponses,
             };
         }
 
@@ -555,11 +635,11 @@ class AnnouncementService {
     }
 
     /**
-     * Submit vote for an announcement poll
+     * Submit vote and/or text response for an announcement poll
      */
     async votePoll(
         announcementId: string,
-        optionIds: string[],
+        input: { optionIds?: string[]; textResponse?: string },
         userId: string
     ): Promise<{ success: boolean; poll: FormattedPoll }> {
         const userObjId = new Types.ObjectId(userId);
@@ -574,30 +654,69 @@ class AnnouncementService {
             throw new AppError('This poll is closed', 400);
         }
 
-        const availableOptionIds = announcement.poll.options.map((o) => o._id.toString());
-        const validOptionIds = optionIds.filter((id) => availableOptionIds.includes(id));
-        if (validOptionIds.length === 0) {
-            throw new AppError('Please select a valid option', 400);
-        }
+        const isTextPoll = announcement.poll.pollType === 'text';
+        const rawOptionIds = Array.isArray(input.optionIds) ? input.optionIds : [];
+        const textResponse = typeof input.textResponse === 'string' ? input.textResponse.trim() : '';
 
-        if (!announcement.poll.allowMultiple && validOptionIds.length > 1) {
-            throw new AppError('You can only select one option in this poll', 400);
-        }
-
-        // Remove previous votes from this user across all options
-        for (const opt of announcement.poll.options) {
-            opt.votes = opt.votes.filter((v) => v.userId.toString() !== userId);
-        }
-
-        // Add user vote to the selected options
         const now = new Date();
-        for (const opt of announcement.poll.options) {
-            if (validOptionIds.includes(opt._id.toString())) {
-                opt.votes.push({
-                    userId: userObjId,
-                    votedAt: now,
-                });
+
+        if (isTextPoll) {
+            if (!textResponse) {
+                throw new AppError('Please enter your response before submitting', 400);
             }
+        } else {
+            // Choice poll
+            const availableOptionIds = (announcement.poll.options || []).map((o) => o._id.toString());
+            const validOptionIds = rawOptionIds.filter((id) => availableOptionIds.includes(id));
+
+            if (validOptionIds.length === 0 && !textResponse) {
+                throw new AppError('Please select at least one option or enter your response', 400);
+            }
+
+            if (!announcement.poll.allowMultiple && validOptionIds.length > 1) {
+                throw new AppError('You can only select one option in this poll', 400);
+            }
+
+            // Remove previous votes from this user across all options
+            for (const opt of announcement.poll.options) {
+                opt.votes = opt.votes.filter((v) => v.userId.toString() !== userId);
+            }
+
+            // Add new votes
+            for (const opt of announcement.poll.options) {
+                if (validOptionIds.includes(opt._id.toString())) {
+                    opt.votes.push({
+                        userId: userObjId,
+                        votedAt: now,
+                        textResponse: textResponse || undefined,
+                    });
+                }
+            }
+        }
+
+        // Store user text response in announcement.poll.textResponses
+        if (!Array.isArray(announcement.poll.textResponses)) {
+            announcement.poll.textResponses = [];
+        }
+
+        // Remove previous text response from this user
+        announcement.poll.textResponses = announcement.poll.textResponses.filter(
+            (tr) => tr.userId.toString() !== userId
+        );
+
+        if (textResponse) {
+            const firstOptId =
+                !isTextPoll && rawOptionIds.length > 0 && Types.ObjectId.isValid(rawOptionIds[0])
+                    ? new Types.ObjectId(rawOptionIds[0])
+                    : null;
+
+            announcement.poll.textResponses.push({
+                _id: new Types.ObjectId(),
+                userId: userObjId,
+                text: textResponse,
+                optionId: firstOptId,
+                submittedAt: now,
+            });
         }
 
         // Also mark announcement as acknowledged if not already acknowledged
@@ -649,7 +768,7 @@ class AnnouncementService {
             type: 'company_announcement',
             title: `🔔 Reminder: ${title}`,
             message: 'Please review and acknowledge the company announcement.',
-            link: '/my-hrms/announcements',
+            link: '/announcements',
             metadata: {
                 announcementId,
                 isNudge: true,

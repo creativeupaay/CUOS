@@ -93,6 +93,22 @@ export const internalHrmsOnly = async (req: Request, res: Response, next: NextFu
     return next();
 };
 
+/**
+ * Allow all authenticated internal CUOS users (excluding external partners and partner employees).
+ * Used for company-wide features like announcements, polls, and global communication.
+ */
+export const internalUserOnly = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+        return next(new AppError('Authentication required', 401));
+    }
+
+    if (req.user.role === 'partner' || req.user.isPartnerEmployee) {
+        return next(new AppError('Partners do not have access to company announcements', 403));
+    }
+
+    return next();
+};
+
 export const hrmsSelfSubmoduleOnly = (submodule: HrmsSelfSubmodule) => {
     return async (req: Request, res: Response, next: NextFunction) => {
         if (!req.user) {

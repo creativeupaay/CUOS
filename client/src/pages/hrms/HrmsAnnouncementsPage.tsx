@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import {
     Megaphone,
@@ -18,6 +18,8 @@ import {
     X,
     BarChart3,
     Plus,
+    MessageSquare,
+    HelpCircle,
 } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import {
@@ -31,6 +33,7 @@ import {
 } from '@/features/hrms/hrmsApi';
 import { useGetOrgSettingsQuery } from '@/features/overall-admin/api/adminApi';
 import { dedupeDepartments, DEFAULT_DEPARTMENTS } from '@/utils/department';
+import { hasModuleAdminAccess } from '@/utils/modulePermissions';
 import type { Announcement } from '@/features/hrms/types/types';
 import AnnouncementReceiptsModal from './components/AnnouncementReceiptsModal';
 
@@ -69,12 +72,12 @@ function AnnouncementCard({
     canManage: boolean;
     onDelete?: (id: string) => void;
     isDeleting?: boolean;
-    onViewReceipts?: (id: string, title: string) => void;
+    onViewReceipts?: (id: string, title: string, tab?: 'unseen' | 'seen' | 'poll') => void;
     onQuickNudge?: (id: string) => void;
     isNudging?: boolean;
     onAcknowledge?: (id: string) => void;
     isAcknowledging?: boolean;
-    onVote?: (announcementId: string, optionId: string) => void;
+    onVote?: (announcementId: string, optionId?: string, textResponse?: string) => void;
     isVoting?: boolean;
 }) {
     const isUrgent = announcement.priority === 'urgent';
@@ -84,6 +87,18 @@ function AnnouncementCard({
     const acknowledgedCount = announcement.acknowledgedCount ?? 0;
     const totalTargeted = announcement.totalTargetedCount ?? 0;
     const pendingCount = Math.max(0, totalTargeted - acknowledgedCount);
+
+    // Results are immediately visible to admin/publishers OR if the current user has voted
+    const showResults = Boolean(canManage || poll?.hasVoted);
+
+    const [feedbackText, setFeedbackText] = useState(poll?.userTextResponse || '');
+    const [isEditingFeedback, setIsEditingFeedback] = useState(false);
+
+    useEffect(() => {
+        if (poll?.userTextResponse) {
+            setFeedbackText(poll.userTextResponse);
+        }
+    }, [poll?.userTextResponse]);
 
     return (
         <div
@@ -110,18 +125,40 @@ function AnnouncementCard({
 
                         {/* Pinned Badge */}
                         {isPinned ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                                 <Pin size={11} />
                                 Pinned
                             </span>
                         ) : null}
 
-                        {/* Poll Badge */}
+                        {/* Poll / Question Badge */}
                         {poll ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    canManage &&
+                                    onViewReceipts?.(
+                                        announcement._id,
+                                        announcement.title || 'Company Announcement',
+                                        'poll'
+                                    )
+                                }
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 transition-colors ${
+                                    canManage
+                                        ? 'hover:bg-emerald-100 hover:border-emerald-300 cursor-pointer'
+                                        : ''
+                                }`}
+                                title={canManage ? 'Click to view who voted what' : undefined}
+                            >
                                 <BarChart3 size={11} />
-                                Poll ({poll.totalVotes} votes)
-                            </span>
+                                {poll.pollType === 'text' ? 'Question' : 'Poll'} ({poll.totalVotes}{' '}
+                                {poll.pollType === 'text' ? 'responses' : 'votes'})
+                                {canManage && (
+                                    <span className="text-[10px] text-emerald-600 font-semibold ml-0.5">
+                                        · View
+                                    </span>
+                                )}
+                            </button>
                         ) : null}
 
                         {/* Target Audience Badge */}
@@ -167,9 +204,7 @@ function AnnouncementCard({
                             >
                                 {announcement.title || 'Company Announcement'}
                             </h3>
-                            <p
-                                className="text-xs mt-0.5 text-slate-500"
-                            >
+                            <p className="text-xs mt-0.5 text-slate-500">
                                 {formatAnnouncementDate(announcement.createdAt)} · Published by{' '}
                                 <span className="font-semibold text-slate-700">
                                     {announcement.publishedBy?.name || 'Admin'}
@@ -180,98 +215,262 @@ function AnnouncementCard({
 
                     {/* Message Body */}
                     <div className="mt-3 pl-0 sm:pl-12">
-                        <p
-                            className="text-sm leading-relaxed whitespace-pre-wrap text-slate-700 font-normal"
-                        >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-700 font-normal">
                             {announcement.content}
                         </p>
 
                         {/* Poll Card if present */}
                         {poll && (
-                            <div className="mt-4 p-4 rounded-2xl border border-indigo-100 bg-gradient-to-b from-indigo-50/40 to-white max-w-xl">
+                            <div className="mt-4 p-4 rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/30 to-white max-w-xl shadow-2xs">
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                     <div className="flex items-center gap-1.5">
-                                        <BarChart3 size={15} className="text-indigo-600" />
+                                        {poll.pollType === 'text' ? (
+                                            <HelpCircle size={15} className="text-emerald-600" />
+                                        ) : (
+                                            <BarChart3 size={15} className="text-emerald-600" />
+                                        )}
                                         <h4 className="text-xs font-bold text-slate-900">
                                             {poll.question}
                                         </h4>
                                     </div>
-                                    <span className="text-[11px] font-medium text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-full">
-                                        {poll.allowMultiple ? 'Multiple choices' : 'Single choice'}
+                                    <span className="text-[11px] font-medium text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                        {poll.pollType === 'text'
+                                            ? 'Open question'
+                                            : poll.allowMultiple
+                                            ? 'Multiple choices'
+                                            : 'Single choice'}
                                     </span>
                                 </div>
 
-                                <div className="space-y-2 mt-2.5">
-                                    {poll.options.map((opt) => {
-                                        const isSelected = poll.userVotedOptionIds?.includes(opt._id);
-                                        const percent = opt.percentage || 0;
+                                {/* Choice Poll Options */}
+                                {poll.pollType !== 'text' && (
+                                    <div className="space-y-2 mt-2.5">
+                                        {poll.options.map((opt) => {
+                                            const isSelected = poll.userVotedOptionIds?.includes(opt._id);
+                                            const percent = opt.percentage || 0;
 
-                                        return (
-                                            <button
-                                                key={opt._id}
-                                                type="button"
-                                                onClick={() => onVote?.(announcement._id, opt._id)}
-                                                disabled={isVoting}
-                                                className={`relative w-full text-left p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${
-                                                    isSelected
-                                                        ? 'border-indigo-500 bg-indigo-50/60 shadow-2xs'
-                                                        : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/70'
-                                                }`}
-                                            >
-                                                {poll.hasVoted && (
-                                                    <div
-                                                        className="absolute inset-y-0 left-0 bg-indigo-100/60 transition-all duration-500"
-                                                        style={{ width: `${percent}%` }}
-                                                    />
-                                                )}
-
-                                                <div className="relative flex items-center justify-between gap-3">
-                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                            return (
+                                                <button
+                                                    key={opt._id}
+                                                    type="button"
+                                                    onClick={() => onVote?.(announcement._id, opt._id)}
+                                                    disabled={isVoting}
+                                                    className={`relative w-full text-left p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${
+                                                        isSelected
+                                                            ? 'border-emerald-500 bg-emerald-50/60 shadow-2xs'
+                                                            : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/70'
+                                                    }`}
+                                                >
+                                                    {/* Progress bar visible to admin or user who voted */}
+                                                    {showResults && (
                                                         <div
-                                                            className={`w-4 h-4 rounded-${
-                                                                poll.allowMultiple ? 'md' : 'full'
-                                                            } border flex items-center justify-center shrink-0 transition-colors ${
-                                                                isSelected
-                                                                    ? 'bg-indigo-600 border-indigo-600 text-white'
-                                                                    : 'border-slate-300 bg-white'
-                                                            }`}
-                                                        >
-                                                            {isSelected && <Check size={11} strokeWidth={3} />}
-                                                        </div>
-                                                        <span
-                                                            className={`text-xs truncate ${
-                                                                isSelected
-                                                                    ? 'font-bold text-indigo-950'
-                                                                    : 'font-medium text-slate-800'
-                                                            }`}
-                                                        >
-                                                            {opt.text}
-                                                        </span>
-                                                    </div>
-
-                                                    {poll.hasVoted && (
-                                                        <div className="flex items-center gap-1.5 shrink-0 text-right">
-                                                            <span className="text-xs font-bold text-slate-900">
-                                                                {percent}%
-                                                            </span>
-                                                            <span className="text-[11px] text-slate-400">
-                                                                ({opt.voteCount})
-                                                            </span>
-                                                        </div>
+                                                            className="absolute inset-y-0 left-0 bg-emerald-100/60 transition-all duration-500"
+                                                            style={{ width: `${percent}%` }}
+                                                        />
                                                     )}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
 
-                                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 px-1">
-                                    <span>
-                                        {poll.totalVotes} {poll.totalVotes === 1 ? 'vote' : 'votes'} cast
-                                    </span>
+                                                    <div className="relative flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            <div
+                                                                className={`w-4 h-4 rounded-${
+                                                                    poll.allowMultiple ? 'md' : 'full'
+                                                                } border flex items-center justify-center shrink-0 transition-colors ${
+                                                                    isSelected
+                                                                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                                        : 'border-slate-300 bg-white'
+                                                                }`}
+                                                            >
+                                                                {isSelected && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span
+                                                                className={`text-xs truncate ${
+                                                                    isSelected
+                                                                        ? 'font-bold text-emerald-950'
+                                                                        : 'font-medium text-slate-800'
+                                                                }`}
+                                                            >
+                                                                {opt.text}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Percentage & Vote Count visible to admin or user who voted */}
+                                                        {showResults && (
+                                                            <div className="flex items-center gap-1.5 shrink-0 text-right">
+                                                                <span className="text-xs font-bold text-emerald-700">
+                                                                    {percent}%
+                                                                </span>
+                                                                <span className="text-[11px] text-slate-400">
+                                                                    ({opt.voteCount})
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Choice Poll Comment / Feedback Area */}
+                                {poll.pollType !== 'text' && poll.allowTextResponse && (
+                                    <div className="mt-3 pt-2.5 border-t border-emerald-100/70">
+                                        {poll.userTextResponse && !isEditingFeedback ? (
+                                            <div className="p-2.5 rounded-xl bg-white border border-emerald-100 flex items-start justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] font-bold text-emerald-900 flex items-center gap-1">
+                                                        <MessageSquare size={11} /> Your comment:
+                                                    </p>
+                                                    <p className="text-xs text-slate-700 mt-0.5 whitespace-pre-wrap">
+                                                        {poll.userTextResponse}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsEditingFeedback(true)}
+                                                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold cursor-pointer shrink-0"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                                                    <MessageSquare size={12} className="text-emerald-600" />
+                                                    <span>Add feedback or note with your vote:</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={feedbackText}
+                                                        onChange={(e) => setFeedbackText(e.target.value)}
+                                                        placeholder="Type optional comments..."
+                                                        className="flex-1 text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-emerald-500"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        disabled={!feedbackText.trim() || isVoting}
+                                                        onClick={async () => {
+                                                            await onVote?.(
+                                                                announcement._id,
+                                                                undefined,
+                                                                feedbackText.trim()
+                                                            );
+                                                            setIsEditingFeedback(false);
+                                                        }}
+                                                        className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Open-Ended Question Input / Response Area */}
+                                {poll.pollType === 'text' && (
+                                    <div className="mt-2.5">
+                                        {poll.userTextResponse && !isEditingFeedback ? (
+                                            <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-xs font-bold text-emerald-900 flex items-center gap-1">
+                                                        <Check size={13} className="text-emerald-600" /> Your Response
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsEditingFeedback(true)}
+                                                        className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold cursor-pointer"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-slate-700 whitespace-pre-wrap">
+                                                    {poll.userTextResponse}
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    value={feedbackText}
+                                                    onChange={(e) => setFeedbackText(e.target.value)}
+                                                    placeholder="Type your response or answer here..."
+                                                    rows={2}
+                                                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-emerald-500 leading-relaxed"
+                                                />
+                                                <div className="flex justify-end gap-2">
+                                                    {isEditingFeedback && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setFeedbackText(poll.userTextResponse || '');
+                                                                setIsEditingFeedback(false);
+                                                            }}
+                                                            className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        disabled={!feedbackText.trim() || isVoting}
+                                                        onClick={async () => {
+                                                            await onVote?.(
+                                                                announcement._id,
+                                                                undefined,
+                                                                feedbackText.trim()
+                                                            );
+                                                            setIsEditingFeedback(false);
+                                                        }}
+                                                        className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                                                    >
+                                                        {isVoting ? (
+                                                            <Loader2 size={12} className="animate-spin" />
+                                                        ) : (
+                                                            <Send size={12} />
+                                                        )}
+                                                        {poll.userTextResponse
+                                                            ? 'Update Response'
+                                                            : 'Submit Response'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Poll Card Footer */}
+                                <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                                    <div className="flex items-center gap-2">
+                                        <span>
+                                            {poll.totalVotes}{' '}
+                                            {poll.pollType === 'text'
+                                                ? poll.totalVotes === 1
+                                                    ? 'response'
+                                                    : 'responses'
+                                                : poll.totalVotes === 1
+                                                ? 'vote'
+                                                : 'votes'}{' '}
+                                            cast
+                                        </span>
+                                        {canManage && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onViewReceipts?.(
+                                                        announcement._id,
+                                                        announcement.title || 'Company Announcement',
+                                                        'poll'
+                                                    )
+                                                }
+                                                className="text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer hover:underline inline-flex items-center gap-0.5"
+                                            >
+                                                View who voted what →
+                                            </button>
+                                        )}
+                                    </div>
                                     {poll.hasVoted && (
-                                        <span className="text-indigo-600 font-semibold">
-                                            ✓ You voted
+                                        <span className="text-emerald-600 font-semibold">
+                                            ✓ You {poll.pollType === 'text' ? 'responded' : 'voted'}
                                         </span>
                                     )}
                                 </div>
@@ -383,7 +582,6 @@ export default function HrmsAnnouncementsPage() {
     const user = useAppSelector((state) => state.auth.user);
     const roleName = getRoleName(user);
     const isPartner = roleName === 'partner' || !!user?.isPartnerEmployee;
-    const isAdminSide = location.pathname.startsWith('/hrms/');
     const isHrAdmin = [
         'super-admin',
         'admin',
@@ -394,7 +592,9 @@ export default function HrmsAnnouncementsPage() {
         'hr-manager',
         'hrmanager',
         'human-resources',
-    ].includes(roleName);
+    ].includes(roleName) || hasModuleAdminAccess(user, 'hrms') || hasModuleAdminAccess(user, 'overallAdmin');
+
+    const isAdminSide = location.pathname.startsWith('/hrms/') || ((location.pathname === '/announcements' || location.pathname.startsWith('/my-hrms/announcements')) && isHrAdmin);
 
     const [activeTab, setActiveTab] = useState<AdminTab>('create');
 
@@ -411,13 +611,16 @@ export default function HrmsAnnouncementsPage() {
 
     // Poll creation state
     const [includePoll, setIncludePoll] = useState(false);
+    const [pollType, setPollType] = useState<'choice' | 'text'>('choice');
     const [pollQuestion, setPollQuestion] = useState('');
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
+    const [pollAllowTextResponse, setPollAllowTextResponse] = useState(false);
 
-    // Modal state for Read Receipts
+    // Modal state for Read Receipts & Poll Breakdown
     const [receiptModalId, setReceiptModalId] = useState<string | null>(null);
     const [receiptModalTitle, setReceiptModalTitle] = useState('');
+    const [receiptModalTab, setReceiptModalTab] = useState<'unseen' | 'seen' | 'poll'>('unseen');
 
     // Queries & Mutations
     const { data, isLoading, isFetching } = useGetAnnouncementsQuery(undefined, {
@@ -461,7 +664,7 @@ export default function HrmsAnnouncementsPage() {
     const announcements = useMemo(() => data?.data?.announcements || [], [data]);
 
     if (isPartner) return <Navigate to="/dashboard" replace />;
-    if (isAdminSide && !isHrAdmin) return <Navigate to="/my-hrms/announcements" replace />;
+    if (isAdminSide && !isHrAdmin) return <Navigate to="/announcements" replace />;
 
     const toggleDepartment = (dept: string) => {
         setSelectedDepartments((prev) =>
@@ -495,25 +698,35 @@ export default function HrmsAnnouncementsPage() {
         });
     };
 
-    const handleVoteFromCard = async (announcementId: string, optionId: string) => {
+    const handleVoteFromCard = async (
+        announcementId: string,
+        optionId?: string,
+        textResponse?: string
+    ) => {
         const ann = announcements.find((a) => a._id === announcementId);
         if (!ann || !ann.poll || isVoting) return;
 
-        let nextSelected: string[] = [];
-        if (ann.poll.allowMultiple) {
-            const currentSelected = ann.poll.userVotedOptionIds || [];
-            if (currentSelected.includes(optionId)) {
-                nextSelected = currentSelected.filter((id) => id !== optionId);
-                if (nextSelected.length === 0) return;
+        let nextSelected: string[] | undefined = undefined;
+        if (optionId) {
+            if (ann.poll.allowMultiple) {
+                const currentSelected = ann.poll.userVotedOptionIds || [];
+                if (currentSelected.includes(optionId)) {
+                    nextSelected = currentSelected.filter((id) => id !== optionId);
+                    if (nextSelected.length === 0 && !textResponse) return;
+                } else {
+                    nextSelected = [...currentSelected, optionId];
+                }
             } else {
-                nextSelected = [...currentSelected, optionId];
+                nextSelected = [optionId];
             }
-        } else {
-            nextSelected = [optionId];
         }
 
         try {
-            await votePoll({ announcementId, optionIds: nextSelected }).unwrap();
+            await votePoll({
+                announcementId,
+                optionIds: nextSelected,
+                textResponse,
+            }).unwrap();
         } catch {
             // Handled
         }
@@ -541,19 +754,31 @@ export default function HrmsAnnouncementsPage() {
         if (includePoll) {
             const trimmedQuestion = pollQuestion.trim();
             if (!trimmedQuestion) {
-                setErrorMessage('Please enter a question for the poll.');
+                setErrorMessage('Please enter a question or prompt for the poll.');
                 return;
             }
-            const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
-            if (cleanOptions.length < 2) {
-                setErrorMessage('Please provide at least 2 non-empty options for the poll.');
-                return;
+            if (pollType === 'choice') {
+                const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+                if (cleanOptions.length < 2) {
+                    setErrorMessage('Please provide at least 2 non-empty options for the poll.');
+                    return;
+                }
+                pollPayload = {
+                    question: trimmedQuestion,
+                    pollType: 'choice',
+                    options: cleanOptions,
+                    allowMultiple: pollAllowMultiple,
+                    allowTextResponse: pollAllowTextResponse,
+                };
+            } else {
+                pollPayload = {
+                    question: trimmedQuestion,
+                    pollType: 'text',
+                    options: [],
+                    allowMultiple: false,
+                    allowTextResponse: true,
+                };
             }
-            pollPayload = {
-                question: trimmedQuestion,
-                options: cleanOptions,
-                allowMultiple: pollAllowMultiple,
-            };
         }
 
         try {
@@ -579,9 +804,11 @@ export default function HrmsAnnouncementsPage() {
             setSelectedUserIds([]);
             setUserSearchTerm('');
             setIncludePoll(false);
+            setPollType('choice');
             setPollQuestion('');
             setPollOptions(['', '']);
             setPollAllowMultiple(false);
+            setPollAllowTextResponse(false);
             setActiveTab('history');
         } catch (error: any) {
             setErrorMessage(error?.data?.message || 'Failed to publish announcement.');
@@ -613,9 +840,14 @@ export default function HrmsAnnouncementsPage() {
         }
     };
 
-    const openReceiptsModal = (id: string, annTitle: string) => {
+    const openReceiptsModal = (
+        id: string,
+        annTitle: string,
+        tab: 'unseen' | 'seen' | 'poll' = 'unseen'
+    ) => {
         setReceiptModalId(id);
         setReceiptModalTitle(annTitle);
+        setReceiptModalTab(tab);
     };
 
     return (
@@ -658,9 +890,9 @@ export default function HrmsAnnouncementsPage() {
                                     style={
                                         active
                                             ? {
-                                                  backgroundColor: 'var(--color-primary-soft, #eff6ff)',
-                                                  borderColor: 'var(--color-primary, #3b82f6)',
-                                                  color: 'var(--color-primary-darker, #1d4ed8)',
+                                                  backgroundColor: 'var(--color-primary-soft, #ECFDF5)',
+                                                  borderColor: 'var(--color-primary, #10B981)',
+                                                  color: 'var(--color-primary-darker, #047857)',
                                               }
                                             : {
                                                   backgroundColor: 'var(--color-bg-surface, #ffffff)',
@@ -787,10 +1019,10 @@ export default function HrmsAnnouncementsPage() {
                                                 type="checkbox"
                                                 checked={isPinned}
                                                 onChange={(e) => setIsPinned(e.target.checked)}
-                                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                             />
                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                                                <Pin size={13} className="text-blue-500" />
+                                                <Pin size={13} className="text-emerald-600" />
                                                 Pin announcement to the top of feed
                                             </div>
                                         </label>
@@ -833,9 +1065,9 @@ export default function HrmsAnnouncementsPage() {
                                                     style={
                                                         active
                                                             ? {
-                                                                  backgroundColor: '#EFF6FF',
-                                                                  borderColor: '#3B82F6',
-                                                                  boxShadow: '0 0 0 1px #3B82F6',
+                                                                  backgroundColor: '#ECFDF5',
+                                                                  borderColor: '#10B981',
+                                                                  boxShadow: '0 0 0 1px #10B981',
                                                               }
                                                             : {
                                                                   backgroundColor: '#f8fafc',
@@ -848,7 +1080,7 @@ export default function HrmsAnnouncementsPage() {
                                                             <Icon
                                                                 size={16}
                                                                 className={
-                                                                    active ? 'text-blue-600' : 'text-slate-500'
+                                                                    active ? 'text-emerald-600' : 'text-slate-500'
                                                                 }
                                                             />
                                                             <span className="text-xs font-bold text-slate-900">
@@ -858,7 +1090,7 @@ export default function HrmsAnnouncementsPage() {
                                                         <div
                                                             className={`w-4 h-4 rounded-full border flex items-center justify-center ${
                                                                 active
-                                                                    ? 'bg-blue-600 border-blue-600 text-white'
+                                                                    ? 'bg-emerald-600 border-emerald-600 text-white'
                                                                     : 'border-slate-300'
                                                             }`}
                                                         >
@@ -875,7 +1107,7 @@ export default function HrmsAnnouncementsPage() {
 
                                     {/* Department multi-select */}
                                     {targetType === 'department' && (
-                                        <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50/40">
+                                        <div className="mt-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50/40">
                                             <p className="text-xs font-semibold text-slate-800 mb-2.5">
                                                 Select Departments ({selectedDepartments.length} selected):
                                             </p>
@@ -891,8 +1123,8 @@ export default function HrmsAnnouncementsPage() {
                                                             style={
                                                                 isSelected
                                                                     ? {
-                                                                          backgroundColor: '#3B82F6',
-                                                                          borderColor: '#3B82F6',
+                                                                          backgroundColor: '#10B981',
+                                                                          borderColor: '#10B981',
                                                                           color: '#ffffff',
                                                                       }
                                                                     : {
@@ -913,7 +1145,7 @@ export default function HrmsAnnouncementsPage() {
 
                                     {/* User multi-select */}
                                     {targetType === 'users' && (
-                                        <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50/40">
+                                        <div className="mt-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50/40">
                                             <div className="flex items-center justify-between mb-2.5 gap-2">
                                                 <p className="text-xs font-semibold text-slate-800">
                                                     Select Team Members ({selectedUserIds.length} selected):
@@ -922,7 +1154,7 @@ export default function HrmsAnnouncementsPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => setSelectedUserIds([])}
-                                                        className="text-[11px] text-blue-600 hover:underline font-semibold"
+                                                        className="text-[11px] text-emerald-600 hover:underline font-semibold"
                                                     >
                                                         Clear all
                                                     </button>
@@ -952,13 +1184,13 @@ export default function HrmsAnnouncementsPage() {
                                                         return (
                                                             <span
                                                                 key={uid}
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200"
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200"
                                                             >
                                                                 {emp?.userId?.name || 'Employee'}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => toggleUser(uid)}
-                                                                    className="hover:text-blue-950 cursor-pointer"
+                                                                    className="hover:text-emerald-950 cursor-pointer"
                                                                 >
                                                                     <X size={12} />
                                                                 </button>
@@ -989,7 +1221,7 @@ export default function HrmsAnnouncementsPage() {
                                                                         type="checkbox"
                                                                         checked={isSelected}
                                                                         onChange={() => {}}
-                                                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                                                     />
                                                                     <div className="min-w-0">
                                                                         <p className="text-xs font-semibold text-slate-800 truncate">
@@ -1010,10 +1242,10 @@ export default function HrmsAnnouncementsPage() {
                                 </div>
 
                                 {/* Team Poll / Voting Section */}
-                                <div className="p-4 sm:p-5 rounded-2xl border border-indigo-200 bg-indigo-50/30 space-y-4">
+                                <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/30 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <BarChart3 size={18} className="text-indigo-600" />
+                                            <BarChart3 size={18} className="text-emerald-600" />
                                             <div>
                                                 <p className="text-sm font-bold text-slate-900">
                                                     Interactive Poll / Vote
@@ -1030,85 +1262,186 @@ export default function HrmsAnnouncementsPage() {
                                                 onChange={(e) => setIncludePoll(e.target.checked)}
                                                 className="sr-only peer"
                                             />
-                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
+                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600" />
                                         </label>
                                     </div>
 
                                     {includePoll && (
-                                        <div className="pt-3 border-t border-indigo-100 space-y-4">
+                                        <div className="pt-3 border-t border-emerald-100 space-y-4">
+                                            {/* Poll Format Selector */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-800 mb-2">
+                                                    Poll Format
+                                                </label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPollType('choice')}
+                                                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                                                            pollType === 'choice'
+                                                                ? 'bg-emerald-50/70 border-emerald-500 shadow-2xs'
+                                                                : 'bg-white border-slate-200 hover:border-slate-300'
+                                                        }`}
+                                                    >
+                                                        <BarChart3
+                                                            size={16}
+                                                            className={
+                                                                pollType === 'choice'
+                                                                    ? 'text-emerald-600 shrink-0 mt-0.5'
+                                                                    : 'text-slate-400 shrink-0 mt-0.5'
+                                                            }
+                                                        />
+                                                        <div>
+                                                            <p
+                                                                className={`text-xs font-bold ${
+                                                                    pollType === 'choice'
+                                                                        ? 'text-emerald-950'
+                                                                        : 'text-slate-800'
+                                                                }`}
+                                                            >
+                                                                Choice Poll (Options)
+                                                            </p>
+                                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                Members vote on defined options (e.g. Yes/No, Dates)
+                                                            </p>
+                                                        </div>
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPollType('text')}
+                                                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                                                            pollType === 'text'
+                                                                ? 'bg-emerald-50/70 border-emerald-500 shadow-2xs'
+                                                                : 'bg-white border-slate-200 hover:border-slate-300'
+                                                        }`}
+                                                    >
+                                                        <HelpCircle
+                                                            size={16}
+                                                            className={
+                                                                pollType === 'text'
+                                                                    ? 'text-emerald-600 shrink-0 mt-0.5'
+                                                                    : 'text-slate-400 shrink-0 mt-0.5'
+                                                            }
+                                                        />
+                                                        <div>
+                                                            <p
+                                                                className={`text-xs font-bold ${
+                                                                    pollType === 'text'
+                                                                        ? 'text-emerald-950'
+                                                                        : 'text-slate-800'
+                                                                }`}
+                                                            >
+                                                                Open Question / Feedback
+                                                            </p>
+                                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                Ask for member input, suggestions, or text responses
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                                                    Poll Question <span className="text-red-500">*</span>
+                                                    {pollType === 'text' ? 'Question or Prompt' : 'Poll Question'}{' '}
+                                                    <span className="text-red-500">*</span>
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={pollQuestion}
                                                     onChange={(e) => setPollQuestion(e.target.value)}
-                                                    placeholder="e.g. Which date works best for the quarterly team outing?"
+                                                    placeholder={
+                                                        pollType === 'text'
+                                                            ? 'e.g. What suggestions do you have for the upcoming project kickoff?'
+                                                            : 'e.g. Which date works best for the quarterly team outing?'
+                                                    }
                                                     className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none"
                                                 />
                                             </div>
 
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                                                    Poll Options (min 2, max 6)
-                                                </label>
-                                                <div className="space-y-2">
-                                                    {pollOptions.map((opt, idx) => (
-                                                        <div key={idx} className="flex items-center gap-2">
-                                                            <span className="text-xs font-bold text-slate-400 w-5">
-                                                                {idx + 1}.
-                                                            </span>
-                                                            <input
-                                                                type="text"
-                                                                value={opt}
-                                                                onChange={(e) =>
-                                                                    handlePollOptionChange(idx, e.target.value)
-                                                                }
-                                                                placeholder={`Option ${idx + 1}...`}
-                                                                className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none"
-                                                            />
-                                                            {pollOptions.length > 2 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleRemovePollOption(idx)}
-                                                                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
-                                                                    title="Remove option"
-                                                                >
-                                                                    <X size={15} />
-                                                                </button>
-                                                            )}
+                                            {pollType === 'choice' ? (
+                                                <>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                                            Poll Options (min 2, max 6)
+                                                        </label>
+                                                        <div className="space-y-2">
+                                                            {pollOptions.map((opt, idx) => (
+                                                                <div key={idx} className="flex items-center gap-2">
+                                                                    <span className="text-xs font-bold text-slate-400 w-5">
+                                                                        {idx + 1}.
+                                                                    </span>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={opt}
+                                                                        onChange={(e) =>
+                                                                            handlePollOptionChange(idx, e.target.value)
+                                                                        }
+                                                                        placeholder={`Option ${idx + 1}...`}
+                                                                        className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none"
+                                                                    />
+                                                                    {pollOptions.length > 2 && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleRemovePollOption(idx)}
+                                                                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
+                                                                            title="Remove option"
+                                                                        >
+                                                                            <X size={15} />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
+
+                                                        {pollOptions.length < 6 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAddPollOption}
+                                                                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer"
+                                                            >
+                                                                <Plus size={13} />
+                                                                Add Option
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-2 pt-1">
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={pollAllowMultiple}
+                                                                onChange={(e) =>
+                                                                    setPollAllowMultiple(e.target.checked)
+                                                                }
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                                            />
+                                                            <span className="text-xs font-semibold text-slate-700">
+                                                                Allow team members to select multiple choices
+                                                            </span>
+                                                        </label>
+
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={pollAllowTextResponse}
+                                                                onChange={(e) =>
+                                                                    setPollAllowTextResponse(e.target.checked)
+                                                                }
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                                            />
+                                                            <span className="text-xs font-semibold text-slate-700">
+                                                                Allow team members to add comments / feedback with their vote
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 text-xs text-slate-600 leading-relaxed">
+                                                    💡 Team members will be prompted to type their answer directly. All user responses will be tracked and visible in the <strong>Receipts & Responses</strong> modal.
                                                 </div>
-
-                                                {pollOptions.length < 6 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleAddPollOption}
-                                                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-100/70 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
-                                                    >
-                                                        <Plus size={13} />
-                                                        Add Option
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={pollAllowMultiple}
-                                                        onChange={(e) =>
-                                                            setPollAllowMultiple(e.target.checked)
-                                                        }
-                                                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                                    />
-                                                    <span className="text-xs font-semibold text-slate-700">
-                                                        Allow team members to select multiple choices
-                                                    </span>
-                                                </label>
-                                            </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1175,7 +1508,7 @@ export default function HrmsAnnouncementsPage() {
                             <Loader2
                                 size={18}
                                 className="animate-spin"
-                                style={{ color: 'var(--color-primary, #3b82f6)' }}
+                                style={{ color: 'var(--color-primary, #10B981)' }}
                             />
                             <span
                                 className="text-sm"
@@ -1227,10 +1560,11 @@ export default function HrmsAnnouncementsPage() {
                 </div>
             )}
 
-            {/* Read Receipts Modal */}
+            {/* Read Receipts & Poll Breakdown Modal */}
             <AnnouncementReceiptsModal
                 announcementId={receiptModalId}
                 announcementTitle={receiptModalTitle}
+                initialTab={receiptModalTab}
                 onClose={() => setReceiptModalId(null)}
             />
         </div>

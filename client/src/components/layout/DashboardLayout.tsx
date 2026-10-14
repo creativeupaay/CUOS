@@ -13,7 +13,7 @@ import { Toaster } from 'react-hot-toast';
 import TabBar from './TabBar';
 import DashboardRoutes from './DashboardRoutes';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
-import AnnouncementPopupModal from '@/components/organisms/AnnouncementPopupModal';
+import AnnouncementBell from '@/components/organisms/AnnouncementBell';
 /**
  * DashboardLayout
  *
@@ -24,6 +24,7 @@ import AnnouncementPopupModal from '@/components/organisms/AnnouncementPopupModa
  */
 
 const ROUTE_TITLES: Record<string, string> = {
+    '/announcements': 'Company Announcements',
     '/projects': 'Projects',
     '/tasks': 'Tasks',
     '/tasks/daily-overview': 'Daily Overview',
@@ -316,6 +317,9 @@ export default function DashboardLayout() {
                             )}
                         </Link>
 
+                        {/* Announcement Bell (left of Notification Bell) */}
+                        <AnnouncementBell />
+
                         {/* Notification Bell (far right) */}
                         <NotificationBell />
                     </div>
@@ -354,9 +358,6 @@ export default function DashboardLayout() {
 
             {/* Notification Panel */}
             <NotificationPanel />
-
-            {/* Unread Company Announcement Modal */}
-            <AnnouncementPopupModal />
         </div>
     );
 }

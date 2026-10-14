@@ -212,17 +212,22 @@ export const hrmsApi = api.injectEndpoints({
             ApiResponse<{ success: boolean; poll: FormattedPoll }>,
             { announcementId: string } & VotePollRequest
         >({
-            query: ({ announcementId, optionIds }) => ({
+            query: ({ announcementId, optionIds, textResponse }) => ({
                 url: `/hrms/announcements/${announcementId}/vote`,
                 method: 'POST',
-                body: { optionIds },
+                body: { optionIds, textResponse },
             }),
-            async onQueryStarted({ announcementId, optionIds }, { dispatch, queryFulfilled }) {
+            async onQueryStarted({ announcementId, optionIds, textResponse }, { dispatch, queryFulfilled }) {
                 const patchList = dispatch(
                     hrmsApi.util.updateQueryData('getAnnouncements', undefined, (draft) => {
                         const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
                         if (item && item.poll) {
-                            item.poll.userVotedOptionIds = optionIds;
+                            if (optionIds) {
+                                item.poll.userVotedOptionIds = optionIds;
+                            }
+                            if (textResponse) {
+                                item.poll.userTextResponse = textResponse;
+                            }
                             item.poll.hasVoted = true;
                         }
                     })
@@ -231,7 +236,12 @@ export const hrmsApi = api.injectEndpoints({
                     hrmsApi.util.updateQueryData('getUnreadAnnouncements', undefined, (draft) => {
                         const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
                         if (item && item.poll) {
-                            item.poll.userVotedOptionIds = optionIds;
+                            if (optionIds) {
+                                item.poll.userVotedOptionIds = optionIds;
+                            }
+                            if (textResponse) {
+                                item.poll.userTextResponse = textResponse;
+                            }
                             item.poll.hasVoted = true;
                         }
                     })

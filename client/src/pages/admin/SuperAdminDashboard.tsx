@@ -5,11 +5,12 @@ import { useGetMyProfileQuery } from '@/features/hrms/hrmsApi';
 import {
     FolderKanban, DollarSign, Users, Building2, Shield,
     ArrowRight, Clock, Sparkles, Briefcase, Handshake, ListTodo, Gamepad2,
-    Database, ExternalLink
+    Database, ExternalLink, Megaphone
 } from 'lucide-react';
 import NotificationBell from '@/features/notification/components/NotificationBell';
 import NotificationPanel from '@/features/notification/components/NotificationPanel';
 import GlobalTimerWidget from '@/components/organisms/project/GlobalTimerWidget';
+import AnnouncementBell from '@/components/organisms/AnnouncementBell';
 
 import { useCheckJobManagerStatusQuery } from '@/features/hiring/hiringApi';
 import { hasModuleViewAccess, hasModuleAdminAccess, hasHrmsSelfSubmoduleAccess } from '@/utils/modulePermissions';
@@ -41,6 +42,7 @@ const MODULE_ACCENTS: Record<string, { from: string; to: string }> = {
     partners: { from: '#0E7490', to: '#06B6D4' },
     teamManagement: { from: '#6366F1', to: '#8B5CF6' },
     gameZone: { from: '#F59E0B', to: '#F43F5E' },
+    announcements: { from: '#E11D48', to: '#F43F5E' },
 };
 
 /* ── Department Card ─────────────────────────────────────── */
@@ -278,6 +280,13 @@ export default function SuperAdminDashboard() {
             icon: <Gamepad2 size={22} />,
             path: '/games',
         },
+        {
+            key: 'announcements',
+            title: 'Announcements',
+            description: 'Company-wide notices, team polls, important updates and broadcasts',
+            icon: <Megaphone size={22} />,
+            path: '/announcements',
+        },
     ];
 
     const partnerDepartments = [
@@ -318,8 +327,8 @@ export default function SuperAdminDashboard() {
 
     const nonAdminDepartments = allDepartments
         .filter(d => {
-            if (!['projectManagement', 'tasks', 'finance', 'crm', 'hrms', 'overallAdmin', 'dbBackup', 'partners', 'hiring', 'gameZone'].includes(d.key)) return false;
-            if (d.key === 'gameZone') return true; // Game zone is visible to all non-partner users
+            if (!['projectManagement', 'tasks', 'finance', 'crm', 'hrms', 'overallAdmin', 'dbBackup', 'partners', 'hiring', 'gameZone', 'announcements'].includes(d.key)) return false;
+            if (d.key === 'gameZone' || d.key === 'announcements') return true; // Game zone & Announcements are visible to all internal users
             if (d.key === 'dbBackup') return isAdmin; // DB_Backup is only visible to admin IDs
             
             // Tasks module reuses projectManagement access
@@ -419,6 +428,9 @@ export default function SuperAdminDashboard() {
                                 </div>
                             )}
                         </Link>
+
+                        {/* Announcement Bell (left of Notification Bell) */}
+                        <AnnouncementBell />
 
                         {/* Notification Bell (far right) */}
                         <NotificationBell />

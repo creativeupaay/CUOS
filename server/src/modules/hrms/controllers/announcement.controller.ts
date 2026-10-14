@@ -15,7 +15,12 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
 
 export const getAnnouncements = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const isAdmin = req.user ? hasModuleAdminAccess(req.user, 'hrms') : false;
+    const roleName = String(req.user?.role || '').toLowerCase();
+    const isAdmin = req.user
+        ? hasModuleAdminAccess(req.user, 'hrms') ||
+          hasModuleAdminAccess(req.user, 'overallAdmin') ||
+          ['super-admin', 'super_admin', 'admin', 'hr', 'hr-admin', 'hr_admin'].includes(roleName)
+        : false;
     const announcements = await announcementService.getAnnouncements(userId, isAdmin);
 
     res.json({
@@ -71,8 +76,8 @@ export const nudgeUnseen = asyncHandler(async (req: Request, res: Response) => {
 export const votePoll = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const announcementId = req.params.id;
-    const { optionIds } = req.body;
-    const result = await announcementService.votePoll(announcementId, optionIds, userId);
+    const { optionIds, textResponse } = req.body;
+    const result = await announcementService.votePoll(announcementId, { optionIds, textResponse }, userId);
 
     res.json({
         status: 'success',

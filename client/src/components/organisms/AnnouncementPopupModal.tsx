@@ -12,6 +12,9 @@ import {
     Pin,
     BarChart3,
     Check,
+    MessageSquare,
+    HelpCircle,
+    Send,
 } from 'lucide-react';
 import { useAppSelector } from '@/app/hooks';
 import { socket } from '@/services/socket';
@@ -39,6 +42,17 @@ export default function AnnouncementPopupModal() {
             : String(user.role).toLowerCase()
         : '';
     const isPartner = roleName === 'partner' || !!user?.isPartnerEmployee;
+    const canManage = [
+        'super-admin',
+        'admin',
+        'super_admin',
+        'hr',
+        'hr-admin',
+        'hr_admin',
+        'hr-manager',
+        'hrmanager',
+        'human-resources',
+    ].includes(roleName);
 
     // Dismissed announcements for this browser session (if user clicked "Remind me later" on non-urgent ones)
     const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -88,6 +102,14 @@ export default function AnnouncementPopupModal() {
 
     const currentAnnouncement = unreadList[currentIndex];
 
+    const [feedbackText, setFeedbackText] = useState('');
+    const [isEditingFeedback, setIsEditingFeedback] = useState(false);
+
+    useEffect(() => {
+        setFeedbackText(currentAnnouncement?.poll?.userTextResponse || '');
+        setIsEditingFeedback(false);
+    }, [currentAnnouncement?._id, currentAnnouncement?.poll?.userTextResponse]);
+
     const handleAcknowledge = useCallback(async () => {
         if (!currentAnnouncement) return;
         try {
@@ -104,28 +126,30 @@ export default function AnnouncementPopupModal() {
         }
     }, [currentAnnouncement]);
 
-    const handleOptionVote = async (optionId: string) => {
+    const handleOptionVote = async (optionId?: string, textResponse?: string) => {
         if (!currentAnnouncement || !currentAnnouncement.poll || isVoting) return;
         const poll = currentAnnouncement.poll;
-        let nextSelected: string[] = [];
+        let nextSelected: string[] | undefined = undefined;
 
-        if (poll.allowMultiple) {
-            const currentSelected = poll.userVotedOptionIds || [];
-            if (currentSelected.includes(optionId)) {
-                nextSelected = currentSelected.filter((id) => id !== optionId);
-                // Require at least one option selected
-                if (nextSelected.length === 0) return;
+        if (optionId) {
+            if (poll.allowMultiple) {
+                const currentSelected = poll.userVotedOptionIds || [];
+                if (currentSelected.includes(optionId)) {
+                    nextSelected = currentSelected.filter((id) => id !== optionId);
+                    if (nextSelected.length === 0 && !textResponse) return;
+                } else {
+                    nextSelected = [...currentSelected, optionId];
+                }
             } else {
-                nextSelected = [...currentSelected, optionId];
+                nextSelected = [optionId];
             }
-        } else {
-            nextSelected = [optionId];
         }
 
         try {
             await votePoll({
                 announcementId: currentAnnouncement._id,
                 optionIds: nextSelected,
+                textResponse,
             }).unwrap();
         } catch {
             // Handled
@@ -139,6 +163,7 @@ export default function AnnouncementPopupModal() {
     const isUrgent = currentAnnouncement.priority === 'urgent';
     const isPinned = Boolean(currentAnnouncement.isPinned);
     const poll = currentAnnouncement.poll;
+    const showResults = Boolean(canManage || poll?.hasVoted);
 
     return (
         <div
@@ -186,7 +211,7 @@ export default function AnnouncementPopupModal() {
                             )}
 
                             {isPinned && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                                     <Pin size={11} />
                                     Pinned
                                 </span>
@@ -238,94 +263,239 @@ export default function AnnouncementPopupModal() {
 
                     {/* Poll / Voting Card */}
                     {poll && (
-                        <div className="mt-4 p-4 rounded-2xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-xs">
+                        <div className="mt-4 p-4 rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/30 to-white shadow-xs">
                             <div className="flex items-center justify-between gap-2 mb-2.5">
                                 <div className="flex items-center gap-1.5">
-                                    <BarChart3 size={15} className="text-indigo-600" />
+                                    {poll.pollType === 'text' ? (
+                                        <HelpCircle size={15} className="text-emerald-600" />
+                                    ) : (
+                                        <BarChart3 size={15} className="text-emerald-600" />
+                                    )}
                                     <h4 className="text-xs font-bold text-slate-900">
                                         {poll.question}
                                     </h4>
                                 </div>
-                                <span className="text-[11px] font-medium text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-full">
-                                    {poll.allowMultiple ? 'Multiple choices' : 'Single choice'}
+                                <span className="text-[11px] font-medium text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                    {poll.pollType === 'text'
+                                        ? 'Open question'
+                                        : poll.allowMultiple
+                                        ? 'Multiple choices'
+                                        : 'Single choice'}
                                 </span>
                             </div>
 
-                            {/* Options List */}
-                            <div className="space-y-2 mt-3">
-                                {poll.options.map((opt) => {
-                                    const isSelected = poll.userVotedOptionIds?.includes(opt._id);
-                                    const percent = opt.percentage || 0;
+                            {/* Options List for Choice Polls */}
+                            {poll.pollType !== 'text' && (
+                                <div className="space-y-2 mt-3">
+                                    {poll.options.map((opt) => {
+                                        const isSelected = poll.userVotedOptionIds?.includes(opt._id);
+                                        const percent = opt.percentage || 0;
 
-                                    return (
-                                        <button
-                                            key={opt._id}
-                                            type="button"
-                                            onClick={() => handleOptionVote(opt._id)}
-                                            disabled={isVoting}
-                                            className={`relative w-full text-left p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${
-                                                isSelected
-                                                    ? 'border-indigo-500 bg-indigo-50/60 shadow-xs'
-                                                    : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/70'
-                                            }`}
-                                        >
-                                            {/* Filled Progress Bar if user has voted */}
-                                            {poll.hasVoted && (
-                                                <div
-                                                    className="absolute inset-y-0 left-0 bg-indigo-100/60 transition-all duration-500"
-                                                    style={{ width: `${percent}%` }}
-                                                />
-                                            )}
-
-                                            <div className="relative flex items-center justify-between gap-3">
-                                                <div className="flex items-center gap-2.5 min-w-0">
+                                        return (
+                                            <button
+                                                key={opt._id}
+                                                type="button"
+                                                onClick={() => handleOptionVote(opt._id)}
+                                                disabled={isVoting}
+                                                className={`relative w-full text-left p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${
+                                                    isSelected
+                                                        ? 'border-emerald-500 bg-emerald-50/60 shadow-xs'
+                                                        : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/70'
+                                                }`}
+                                            >
+                                                {/* Filled Progress Bar if user has voted or admin */}
+                                                {showResults && (
                                                     <div
-                                                        className={`w-4 h-4 rounded-${
-                                                            poll.allowMultiple ? 'md' : 'full'
-                                                        } border flex items-center justify-center shrink-0 transition-colors ${
-                                                            isSelected
-                                                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                                                : 'border-slate-300 bg-white'
-                                                        }`}
-                                                    >
-                                                        {isSelected && <Check size={11} strokeWidth={3} />}
-                                                    </div>
-                                                    <span
-                                                        className={`text-xs truncate ${
-                                                            isSelected
-                                                                ? 'font-bold text-indigo-950'
-                                                                : 'font-medium text-slate-800'
-                                                        }`}
-                                                    >
-                                                        {opt.text}
-                                                    </span>
-                                                </div>
-
-                                                {/* Percentage / Vote Count */}
-                                                {poll.hasVoted && (
-                                                    <div className="flex items-center gap-1.5 shrink-0 text-right">
-                                                        <span className="text-xs font-bold text-slate-900">
-                                                            {percent}%
-                                                        </span>
-                                                        <span className="text-[11px] text-slate-400">
-                                                            ({opt.voteCount})
-                                                        </span>
-                                                    </div>
+                                                        className="absolute inset-y-0 left-0 bg-emerald-100/60 transition-all duration-500"
+                                                        style={{ width: `${percent}%` }}
+                                                    />
                                                 )}
+
+                                                <div className="relative flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div
+                                                            className={`w-4 h-4 rounded-${
+                                                                poll.allowMultiple ? 'md' : 'full'
+                                                            } border flex items-center justify-center shrink-0 transition-colors ${
+                                                                isSelected
+                                                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                                    : 'border-slate-300 bg-white'
+                                                            }`}
+                                                        >
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span
+                                                            className={`text-xs truncate ${
+                                                                isSelected
+                                                                    ? 'font-bold text-emerald-950'
+                                                                    : 'font-medium text-slate-800'
+                                                            }`}
+                                                        >
+                                                            {opt.text}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Percentage / Vote Count */}
+                                                    {showResults && (
+                                                        <div className="flex items-center gap-1.5 shrink-0 text-right">
+                                                            <span className="text-xs font-bold text-emerald-700">
+                                                                {percent}%
+                                                            </span>
+                                                            <span className="text-[11px] text-slate-400">
+                                                                ({opt.voteCount})
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Comment Area for Choice Poll with allowTextResponse */}
+                            {poll.pollType !== 'text' && poll.allowTextResponse && (
+                                <div className="mt-3 pt-2.5 border-t border-emerald-100/70">
+                                    {poll.userTextResponse && !isEditingFeedback ? (
+                                        <div className="p-2.5 rounded-xl bg-white border border-emerald-100 flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="text-[11px] font-bold text-emerald-900 flex items-center gap-1">
+                                                    <MessageSquare size={11} /> Your comment:
+                                                </p>
+                                                <p className="text-xs text-slate-700 mt-0.5 whitespace-pre-wrap">
+                                                    {poll.userTextResponse}
+                                                </p>
                                             </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsEditingFeedback(true)}
+                                                className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold cursor-pointer shrink-0"
+                                            >
+                                                Edit
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                                                <MessageSquare size={12} className="text-emerald-600" />
+                                                <span>Add comment with your vote:</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={feedbackText}
+                                                    onChange={(e) => setFeedbackText(e.target.value)}
+                                                    placeholder="Type optional comments..."
+                                                    className="flex-1 text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-emerald-500"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={!feedbackText.trim() || isVoting}
+                                                    onClick={async () => {
+                                                        await handleOptionVote(
+                                                            undefined,
+                                                            feedbackText.trim()
+                                                        );
+                                                        setIsEditingFeedback(false);
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Open-Ended Question Input / Response Area */}
+                            {poll.pollType === 'text' && (
+                                <div className="mt-2.5">
+                                    {poll.userTextResponse && !isEditingFeedback ? (
+                                        <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1">
+                                                    <Check size={13} className="text-emerald-600" /> Your Response
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsEditingFeedback(true)}
+                                                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold cursor-pointer"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-slate-700 whitespace-pre-wrap">
+                                                {poll.userTextResponse}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <textarea
+                                                value={feedbackText}
+                                                onChange={(e) => setFeedbackText(e.target.value)}
+                                                placeholder="Type your response or answer here..."
+                                                rows={2}
+                                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-emerald-500 leading-relaxed"
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                {isEditingFeedback && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFeedbackText(
+                                                                poll.userTextResponse || ''
+                                                            );
+                                                            setIsEditingFeedback(false);
+                                                        }}
+                                                        className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    disabled={!feedbackText.trim() || isVoting}
+                                                    onClick={async () => {
+                                                        await handleOptionVote(
+                                                            undefined,
+                                                            feedbackText.trim()
+                                                        );
+                                                        setIsEditingFeedback(false);
+                                                    }}
+                                                    className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                                                >
+                                                    {isVoting ? (
+                                                        <Loader2 size={12} className="animate-spin" />
+                                                    ) : (
+                                                        <Send size={12} />
+                                                    )}
+                                                    {poll.userTextResponse
+                                                        ? 'Update Response'
+                                                        : 'Submit Response'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Poll Footer */}
                             <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 px-1">
                                 <span>
-                                    {poll.totalVotes} {poll.totalVotes === 1 ? 'vote' : 'votes'} cast
+                                    {poll.totalVotes}{' '}
+                                    {poll.pollType === 'text'
+                                        ? poll.totalVotes === 1
+                                            ? 'response'
+                                            : 'responses'
+                                        : poll.totalVotes === 1
+                                        ? 'vote'
+                                        : 'votes'}{' '}
+                                    cast
                                 </span>
                                 {poll.hasVoted && (
-                                    <span className="text-indigo-600 font-semibold">
-                                        ✓ Your vote is recorded
+                                    <span className="text-emerald-600 font-semibold">
+                                        ✓ Your {poll.pollType === 'text' ? 'response' : 'vote'} is recorded
                                     </span>
                                 )}
                             </div>

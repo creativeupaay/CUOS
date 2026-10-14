@@ -157,11 +157,14 @@ export interface CreateAnnouncementRequest {
     targetUsers?: string[];
     poll?: {
         question: string;
-        options: string[];
+        pollType?: 'choice' | 'text';
+        options?: string[];
         allowMultiple?: boolean;
+        allowTextResponse?: boolean;
     };
 }
 
 export interface VotePollRequest {
-    optionIds: string[];
+    optionIds?: string[];
+    textResponse?: string;
 }
