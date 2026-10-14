@@ -148,5 +148,20 @@ export interface CheckOutRequest {
 }
 
 export interface CreateAnnouncementRequest {
+    title?: string;
     content: string;
+    priority?: 'normal' | 'urgent';
+    isPinned?: boolean;
+    targetType?: 'all' | 'department' | 'users';
+    targetDepartments?: string[];
+    targetUsers?: string[];
+    poll?: {
+        question: string;
+        options: string[];
+        allowMultiple?: boolean;
+    };
+}
+
+export interface VotePollRequest {
+    optionIds: string[];
 }

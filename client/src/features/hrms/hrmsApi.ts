@@ -2,7 +2,8 @@ import { api } from '@/services/api';
 import toast from 'react-hot-toast';
 import type {
     Employee, SalaryStructure, Leave, Payroll, LeaveBalance,
-    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance, Announcement
+    DashboardStats, WorkingHoursAnalytics, TeamAnalyticsMember, IncentiveSummary, Attendance, Announcement,
+    AnnouncementReceiptsResponse, FormattedPoll
 } from './types/types';
 import type {
     ApiResponse, PaginatedResponse,
@@ -11,7 +12,7 @@ import type {
     CreateLeaveRequest, UpdateLeaveStatusRequest,
     GeneratePayrollRequest, GenerateBulkPayrollRequest, UpdatePayrollRequest, UpdatePayrollStatusRequest,
     CheckInRequest, CheckOutRequest,
-    CreateAnnouncementRequest,
+    CreateAnnouncementRequest, VotePollRequest,
 } from './types/apiTypes';
 
 export const hrmsApi = api.injectEndpoints({
@@ -135,6 +136,136 @@ export const hrmsApi = api.injectEndpoints({
         getAnnouncements: builder.query<ApiResponse<{ announcements: Announcement[] }>, void>({
             query: () => '/hrms/announcements',
             providesTags: ['Announcements'],
+        }),
+
+        getUnreadAnnouncements: builder.query<ApiResponse<{ announcements: Announcement[] }>, void>({
+            query: () => '/hrms/announcements/unread',
+            providesTags: ['Announcements'],
+        }),
+
+        acknowledgeAnnouncement: builder.mutation<
+            ApiResponse<{ success: boolean; seenAt: string }>,
+            string
+        >({
+            query: (id) => ({
+                url: `/hrms/announcements/${id}/acknowledge`,
+                method: 'POST',
+            }),
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                // Optimistically update getUnreadAnnouncements and getAnnouncements
+                const patchUnread = dispatch(
+                    hrmsApi.util.updateQueryData('getUnreadAnnouncements', undefined, (draft) => {
+                        if (draft?.data?.announcements) {
+                            draft.data.announcements = draft.data.announcements.filter((a) => a._id !== id);
+                        }
+                    })
+                );
+                const patchList = dispatch(
+                    hrmsApi.util.updateQueryData('getAnnouncements', undefined, (draft) => {
+                        if (draft?.data?.announcements) {
+                            const found = draft.data.announcements.find((a) => a._id === id);
+                            if (found) {
+                                found.isAcknowledged = true;
+                                found.acknowledgedCount = (found.acknowledgedCount || 0) + 1;
+                                found.acknowledgedAt = new Date().toISOString();
+                            }
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchUnread.undo();
+                    patchList.undo();
+                }
+            },
+            invalidatesTags: ['Announcements'],
+        }),
+
+        getAnnouncementReceipts: builder.query<
+            ApiResponse<{ receipts: AnnouncementReceiptsResponse }>,
+            string
+        >({
+            query: (id) => `/hrms/announcements/${id}/receipts`,
+            providesTags: (_result, _error, id) => [{ type: 'Announcements', id: `receipts-${id}` }],
+        }),
+
+        nudgeUnseenAnnouncement: builder.mutation<
+            ApiResponse<{ nudgedCount: number }>,
+            string
+        >({
+            query: (id) => ({
+                url: `/hrms/announcements/${id}/nudge`,
+                method: 'POST',
+            }),
+            async onQueryStarted(_id, { queryFulfilled }) {
+                toast.promise(queryFulfilled, {
+                    loading: 'Sending reminder notification...',
+                    success: (res) => `Sent reminder to ${res.data?.data?.nudgedCount ?? 0} pending team member(s)`,
+                    error: (err) => err?.data?.message || 'Failed to send reminder',
+                });
+            },
+            invalidatesTags: (_result, _error, id) => [{ type: 'Announcements', id: `receipts-${id}` }],
+        }),
+
+        voteAnnouncementPoll: builder.mutation<
+            ApiResponse<{ success: boolean; poll: FormattedPoll }>,
+            { announcementId: string } & VotePollRequest
+        >({
+            query: ({ announcementId, optionIds }) => ({
+                url: `/hrms/announcements/${announcementId}/vote`,
+                method: 'POST',
+                body: { optionIds },
+            }),
+            async onQueryStarted({ announcementId, optionIds }, { dispatch, queryFulfilled }) {
+                const patchList = dispatch(
+                    hrmsApi.util.updateQueryData('getAnnouncements', undefined, (draft) => {
+                        const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
+                        if (item && item.poll) {
+                            item.poll.userVotedOptionIds = optionIds;
+                            item.poll.hasVoted = true;
+                        }
+                    })
+                );
+                const patchUnread = dispatch(
+                    hrmsApi.util.updateQueryData('getUnreadAnnouncements', undefined, (draft) => {
+                        const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
+                        if (item && item.poll) {
+                            item.poll.userVotedOptionIds = optionIds;
+                            item.poll.hasVoted = true;
+                        }
+                    })
+                );
+                try {
+                    const { data } = await queryFulfilled;
+                    if (data?.data?.poll) {
+                        dispatch(
+                            hrmsApi.util.updateQueryData('getAnnouncements', undefined, (draft) => {
+                                const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
+                                if (item) {
+                                    item.poll = data.data.poll;
+                                    item.isAcknowledged = true;
+                                }
+                            })
+                        );
+                        dispatch(
+                            hrmsApi.util.updateQueryData('getUnreadAnnouncements', undefined, (draft) => {
+                                const item = draft?.data?.announcements?.find((a) => a._id === announcementId);
+                                if (item) {
+                                    item.poll = data.data.poll;
+                                }
+                            })
+                        );
+                    }
+                } catch {
+                    patchList.undo();
+                    patchUnread.undo();
+                }
+            },
+            invalidatesTags: (_result, _error, { announcementId }) => [
+                'Announcements',
+                { type: 'Announcements', id: `receipts-${announcementId}` },
+            ],
         }),
 
         createAnnouncement: builder.mutation<
@@ -638,6 +769,11 @@ export const {
     useDeleteEmployeeMutation,
     useGetOnboardingEmployeesQuery,
     useGetAnnouncementsQuery,
+    useGetUnreadAnnouncementsQuery,
+    useAcknowledgeAnnouncementMutation,
+    useGetAnnouncementReceiptsQuery,
+    useNudgeUnseenAnnouncementMutation,
+    useVoteAnnouncementPollMutation,
     useCreateAnnouncementMutation,
     useDeleteAnnouncementMutation,
     useGenerateFormTokenMutation,

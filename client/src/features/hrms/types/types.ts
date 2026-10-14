@@ -190,14 +190,83 @@ export interface Payroll {
     updatedAt: string;
 }
 
+export interface AnnouncementReceiptUser {
+    _id: string;
+    name: string;
+    email: string;
+    department: string;
+    designation: string;
+    profilePhotoUrl?: string;
+}
+
+export interface FormattedPollOption {
+    _id: string;
+    text: string;
+    voteCount: number;
+    percentage: number;
+    hasVoted: boolean;
+}
+
+export interface FormattedPoll {
+    question: string;
+    options: FormattedPollOption[];
+    allowMultiple: boolean;
+    isClosed: boolean;
+    totalVotes: number;
+    userVotedOptionIds: string[];
+    hasVoted: boolean;
+}
+
+export interface PollVoterDetail {
+    user: AnnouncementReceiptUser;
+    votedAt: string;
+}
+
+export interface PollOptionResult {
+    _id: string;
+    text: string;
+    voteCount: number;
+    percentage: number;
+    voters: PollVoterDetail[];
+}
+
+export interface PollResultsDetail {
+    question: string;
+    totalVotes: number;
+    allowMultiple: boolean;
+    isClosed: boolean;
+    options: PollOptionResult[];
+}
+
+export interface AnnouncementReceiptsResponse {
+    announcementId: string;
+    totalTargeted: number;
+    seenCount: number;
+    unseenCount: number;
+    seen: Array<{ user: AnnouncementReceiptUser; seenAt: string }>;
+    unseen: Array<{ user: AnnouncementReceiptUser }>;
+    pollResults?: PollResultsDetail;
+}
+
 export interface Announcement {
     _id: string;
+    title?: string;
     content: string;
+    priority?: 'normal' | 'urgent';
+    isPinned?: boolean;
+    targetType?: 'all' | 'department' | 'users';
+    targetDepartments?: string[];
+    targetUsers?: Array<{ _id: string; name: string; email?: string } | string>;
     publishedBy?: {
         _id: string;
         name: string;
         email?: string;
     };
+    acknowledgedCount?: number;
+    totalTargetedCount?: number;
+    isAcknowledged?: boolean;
+    acknowledgedAt?: string | null;
+    poll?: FormattedPoll;
     createdAt: string;
     updatedAt: string;
 }

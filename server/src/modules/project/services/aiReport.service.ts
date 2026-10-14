@@ -440,13 +440,20 @@ export async function generateEmployeeAiReport(params: {
         }
     }
 
-    // 4. Fetch Completed & Overdue Tasks assigned to employee in period (even if no time log recorded)
+    // 4. Fetch Completed & Overdue Tasks assigned to or created by employee in period (even if no time log recorded)
     const assignedTasks = await Task.find({
-        assignees: userObjId,
         $or: [
-            { completedAt: { $gte: start, $lte: end } },
-            { deadline: { $gte: start, $lte: end } },
-            { status: 'in-progress' },
+            { assignees: userObjId },
+            { createdBy: userObjId },
+        ],
+        $and: [
+            {
+                $or: [
+                    { completedAt: { $gte: start, $lte: end } },
+                    { deadline: { $gte: start, $lte: end } },
+                    { status: 'in-progress' },
+                ],
+            },
         ],
     })
         .populate('projectId', 'name')
@@ -574,16 +581,42 @@ export async function generateEmployeeAiReport(params: {
     const prevLogs = await TimeLog.find({
         userId: userObjId,
         date: { $gte: prevStart, $lte: prevEnd },
-    }).select('duration date').lean();
+    }).select('duration date taskId').lean();
     const prevMinutes = prevLogs.reduce((acc, l) => acc + (l.duration || 0), 0);
     const prevDatesSet = new Set(prevLogs.map(l => l.date ? new Date(l.date).toISOString().split('T')[0] : ''));
     prevDatesSet.delete('');
     const prevActiveDays = prevDatesSet.size;
 
+    const prevTaskIds = Array.from(
+        new Set(
+            prevLogs
+                .map(l => {
+                    const rawId = (l as any).taskId;
+                    if (!rawId) return null;
+                    return rawId._id ? rawId._id.toString() : rawId.toString();
+                })
+                .filter((id): id is string => Boolean(id) && id !== '000000000000000000000000' && mongoose.Types.ObjectId.isValid(id))
+        )
+    );
+
     const prevCompletedTasks = await Task.countDocuments({
-        assignees: userObjId,
-        status: 'completed',
-        completedAt: { $gte: prevStart, $lte: prevEnd },
+        $and: [
+            { status: 'completed' },
+            {
+                $or: [
+                    { completedAt: { $gte: prevStart, $lte: prevEnd } },
+                    { completedAt: { $exists: false }, updatedAt: { $gte: prevStart, $lte: prevEnd } },
+                    { completedAt: null, updatedAt: { $gte: prevStart, $lte: prevEnd } },
+                ],
+            },
+            {
+                $or: [
+                    { assignees: userObjId },
+                    { createdBy: userObjId },
+                    ...(prevTaskIds.length > 0 ? [{ _id: { $in: prevTaskIds.map(id => new mongoose.Types.ObjectId(id)) } }] : []),
+                ],
+            },
+        ],
     });
 
     const totalTrackedMinutes = totalWorkMinutes + totalMeetingMinutes;
@@ -896,6 +929,7 @@ export async function generateEmployeeAiReport(params: {
             totalWorkMinutes,
             totalMeetingMinutes,
             prevMinutes,
+            prevCompletedTasks,
         }))
         .digest('hex');
 

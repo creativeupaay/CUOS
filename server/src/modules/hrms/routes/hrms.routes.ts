@@ -7,9 +7,8 @@ import { hasModuleAdminAccess } from '../../../utils/moduleAccess.util';
 import { Leave } from '../models/Leave.model';
 import { Employee } from '../models/Employee.model';
 
-// Validators
 import { createEmployeeSchema, updateEmployeeSchema, selfUpdateSchema } from '../validators/employee.validator';
-import { createAnnouncementSchema, deleteAnnouncementSchema } from '../validators/announcement.validator';
+import { createAnnouncementSchema, deleteAnnouncementSchema, acknowledgeAnnouncementSchema, nudgeAnnouncementSchema, votePollSchema } from '../validators/announcement.validator';
 import { createSalarySchema, updateSalarySchema } from '../validators/salary.validator';
 import { createLeaveSchema, updateLeaveStatusSchema, deleteLeaveSchema } from '../validators/leave.validator';
 import { generatePayrollSchema, generateBulkPayrollSchema, updatePayrollSchema, updatePayrollStatusSchema, deletePayrollSchema } from '../validators/payroll.validator';
@@ -93,6 +92,30 @@ router.patch(
 
 // Company announcements
 router.get('/announcements', internalHrmsOnly, hrmsSelfSubmoduleOnly('announcements'), announcementController.getAnnouncements);
+router.get('/announcements/unread', internalHrmsOnly, announcementController.getUnreadAnnouncements);
+router.post(
+    '/announcements/:id/acknowledge',
+    internalHrmsOnly,
+    validateRequest(acknowledgeAnnouncementSchema),
+    announcementController.acknowledgeAnnouncement
+);
+router.post(
+    '/announcements/:id/vote',
+    internalHrmsOnly,
+    validateRequest(votePollSchema),
+    announcementController.votePoll
+);
+router.get(
+    '/announcements/:id/receipts',
+    hrAdminOnly,
+    announcementController.getAnnouncementReceipts
+);
+router.post(
+    '/announcements/:id/nudge',
+    hrAdminOnly,
+    validateRequest(nudgeAnnouncementSchema),
+    announcementController.nudgeUnseen
+);
 router.post(
     '/announcements',
     hrAdminOnly,

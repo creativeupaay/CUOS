@@ -13,6 +13,7 @@ import { Toaster } from 'react-hot-toast';
 import TabBar from './TabBar';
 import DashboardRoutes from './DashboardRoutes';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
+import AnnouncementPopupModal from '@/components/organisms/AnnouncementPopupModal';
 /**
  * DashboardLayout
  *
@@ -353,6 +354,9 @@ export default function DashboardLayout() {
 
             {/* Notification Panel */}
             <NotificationPanel />
+
+            {/* Unread Company Announcement Modal */}
+            <AnnouncementPopupModal />
         </div>
     );
 }
