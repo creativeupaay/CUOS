@@ -112,17 +112,6 @@ function getModuleConfig(
     const isPartner = roleName === 'partner';
     const isPartnerEmployee = !!user?.isPartnerEmployee;
 
-    // ── Company Announcements — accessible to all internal CUOS users ──
-    if (pathname.startsWith('/announcements')) {
-        if (isPartner) return null;
-        return {
-            title: 'Announcements',
-            items: [
-                { label: 'Company Feed', path: '/announcements', icon: <Megaphone size={18} />, matchPrefix: '/announcements' },
-            ],
-        };
-    }
-
     // ── Tasks hub — must be checked BEFORE the generic /projects block ──
     if (pathname.startsWith('/tasks') || pathname.startsWith('/reports')) {
         const hasAccess = hasModuleViewAccess(user, 'projectManagement') || (isPartner && mp?.projectManagement?.enabled);

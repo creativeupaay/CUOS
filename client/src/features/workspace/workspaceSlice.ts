@@ -22,11 +22,7 @@ const initialState: WorkspaceState = {
 };
 
 const normalizeUrlPath = (u: string) => {
-    const norm = (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
-    if (norm === '/announcements' || norm === '/hrms/announcements' || norm === '/my-hrms/announcements') {
-        return 'canonical-announcements';
-    }
-    return norm;
+    return (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
 };
 
 export const workspaceSlice = createSlice({
@@ -112,13 +108,10 @@ export const workspaceSlice = createSlice({
                 seen.add(key);
                 return true;
             });
-            // Normalize any legacy /announcements URLs so they do not trigger background redirects
-            state.tabs.forEach(t => {
+            // Remove any lingering standalone /announcements tabs
+            state.tabs = state.tabs.filter(t => {
                 const raw = (t.url || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
-                if (raw === '/announcements' || raw === '/hrms/announcements') {
-                    t.url = '/my-hrms/announcements';
-                    t.title = 'Announcements';
-                }
+                return raw !== '/announcements';
             });
             if (state.activeTabId && !state.tabs.some(t => t.id === state.activeTabId)) {
                 state.activeTabId = state.tabs[0]?.id || null;

@@ -664,7 +664,7 @@ export default function HrmsAnnouncementsPage() {
     const announcements = useMemo(() => data?.data?.announcements || [], [data]);
 
     if (isPartner) return <Navigate to="/dashboard" replace />;
-    if (isAdminSide && !isHrAdmin) return <Navigate to="/announcements" replace />;
+    if (isAdminSide && !isHrAdmin) return <Navigate to="/my-hrms/announcements" replace />;
 
     const toggleDepartment = (dept: string) => {
         setSelectedDepartments((prev) =>

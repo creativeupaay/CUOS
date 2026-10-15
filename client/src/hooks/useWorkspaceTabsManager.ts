@@ -107,7 +107,7 @@ export function resolveTabGroup(pathname: string): string | undefined {
         return 'hiring-application-detail-' + segments[2];
     }
 
-    if (pathname === '/announcements' || pathname === '/hrms/announcements' || pathname === '/my-hrms/announcements') {
+    if (pathname === '/hrms/announcements' || pathname === '/my-hrms/announcements') {
         return 'hrms-announcements';
     }
 
@@ -125,11 +125,7 @@ export function useWorkspaceTabsManager() {
     const processedLocationKeyRef = useRef<string | null>(null);
 
     const normalizeUrl = (u: string) => {
-        const norm = (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
-        if (norm === '/announcements' || norm === '/hrms/announcements' || norm === '/my-hrms/announcements') {
-            return 'canonical-announcements';
-        }
-        return norm;
+        return (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
     };
 
     // Sanitize any existing duplicates on load
@@ -150,10 +146,6 @@ export function useWorkspaceTabsManager() {
         processedLocationKeyRef.current = location.key;
 
         let currentUrl = location.pathname;
-        if (currentUrl === '/announcements') {
-            const isHrAdmin = user?.role === 'admin' || user?.role === 'super-admin' || user?.modulePermissions?.hrms?.adminAccess === true;
-            currentUrl = isHrAdmin ? '/hrms/announcements' : '/my-hrms/announcements';
-        }
         const activeTab = tabs.find(t => t.id === activeTabId);
 
         // If the current browser URL matches the active tab's URL perfectly, do nothing.
@@ -210,9 +202,7 @@ export function useWorkspaceTabsManager() {
         } else {
             // In-page navigation without newTab flag
             const getBaseModule = (u: string) => {
-                const norm = (u || '').toLowerCase().replace(/\/+$/, '').split('?')[0].split('#')[0];
-                if (norm === 'canonical-announcements' || norm === '/announcements' || norm.includes('/announcements')) return 'hrms';
-                const base = u.split('/')[1];
+                const base = (u || '').split('/')[1];
                 return base === 'my-hrms' ? 'hrms' : base;
             };
             const isBaseUrlChanged = activeTab && getBaseModule(normalizeUrl(activeTab.url)) !== getBaseModule(normalizeUrl(currentUrl));

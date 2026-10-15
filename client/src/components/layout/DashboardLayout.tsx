@@ -13,7 +13,6 @@ import { Toaster } from 'react-hot-toast';
 import TabBar from './TabBar';
 import DashboardRoutes from './DashboardRoutes';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
-import AnnouncementBell from '@/components/organisms/AnnouncementBell';
 /**
  * DashboardLayout
  *
@@ -24,7 +23,6 @@ import AnnouncementBell from '@/components/organisms/AnnouncementBell';
  */
 
 const ROUTE_TITLES: Record<string, string> = {
-    '/announcements': 'Company Announcements',
     '/projects': 'Projects',
     '/tasks': 'Tasks',
     '/tasks/daily-overview': 'Daily Overview',
@@ -316,9 +314,6 @@ export default function DashboardLayout() {
                                 </div>
                             )}
                         </Link>
-
-                        {/* Announcement Bell (left of Notification Bell) */}
-                        <AnnouncementBell />
 
                         {/* Notification Bell (far right) */}
                         <NotificationBell />
