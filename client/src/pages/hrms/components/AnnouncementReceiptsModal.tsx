@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     X,
     Eye,
@@ -48,6 +49,16 @@ export default function AnnouncementReceiptsModal({
             setActiveTab(initialTab);
         }
     }, [initialTab, announcementId]);
+
+    // Prevent background page scrolling while modal is open
+    useEffect(() => {
+        if (!announcementId) return;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [announcementId]);
 
     const { data, isLoading, isFetching } = useGetAnnouncementReceiptsQuery(
         announcementId || '',
@@ -104,6 +115,7 @@ export default function AnnouncementReceiptsModal({
     }, [pollResults?.textResponses, searchTerm]);
 
     if (!announcementId) return null;
+    if (typeof document === 'undefined') return null;
 
     const handleNudgeAll = async () => {
         if (!announcementId || unseenCount === 0) return;
@@ -114,17 +126,17 @@ export default function AnnouncementReceiptsModal({
         }
     };
 
-    return (
+    return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5"
             style={{
-                backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                backgroundColor: 'rgba(15, 23, 42, 0.72)',
                 backdropFilter: 'blur(6px)',
             }}
             onClick={onClose}
         >
             <div
-                className="relative w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden max-h-[90vh]"
+                className="relative w-full max-w-2xl max-h-[88vh] h-full sm:h-auto rounded-2xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
                 style={{
                     backgroundColor: 'var(--color-bg-surface, #ffffff)',
                     borderColor: 'var(--color-border-default, #e2e8f0)',
@@ -133,7 +145,7 @@ export default function AnnouncementReceiptsModal({
             >
                 {/* Header */}
                 <div
-                    className="flex items-center justify-between px-6 py-4 border-b"
+                    className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b shrink-0"
                     style={{ borderColor: 'var(--color-border-default, #e2e8f0)' }}
                 >
                     <div className="flex items-center gap-3 min-w-0">
@@ -171,31 +183,31 @@ export default function AnnouncementReceiptsModal({
 
                 {/* Statistics Banner */}
                 <div
-                    className="px-6 py-4 border-b"
+                    className="px-5 sm:px-6 py-3 sm:py-3.5 border-b shrink-0"
                     style={{
                         backgroundColor: 'var(--color-bg-subtle, #f8fafc)',
                         borderColor: 'var(--color-border-default, #e2e8f0)',
                     }}
                 >
-                    <div className={`grid ${pollResults ? 'grid-cols-4' : 'grid-cols-3'} gap-3 mb-3 text-center`}>
-                        <div className="p-3 rounded-xl border bg-white border-slate-200">
-                            <p className="text-xs font-medium text-slate-500">Targeted</p>
-                            <p className="text-lg font-bold text-slate-900 mt-0.5">{totalTargeted}</p>
+                    <div className={`grid ${pollResults ? 'grid-cols-4' : 'grid-cols-3'} gap-2 sm:gap-3 mb-2.5 text-center`}>
+                        <div className="p-2.5 rounded-xl border bg-white border-slate-200">
+                            <p className="text-[11px] sm:text-xs font-medium text-slate-500">Targeted</p>
+                            <p className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">{totalTargeted}</p>
                         </div>
-                        <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50">
-                            <p className="text-xs font-semibold text-emerald-700">Acknowledged</p>
-                            <p className="text-lg font-bold text-emerald-800 mt-0.5">{seenCount}</p>
+                        <div className="p-2.5 rounded-xl border border-emerald-100 bg-emerald-50">
+                            <p className="text-[11px] sm:text-xs font-semibold text-emerald-700">Acknowledged</p>
+                            <p className="text-base sm:text-lg font-bold text-emerald-800 mt-0.5">{seenCount}</p>
                         </div>
-                        <div className="p-3 rounded-xl border border-amber-100 bg-amber-50">
-                            <p className="text-xs font-semibold text-amber-700">Pending</p>
-                            <p className="text-lg font-bold text-amber-800 mt-0.5">{unseenCount}</p>
+                        <div className="p-2.5 rounded-xl border border-amber-100 bg-amber-50">
+                            <p className="text-[11px] sm:text-xs font-semibold text-amber-700">Pending</p>
+                            <p className="text-base sm:text-lg font-bold text-amber-800 mt-0.5">{unseenCount}</p>
                         </div>
                         {pollResults && (
-                            <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50">
-                                <p className="text-xs font-semibold text-emerald-700 truncate">
+                            <div className="p-2.5 rounded-xl border border-emerald-100 bg-emerald-50">
+                                <p className="text-[11px] sm:text-xs font-semibold text-emerald-700 truncate">
                                     {pollResults.pollType === 'text' ? 'Responses' : 'Votes Cast'}
                                 </p>
-                                <p className="text-lg font-bold text-emerald-800 mt-0.5">
+                                <p className="text-base sm:text-lg font-bold text-emerald-800 mt-0.5">
                                     {pollResults.totalVotes}
                                 </p>
                             </div>
@@ -208,7 +220,7 @@ export default function AnnouncementReceiptsModal({
                             <span className="font-semibold text-slate-600">Acknowledgment Progress</span>
                             <span className="font-bold text-emerald-600">{seenPercent}% Seen</span>
                         </div>
-                        <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                        <div className="w-full h-1.5 sm:h-2 rounded-full bg-slate-200 overflow-hidden">
                             <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
@@ -222,7 +234,7 @@ export default function AnnouncementReceiptsModal({
 
                 {/* Tabs & Search Bar */}
                 <div
-                    className="p-4 border-b flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+                    className="p-3 sm:p-4 border-b flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0"
                     style={{ borderColor: 'var(--color-border-default, #e2e8f0)' }}
                 >
                     <div className="flex gap-2 flex-wrap">
@@ -334,7 +346,7 @@ export default function AnnouncementReceiptsModal({
                 </div>
 
                 {/* Content List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[240px]">
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-2.5">
                     {isLoading || isFetching ? (
                         <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
                             <Loader2 size={24} className="animate-spin text-emerald-500" />
@@ -648,8 +660,11 @@ export default function AnnouncementReceiptsModal({
 
                 {/* Footer */}
                 <div
-                    className="px-6 py-3 border-t flex justify-end"
-                    style={{ borderColor: 'var(--color-border-default, #e2e8f0)' }}
+                    className="px-5 sm:px-6 py-3 border-t flex justify-end shrink-0"
+                    style={{
+                        borderColor: 'var(--color-border-default, #e2e8f0)',
+                        backgroundColor: 'var(--color-bg-surface, #ffffff)',
+                    }}
                 >
                     <button
                         type="button"
@@ -660,7 +675,8 @@ export default function AnnouncementReceiptsModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

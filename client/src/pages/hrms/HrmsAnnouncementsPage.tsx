@@ -646,7 +646,12 @@ export default function HrmsAnnouncementsPage() {
     }, [orgSettingsData]);
 
     const activeEmployees = useMemo(() => {
-        return employeesData?.data?.employees || [];
+        const list = employeesData?.data?.employees || [];
+        return list.filter((emp: any) => {
+            const isEmpActive = emp.status === 'active' || emp.status === 'on-notice';
+            const isUserActive = emp.userId && emp.userId.isActive !== false;
+            return isEmpActive && isUserActive;
+        });
     }, [employeesData]);
 
     const filteredEmployeeOptions = useMemo(() => {

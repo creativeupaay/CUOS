@@ -248,9 +248,13 @@ class AnnouncementService {
                 },
             });
         } else if (targetType === 'department') {
+            const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+            const activeUserIds = activeUsers.map((u) => u._id);
+
             const employees = await Employee.find({
                 department: { $in: targetDepartments },
-                status: 'active',
+                status: { $in: ['active', 'on-notice'] },
+                userId: { $in: activeUserIds },
             })
                 .select('userId')
                 .lean();
@@ -272,7 +276,14 @@ class AnnouncementService {
                 });
             }
         } else if (targetType === 'users') {
-            recipientUserIds = targetUsers.map((u) => u.toString());
+            const activeTargetUsers = await User.find({
+                _id: { $in: targetUsers },
+                isActive: true,
+            })
+                .select('_id')
+                .lean();
+
+            recipientUserIds = activeTargetUsers.map((u) => u._id.toString());
             if (recipientUserIds.length > 0) {
                 await notificationService.createBulkNotifications(recipientUserIds, {
                     type: 'company_announcement',
@@ -339,23 +350,64 @@ class AnnouncementService {
             .lean();
 
         // Total active employees count for 'all' announcements
-        const totalActiveEmployees = await Employee.countDocuments({ status: 'active' });
+        const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+        const activeUserIds = activeUsers.map((u) => u._id);
+        const activeUserIdSet = new Set(activeUsers.map((u) => u._id.toString()));
+
+        const totalActiveEmployees = await Employee.countDocuments({
+            status: { $in: ['active', 'on-notice'] },
+            userId: { $in: activeUserIds },
+        });
+
+        // Compute active employees count by department
+        const activeEmployeesPerDept = await Employee.aggregate([
+            {
+                $match: {
+                    status: { $in: ['active', 'on-notice'] },
+                    userId: { $in: activeUserIds },
+                },
+            },
+            {
+                $group: {
+                    _id: '$department',
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
+        const deptCountMap = new Map<string, number>();
+        for (const item of activeEmployeesPerDept) {
+            if (item._id) {
+                deptCountMap.set(item._id.toLowerCase(), item.count);
+            }
+        }
 
         return announcements.map((item: any) => {
             const acks = Array.isArray(item.acknowledgedBy) ? item.acknowledgedBy : [];
+            // Filter acknowledgments to active users only
+            const activeAcks = acks.filter(
+                (a: any) => a.userId && activeUserIdSet.has(a.userId.toString())
+            );
             const isAcknowledged = userId
-                ? acks.some((a: any) => a.userId?.toString() === userId)
+                ? activeAcks.some((a: any) => a.userId?.toString() === userId)
                 : false;
             const myAck = userId
-                ? acks.find((a: any) => a.userId?.toString() === userId)
+                ? activeAcks.find((a: any) => a.userId?.toString() === userId)
                 : undefined;
 
             let totalTargetedCount = totalActiveEmployees;
             if (item.targetType === 'users') {
-                totalTargetedCount = Array.isArray(item.targetUsers) ? item.targetUsers.length : 0;
+                const targetUids = Array.isArray(item.targetUsers) ? item.targetUsers : [];
+                totalTargetedCount = targetUids.filter((tu: any) => {
+                    const uid = tu?._id?.toString() || tu?.toString();
+                    return activeUserIdSet.has(uid);
+                }).length;
             } else if (item.targetType === 'department') {
-                // If department-targeted, we compute roughly or load
-                totalTargetedCount = totalActiveEmployees; // fallback, exact computed in receipts
+                const depts = item.targetDepartments || [];
+                let deptSum = 0;
+                for (const d of depts) {
+                    deptSum += deptCountMap.get(d.toLowerCase()) || 0;
+                }
+                totalTargetedCount = deptSum > 0 ? deptSum : totalActiveEmployees;
             }
 
             return {
@@ -365,7 +417,7 @@ class AnnouncementService {
                 isPinned: Boolean(item.isPinned),
                 targetType: item.targetType || 'all',
                 targetDepartments: item.targetDepartments || [],
-                acknowledgedCount: acks.length,
+                acknowledgedCount: activeAcks.length,
                 totalTargetedCount,
                 isAcknowledged,
                 acknowledgedAt: myAck?.seenAt || null,
@@ -452,24 +504,29 @@ class AnnouncementService {
 
         const targetType = announcement.targetType || 'all';
 
-        let employeeFilter: any = { status: 'active' };
+        const activeUsers = await User.find({ isActive: true }).select('_id').lean();
+        const activeUserIds = activeUsers.map((u) => u._id);
+        const activeUserIdSet = new Set(activeUsers.map((u) => u._id.toString()));
+
+        let employeeFilter: any = {
+            status: { $in: ['active', 'on-notice'] },
+            userId: { $in: activeUserIds },
+        };
 
         if (targetType === 'department') {
             const depts = announcement.targetDepartments || [];
-            employeeFilter = {
-                status: 'active',
-                department: { $in: depts },
-            };
+            employeeFilter.department = { $in: depts };
         } else if (targetType === 'users') {
-            const uids = announcement.targetUsers || [];
-            employeeFilter = {
-                userId: { $in: uids },
-            };
+            const targetUids = (announcement.targetUsers || []).map((id: any) => id.toString());
+            const validTargetUserIds = activeUserIds.filter((id) =>
+                targetUids.includes(id.toString())
+            );
+            employeeFilter.userId = { $in: validTargetUserIds };
         }
 
         const targetedEmployees = await Employee.find(employeeFilter)
-            .populate({ path: 'userId', select: 'name email profilePhoto' })
-            .select('userId department designation profilePhoto')
+            .populate({ path: 'userId', select: 'name email profilePhoto isActive' })
+            .select('userId department designation profilePhoto status')
             .lean();
 
         // Build acknowledgment lookup
@@ -488,8 +545,10 @@ class AnnouncementService {
         for (const emp of targetedEmployees) {
             if (!emp.userId || typeof emp.userId !== 'object') continue;
             const u = emp.userId as any;
+            if (u.isActive === false) continue;
             const uidStr = u._id?.toString();
             if (!uidStr) continue;
+            if (!activeUserIdSet.has(uidStr)) continue;
 
             const userObj: AnnouncementReceiptUser = {
                 _id: uidStr,

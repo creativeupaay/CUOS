@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Megaphone,
     AlertTriangle,
@@ -156,25 +157,36 @@ export default function AnnouncementPopupModal() {
         }
     };
 
+    // Prevent body scrolling while popup modal is visible
+    useEffect(() => {
+        if (!isAuthenticated || isPartner || unreadList.length === 0 || !currentAnnouncement) return;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [isAuthenticated, isPartner, unreadList.length, currentAnnouncement]);
+
     if (!isAuthenticated || isPartner || unreadList.length === 0 || !currentAnnouncement) {
         return null;
     }
+    if (typeof document === 'undefined') return null;
 
     const isUrgent = currentAnnouncement.priority === 'urgent';
     const isPinned = Boolean(currentAnnouncement.isPinned);
     const poll = currentAnnouncement.poll;
     const showResults = Boolean(canManage || poll?.hasVoted);
 
-    return (
+    return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5"
             style={{
                 backgroundColor: 'rgba(15, 23, 42, 0.72)',
                 backdropFilter: 'blur(8px)',
             }}
         >
             <div
-                className="relative w-full max-w-xl rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                className="relative w-full max-w-xl max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 style={{
                     backgroundColor: 'var(--color-bg-surface, #ffffff)',
                     borderColor: isUrgent ? '#FCA5A5' : 'var(--color-border-default, #e2e8f0)',
@@ -194,7 +206,7 @@ export default function AnnouncementPopupModal() {
                 />
 
                 {/* Header Section */}
-                <div className="p-6 sm:p-7 pb-3">
+                <div className="p-5 sm:p-6 pb-2.5 shrink-0">
                     <div className="flex items-center justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                             {/* Priority Badge */}
@@ -255,7 +267,7 @@ export default function AnnouncementPopupModal() {
                 </div>
 
                 {/* Announcement Content & Poll Area */}
-                <div className="px-6 sm:p-7 pt-1 pb-4 max-h-[300px] overflow-y-auto space-y-4">
+                <div className="px-5 sm:px-6 pt-1 pb-4 flex-1 min-h-0 overflow-y-auto space-y-4">
                     {/* Message Body */}
                     <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-normal">
                         {currentAnnouncement.content}
@@ -586,6 +598,7 @@ export default function AnnouncementPopupModal() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
